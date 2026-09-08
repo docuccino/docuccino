@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Watch;
 
 use Docuccino\Core\Extensions\Context\ExportTarget;
-use Docuccino\Laravel\Engine\EngineNeon;
+use Docuccino\Laravel\Engine\EngineConfigFile;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\FragmentStore;
 use Docuccino\Laravel\Support\Paths;
@@ -39,7 +39,7 @@ use SplFileInfo;
 final readonly class WatchSet
 {
     /**
-     * @param  array<string, mixed>  $engineConfig  the `docuccino.engine` bag, for the `neon` file it may name
+     * @param  array<string, mixed>  $engineConfig  the `engine` bag, for the analyser config file it may name
      */
     public function __construct(
         private DocumentBuilder $builder,
@@ -75,9 +75,9 @@ final readonly class WatchSet
             $this->path('composer.lock'),
         ];
 
-        $neon = EngineNeon::path($this->engineConfig, $this->basePath);
-        if ($neon !== null) {
-            $roots[] = $neon;
+        $analyser = EngineConfigFile::path($this->engineConfig, $this->basePath);
+        if ($analyser !== null) {
+            $roots[] = $analyser;
         }
 
         foreach ($documents as $key) {

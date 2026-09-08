@@ -9,12 +9,13 @@ use Docuccino\Core\Support\Hydrate;
 use Docuccino\Core\Versioning\VersionOrder;
 
 /**
- * The `docuccino.documents` bag: which documents this application configures, and the raw entry for
- * one of them. Every reader of the key set comes here, so the set a build resolves and the set an
- * `#[InDocs]` key is judged against cannot disagree.
+ * The `documents` bag out of `docuccino.yaml`: which documents this application configures, and the
+ * raw entry for one of them. Every reader of the key set comes here, so the set a build resolves and
+ * the set an `#[InDocs]` key is judged against cannot disagree.
  *
- * Read on every call rather than memoised — the key set is ordinary test and command input, and a
- * cached one would answer a build with the configuration of the build before it.
+ * Asked of {@see BuildConfig} rather than memoised here. That reader holds ONE parse per build for
+ * its own reasons, and a second cache in front of it would answer a build with the configuration of
+ * the build before it.
  *
  * @internal
  */
@@ -27,10 +28,7 @@ final class ConfiguredDocuments
      */
     public function all(): array
     {
-        /** @var array<string, mixed> $documents */
-        $documents = (array) config('docuccino.documents', []);
-
-        return $documents;
+        return app(BuildConfig::class)->documents();
     }
 
     /**

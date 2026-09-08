@@ -18,10 +18,11 @@ use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
 use Docuccino\Core\Support\ConfinedPath;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Core\Support\PlainText;
+use Docuccino\Laravel\Config\BuildConfig;
 use Docuccino\Laravel\Config\ConfiguredDocuments;
 use Docuccino\Laravel\Config\ConfiguredFlags;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
-use Docuccino\Laravel\Engine\EngineNeon;
+use Docuccino\Laravel\Engine\EngineConfigFile;
 use Docuccino\Laravel\Engine\EnginePackage;
 use Docuccino\Laravel\Engine\TypeEngineMode;
 use Docuccino\Laravel\Registry\ConfigExtensions;
@@ -30,8 +31,8 @@ use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 /**
- * The one entry point every command and the runtime viewer share for turning
- * `config('docuccino.documents.*')` into a {@see GenerationResult}: resolves the
+ * The one entry point every command and the runtime viewer share for turning the `documents` bag of
+ * `docuccino.yaml` into a {@see GenerationResult}: resolves the
  * {@see DocumentConfig}, loads Overlay 1.0 files (a malformed one becomes a warning, not a fatal),
  * merges config extensions, and hands off to {@see DocumentGenerator}. Sharing it keeps
  * export/validate/diff/cache/viewer on an identical build path.
@@ -65,6 +66,16 @@ final class DocumentBuilder
 
     public function config(string $key): DocumentConfig
     {
+        // Asked through the TYPED reader first, for the report rather than for the value: these two are
+        // published verbatim into the document, and YAML is free to read either as something else.
+        // `version: 1.10` is the float 1.1, and a document that answered 1.0.0 instead without a word
+        // would hand a different version number to whoever pins one. The defaults named here are the
+        // ones {@see DocumentConfigFactory::resolveInfo()} actually falls back to, so the refusal and
+        // the document cannot disagree about what was used instead.
+        $values = $this->settings()->values();
+        $values->string('documents.'.$key.'.info.title', DocumentConfig::DEFAULT_TITLE);
+        $values->string('documents.'.$key.'.info.version', DocumentConfig::DEFAULT_VERSION);
+
         return $this->configs->make($key, $this->documents->raw($key), $this->onRouteError());
     }
 
@@ -75,6 +86,10 @@ final class DocumentBuilder
         [$overlays, $overlayDiagnostics] = $this->overlays($config);
         [$extensions, $extensionDiagnostics] = ConfigExtensions::read();
         $preDiagnostics = [
+            // The configuration FILE itself, before anything read out of it: whether it was found and
+            // parsed, every setting whose type it refused, and what is left in the framework config
+            // that nothing reads. First, because an unreadable file is why the rest of this is empty.
+            ...$this->settings()->diagnostics(),
             // The switches outside every document — the master one, the fragment cache, the lint rules.
             // Reported here because they are read at container binds, where nothing can carry a report.
             ...ConfiguredFlags::forInstall(),
@@ -107,13 +122,13 @@ final class DocumentBuilder
      * `mode: null` is an explicit opt-out, so it says nothing. An unrecognised mode — a typo, or one a
      * later version dropped — ran in-process instead of failing the build, which is worth saying out
      * loud; it is suppressed when the engine is absent, since which mode was asked for is then moot.
-     * {@see engineNeonDiagnostics()} adds the last of it, and only where something was going to analyse.
+     * {@see engineConfigFileDiagnostics()} adds the last of it, and only where something was going to analyse.
      *
      * @return list<Diagnostic>
      */
     private function engineDiagnostics(): array
     {
-        $mode = config('docuccino.engine.mode');
+        $mode = $this->settings()->engine()['mode'] ?? null;
         $analysing = $mode !== TypeEngineMode::Null->value;
 
         if ($analysing && ! $this->engine->installed()) {
@@ -146,7 +161,7 @@ final class DocumentBuilder
         }
 
         return $analysing
-            ? [...$diagnostics, ...$this->engineNeonDiagnostics()]
+            ? [...$diagnostics, ...$this->engineConfigFileDiagnostics()]
             : $diagnostics;
     }
 
@@ -160,7 +175,7 @@ final class DocumentBuilder
      * The same two codes and severities the `#[Description(file: …)]` reader raises, because it is the
      * same fact with the same remedy — only the place to go and edit it differs, which is what the
      * config-facing half of {@see ConfinedPath}'s help sentences is for. Reported here rather than in
-     * ConfigDiagnostics for the reason {@see engineNeonDiagnostics()} is: telling a refusal from an
+     * ConfigDiagnostics for the reason {@see engineConfigFileDiagnostics()} is: telling a refusal from an
      * absence needs the base path, and a document's own config bag does not carry one.
      *
      * @return list<Diagnostic>
@@ -214,7 +229,7 @@ final class DocumentBuilder
      */
     private function cachePathDiagnostics(): array
     {
-        $configured = config('docuccino.cache.path');
+        $configured = $this->settings()->raw('cache.path');
 
         if (! is_string($configured) || ConfinedPath::holdable($configured) !== null) {
             return [];
@@ -232,7 +247,7 @@ final class DocumentBuilder
     }
 
     /**
-     * `engine.neon` names a file that is not there, so the engine analysed without it.
+     * `engine.config` names a file that is not there, so the engine analysed without it.
      *
      * A WARNING, like a missing config extension and unlike a boot failure: nothing malfunctioned and
      * the document that got built is true, but the author configured analysis machinery the build
@@ -242,13 +257,12 @@ final class DocumentBuilder
      *
      * @return list<Diagnostic>
      */
-    private function engineNeonDiagnostics(): array
+    private function engineConfigFileDiagnostics(): array
     {
-        /** @var array<string, mixed> $engineConfig */
-        $engineConfig = (array) config('docuccino.engine', []);
-        $neon = EngineNeon::path($engineConfig, $this->basePath);
+        $engineConfig = $this->settings()->engine();
+        $analyser = EngineConfigFile::path($engineConfig, $this->basePath);
 
-        if ($neon === null || is_file($neon)) {
+        if ($analyser === null || is_file($analyser)) {
             return [];
         }
 
@@ -256,12 +270,12 @@ final class DocumentBuilder
 
         return [new Diagnostic(
             severity: Severity::Warning,
-            code: 'config.engine-neon-missing',
+            code: 'config.engine-config-missing',
             message: sprintf(
-                'engine.neon names %s, which does not exist — inference ran without it, so nothing that file registers shaped this document.',
-                $paths->relative($neon),
+                'engine.config names %s, which does not exist — inference ran without it, so nothing that file registers shaped this document.',
+                $paths->relative($analyser),
             ),
-            help: 'Check the path in config/docuccino.php; it is read relative to the application base path. Remove the key to analyse with the engine\'s own configuration.',
+            help: 'Check the path in docuccino.yaml; it is read relative to the application base path. Remove the key to analyse with the engine\'s own configuration.',
         )];
     }
 
@@ -296,9 +310,16 @@ final class DocumentBuilder
 
     private function onRouteError(): string
     {
-        $configured = config('docuccino.on_route_error');
+        return $this->settings()->values()->string('on_route_error', 'skeleton') ?? 'skeleton';
+    }
 
-        return is_string($configured) ? $configured : 'skeleton';
+    /**
+     * The tool's own configuration, off the container so one command holds one parse of it — and so
+     * every refusal any reader makes lands in the one list this build reports.
+     */
+    private function settings(): BuildConfig
+    {
+        return app(BuildConfig::class);
     }
 
     /**

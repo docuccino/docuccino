@@ -71,8 +71,9 @@ final class ConfiguredFlags
     ];
 
     /**
-     * Switches outside every document, as dotted path => default. The master switch and the
-     * `lint.<rule>.enabled` family are read off their own constants above.
+     * Switches outside every document in `docuccino.yaml`, as dotted path => default. The master
+     * switch is not here — it belongs to the framework config — and the `lint.<rule>.enabled` family
+     * is read off its own constant above.
      *
      * @var array<string, bool>
      */
@@ -80,10 +81,19 @@ final class ConfiguredFlags
         'cache.enabled' => false,
     ];
 
-    /** The master switch, read the one way: absent is on, and only `false` turns it off. */
+    /**
+     * The master switch, read the one way: absent is on, and only `false` turns it off.
+     *
+     * Off the FRAMEWORK's config, because the provider asks it on every application boot to decide
+     * whether the viewer's routes exist at all. A switch that decides whether to wire anything up
+     * cannot live in a file a boot would have to parse first.
+     */
     public static function enabled(): bool
     {
-        return self::read(self::config(), 'enabled', self::ENABLED_DEFAULT)->on;
+        /** @var array<string, mixed> $config */
+        $config = (array) config('docuccino', []);
+
+        return self::read($config, 'enabled', self::ENABLED_DEFAULT)->on;
     }
 
     /**
@@ -125,15 +135,20 @@ final class ConfiguredFlags
     }
 
     /**
-     * The switches outside any document: the master one, the fragment cache and every lint rule. Read
-     * off the live config rather than a document bag, and reported once per build.
+     * The switches outside any document: the master one, the fragment cache and every lint rule,
+     * reported once per build.
+     *
+     * Read off TWO files, because that is where they live: the fragment cache and the lint rules are
+     * build settings out of `docuccino.yaml`, while the master switch is asked on every application
+     * boot and stays in the framework config. The master switch is reported FIRST — an application
+     * with it off has one thing wrong with it, and that is the one.
      *
      * @return list<Diagnostic>
      */
     public static function forInstall(): array
     {
-        $config = self::config();
-        $paths = ['enabled' => self::ENABLED_DEFAULT, ...self::INSTALL_FLAGS];
+        $config = app(BuildConfig::class)->all();
+        $paths = self::INSTALL_FLAGS;
 
         foreach (self::LINT_DEFAULTS as $rule => $default) {
             $paths['lint.'.$rule.'.enabled'] = $default;
@@ -147,7 +162,11 @@ final class ConfiguredFlags
             }
         }
 
-        return $diagnostics;
+        /** @var array<string, mixed> $framework */
+        $framework = (array) config('docuccino', []);
+        $master = self::report($framework, 'enabled', self::ENABLED_DEFAULT);
+
+        return $master === null ? $diagnostics : [$master, ...$diagnostics];
     }
 
     /**
@@ -188,16 +207,5 @@ final class ConfiguredFlags
             message: $refusal,
             help: ConfiguredFlag::HELP,
         );
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private static function config(): array
-    {
-        /** @var array<string, mixed> $config */
-        $config = (array) config('docuccino', []);
-
-        return $config;
     }
 }
