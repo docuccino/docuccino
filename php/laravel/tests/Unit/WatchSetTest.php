@@ -43,13 +43,18 @@ it('reads no dependency out of an entry it cannot make sense of', function (): v
     ]);
 });
 
-it('watches config, routes and the lock file whatever the fragments say', function (): void {
-    expect($this->watched->documentRoots(['default']))->toContain(
-        $this->fixture->path('config'),
-        $this->fixture->path('routes'),
-        $this->fixture->path('composer.json'),
-        $this->fixture->path('composer.lock'),
-    );
+it('watches the configuration file, config, routes and the lock file whatever the fragments say', function (): void {
+    // `docuccino.yaml` by name, and whether or not it is there: the file appearing is exactly the edit
+    // a watch session has to notice, and a session that missed it would keep rebuilding the document
+    // its author had just stopped configuring.
+    expect(is_file($this->fixture->path('docuccino.yaml')))->toBeFalse()
+        ->and($this->watched->documentRoots(['default']))->toContain(
+            $this->fixture->path('docuccino.yaml'),
+            $this->fixture->path('config'),
+            $this->fixture->path('routes'),
+            $this->fixture->path('composer.json'),
+            $this->fixture->path('composer.lock'),
+        );
 });
 
 it('adds the content directory, the overlay files and the analyser config a document configures', function (): void {
