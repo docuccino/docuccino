@@ -51,6 +51,10 @@ function safelistExplainedRawReads(): array
         // Carries the list across to a copy with extra heuristics merged in. Nothing is matched here,
         // and the copy's own reads are covered like any other.
         'php/core/src/Lint/SensitiveFieldLintOptions.php::withPatterns' => 'copy forwarded to a new instance',
+        // Hashes the list into the fragment-cache key. It compares no subject at all, so there is nothing
+        // for the reader to decide; the two spellings of one pointer key apart, which costs a rebuild
+        // nobody needed and can never publish the wrong answer.
+        'php/laravel/src/Support/LeakageDigestContributor.php::digest' => 'hashed into the cache key, never matched',
     ];
 }
 

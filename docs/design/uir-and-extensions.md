@@ -1975,7 +1975,7 @@ Extensions/Integrations line and an extension may not import an integration.
 Unit = OperationFragment (operation + registered components + diagnostics + document-level notes +
 provenance, serialized as UIR JSON fragments). Key = sha256(tool ver ‖ spec ver ‖ identity-algo ver ‖
 document id ‖ doc configHash ‖ environment digest ‖ build fingerprint ‖ resolved extension list (FQCNs +
-package versions) ‖ route cache-signature ‖ sha256 of each file in
+package versions + source digests) ‖ route cache-signature ‖ sha256 of each file in
 `ActionAnalysis::$dependencyFiles`). Assembly → canonicalize → validate always run fresh.
 Watch mode later = loop incremental build + SSE push.
 
@@ -2074,11 +2074,49 @@ discovery scan itself is never cached, so a webhook added or deleted is seen the
 **The extension signature is per INSTANCE.** Extensions are registrable as objects on every surface
 there is (`Registrar::add`, `ExtensionRegistry::extend`, config), so `new MyExtension(mode: 'a')` and
 `mode: 'b'` are two different builds under one class name. `ResolvedExtensions::cacheSignature()`
-therefore emits one entry per resolved instance — class, owning package version, and a digest of the
-instance's own properties, reading enum cases as cases and a closure as where it was written plus what
-it captured. Its honest limit: it does not descend into a collaborator OBJECT a property holds (an
-injected container would be an unbounded walk, and a collaborator is a dependency rather than a
-setting), so two instances differing only inside one still key alike — hold the setting itself.
+therefore emits one entry per resolved instance — class, owning package version, a digest of the
+instance's own properties (reading enum cases as cases and a closure as where it was written plus what
+it captured), and a digest of the BYTES the class is written in: its own file, its parents' and its
+traits' (`DeclarationFiles`). Its honest limit: it does not descend into a collaborator OBJECT a
+property holds (an injected container would be an unbounded walk, and a collaborator is a dependency
+rather than a setting), so two instances differing only inside one still key alike — hold the setting
+itself, or key it through the environment digest.
+
+**Why the version needs the source digest beside it.** A package's version is a proxy for its author
+having released; a class in the APPLICATION's own tree has no such author — its "package" is the root,
+whose version does not move when a file is saved — so an author who edited their own extension was
+served the output the old body produced. The two components are complementary rather than redundant and
+neither is a heuristic about where a class lives: a digest over CONTENT is inert exactly where the
+version is informative, because a release nobody edited reinstalls byte-identically, and informative
+exactly where the version is inert. So a `composer install`, or a `composer update` that leaves an
+extension's own bytes alone, costs nobody a rebuild, while the version still covers a package changing
+another file the extension calls.
+
+Where an extension's declaration cannot be hashed back — `eval()`'d code reports a path no `is_file()`
+matches, and a manifest records an absent file as ABSENT, which compares FRESH while it stays absent —
+the DOCUMENT is refused the cache, with one `extension.unhashable` info diagnostic naming the class.
+Unlike a tag mapper there is no per-route bag to refuse with: an operation extension is run over every
+operation and nothing records which of them its answer reached (an extension that wrote nothing still
+ran, and withholding a value is an answer), so the entry keys every fragment and the refusal has the
+same scope. The refusal and the key read the same instance set for that reason.
+
+**The leakage bag is keyed unconditionally too.** `Support\LeakageDigestContributor` feeds
+`lint.leakage`'s safelist and heuristics table into the environment digest, because they decide whether
+a recorded example is PUBLISHED at all — `RecordedExamplesExtension` withholds a body `ExampleRedaction`
+still finds a credential in. Nothing else could see them: `lint.*` is deliberately top-level, so no
+document's config bag holds it and `DocumentConfig::hash()` cannot reach it, and the extension carries
+the options inside a collaborator object, which is the limit named above. The safelist goes in sorted,
+since it is consulted by membership and re-ordering it changes no answer; the heuristics table goes in
+as written, since a name matches a token it CONTAINS and the first hit wins. `enabled` is left out: it
+turns a REPORT off, redaction is handed its options with the switch unhonoured, and the lint that reads
+it is a document transformer re-run on every build.
+
+**A "was the bag readable" flag is a cache input, not a value.** `QueryBuilderConfig::$recovered` and
+`JsonApiPaginateConfig::$recovered` each gate a per-route diagnostic that rides the fragment, and
+`vendor:publish` writes the package's own DEFAULTS — so the bag going from absent to present moves not
+one of the values those contributors digest. Digesting the values alone left an author who followed
+that diagnostic's own advice rebuilding and still being told the config was unreadable, so both
+contributors carry the flag.
 
 **Auth config is keyed unconditionally.** `Integrations\Support\AuthConfigDigestContributor` feeds
 `auth.guards` and `auth.defaults.guard` into the environment digest whether or not Sanctum or Passport

@@ -180,6 +180,20 @@ function generateDocumentWithTagMapper(string $mapper): GenerationResult
 }
 
 /**
+ * The `default` document reading committed example recordings out of `$dir` — for a suite whose only
+ * variable is something else entirely, such as the leakage bag that decides whether a recording
+ * publishes at all.
+ */
+function generateDocumentWithRecordings(string $dir): GenerationResult
+{
+    return generateDocument(static function (array $raw) use ($dir): array {
+        $raw['examples'] = ['recordings' => $dir];
+
+        return $raw;
+    });
+}
+
+/**
  * The full round-trip the feature suites lean on: bind the deterministic stub engine, generate the
  * `default` document (optionally mutating its raw config), and return the emitted array — so no suite
  * re-rolls the bindStubEngine + generate + toArray wiring.
@@ -2178,6 +2192,22 @@ function fragmentEntries(string $dir): array
     }
 
     return $entries;
+}
+
+/**
+ * Every cache key $dir currently holds an entry for, sorted. What a row needs when the input it changed
+ * keys the fragment rather than joining its dependency manifest: an entry the key no longer addresses
+ * stays on disk and goes on reading fresh forever, so `array_diff(after, before)` is what says which
+ * fragments a build had to write again.
+ *
+ * @return list<string>
+ */
+function fragmentKeys(string $dir): array
+{
+    $keys = array_map(static fn (string $file): string => basename($file, '.json'), glob($dir.'/*.json') ?: []);
+    sort($keys);
+
+    return $keys;
 }
 
 /**

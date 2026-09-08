@@ -401,6 +401,29 @@ it('invalidates fragments when the query-builder delimiter changes (booted-app c
     expect($engine->analyzeCount)->toBeGreaterThan(0);
 });
 
+it('invalidates fragments when a package config appears holding the values it already had', function (string $key, array $bag, string $code): void {
+    fragmentCacheDir('fragments');
+    $engine = new CountingTypeEngine(WorkbenchEngine::make());
+    app()->instance(TypeEngine::class, $engine);
+
+    // A per-route diagnostic gated on whether the package's bag was READABLE, which rides the fragment.
+    $cold = generateDocument();
+    expect(diagnosticsCoded($cold->diagnostics, $code))->not->toBe([]);
+    $engine->analyzeCount = 0;
+
+    // `vendor:publish` writes the package's own DEFAULTS, so every value the digest reads stays where it
+    // was and only the fact that a bag exists at all has changed. Digesting the values alone left an
+    // author who followed that diagnostic's own advice rebuilding and still being told it.
+    config()->set($key, $bag);
+    $warm = generateDocument();
+
+    expect($engine->analyzeCount)->toBeGreaterThan(0)
+        ->and(diagnosticsCoded($warm->diagnostics, $code))->toBe([]);
+})->with([
+    'query-builder' => ['query-builder', ['parameters' => []], 'query-builder.default-config'],
+    'json-api-paginate' => ['json-api-paginate', ['default_size' => 30], 'json-api-paginate.default-config'],
+]);
+
 it('invalidates fragments when a format example sample is configured', function (): void {
     fragmentCacheDir('fragments');
     $engine = new CountingTypeEngine(WorkbenchEngine::make());
