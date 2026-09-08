@@ -9,6 +9,7 @@ use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Laravel\Config\BuildConfig;
 use Docuccino\Laravel\Config\ConfigPublisher;
 use Docuccino\Laravel\Config\ConfigPublishers;
+use Docuccino\Laravel\Config\ConfigSplit;
 use Docuccino\Laravel\Engine\EnginePackage;
 use Docuccino\Laravel\Engine\TypeEngineMode;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
@@ -27,11 +28,13 @@ use Illuminate\Support\Facades\URL;
  * the rest live when it matches none), reports whether the analysis engine is there, offers a first
  * export, and names what to do next.
  *
- * The one command that WRITES anything outside an export path, which is why the config half is
- * timid: an existing configuration file is a decision somebody made, and neither of the two is ever
- * replaced without `--force`. Everything else here is a read, so a second run reports the same and
- * changes nothing. None of it is a diagnostic — a diagnostic tells the document's author about the document,
- * and this tells an operator about their machine ({@see ExplainCommand} set the precedent).
+ * The config half is timid: an existing configuration file is a decision somebody made, and neither
+ * of the two is ever replaced without `--force`. Build settings still sitting in `config/docuccino.php`
+ * are a decision too, so an application holding those gets `docuccino.yaml` written from THEM — by
+ * {@see MigrateConfigCommand}, which owns that — rather than from the shipped defaults. Everything
+ * else here is a read, so a second run reports the same and changes nothing. None of it is a
+ * diagnostic — a diagnostic tells the document's author about the document, and this tells an operator
+ * about their machine ({@see ExplainCommand} set the precedent).
  */
 final class InstallCommand extends Command
 {
@@ -103,6 +106,10 @@ final class InstallCommand extends Command
         $path = $this->projectPath($publisher->target());
         $existed = $publisher->published();
 
+        if (! $existed && $this->option('force') !== true && $this->owesMigration($publisher)) {
+            return $this->migrate($publisher);
+        }
+
         if ($existed && $this->option('force') !== true) {
             $this->line(sprintf('%s is already there, and was left exactly as it is.', $path));
             $this->line('<fg=gray>Pass --force to replace it with the shipped defaults.</>');
@@ -121,6 +128,53 @@ final class InstallCommand extends Command
             : sprintf('Published %s.', $path));
 
         return true;
+    }
+
+    /**
+     * Whether this publisher would write the shipped `docuccino.yaml` over settings an application
+     * already has, which is a state the timidity rule covers and the file name cannot see.
+     *
+     * An existing file is a decision somebody made — and so are build settings sitting in
+     * `config/docuccino.php`. Publishing defaults there answers confidently and wrongly in the one way
+     * that is hard to recover from: the file appears, so nothing refuses the build any more, the
+     * document is assembled from defaults, and the `config.stale-php-keys` warning that follows tells
+     * its reader to delete the only remaining copy of what they configured.
+     */
+    private function owesMigration(ConfigPublisher $publisher): bool
+    {
+        return basename($publisher->target()) === ConfigFile::NAME && ConfigSplit::staleKeys() !== [];
+    }
+
+    /**
+     * Write that file from the settings the application already has, by running the one command that
+     * knows how — rather than holding a second opinion about what belongs in it.
+     *
+     * Its exit code is not read: a setting it could not carry over is news for the operator, not a
+     * reason for the setup to stop. Whether the file arrived is read instead, because every step after
+     * this one reports on a configuration the application would not have.
+     */
+    private function migrate(ConfigPublisher $publisher): bool
+    {
+        $stale = ConfigSplit::staleKeys();
+
+        $this->line(sprintf(
+            'config/docuccino.php holds %d build setting%s the build no longer reads, so %s is written',
+            count($stale),
+            count($stale) === 1 ? '' : 's',
+            ConfigFile::NAME,
+        ));
+        $this->line('from those rather than from the shipped defaults.');
+        $this->newLine();
+
+        $this->call(MigrateConfigCommand::NAME);
+
+        if ($publisher->published()) {
+            return true;
+        }
+
+        $this->error(sprintf('Could not write %s.', $this->projectPath($publisher->target())));
+
+        return false;
     }
 
     /**

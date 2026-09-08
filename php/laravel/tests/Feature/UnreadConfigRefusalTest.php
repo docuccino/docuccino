@@ -63,6 +63,10 @@ function unreadConfigRefusalRows(): array
         'watch' => ['Docuccino\Laravel\Commands\WatchCommand', true, []],
         // The remedy: refusing to run it would leave the reader with no way out of the state.
         'install' => ['Docuccino\Laravel\Commands\InstallCommand', false, ['--no-export' => true]],
+        // The remedy proper — this state is the one it exists to clear. Run as a dry run, because the
+        // real thing writes `docuccino.yaml` at the project root and every parallel process shares one
+        // workbench; what it WRITES is covered where it can own a root of its own.
+        'migrate-config' => ['Docuccino\Laravel\Commands\MigrateConfigCommand', false, ['--dry-run' => true]],
         // Reads no configuration. Emptying a cache built from the wrong settings is the one thing
         // still worth doing here, so it is not gated on fixing them.
         'clear' => ['Docuccino\Laravel\Commands\ClearCommand', false, []],
@@ -115,7 +119,7 @@ it('gives every registered command a row', function (): void {
     sort($registered);
 
     expect($rows)->toBe($registered)
-        ->and($rows)->toHaveCount(10);
+        ->and($rows)->toHaveCount(11);
 });
 
 it('declares the refusal exactly where the rows say it does', function (): void {
@@ -139,7 +143,7 @@ it('refuses, naming the code, before it builds anything', function (string $name
     // exit 0 under. Nothing here can turn the refusal off.
     test()->artisan($class, $arguments)
         ->expectsOutputToContain('config.not-migrated')
-        ->expectsOutputToContain('docuccino:install')
+        ->expectsOutputToContain('docuccino:migrate-config')
         ->assertExitCode(1);
 })->with(array_keys(array_filter(unreadConfigRefusalRows(), static fn (array $row): bool => $row[1])));
 

@@ -46,7 +46,9 @@ it('refuses to build an application whose settings are all still in the framewor
         ->and($errors[0]->message)->toContain('2 settings the build no longer reads')
         ->and($errors[0]->message)->toContain('documents.default.routes')
         ->and($errors[0]->message)->toContain('on_route_error')
-        ->and($errors[0]->help)->toContain('docuccino:install');
+        // The remedy names the command that carries the settings over, and not the one that publishes
+        // defaults: `docuccino:install` would write a file with none of these in it.
+        ->and($errors[0]->help)->toContain('docuccino:migrate-config');
 });
 
 it('names the two files one report each, not one per key, and counts what it does not name', function (): void {

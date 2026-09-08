@@ -35,6 +35,7 @@ use Docuccino\Laravel\Commands\ExplainCommand;
 use Docuccino\Laravel\Commands\ExportCommand;
 use Docuccino\Laravel\Commands\InstallCommand;
 use Docuccino\Laravel\Commands\MemoryLimitOption;
+use Docuccino\Laravel\Commands\MigrateConfigCommand;
 use Docuccino\Laravel\Commands\ValidateCommand;
 use Docuccino\Laravel\Commands\VersionChangesCommand;
 use Docuccino\Laravel\Commands\WatchCommand;
@@ -125,6 +126,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             ->hasConfigFile()
             ->hasCommands([
                 InstallCommand::class,
+                MigrateConfigCommand::class,
                 ExportCommand::class,
                 ValidateCommand::class,
                 DiffCommand::class,

@@ -6,6 +6,7 @@ use Docuccino\Core\Config\ConfigFile;
 use Docuccino\Laravel\Config\ConfigPublisher;
 use Docuccino\Laravel\Config\ConfigPublishers;
 use Docuccino\Laravel\Engine\EnginePackage;
+use Docuccino\Laravel\Tests\Support\BuildSettings;
 use Illuminate\Routing\RouteCollection;
 use Illuminate\Support\Facades\Artisan;
 
@@ -114,6 +115,72 @@ it('replaces docuccino.yaml only when --force asks for it', function (): void {
         ->and(file_get_contents($settings))->toBe(shippedSettings());
 
     removeInstallTarget($framework);
+});
+
+/**
+ * An unmigrated application, with the publishers AND the project root pointed at one temp root — in a
+ * real install they are the same directory, and the migration writes to the root rather than through a
+ * publisher.
+ *
+ * @return array{0: string, 1: string}
+ */
+function unmigratedInstallRoot(): array
+{
+    $root = sys_get_temp_dir().'/docuccino-install-'.bin2hex(random_bytes(8));
+    mkdir($root.'/config', 0755, true);
+    app()->setBasePath($root);
+
+    app()->instance(ConfigPublishers::class, new ConfigPublishers([
+        new ConfigPublisher(source: dirname(__DIR__, 2).'/config/'.ConfigFile::NAME, target: $root.'/'.ConfigFile::NAME),
+        new ConfigPublisher(source: dirname(__DIR__, 2).'/config/docuccino.php', target: $root.'/config/docuccino.php'),
+    ]));
+
+    BuildSettings::none();
+    config()->set('docuccino.documents.default.routes.include', ['api/v7/*']);
+    config()->set('docuccino.on_route_error', 'omit');
+
+    return [$root.'/'.ConfigFile::NAME, $root];
+}
+
+it('writes docuccino.yaml from the settings an application already has, not from the defaults', function (): void {
+    // Build settings in `config/docuccino.php` are a decision somebody made, the same way an existing
+    // file is. Publishing defaults over them would put a file on disk that stops the build refusing
+    // and documents something else — and the warning that follows would then say to delete the only
+    // copy of what its author configured.
+    [$settings, $root] = unmigratedInstallRoot();
+    $this->withoutMockingConsoleOutput();
+
+    try {
+        expect($this->artisan('docuccino:install', ['--no-export' => true]))->toBe(0);
+
+        expect(Artisan::output())
+            ->toContain('config/docuccino.php holds 2 build settings the build no longer reads')
+            ->toContain('Wrote docuccino.yaml')
+            ->and(file_get_contents($settings))->not->toBe(shippedSettings())
+            ->and((string) file_get_contents($settings))->toContain('api/v7/*')
+            ->and((string) file_get_contents($settings))->toContain('on_route_error: omit');
+    } finally {
+        @unlink($settings);
+        @unlink($root.'/config/docuccino.php');
+        @rmdir($root.'/config');
+        @rmdir($root);
+    }
+});
+
+it('publishes the shipped defaults over an unmigrated application only when --force asks', function (): void {
+    [$settings, $root] = unmigratedInstallRoot();
+    $this->withoutMockingConsoleOutput();
+
+    try {
+        expect($this->artisan('docuccino:install', ['--no-export' => true, '--force' => true]))->toBe(0);
+
+        expect(file_get_contents($settings))->toBe(shippedSettings());
+    } finally {
+        @unlink($settings);
+        @unlink($root.'/config/docuccino.php');
+        @rmdir($root.'/config');
+        @rmdir($root);
+    }
 });
 
 /**

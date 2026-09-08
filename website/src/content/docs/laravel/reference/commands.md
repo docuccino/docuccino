@@ -1,6 +1,6 @@
 ---
 title: Commands
-description: The docuccino artisan commands — install, export, validate, diff, cache, clear, watch, coverage, explain and version-changes — with every flag, default and exit code.
+description: The docuccino artisan commands — install, migrate-config, export, validate, diff, cache, clear, watch, coverage, explain and version-changes — with every flag, default and exit code.
 ---
 
 
@@ -47,7 +47,7 @@ docuccino:install
 
 | Flag | Values / default | Effect |
 | --- | --- | --- |
-| `--force` | flag / off | Replaces an existing `docuccino.yaml` or `config/docuccino.php` with the shipped defaults. Without it an existing file is never touched — the command says which it left alone and names this flag. |
+| `--force` | flag / off | Replaces an existing `docuccino.yaml` or `config/docuccino.php` with the shipped defaults. Without it an existing file is never touched — the command says which it left alone and names this flag — and an application whose build settings are still in `config/docuccino.php` gets `docuccino.yaml` written from *those* rather than from the defaults. |
 | `--no-export` | flag / off | Finishes the setup without generating a document. Otherwise the command offers one, and `--no-interaction` takes the prompt's default, which is yes. |
 | `--memory-limit` | php.ini value, e.g. `2G` / unset | Raises the process memory limit before the first export runs — see the shared-behavior note above. |
 
@@ -92,6 +92,74 @@ An application with no routes to document yet gets a sentence saying so, not a f
 
 Exits `1` on a disabled install, a configuration file it could not write, or a failed first
 export — setup succeeding while the export fails is still a failure.
+
+**On an application that hasn't migrated yet.** Build settings still sitting in `config/docuccino.php`
+are a decision somebody made, the same way an existing file is, so the config step does *not* publish
+the shipped `docuccino.yaml` over them. It runs [`docuccino:migrate-config`](#docuccinomigrate-config)
+instead and you get a file holding your own settings. `--force` still publishes the defaults.
+
+## `docuccino:migrate-config`
+
+Write docuccino.yaml from the build settings left in config/docuccino.php.
+
+```
+docuccino:migrate-config
+    {--force : Replace an existing docuccino.yaml with the settings from config/docuccino.php}
+    {--dry-run : Print the file that would be written, and write nothing}
+```
+
+| Flag | Values / default | Effect |
+| --- | --- | --- |
+| `--force` | flag / off | Replaces an existing `docuccino.yaml`. Without it an existing file is never touched. It **replaces** rather than merges — there is no precedence rule between two files of settings — so read what is there first. |
+| `--dry-run` | flag / off | Prints the file it would write and writes nothing. Reports and exits exactly as the real run would. |
+
+The way out of [`config.not-migrated`](/laravel/reference/diagnostics/), which refuses a build whose
+settings are all still in `config/docuccino.php`. It reads `config('docuccino')`, writes the build
+settings to `docuccino.yaml` at your project root, and leaves the framework's three keys —
+`enabled`, `cache.store` and each document's `viewer` — where they are.
+
+It writes **one** file and never edits the other. `config/docuccino.php` keeps three of its keys, so
+tidying it would be surgery on a file you wrote rather than a file replaced, and the comments,
+formatting and `env()` calls in it cannot be put back from a parsed array. It is also your only
+remaining copy of what you configured while you check the new file against it. So the command prints
+the exact list of keys to delete and leaves the deleting to you —
+[`config.stale-php-keys`](/laravel/reference/diagnostics/) goes on naming them until you do.
+
+The file it writes carries **only what your application configured** — no defaults and no commented
+catalogue, unlike the template `docuccino:install` publishes. A key written there that you never set
+still joins the resolved configuration and changes the document's `configHash`, so a migration that
+helpfully filled in the defaults would change every fingerprint it touched.
+
+**What it changes on the way over.** Two settings moved to the names they have now, and a migration
+writing the old spelling would hand you a file the build reports as naming no setting:
+
+| Written in `config/docuccino.php` | Written to `docuccino.yaml` |
+| --- | --- |
+| `documents.*.security.auto_detect_middleware` | `documents.*.security.auth_middleware` |
+| `engine.neon` | `engine.config` |
+
+**What it cannot carry.** Two keys have no `docuccino.yaml` equivalent at all, and the two are
+reported differently because they cost different things:
+
+- `documents.*.representation.lists` had no reader — both of its values emitted the same document — so
+  it is dropped and the run still exits `0`.
+- `documents.*.routes.closure` **filtered routes**. A closure has no form in a configuration file, so
+  it cannot come with you: [`routes.filter`](/laravel/reference/configuration/#routes) names a class
+  instead. The file is still written, the omission is printed, a comment naming it goes into
+  `docuccino.yaml` where it outlives the console, and the command exits `1` — the routes that closure
+  held back are documented again until you write a `RouteFilter`. A `closure` left at its shipped
+  `null` filtered nothing, so that one is only a drop.
+
+**`env()` calls.** `config('docuccino')` hands over *resolved* values, so an `env()` call in
+`config/docuccino.php` arrived as whatever the variable said where you ran this, and the indirection
+is not recoverable from the value. Where the framework config reads a setting through `DOCUCCINO_ENGINE`
+or `DOCUCCINO_FRAGMENT_CACHE` **and** that variable is set, the command names the setting and the
+variable — both still override the file, so the lever keeps working. Where any other `env()` call is
+in the file, it says so once and tells you to check those keys, rather than guessing which they were.
+
+Exits `0` when everything came over, `1` on a disabled install, a file it could not write, or a
+setting it could not carry — the file is written in that last case, and the exit code is what a script
+reads. Running it twice writes the same bytes.
 
 ## `docuccino:export`
 
