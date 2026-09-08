@@ -500,8 +500,10 @@ The rest of the rules:
 #### Overriding a built-in name
 
 Docuccino's own tiers name Laravel's errors `BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`,
-`MethodNotAllowed`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`, `InternalServerError` and
-`ServiceUnavailable` — the full table, with what produces each, is on [Error
+`MethodNotAllowed`, `NotAcceptable`, `Conflict`, `Gone`, `LengthRequired`, `PreconditionFailed`,
+`ContentTooLarge`, `UnsupportedMediaType`, `UnprocessableEntity`, `Locked`, `PreconditionRequired`,
+`TooManyRequests`, `InternalServerError` and `ServiceUnavailable` — the full table, with what produces
+each, is on [Error
 responses](/laravel/documenting/errors/#shared-errors-are-named-after-the-error). Four supported ways to
 change one, in the order to reach for them.
 
