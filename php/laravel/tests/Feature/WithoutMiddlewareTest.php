@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
+use Docuccino\Laravel\Tests\Fixtures\Middleware\ApplicationAuthenticate;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Routing\Middleware\ThrottleRequests;
@@ -64,6 +65,32 @@ beforeEach(function (): void {
     $router->get('api/opt-out-auth-bare', [FormController::class, 'index'])
         ->middleware('auth:')
         ->withoutMiddleware('auth');
+    // A middleware that reaches the route through a GROUP, which reattaches its members' parameters on
+    // truthiness where a route does it on `! is_null()`. So the two falsy parameter strings name a BARE
+    // middleware inside a group and an argumented one on a route, and all three of these disagree with
+    // the framework unless the expansion reads the group's grammar rather than the route's.
+    $router->middlewareGroup('docuccino-zero-argument', ['auth:0']);
+    $router->middlewareGroup('docuccino-empty-argument', ['auth:']);
+    $router->middlewareGroup('docuccino-throttled', ['throttle:60,1']);
+    $router->get('api/opt-out-group-zero-argument', [FormController::class, 'index'])
+        ->middleware('docuccino-zero-argument')
+        ->withoutMiddleware('auth');
+    $router->get('api/opt-out-group-empty-argument', [FormController::class, 'index'])
+        ->middleware('docuccino-empty-argument')
+        ->withoutMiddleware('auth');
+    // And the one the framework KEEPS: the group's member is bare, the route's exclusion is not.
+    $router->get('api/opt-out-group-empty-argument-both-sides', [FormController::class, 'index'])
+        ->middleware('docuccino-empty-argument')
+        ->withoutMiddleware('auth:');
+    // A group's ordinary member, subtracted by the class name the route never wrote.
+    $router->get('api/opt-out-group-throttle', [FormController::class, 'index'])
+        ->middleware('docuccino-throttled')
+        ->withoutMiddleware(ThrottleRequests::class.':60,1');
+    // The subclass fallback against the real Router rather than by hand: two BARE class names, the
+    // excluded one a parent of the gathered one.
+    $router->get('api/opt-out-subclass-by-parent', [FormController::class, 'index'])
+        ->middleware(ApplicationAuthenticate::class)
+        ->withoutMiddleware(Authenticate::class);
     $router->getRoutes()->refreshNameLookups();
 });
 
@@ -86,7 +113,14 @@ it('drops excluded middleware from the resolved route descriptor', function (): 
         ->and($middlewareByUri['/api/opt-out-can-by-class'] ?? null)->toBe(['auth:web'])
         // And the two the framework keeps.
         ->and($middlewareByUri['/api/opt-out-auth-empty-args'] ?? null)->toBe(['auth'])
-        ->and($middlewareByUri['/api/opt-out-auth-bare'] ?? null)->toBe(['auth:']);
+        ->and($middlewareByUri['/api/opt-out-auth-bare'] ?? null)->toBe(['auth:'])
+        // The group rows: a falsy parameter list inside a group is not part of the member's name, so
+        // `auth` removes it — and `auth:`, which is not the same middleware, does not.
+        ->and($middlewareByUri['/api/opt-out-group-zero-argument'] ?? null)->toBe([])
+        ->and($middlewareByUri['/api/opt-out-group-empty-argument'] ?? null)->toBe([])
+        ->and($middlewareByUri['/api/opt-out-group-empty-argument-both-sides'] ?? null)->toBe(['auth'])
+        ->and($middlewareByUri['/api/opt-out-group-throttle'] ?? null)->toBe([])
+        ->and($middlewareByUri['/api/opt-out-subclass-by-parent'] ?? null)->toBe([]);
 });
 
 /**
@@ -139,7 +173,7 @@ it('keeps exactly what the framework\'s own router keeps', function (): void {
     }
 
     // A scan that stopped seeing its routes must fail rather than pass.
-    expect($compared)->toBeGreaterThanOrEqual(9);
+    expect($compared)->toBeGreaterThanOrEqual(14);
 });
 
 it('documents no 429 for a route that excludes its throttle middleware', function (string $uri): void {

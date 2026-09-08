@@ -71,6 +71,20 @@ final class MiddlewareName
     }
 
     /**
+     * A group member's name the way `MiddlewareNameResolver::parseMiddlewareGroup()` reattaches its
+     * parameters: on truthiness, where the top-level `resolve()` uses `! is_null()`. The two falsy
+     * parameter strings are therefore dropped INSIDE a group and kept on a route, so a member written
+     * `auth:` or `auth:0` reaches the pipeline as a bare `auth` — a different middleware from the one
+     * the same string names on the route itself.
+     */
+    public static function asGroupMember(string $member): string
+    {
+        [$name, $parameters] = array_pad(explode(':', $member, 2), 2, null);
+
+        return $name.($parameters ? ':'.$parameters : '');
+    }
+
+    /**
      * Whether a middleware string carries no argument separator at all. The grammar is `name[:args]`,
      * so this is the one fact that separates a bare name from a name with an empty argument list —
      * which the framework treats as two different strings.

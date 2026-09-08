@@ -197,7 +197,15 @@ final class LaravelRouteResolver implements RouteResolver
 
         $members = is_array($groups[$entry]) ? $groups[$entry] : [];
         foreach (self::strings($members) as $member) {
-            $this->expandMiddleware($member, $groups, $out, [...$visiting, $entry]);
+            // A member that names another group is looked up before its parameters are read, which is
+            // the order the framework's own expansion uses; anything else has them reattached the way a
+            // GROUP reattaches them ({@see MiddlewareName::asGroupMember()}).
+            $this->expandMiddleware(
+                array_key_exists($member, $groups) ? $member : MiddlewareName::asGroupMember($member),
+                $groups,
+                $out,
+                [...$visiting, $entry],
+            );
         }
     }
 
