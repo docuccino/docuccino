@@ -401,6 +401,7 @@ schema's `nodeId` pattern.
 | `par:` | parent op id + `in` + name | reorder, description/schema edits | rename (a real contract change for query/header) |
 | `sch:` (named) | source FQCN (+ generic args); pinnable via `#[SchemaId('…')]` | file moves | class rename without pin |
 | `sch:` (request body) | the source class identity (pinned id or FQCN) with a `#request` discriminator appended | same as the class identity above — file moves, and rename **with** a pin | class rename without pin |
+| `sch:` (component, no class) | a `component` discriminator + the name the registration ASKED to be called + the exact bytes it publishes | a sibling arriving and pushing it off that name — a rename, not a new node | any edit to what it publishes, prose included (correct) |
 | `sch:` (inline) | structural hash of canonical schema with descriptions/examples/x-docuccino stripped | prose edits | shape change (correct) |
 | `res:` | parent op id + status + media type | — | status change (correct) |
 | `doc:` | config key | everything | doc renamed in config |
@@ -410,6 +411,18 @@ A webhook is an operation and carries an `op:` id, because that is what the diff
 is keyed by a name rather than a path, so nothing is normalised away (a webhook has no parameters, and
 every byte of its name is contract) and the discriminator keeps a webhook called `/forms` out of the
 identity the path `/forms` holds.
+
+**A component's id is not an inline schema's id, and the two rules are not interchangeable.** The inline
+rule normalises annotations and `required` order away so a schema written into an operation keeps its
+identity across a cosmetic edit; no node a document publishes carries one today. A COMPONENT is a
+published node, and two of them differing at all — in one word of prose, in the order they list
+`required` — are two nodes that a differ pairing by id would otherwise see as one, with
+`ContractIndex::provenanceOf()` answering about whichever the walk reached first. So the component mint
+keeps every member the registry compares when it decides whether two registrations are ONE component,
+and both are derived from a single statement of that difference (`ComponentRegistry::claim()`): the name
+asked for, the identity behind it, and the bytes published. What the component mint deliberately does
+NOT read is the PUBLISHED name — a component pushed off its name by a claim that arrived beside it has
+been renamed, and the differ pairs it by the id it kept.
 
 Never file paths, line numbers, or array positions as identity inputs (those are
 provenance). `operationId` (human-readable OAS field) is separate: route name by default,

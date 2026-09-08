@@ -49,6 +49,7 @@ use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Core\Pipeline\Assembler;
 use Docuccino\Core\Pipeline\FragmentCache;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Pipeline\OperationFragment;
@@ -919,6 +920,60 @@ function emptyCollectionPositions(): array
             'pathItems' => [],
         ],
     ];
+}
+
+/**
+ * Assemble one document over a filled component registry and hand back `components.schemas` as the
+ * document publishes it — the published names, the bodies, and the node id stamped on each.
+ *
+ * @return array<string, array<string, mixed>>
+ */
+function assembledComponentSchemas(ComponentRegistry $components): array
+{
+    $result = (new Assembler('docuccino'))->assemble(
+        [new OperationFragment('/api/reports', 'get', (new OperationDraft)->freeze(), 'GET /api/reports')],
+        new DocumentConfig('default', ['title' => 'T', 'version' => '1.0.0']),
+        'doc:default',
+        $components,
+        [],
+        [],
+        '1.0.0',
+    );
+
+    $schemas = $result->document['components']['schemas'] ?? null;
+
+    if (! is_array($schemas)) {
+        return [];
+    }
+
+    /** @var array<string, array<string, mixed>> $schemas */
+    return $schemas;
+}
+
+/**
+ * The node id each entry of a document's `components.schemas` carries, by published name — read off the
+ * document rather than asked of the code that minted it.
+ *
+ * @param  array<string, mixed>  $document
+ * @return array<string, string>
+ */
+function componentSchemaIds(array $document): array
+{
+    $components = $document['components'] ?? null;
+    $schemas = is_array($components) ? ($components['schemas'] ?? null) : null;
+
+    if (! is_array($schemas)) {
+        return [];
+    }
+
+    $ids = [];
+    foreach ($schemas as $name => $body) {
+        $docuccino = is_array($body) ? ($body['x-docuccino'] ?? null) : null;
+        $id = is_array($docuccino) ? ($docuccino['id'] ?? null) : null;
+        $ids[(string) $name] = is_string($id) ? $id : '';
+    }
+
+    return $ids;
 }
 
 /**
