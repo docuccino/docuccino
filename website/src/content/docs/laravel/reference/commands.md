@@ -616,12 +616,14 @@ as its inputs:
 - **Everything behind an operation.** Each cached operation stores the files it was recovered from:
   the controller, everything a parent class or trait answered for it, every file a traced helper
   walked, and any file an attribute read. Editing one controller rebuilds one operation.
-- **Everything that decides all of them.** `config/`, `routes/`, `composer.json` and `composer.lock`,
-  each document's [`content.dir`](/laravel/reference/configuration/#content) tree, its
+- **Everything that decides all of them.** `docuccino.yaml`, `config/`, `routes/`, `composer.json`
+  and `composer.lock`, each document's [`content.dir`](/laravel/reference/configuration/#content) tree, its
   [`webhooks.dir`](/laravel/reference/configuration/#webhooks) tree, its
   [overlay](/laravel/reference/configuration/#overlays) files, and the
   [`engine.config`](/laravel/reference/configuration/#engine) file if you name one. These are watched
   as directories, so a route file, a content page or a webhook class you add mid-session counts too.
+  `docuccino.yaml` is watched whether or not it is there, because the file appearing is itself the
+  edit a session has to notice.
 
 The artifacts a build writes are deliberately excluded — watching its own output would rebuild
 forever.
@@ -632,9 +634,9 @@ list above. `php artisan config:cache` cannot get in the way of that: `cache.ena
 `docuccino.yaml` and the override from the environment the rebuild is handed, so neither goes through
 the config a cache would bake.
 
-If nothing was stored anyway, watch says so before the first rebuild rather than leaving you to
-notice that editing a controller changed nothing — the fragment directory is unwritable, or the cache
-is off in a way the session could not reach.
+If the first build stored nothing, watch says so rather than leaving you to notice that editing a
+controller changes nothing: only the roots above are watched, and the usual cause is a fragment
+directory it could not write to.
 
 ### Live viewer refresh
 
