@@ -8,7 +8,6 @@ use Docuccino\Laravel\Tests\Fixtures\Middleware\ApplicationAuthenticate;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Routing\Middleware\ThrottleRequests;
-use Illuminate\Routing\MiddlewareNameResolver;
 use Illuminate\Routing\Router;
 use Workbench\App\Http\Controllers\FormController;
 
@@ -124,56 +123,12 @@ it('drops excluded middleware from the resolved route descriptor', function (): 
 });
 
 /**
- * The subtraction against the authority it is a mirror of: whatever the framework's own
- * `Router::gatherRouteMiddleware()` keeps for each of these routes, we keep — read back through the
- * framework's own resolver so the comparison is in ITS vocabulary and not in one of ours. Compared as a
- * set of class identities, because the short forms we hand on are deliberately canonicalised (a leading
- * `\` names the same class, and an aliased class comes back under its alias).
+ * The subtraction against the authority it is a mirror of: whatever the framework's own Router keeps
+ * for each of these routes, we keep ({@see assertMiddlewareAgreesWithRouter()} for how the two sides
+ * are made comparable).
  */
 it('keeps exactly what the framework\'s own router keeps', function (): void {
-    /** @var Router $router */
-    $router = app('router');
-    $aliases = $router->getMiddleware();
-    $groups = $router->getMiddlewareGroups();
-
-    $identities = static function (array $names) use ($aliases, $groups): array {
-        $out = [];
-        foreach ($names as $name) {
-            if (! is_string($name)) {
-                continue;
-            }
-            foreach ((array) MiddlewareNameResolver::resolve($name, $aliases, $groups) as $resolved) {
-                if (is_string($resolved)) {
-                    $out[] = ltrim($resolved, '\\');
-                }
-            }
-        }
-        sort($out);
-
-        return array_values(array_unique($out));
-    };
-
-    $document = app(DocumentConfigFactory::class)
-        ->make('default', (array) config('docuccino.documents.default'), 'skeleton');
-
-    $ours = [];
-    foreach (app(LaravelRouteResolver::class)->resolve($document) as $descriptor) {
-        $ours[$descriptor->uri] = $descriptor->middleware;
-    }
-
-    $compared = 0;
-    foreach ($router->getRoutes() as $route) {
-        $uri = '/'.ltrim($route->uri(), '/');
-        if (! str_starts_with($uri, '/api/opt-out-') || ! array_key_exists($uri, $ours)) {
-            continue;
-        }
-
-        $compared++;
-        expect($identities($ours[$uri]))->toBe($identities($router->gatherRouteMiddleware($route)), $uri);
-    }
-
-    // A scan that stopped seeing its routes must fail rather than pass.
-    expect($compared)->toBeGreaterThanOrEqual(14);
+    assertMiddlewareAgreesWithRouter('/api/opt-out-', 14);
 });
 
 it('documents no 429 for a route that excludes its throttle middleware', function (string $uri): void {
