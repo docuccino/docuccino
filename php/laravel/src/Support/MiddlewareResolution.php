@@ -60,6 +60,39 @@ final class MiddlewareResolution
     }
 
     /**
+     * The excluded entries that removed nothing AND whose own name this map cannot resolve — the
+     * exclusions a build cannot vouch for. Asked by running the subtraction one exclusion at a time,
+     * so the answer is a function of the same rule rather than of a second reading of it.
+     *
+     * An exclusion naming something the route does not carry is ordinary — a group-wide
+     * `withoutMiddleware()` where only some members have it — so the unresolvable half is what makes
+     * this worth saying: an alias nothing in the map explains may be another spelling of a middleware
+     * the route DOES carry, and then the subtraction is short and the document over-describes.
+     *
+     * @param  list<string>  $gathered
+     * @param  list<string>  $excluded
+     * @param  array<string, string>  $aliases
+     * @return list<string>
+     */
+    public static function unmatchedExclusions(array $gathered, array $excluded, array $aliases): array
+    {
+        $unmatched = [];
+        foreach ($excluded as $entry) {
+            $name = MiddlewareName::normalize(explode(':', $entry, 2)[0]);
+
+            if (isset($aliases[$name]) || class_exists($name)) {
+                continue;
+            }
+
+            if (self::subtract($gathered, [$entry], $aliases) === $gathered && ! in_array($entry, $unmatched, true)) {
+                $unmatched[] = $entry;
+            }
+        }
+
+        return $unmatched;
+    }
+
+    /**
      * `MiddlewareNameResolver::resolve()` for an entry whose groups are already expanded: the alias's
      * class with the arguments reattached, or the entry itself where no alias answers.
      *

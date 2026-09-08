@@ -42,16 +42,23 @@ final class LaravelRouteResolver implements RouteResolver
         private readonly UnknownDocumentPins $pins = new UnknownDocumentPins,
     ) {}
 
+    /** @var list<Diagnostic> */
+    private array $middlewareDiagnostics = [];
+
     /**
-     * What the walk found and could not say for itself: the `#[InDocs]` keys naming no configured
-     * document, whose only effect is a route that is not there ({@see UnknownDocumentPins}). Drained by
-     * the generator once the walk is complete.
+     * What the walk found and could not say for itself, emptied as it is read: the `#[InDocs]` keys
+     * naming no configured document, whose only effect is a route that is not there
+     * ({@see UnknownDocumentPins}), and what the alias map could not answer ({@see MiddlewareAliases}).
+     * Drained by the generator once the walk is complete.
      *
      * @return list<Diagnostic>
      */
     public function takeDiagnostics(): array
     {
-        return $this->pins->take();
+        $middleware = $this->middlewareDiagnostics;
+        $this->middlewareDiagnostics = [];
+
+        return [...$this->pins->take(), ...$middleware];
     }
 
     public function resolve(DocumentConfig $document): iterable
@@ -59,9 +66,9 @@ final class LaravelRouteResolver implements RouteResolver
         /** @var iterable<Route> $routes */
         $routes = $this->router->getRoutes();
 
-        // Build-constant, and read once rather than per route: the alias map costs a `new Middleware`
-        // and an array merge to assemble ({@see MiddlewareAliases}).
-        $aliases = MiddlewareAliases::of($this->router);
+        // Build-constant, and read once rather than per route: the alias map costs a reflection and an
+        // array merge to assemble ({@see MiddlewareAliases}).
+        $aliases = MiddlewareAliases::of($this->router, $this->record(...));
         $groups = $this->router->getMiddlewareGroups();
 
         foreach ($routes as $route) {
@@ -94,12 +101,15 @@ final class LaravelRouteResolver implements RouteResolver
      */
     private function describe(Route $route, array $aliases, array $groups): RouteDescriptor
     {
-        return new RouteDescriptor(
+        $gathered = $this->expandAll(self::strings($route->gatherMiddleware()), $groups);
+        $excluded = $this->expandAll(self::strings($route->excludedMiddleware()), $groups);
+
+        $descriptor = new RouteDescriptor(
             methods: self::strings($route->methods()),
             uri: '/'.ltrim($route->uri(), '/'),
             name: $route->getName(),
             action: $route->getActionName(),
-            middleware: $this->gatherMiddleware($route, $aliases, $groups),
+            middleware: self::middleware($gathered, $excluded, $aliases),
             // `->withTrashed()` puts a note and a fact on every bound parameter but touches nothing
             // else the signature already carries, so it has to fold itself in or a warm build keeps
             // answering with the note the route dropped. Binding fields are the same shape of input for
@@ -112,46 +122,64 @@ final class LaravelRouteResolver implements RouteResolver
             domain: RouteHost::of($route),
             fallback: $route->isFallback,
         );
+
+        $unmatched = MiddlewareResolution::unmatchedExclusions($gathered, $excluded, $aliases);
+        if ($unmatched !== []) {
+            $this->record(MiddlewareAliases::unmatchedExclusion($descriptor->signature(), $unmatched));
+        }
+
+        return $descriptor;
+    }
+
+    private function record(Diagnostic $diagnostic): void
+    {
+        $this->middlewareDiagnostics[] = $diagnostic;
     }
 
     /**
-     * The route's middleware with kernel groups expanded to their members (recursively, cycle-guarded),
-     * so something registered app-wide via a group — Sanctum's stateful middleware on `api`, a group's
-     * `throttle:` — is detected as if it were on the route. The result stays in the short-form
-     * vocabulary the detectors read, so this widens detection without the wholesale alias resolution
-     * `Router::gatherRouteMiddleware()` does.
-     *
-     * `withoutMiddleware(...)` exclusions are subtracted the way the framework subtracts them, in its
-     * resolved-class space ({@see MiddlewareResolution}, {@see MiddlewareAliases} for the map), so a
-     * route that opts out of `throttle:api` or `auth` isn't documented with a 429/401 it never
-     * enforces, and one that opts out in a spelling the framework does NOT equate keeps the response it
+     * The route's middleware set: `withoutMiddleware(...)` exclusions subtracted the way the framework
+     * subtracts them, in its resolved-class space ({@see MiddlewareResolution}, and
+     * {@see MiddlewareAliases} for the map), so a route that opts out of `throttle:api` or `auth` isn't
+     * documented with a 429/401 it never enforces, and one that opts out in a spelling the framework does NOT equate keeps the response it
      * does. What survives is handed on in the spelling the route wrote, because the readers downstream
      * are tables of alias AND class names and rewriting an entry into one vocabulary hides it from
      * whoever speaks the other. The one rewrite that hides nothing is dropping a leading `\`, which is
      * not part of a class name ({@see MiddlewareName::normalize()}).
      *
+     * @param  list<string>  $gathered
+     * @param  list<string>  $excluded
      * @param  array<string, string>  $aliases
-     * @param  array<array-key, mixed>  $groups
      * @return list<string>
      */
-    private function gatherMiddleware(Route $route, array $aliases, array $groups): array
+    private static function middleware(array $gathered, array $excluded, array $aliases): array
     {
-        $out = [];
-        foreach (self::strings($route->gatherMiddleware()) as $entry) {
-            $this->expandMiddleware($entry, $groups, $out, []);
-        }
-
-        $excluded = [];
-        foreach (self::strings($route->excludedMiddleware()) as $entry) {
-            $this->expandMiddleware($entry, $groups, $excluded, []);
-        }
-
         $kept = array_map(
             MiddlewareName::normalize(...),
-            MiddlewareResolution::subtract($out, $excluded, $aliases),
+            MiddlewareResolution::subtract($gathered, $excluded, $aliases),
         );
 
         return array_values(array_unique($kept));
+    }
+
+    /**
+     * Every entry with the kernel groups among them expanded to their members (recursively,
+     * cycle-guarded), so something registered app-wide via a group — Sanctum's stateful middleware on
+     * `api`, a group's `throttle:` — is read as if it were on the route. The members stay in the
+     * short-form vocabulary the detectors read, so this widens detection without the wholesale alias
+     * resolution `Router::gatherRouteMiddleware()` does.
+     *
+     * @param  list<string>  $entries
+     * @param  array<array-key, mixed>  $groups
+     * @return list<string>
+     */
+    private function expandAll(array $entries, array $groups): array
+    {
+        $out = [];
+        foreach ($entries as $entry) {
+            $this->expandMiddleware($entry, $groups, $out, []);
+        }
+
+        return $out;
     }
 
     /**
