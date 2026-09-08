@@ -427,7 +427,12 @@ those instances is first-match-wins (`RouteContext`'s six resolvers, `SchemaConv
 sequential mutation (`OperationPipeline`). Its docblock had already closed identity and multiplicity
 deliberately; order was the property left open, and `ExtensionSorter` decides it from the registration
 index whenever two instances are of one class — which is every such pair, because `ExtensionOrder` is
-`TARGET_CLASS` and `before`/`after` name classes.
+`TARGET_CLASS` and `before`/`after` name classes. The fourth was found by sweeping core for the tell and
+publishes a NAME rather than keying a cache: `ComponentNames::award()` sorted claims by discriminant
+alone, so two claims agreeing on it — one identity claimed twice, or two unidentified claims of one body
+— tied, and `usort` being stable handed the plain name to whichever registered first and the `_2` tail
+to the other. The class owning the rule that a published name is never a function of arrival was
+deciding one that way, and its own docblock said the tail was already settled by the contesting set.
 
 *The tell.* A `sort()`, `ksort()` or `array_unique()` immediately before a `hash()`, with a `foreach` in
 some other file that `return`s out of its first match over the same collection. The sharper form asks it
@@ -451,3 +456,11 @@ putting them through the sorter would pass whether the signature read order or n
 entry no sibling contests is pinned as BYTES, so nobody pays a cold rebuild for a run they do not have.
 `ExtensionSorterTest` holds the other half, that the residual order is real and author-controlled, so
 the day the sort becomes arrival-free it says the position has gone redundant.
+
+Where the answer is a published NAME the trade-off does not apply, because there is no cache to churn:
+give the comparison somewhere intrinsic to fall through to instead. `ComponentNames::award()` reads the
+claim's content and then the registration name it arrived under — both data the claims map holds, the
+second being its keys — so the ordering is total over the set with nothing left to arrive. Its guard is
+a dataset of the pairs that actually tie, and it stands where no golden can: the registry upstream
+cannot form such a pair, so the reachable seam is the public `mint()` the test calls. A guard written
+over claims with different identities, which is what was there, never reaches the tie-break at all.
