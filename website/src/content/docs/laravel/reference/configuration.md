@@ -207,7 +207,7 @@ never affected, and the `include`/`exclude`/`closure` filters are unchanged. Set
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `auto_detect_middleware` | `'auth*'` | Wildcard matched against each route's middleware, in either spelling — the registered alias or the middleware's own class name; a match applies the `default` requirement. |
+| `auto_detect_middleware` | `'auth*'` | Wildcard (`*` stands for any run of characters; everything else, `\` included, is literal) matched against each route's middleware, in either spelling — the registered alias or the middleware's own class name; a match applies the `default` requirement. |
 | `schemes` | none | `components.securitySchemes` — full breadth: http bearer/basic, apiKey (header/query/cookie), oauth2 flow builders, OpenID Connect. |
 | `default` | none | The per-operation `security` requirement applied to auth-detected routes. |
 | `document` | none | A document-wide `security` requirement. |

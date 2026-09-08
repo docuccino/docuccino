@@ -181,7 +181,10 @@ Two things worth knowing:
   `auth:web`, `auth:sanctum` and friends.
 - A route can name the same middleware two ways — the alias, or the middleware's own class name, which
   is what `Authenticate::using('web')` writes — and the pattern is matched against **both**, so your
-  own narrower pattern keeps its meaning whichever spelling a route uses.
+  own narrower pattern keeps its meaning whichever spelling a route uses. An alias you registered
+  yourself counts: `auth` pointing at your app's own `Authenticate` is read as `auth`. In the pattern,
+  `*` stands for any run of characters and everything else is literal, so a pattern naming a class can
+  be written with single backslashes.
 - Declaring any `schemes` stands the Sanctum and Passport integrations down entirely — explicit config
   wins, so you never get a surprise second scheme alongside your own.
 
