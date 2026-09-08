@@ -46,7 +46,7 @@ beforeEach(function (): void {
     $router->get('api/inherited/neither', [FormController::class, 'index']);
     $router->getRoutes()->refreshNameLookups();
 
-    config()->set('docuccino.documents', [
+    setDocuments([
         'inherited' => [
             'info' => ['title' => 'Inherited Middleware', 'version' => '1.0.0'],
             'routes' => ['include' => ['api/inherited/*']],
@@ -64,7 +64,7 @@ beforeEach(function (): void {
 function inheritedBuild(): GenerationResult
 {
     /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.inherited');
+    $raw = documentSettings('inherited');
     $config = app(DocumentConfigFactory::class)->make('inherited', $raw, 'skeleton');
 
     return app(DocumentGenerator::class)->generate($config, app(TypeEngine::class));

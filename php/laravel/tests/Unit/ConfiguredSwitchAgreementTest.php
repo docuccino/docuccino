@@ -48,7 +48,7 @@ function configuredSwitchSites(): array
         ],
         'lint.<rule>.enabled' => [
             function (mixed $v): bool {
-                config()->set('docuccino.lint.descriptions.enabled', $v);
+                setBuild('lint.descriptions.enabled', $v);
 
                 return switchLintEnabled(app(MissingDescriptionLint::class));
             },
@@ -56,7 +56,7 @@ function configuredSwitchSites(): array
         ],
         'cache.enabled' => [
             function (mixed $v): bool {
-                config()->set('docuccino.cache.enabled', $v);
+                setBuild('cache.enabled', $v);
 
                 return app(FragmentStore::class)->enabled;
             },
@@ -292,7 +292,7 @@ it('holds a lint default for every lint rule the shipped config declares', funct
 });
 
 it('keeps the sensitive-field lint reading the same switch', function (): void {
-    config()->set('docuccino.lint.leakage.enabled', 'no');
+    setBuild('lint.leakage.enabled', 'no');
 
     // 'no' is refused, so the lint keeps its default — which for leakage is ON.
     expect(switchLintEnabled(app(SensitiveFieldLint::class)))->toBeTrue()

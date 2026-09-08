@@ -26,7 +26,7 @@ function acceptanceOut(): string
 
 function onlyTheRecoveringRoute(): void
 {
-    config()->set('docuccino.documents.default.routes.include', ['api/widget-query']);
+    setBuild('documents.default.routes.include', ['api/widget-query']);
 }
 
 it('lets an accepted code through every floor that would otherwise catch it', function (string $failOn, bool $failsUnaccepted): void {
@@ -37,7 +37,7 @@ it('lets an accepted code through every floor that would otherwise catch it', fu
     $this->artisan('docuccino:export', ['--out' => $out, '--fail-on' => $failOn])
         ->{$failsUnaccepted ? 'assertFailed' : 'assertSuccessful'}();
 
-    config()->set('docuccino.diagnostics.accept', ['query-builder.default-config']);
+    setBuild('diagnostics.accept', ['query-builder.default-config']);
 
     $this->artisan('docuccino:export', ['--out' => $out, '--fail-on' => $failOn])->assertSuccessful();
 
@@ -52,7 +52,7 @@ it('lets an accepted code through every floor that would otherwise catch it', fu
 
 it('keeps printing what it accepted, and totals it', function (): void {
     onlyTheRecoveringRoute();
-    config()->set('docuccino.diagnostics.accept', ['query-builder.default-config']);
+    setBuild('diagnostics.accept', ['query-builder.default-config']);
     $out = acceptanceOut();
 
     $this->artisan('docuccino:export', ['--out' => $out, '--fail-on' => 'info'])
@@ -80,7 +80,7 @@ it('marks nothing accepted when nothing is', function (): void {
  * tier of facts; a list in a config file must not be able to ship that quietly.
  */
 it('never accepts an error, at any floor that can see one', function (string $failOn): void {
-    config()->set('docuccino.diagnostics.accept', ['route.build-failed']);
+    setBuild('diagnostics.accept', ['route.build-failed']);
     $out = acceptanceOut();
 
     $this->artisan('docuccino:export', ['--out' => $out, '--fail-on' => $failOn])
@@ -91,7 +91,7 @@ it('never accepts an error, at any floor that can see one', function (string $fa
 })->with(['error', 'warning', 'info', 'hint']);
 
 it('says why an accepted code failed the run anyway', function (): void {
-    config()->set('docuccino.diagnostics.accept', ['route.build-failed']);
+    setBuild('diagnostics.accept', ['route.build-failed']);
     $out = acceptanceOut();
 
     $this->artisan('docuccino:export', ['--out' => $out, '--fail-on' => 'error'])
@@ -103,7 +103,7 @@ it('says why an accepted code failed the run anyway', function (): void {
 
 it('reports an entry nothing fired, whether the cause is fixed or the code is misspelled', function (string $code): void {
     onlyTheRecoveringRoute();
-    config()->set('docuccino.diagnostics.accept', [$code]);
+    setBuild('diagnostics.accept', [$code]);
     $out = acceptanceOut();
 
     // Visible at every floor: the report is how the list is kept honest, not a gate of its own.
@@ -122,7 +122,7 @@ it('reports an entry nothing fired, whether the cause is fixed or the code is mi
 
 it('says nothing about a stale entry while one is firing', function (): void {
     onlyTheRecoveringRoute();
-    config()->set('docuccino.diagnostics.accept', ['query-builder.default-config']);
+    setBuild('diagnostics.accept', ['query-builder.default-config']);
     $out = acceptanceOut();
 
     $this->artisan('docuccino:export', ['--out' => $out, '--fail-on' => 'warning'])
@@ -140,7 +140,7 @@ it('checks a stale entry only once the run has covered every document', function
     $defaultOut = acceptanceOut();
     $secondOut = acceptanceOut();
 
-    config()->set('docuccino.documents', [
+    setDocuments([
         'default' => [
             'info' => ['title' => 'API Documentation', 'version' => '1.0.0'],
             'routes' => ['include' => ['api/widget-query']],
@@ -152,7 +152,7 @@ it('checks a stale entry only once the run has covered every document', function
             'export' => ['path' => $secondOut],
         ],
     ]);
-    config()->set('docuccino.diagnostics.accept', ['not-a.code']);
+    setBuild('diagnostics.accept', ['not-a.code']);
 
     $this->artisan('docuccino:export', ['document' => 'default'])
         ->doesntExpectOutputToContain('config.accept-unused')
@@ -171,7 +171,7 @@ it('reads the same list on validate', function (): void {
 
     $this->artisan('docuccino:validate', ['--fail-on' => 'info'])->assertFailed();
 
-    config()->set('docuccino.diagnostics.accept', ['query-builder.default-config']);
+    setBuild('diagnostics.accept', ['query-builder.default-config']);
 
     $this->artisan('docuccino:validate', ['--fail-on' => 'info'])
         ->expectsOutputToContain('[info, accepted] query-builder.default-config')
@@ -179,7 +179,7 @@ it('reads the same list on validate', function (): void {
 });
 
 it('cannot accept a validate failure any more than an export one', function (): void {
-    config()->set('docuccino.diagnostics.accept', ['route.build-failed']);
+    setBuild('diagnostics.accept', ['route.build-failed']);
 
     $this->artisan('docuccino:validate', ['--fail-on' => 'error'])
         ->expectsOutputToContain('config.accept-refused')

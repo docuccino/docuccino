@@ -95,7 +95,7 @@ beforeEach(function (): void {
 
 it('drops excluded middleware from the resolved route descriptor', function (): void {
     $document = app(DocumentConfigFactory::class)
-        ->make('default', (array) config('docuccino.documents.default'), 'skeleton');
+        ->make('default', documentSettings(), 'skeleton');
 
     $middlewareByUri = [];
     foreach (app(LaravelRouteResolver::class)->resolve($document) as $descriptor) {

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Laravel\Commands\MemoryLimitOption;
+use Docuccino\Laravel\Config\BuildConfig;
 use Docuccino\Laravel\Engine\ConsoleBuild;
 use Docuccino\Laravel\Engine\EnginePackage;
 use Docuccino\Laravel\Engine\LazyTypeEngine;
@@ -87,8 +88,8 @@ it('does not offer the flag on the command that builds nothing', function (): vo
     expect(Artisan::all()['docuccino:clear']->getDefinition()->hasOption('memory-limit'))->toBeFalse();
 });
 
-it('captures the flag into the engine config the factory reads', function (): void {
-    config(['docuccino.engine.memory_limit' => null]);
+it('captures the flag into the engine bag the factory reads', function (): void {
+    setBuild('engine.memory_limit', '512M');
 
     MemoryLimitOption::capture(new CommandStarting(
         'docuccino:export',
@@ -96,11 +97,26 @@ it('captures the flag into the engine config the factory reads', function (): vo
         new NullOutput,
     ));
 
-    expect(config('docuccino.engine.memory_limit'))->toBe('3G');
+    // The flag wins over the configured ceiling, which is the whole point of the two being one lever.
+    expect(MemoryLimitOption::requested())->toBe('3G')
+        ->and(app(BuildConfig::class)->engine()['memory_limit'])->toBe('3G');
+});
+
+it('leaves the configured ceiling alone when no flag was passed', function (): void {
+    setBuild('engine.memory_limit', '512M');
+
+    MemoryLimitOption::capture(new CommandStarting(
+        'docuccino:export',
+        new ArrayInput([]),
+        new NullOutput,
+    ));
+
+    expect(MemoryLimitOption::requested())->toBeNull()
+        ->and(app(BuildConfig::class)->engine()['memory_limit'])->toBe('512M');
 });
 
 it('ignores the flag for commands that are not ours', function (): void {
-    config(['docuccino.engine.memory_limit' => null]);
+    setBuild('engine.memory_limit', '512M');
 
     MemoryLimitOption::capture(new CommandStarting(
         'migrate',
@@ -108,7 +124,8 @@ it('ignores the flag for commands that are not ours', function (): void {
         new NullOutput,
     ));
 
-    expect(config('docuccino.engine.memory_limit'))->toBeNull();
+    expect(MemoryLimitOption::requested())->toBeNull()
+        ->and(app(BuildConfig::class)->engine()['memory_limit'])->toBe('512M');
 });
 
 // --- Who may move the process ceiling ---------------------------------------
