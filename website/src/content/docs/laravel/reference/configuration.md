@@ -372,7 +372,6 @@ examples.
 ```php
 'representation' => [
     'filters' => 'bracketed',       // bracketed | deepObject (Query Builder filter/field style)
-    'lists' => 'comma',             // sort/include documentation style; both keywords emit the ?sort=a,b comma form
     'nullable' => 'type-array',     // type-array (type: [x, null]) | anyof ({type: null} branch)
     'operation_id' => 'route-name', // route-name | controller-method ({ShortController}@{method})
     // 'enums' => [
@@ -399,7 +398,6 @@ from "API changed".
 | Key | Values | Default | Effect |
 | --- | --- | --- | --- |
 | `filters` | `bracketed` \| `deepObject` | `bracketed` | Query Builder filter/field style: one flat `filter[status]` / `fields[type]` parameter each (`bracketed`), or a single `filter` / `fields` object parameter with `style: deepObject` (`deepObject`). See [Spatie Query Builder](/laravel/packages/query-builder/). |
-| `lists` | `comma` \| `array` | `comma` | Query Builder `sort` / `include` documentation style. Both keywords emit the same shape — an array parameter serialized to the `?sort=a,b` comma form (`style: form, explode: false`) whose `items` enum lists the [allow-list's legal values](/laravel/packages/query-builder/#sorts-and-includes-are-enums-of-the-allow-list). |
 | `nullable` | `type-array` \| `anyof` | `type-array` | How nullability is expressed: `type: ["string","null"]` vs a `{type: null}` `anyOf` branch (legacy tooling). |
 | `operation_id` | `route-name` \| `controller-method` | `route-name` | `operationId` strategy. |
 | `enums.naming` | `names` \| `none` \| `x-enumNames` \| `x-enum-varnames` | `names` | SDK member-name hints on enum schemas. The default `names` emits both spellings (`x-enum-varnames` for OpenAPI Generator and the TypeScript toolchain, `x-enumNames` for NSwag); a single-key keyword pins one tool's shape; `none` turns hints off. Read by the [Enum integration](/laravel/documenting/schemas/#enums) and the [Query Builder sort/include enums](/laravel/packages/query-builder/#sorts-and-includes-are-enums-of-the-allow-list). |
