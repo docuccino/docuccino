@@ -125,9 +125,22 @@ leaving, `not` leaving and the `contains` bounds decided it. So `maxItems: 2 →
 while `maxContains: 2 → 9` passed it — same document, same gate, same day. Three of the four wrong
 sites were pinned by tests whose comments asserted the behaviour was deliberate.
 
+The implicit `403` is the same shape one layer over. Three producers each ask whether an authorization
+gate's body could ever refuse, and each answered a body it could not read differently: the FormRequest
+arm asked the ENGINE and read silence as a gate that never refuses, `GateDenial` asked the SOURCE for a
+single literal `return true;` — a strictly weaker read, privately re-implemented — and read the same
+silence as a gate that CAN refuse, and the Laravel Actions arm asks nothing at all. Nothing said the
+three disagreed, and the weakest of them was a copy of the strongest. `GateBody` is the seam now, with
+the three rows written down in its own docblock; `GateBodyTest` is what recognises a producer that
+stops asking through it.
+
 *The tell.* One fact computed independently at more than one site, where the only guard holding the
 sites together reads their INPUTS. A second tell is prose: this rule was stated in five places, and
-three of those paragraphs certified behaviour the code did not have.
+three of those paragraphs certified behaviour the code did not have. Where the callers' defaults
+legitimately differ, the seam answers three-valued and each caller collapses it at its own call site —
+in the schema-diff case all four disagreeing sites were wrong, while in the gate case two opposite
+defaults are both right, because one decides whether to PUBLISH an error and the other whether to
+REPORT on one.
 
 *The fix that worked.* One function from the direction to the verdict, owned by the single reader of
 all three tables — and the tables return the DIRECTION rather than a pre-collapsed boolean, because a
