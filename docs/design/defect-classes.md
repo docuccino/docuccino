@@ -360,20 +360,47 @@ both Sanctum and Passport) — so a route behind `Authenticate::using('web')` pu
 security scheme: not an under-described error but a misdescribed endpoint, read by a consumer as public
 and by a generated client as needing no credential. The subtraction side had it too: a
 `withoutMiddleware()` exclusion was subtracted by literal string, so opting out of the authenticator in
-the spelling the group did not use left the `401` on a route that — Laravel resolving both sides to a
-class name before subtracting — really does run unauthenticated.
+the spelling the group did not use left the `401` on a route that really does run unauthenticated.
+
+*Which spellings those are is the APPLICATION's fact, not the framework's.* An application registers
+`auth` against its own `Authenticate` subclass — the Laravel ≤10 skeleton does, and every application
+upgraded from one carries it — and a reader holding the framework's alias map then gets both directions
+wrong at once: the subclass spelled by class name is a middleware nobody recognises, so the route is
+published public; and the framework's own authenticator is no longer what `auth` resolves to, so an
+exclusion naming it removes nothing while a document that subtracted it anyway drops a `401` the server
+does enforce. `class_exists` is a presence check and a hardcoded family is a guess at a map: the map has
+to be read off the router.
 
 *The tell.* A comparison against a middleware string — `===`, `str_starts_with($entry, 'x:')`, an
 `fnmatch` over a pattern written in alias vocabulary — where the name being matched is an alias and no
 class name sits beside it. The related tell is a user-facing pattern over that vocabulary: it cannot be
 asked to spell an FQCN, so the fix is to match it against every spelling of the middleware rather than to
-widen the pattern.
+widen the pattern. And a third: an equivalence used for both of the two questions here, which are not
+the same question. "Does this string name authentication?" wants the generous reading, since a name that
+authenticates owes a `401` however it is spelled. "Are these two strings the same middleware?" wants the
+framework's own, which compares its resolved names with their arguments attached and gates its subclass
+fallback on `class_exists` — so `auth` and `auth:` are two middleware to it, and reading them as one
+subtracted a `401` nothing had excluded.
 
 *The fix that worked.* One reader of the grammar (`MiddlewareName`: alias or class name, bare or
-`:args`), and one list per middleware read through it — `CanGate` for the authorization middleware,
-`AuthMiddlewareNames` for the authentication family, whose `spellings()` is what keeps a configured
-wildcard meaning the same thing whichever spelling a route used. The datasets assert both spellings
-against ONE expectation rather than each separately, because a reader that answers them differently is
-the defect; the hand-maintained family is read against the framework's own alias map so a fourth
-`auth*` alias cannot leave it short; and a golden holds the two spellings of one middleware side by side,
-which is the evidence that had been missing in all four instances.
+`:args`, a leading `\` trimmed), and one list per middleware read through it — `CanGate` for the
+authorization middleware, `AuthMiddlewareNames` for the authentication family, where every question is
+a function of `spellings()` so no two of them can answer one string differently. For the equivalence
+question, `MiddlewareResolution` mirrors `Router::resolveMiddleware()` through the application's alias
+map, which also brought the `throttle` and `can` exclusions — the same defect, never reported — into
+agreement with the framework. The datasets assert both spellings against ONE expectation rather than
+each separately, because a reader that answers them differently is the defect; the hand-maintained
+family is read against the framework's own alias map so a fourth `auth*` alias cannot leave it short;
+the pattern is read with the product's one wildcard grammar rather than `fnmatch`, which treats a `\` in
+the pattern as an escape; and the corpus holds the two spellings of one middleware side by side, plus a
+route that opts out of its authenticator in the other spelling, which is the evidence that had been
+missing in all four instances.
+
+*What recognises it.* `AuthMiddlewareNamesTest` for the family and its spellings,
+`AuthMiddlewareDetectorTest` for the configured pattern over both of them, `MiddlewareResolutionTest`
+for the equivalence as a function of the alias map, `WithoutMiddlewareTest` and `MiddlewareAliasMapTest`
+for that same equivalence against the framework's own router, and the `workbench-auth-spelling` golden
+for the published bytes. See also
+[A partition that covers everything and agrees on nothing](#a-partition-that-covers-everything-and-agrees-on-nothing):
+the fix here is that entry's fix — one seam, every reader through it — and the family predicate that
+read the map a second way is exactly its tell.
