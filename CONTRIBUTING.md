@@ -81,6 +81,13 @@ fence's language, and the rows of every table whose first column is headed `Key`
 `tools/config-reference-sync.php`, in `CONFIG_REFERENCE_SECTIONS` — so a new section of the page
 needs a line there, and the test says so by name if you forget.
 
+That guard covers one page. `tests/tools/DocsConfigSplitTest.php` covers the rest of the site: it
+finds every `php` fenced block that is Docuccino configuration — a block one of whose keys names a
+setting — and fails when one shows a setting the build reads from `docuccino.yaml`. Show a build
+setting as a PHP array anywhere and it names the page and the key, because a reader who follows that
+snippet gets a setting nothing reads plus a `config.stale-php-keys` warning. The framework config's
+own keys — `enabled`, `cache.store` and each document's `viewer` — stay PHP and stay admitted.
+
 ### Release tags are immutable
 
 `v*` tags cannot be moved or deleted once pushed: a tag fans out through the subtree split to all
