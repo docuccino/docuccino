@@ -3,11 +3,16 @@
 declare(strict_types=1);
 
 use Docuccino\Laravel\Integrations\Support\AuthGuardDrivers;
+use Illuminate\Auth\Middleware\Authenticate;
+use Illuminate\Auth\Middleware\AuthenticateWithBasicAuth;
 
 /**
  * Dataset coverage for the guard→driver resolution (auth audit #8): every driver kind an auth
  * middleware can resolve to, the bare-`auth` default-guard path, multi-guard lists, and the
- * unknown-guard degradation contract (a guard absent from the map contributes no driver).
+ * unknown-guard degradation contract (a guard absent from the map contributes no driver). Each guard
+ * spelling is asserted in BOTH forms the framework writes — the alias, and the class name
+ * `Authenticate::using()` renders — against the same expectation, because a driver resolved from one and
+ * not the other is a route whose owning integration never claims it.
  */
 it('resolves auth middleware to the drivers behind their guards', function (array $middleware, array $drivers, string $default, array $expected): void {
     expect(AuthGuardDrivers::driversFor($middleware, $drivers, $default))->toBe($expected);
@@ -23,6 +28,17 @@ it('resolves auth middleware to the drivers behind their guards', function (arra
     'unknown guard contributes nothing' => [['auth:partner'], [], 'web', []],
     'non-auth middleware contributes nothing' => [['throttle:60,1', 'scopes:read'], ['api' => 'passport'], 'web', []],
     'auth.basic is not a guard driver' => [['auth.basic'], ['web' => 'session'], 'web', []],
+    // The class-name spelling, which is what `Authenticate::using()` renders, answers identically.
+    'Authenticate::using(api) → passport' => [[Authenticate::using('api')], ['api' => 'passport'], 'web', ['passport']],
+    'Authenticate::using(partner) → passport' => [[Authenticate::using('partner')], ['partner' => 'passport'], 'web', ['passport']],
+    'bare Authenticate uses the default guard' => [[Authenticate::class], ['api' => 'passport'], 'api', ['passport']],
+    'Authenticate::using(web,api) resolves each' => [[Authenticate::using('web', 'api')], ['web' => 'session', 'api' => 'passport'], 'web', ['session', 'passport']],
+    'the two spellings dedupe to one driver' => [['auth:api', Authenticate::using('api')], ['api' => 'passport'], 'web', ['passport']],
+    'Authenticate::using with an unknown guard contributes nothing' => [[Authenticate::using('partner')], [], 'web', []],
+    // An argument list that named no guard names nothing — it does not fall back to the default.
+    'an empty argument list names nothing' => [['auth:'], ['web' => 'session'], 'web', []],
+    'an empty class-spelled argument list names nothing' => [[Authenticate::class.':'], ['web' => 'session'], 'web', []],
+    'AuthenticateWithBasicAuth is not a guard driver' => [[AuthenticateWithBasicAuth::using('web')], ['web' => 'session'], 'web', []],
 ]);
 
 it('builds the guard→driver map from raw config, dropping malformed entries', function (): void {

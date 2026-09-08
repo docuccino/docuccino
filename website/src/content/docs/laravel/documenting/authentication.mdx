@@ -179,6 +179,9 @@ Two things worth knowing:
   "protected", and `default` decides **what** requirement they carry. Set both. The pattern is a
   wildcard matched against each route's middleware strings, so the shipped `auth*` covers `auth`,
   `auth:web`, `auth:sanctum` and friends.
+- A route can name the same middleware two ways — the alias, or the middleware's own class name, which
+  is what `Authenticate::using('web')` writes — and the pattern is matched against **both**, so your
+  own narrower pattern keeps its meaning whichever spelling a route uses.
 - Declaring any `schemes` stands the Sanctum and Passport integrations down entirely — explicit config
   wins, so you never get a surprise second scheme alongside your own.
 

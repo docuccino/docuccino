@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\Support;
 
+use Docuccino\Laravel\Support\AuthMiddlewareNames;
+
 /**
- * Resolves a route's `auth`/`auth:<guard>` middleware to the DRIVERS behind those guards, via the app's
+ * Resolves a route's `auth`/`auth:<guard>` middleware — in either spelling, alias or class name — to the
+ * DRIVERS behind those guards, via the app's
  * `config('auth.guards')` map. The driver, not the guard name, is what tells you which security
  * integration owns a route: a `passport`-driver guard is Passport whatever it's called, and an `api`
  * guard on a `sanctum` driver isn't. The extension resolves the config and passes the plain map in, so
@@ -65,18 +68,23 @@ final class AuthGuardDrivers
      */
     private static function guardsFor(string $entry, string $defaultGuard): array
     {
-        if ($entry === 'auth') {
-            return [$defaultGuard];
+        // Both spellings of the authenticator, read through the one list of them: a `passport` guard
+        // written `Authenticate::using('api')` names the same guard `auth:api` does, and a reader that
+        // knew only the alias resolved it to no driver at all — so the integration that owns the route
+        // never claimed it and the document published it as public.
+        $arguments = AuthMiddlewareNames::guardArguments($entry);
+        if ($arguments === null) {
+            return [];
         }
 
-        if (str_starts_with($entry, 'auth:')) {
-            return array_values(array_filter(
-                array_map('trim', explode(',', substr($entry, 5))),
-                static fn (string $guard): bool => $guard !== '',
-            ));
-        }
+        $named = array_values(array_filter(
+            array_map('trim', explode(',', $arguments)),
+            static fn (string $guard): bool => $guard !== '',
+        ));
 
-        return [];
+        // A bare authenticator names the default guard; an argument list that named none — `auth:` —
+        // names nothing. Only a bare entry can lack the separator, in either spelling.
+        return $named === [] && ! str_contains($entry, ':') ? [$defaultGuard] : $named;
     }
 
     /** The default guard from `config('auth.defaults.guard')`; Laravel's own fallback is `web`. */

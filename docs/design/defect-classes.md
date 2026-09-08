@@ -342,3 +342,35 @@ consumer that has only a line an explicit ask that DECLINES when the line carrie
 degraded-but-true answer, since nothing at that call can tell them apart. Both halves are pinned by
 fixtures that put two of the thing on one line: two closures at one call, and two render callbacks in one
 `return`.
+
+## A middleware read by one of its two spellings
+
+A route names a middleware by its registered alias or by the middleware's own class name, and those are
+two spellings of one thing. Every static constructor the framework ships for a middleware that takes
+arguments renders `static::class.':'.$arguments` — `Authenticate::using('web')`, `Authorize::using()`,
+`ValidateSignature::relative()`, `EnsureEmailIsVerified::redirectTo()`, and a route may simply list
+`Middleware::class` besides. A reader that knows one spelling therefore sees no middleware at all on a
+route written the other way, and the route is documented as if the middleware were absent.
+
+*Instances.* The authorization signal read `can` only, so a `403` the route really enforces went
+missing; `signed` and `verified` the same, and the reachability check then reported a `403` the signature
+genuinely denies. Worse, the authentication signal read the `auth` alias only — in three separate readers
+(the `auto_detect_middleware` wildcard, Sanctum's mode detection, and the guard→driver resolution behind
+both Sanctum and Passport) — so a route behind `Authenticate::using('web')` published no `401` and no
+security scheme: not an under-described error but a misdescribed endpoint, read by a consumer as public
+and by a generated client as needing no credential.
+
+*The tell.* A comparison against a middleware string — `===`, `str_starts_with($entry, 'x:')`, an
+`fnmatch` over a pattern written in alias vocabulary — where the name being matched is an alias and no
+class name sits beside it. The related tell is a user-facing pattern over that vocabulary: it cannot be
+asked to spell an FQCN, so the fix is to match it against every spelling of the middleware rather than to
+widen the pattern.
+
+*The fix that worked.* One reader of the grammar (`MiddlewareName`: alias or class name, bare or
+`:args`), and one list per middleware read through it — `CanGate` for the authorization middleware,
+`AuthMiddlewareNames` for the authentication family, whose `spellings()` is what keeps a configured
+wildcard meaning the same thing whichever spelling a route used. The datasets assert both spellings
+against ONE expectation rather than each separately, because a reader that answers them differently is
+the defect; the hand-maintained family is read against the framework's own alias map so a fourth
+`auth*` alias cannot leave it short; and a golden holds the two spellings of one middleware side by side,
+which is the evidence that had been missing in all four instances.
