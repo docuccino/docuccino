@@ -8,6 +8,7 @@ use Docuccino\Laravel\DocuccinoServiceProvider;
 use Docuccino\Laravel\Testing\AssertsApiContract;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Gadget;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Widget;
+use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -94,6 +95,12 @@ abstract class TestCase extends Orchestra
             ->middleware(['auth:web', EnsureEmailIsVerified::redirectTo('verification.notice')]);
         $router->get('api/authorized-forms', [FormController::class, 'index'])
             ->middleware(['auth:web', Authorize::using('view')]);
+        // And the authenticator itself written as its own class name — what `Authenticate::using()`
+        // renders. It decides the implicit 401 and the security requirement together, so a reader that
+        // knew only the `auth` alias published this route as PUBLIC: it sits beside `api/guarded-forms`
+        // above, whose `auth:web` is the same middleware, so the two 401s are byte-comparable here.
+        $router->get('api/authenticated-forms', [FormController::class, 'index'])
+            ->middleware(Authenticate::using('web'));
 
         // Spatie Data, API Resources, JSON:API, Eloquent and status-code routes.
         $router->post('api/articles', [IntegrationsController::class, 'storeArticle']);
