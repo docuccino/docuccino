@@ -7,12 +7,11 @@ namespace Docuccino\Inference\PhpStan\Throwing;
 /**
  * Which fold gave up when a throw carried no readable HTTP status. The response is published under the
  * adapter's unplaced status either way, so this is the part a reader cannot work out from the document:
- * one of these four sentences is the difference between "write a constant here" and "nothing you own
- * could have helped".
+ * which of four reads was asked, and what would have answered it.
  *
- * Every case answers {@see because()}; only the ones whose remedy is an edit the author owns answer
- * {@see remedy()}. Whether a firing IS one of those is not the reason's call — a status argument folded
- * in a package-shipped action is the same reason in code nobody here can edit — so it is
+ * Every case answers {@see because()}; the three that name a fold over code an author can be writing in
+ * answer {@see remedy()} too. Whether a firing IS one of those is not the reason's call — a status
+ * argument folded in a package-shipped action is the same reason in code nobody here can edit — so it is
  * {@see UnreadStatus::isActionable()} that decides, off the file the fold actually read.
  *
  * @internal
@@ -43,9 +42,8 @@ enum UnreadStatusReason: string
     }
 
     /**
-     * What the author can change, or null where nothing they own would help — which is the whole
-     * reason the two are separate: a notice that fires where the remedy is an edit to `vendor/`
-     * trains a reader to ignore the channel and takes the useful notices with it.
+     * What the author can change so the NEXT build reads a number, or null where the fold read a
+     * declaration nobody here owns and there is nothing to ask for.
      */
     public function remedy(): ?string
     {

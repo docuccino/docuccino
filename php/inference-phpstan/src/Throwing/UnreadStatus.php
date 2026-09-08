@@ -11,10 +11,7 @@ use Docuccino\Core\Inference\SourceLocation;
  * and which fold gave up on it.
  *
  * `inProjectCode` is the actionability fact, and it is the file the FOLD READ — not where the exception
- * class happens to be declared. The two come apart in the shape every application writes: `abort($status)`
- * raises the framework's own `HttpException`, so a test keyed on the class would call every dynamic abort
- * unactionable, when the expression that would not fold is a line of the application's own code and
- * writing a constant there is the whole remedy.
+ * class happens to be declared (docs/design/inference-embedding.md §6).
  *
  * @internal
  */

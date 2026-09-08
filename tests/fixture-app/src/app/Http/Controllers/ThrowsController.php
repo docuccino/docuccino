@@ -504,6 +504,15 @@ class ThrowsController extends Controller
     }
 
     /**
+     * Case 1d: the framework's own HttpException, constructed HERE with a status
+     * chosen at run time, so the constant the notice asks for goes on this line.
+     */
+    public function dynamicVendorConstructionStatus(int $chosen): void
+    {
+        throw new \Symfony\Component\HttpKernel\Exception\HttpException($chosen, 'The export cannot continue.');
+    }
+
+    /**
      * Case 10v: an unreadable status a call away. The throw is written in an
      * injected collaborator, so the notice about it has to name that file and
      * that line rather than the controller line the route entered by.

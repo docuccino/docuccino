@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Docuccino\Inference\PhpStan\Throwing;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
-use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Inference\Frame;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
+use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Support\Fqcn;
 use Docuccino\Inference\PhpStan\Analysis\FileAnalyzer;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
@@ -57,8 +57,8 @@ final class ThrowAnalyzer
     /** @var array<string, true> */
     private array $visitedFiles = [];
 
-    /** @var array<string, UnreadStatus> throws whose status did not fold, by {@see UnreadStatus::key()} */
-    private array $unreadStatuses = [];
+    /** Throws whose status did not fold, and the notices they publish. */
+    private UnreadStatuses $unreadStatuses;
 
     public function __construct(
         private readonly ReflectionProvider $reflectionProvider,
@@ -68,11 +68,16 @@ final class ThrowAnalyzer
         private readonly CalleeResolver $calleeResolver,
         private readonly HttpExceptionStatus $httpExceptionStatus,
         private readonly FactoryStatus $factoryStatus,
+        // A diagnostic leaves here publishable, like every other one the engine composes: the file a
+        // notice names is a raw analyser path, and an engine is a contract another host can call.
+        private readonly MessagePaths $labels,
         // No default: the budget is `EngineConfig::$throwDepth` and nowhere else. A second copy here
         // was dead — the one construction always passes the config's — and it read as the real one, so
         // changing it moved nothing while looking like it had.
         private readonly int $maxDepth,
-    ) {}
+    ) {
+        $this->unreadStatuses = new UnreadStatuses;
+    }
 
     /**
      * @return list<ThrownException>
@@ -80,7 +85,7 @@ final class ThrowAnalyzer
     public function analyze(MethodReturnStatementsNode $node, string $selfLabel): array
     {
         $this->visitedFiles = [];
-        $this->unreadStatuses = [];
+        $this->unreadStatuses = new UnreadStatuses;
 
         $raw = $this->analyzeMethod($node, $selfLabel, 0, [], []);
 
@@ -96,38 +101,14 @@ final class ThrowAnalyzer
     }
 
     /**
-     * One notice per unread throw — the exception, the site the `throw` is written at, and which fold
-     * gave up ({@see UnreadStatus::sentence()}) — for the firings a reader can act on. They ride the
-     * analysis, so a warm build reports what a cold one did. Where it fires, and the measurement that
-     * sized its population, are in docs/design/inference-embedding.md §6.
-     *
-     * Every unread status is RECORDED ({@see StatusRead}); this is where the ones whose remedy nobody
-     * owns are dropped, so the actionability decision has one home and cannot be mistaken for the
-     * publish condition.
+     * The notices this analysis has to give ({@see UnreadStatuses::diagnostics()}). They ride the
+     * analysis, so a warm build reports what a cold one did.
      *
      * @return list<Diagnostic>
      */
     public function diagnostics(): array
     {
-        $keys = array_keys($this->unreadStatuses);
-        sort($keys);
-
-        $diagnostics = [];
-        foreach ($keys as $key) {
-            $unread = $this->unreadStatuses[$key];
-            if (! $unread->isActionable()) {
-                continue;
-            }
-
-            $diagnostics[] = new Diagnostic(
-                severity: Severity::Info,
-                code: 'inference.http-exception-status-unread',
-                message: $unread->sentence(),
-                help: $unread->reason->remedy(),
-            );
-        }
-
-        return $diagnostics;
+        return $this->unreadStatuses->diagnostics($this->labels);
     }
 
     /**
@@ -225,24 +206,21 @@ final class ThrowAnalyzer
 
         // The registry answers null for one entry shape only — one that folds its status from an argument
         // ({@see KnownThrower}'s two constructors leave a fixed-status entry nothing to fail at) — so that
-        // fold is the reason, and the file the fold READ is what says whether anyone can act on it. The
-        // exception here is always the framework's own `HttpException`, which is why a test keyed on the
-        // exception CLASS called every dynamic `abort()` unactionable and reported none of them.
-        $read = $this->recorded($status === null
-            ? StatusRead::unread(new UnreadStatus(
-                $thrower->exceptionFqcn,
-                UnreadStatusReason::DynamicArgument,
-                $frame->location,
-                $this->projectFilter->isProjectFile($scope->getFile()),
-            ))
-            : StatusRead::of($status));
+        // fold is the reason, and the file the fold READ is what says whether anyone can act on it — the
+        // exception here is always the framework's own, so the class says nothing about who can.
+        $read = $status ?? $this->unread(
+            $thrower->exceptionFqcn,
+            UnreadStatusReason::DynamicArgument,
+            $frame->location,
+            $this->projectFilter->isProjectFile($scope->getFile()),
+        );
 
         // Certain when PHPStan corroborated the same concrete type; likely when we rescued a bare-Throwable.
         $corroborated = $explicit && in_array($thrower->exceptionFqcn, $type->getObjectClassNames(), true);
 
         return new ThrownException(
             $thrower->exceptionFqcn,
-            $read->status,
+            $read,
             [...$priorChain, $frame],
             $corroborated ? ThrowConfidence::Certain : ThrowConfidence::Likely,
             ThrowDisposition::Signal,
@@ -250,18 +228,24 @@ final class ThrowAnalyzer
     }
 
     /**
-     * Records an unread status on the way past, and hands the reading back so the caller reads the
-     * status off the same value that carried the record. Every null status in this class goes through
-     * here — which is what makes {@see StatusRead}'s invariant hold of the analysis and not just of the
-     * type: a status the document publishes as unplaced is one the build has something to say about.
+     * Records an unread status and answers the "no status" every caller in the status path hands back
+     * for one — which is what makes the invariant hold of the ANALYSIS and not just of a type: the only
+     * expression in this class that produces a null status is this call, so a status the document
+     * publishes as unplaced is one the build has something to say about. A null status is what the
+     * adapter keys at its own unplaced status, so the condition that PUBLISHES such a response and the
+     * condition the build can REPORT on are one fact rather than two readers agreeing.
+     *
+     * It takes the record's PARTS rather than the record, so filing is the only way to build one at all
+     * and "recorded but dropped" is not a thing this class can express. Where the records then go, and
+     * which of them are worth a reader's time, is {@see UnreadStatuses}.
+     *
+     * Whether the report reaches anyone is a separate question, answered later and off the file the fold
+     * read ({@see UnreadStatus::isActionable()}). Silence there is a decision about the audience;
+     * silence here would be a fact nobody recorded.
      */
-    private function recorded(StatusRead $read): StatusRead
+    private function unread(string $fqcn, UnreadStatusReason $reason, SourceLocation $at, bool $inProject): null
     {
-        if ($read->unread !== null) {
-            $this->unreadStatuses[$read->unread->key()] = $read->unread;
-        }
-
-        return $read;
+        return $this->unreadStatuses->record(new UnreadStatus($fqcn, $reason, $at, $inProject));
     }
 
     /**
@@ -317,7 +301,7 @@ final class ThrowAnalyzer
             $resolution = $this->statusForType($class, $node, $scope, $frame);
             $results[] = new ThrownException(
                 $class,
-                $resolution['read']->status,
+                $resolution['status'],
                 [...$priorChain, $frame],
                 $isLiteral ? ThrowConfidence::Certain : ThrowConfidence::Declared,
                 ThrowSignal::disposition($isLiteral, $calleeIsProject, $resolution['fellBack']),
@@ -538,24 +522,24 @@ final class ThrowAnalyzer
     /**
      * The status a thrown type carries, and whether that answer is the FALLBACK rather than something the
      * code states. The two are separate because 500 is a real status a class may pin, and because "an HTTP
-     * error whose status did not fold" is a third answer again — a {@see StatusRead} with no status, which
-     * is not the same claim as "no HTTP status at all".
+     * error whose status did not fold" is a third answer again — a null status, which is not the same claim
+     * as "no HTTP status at all".
      *
-     * @return array{read: StatusRead, fellBack: bool}
+     * @return array{status: int|null, fellBack: bool}
      */
     private function statusForType(string $fqcn, Node $node, Scope $scope, Frame $frame): array
     {
         // KnownThrowers is the single source: exact FQCN wins, else a subclass inherits its parent's status.
         $exact = $this->knownThrowers->statusForExceptionFqcn($fqcn);
         if ($exact !== null) {
-            return ['read' => StatusRead::of($exact), 'fellBack' => false];
+            return ['status' => $exact, 'fellBack' => false];
         }
 
         if ($this->reflectionProvider->hasClass($fqcn)) {
             $reflection = $this->reflectionProvider->getClass($fqcn);
             foreach ($this->knownThrowers->knownStatuses() as $known => $status) {
                 if ($reflection->is($known)) {
-                    return ['read' => StatusRead::of($status), 'fellBack' => false];
+                    return ['status' => $status, 'fellBack' => false];
                 }
             }
         }
@@ -567,58 +551,74 @@ final class ThrowAnalyzer
             // vendor plumbing, and calling it read would promote it to a Signal with nothing behind it.
             $read = $this->httpStatus($fqcn, $node, $scope, $frame);
 
-            return ['read' => $read, 'fellBack' => $read->isUnplaced()];
+            return ['status' => $read, 'fellBack' => $read === null];
         }
 
-        return ['read' => StatusRead::of(500), 'fellBack' => true]; // internal / unhandled
+        return ['status' => 500, 'fellBack' => true]; // internal / unhandled
     }
 
     /**
      * What an `HttpException` subclass's status is here: the one the class pins on every instance, else the
      * one THIS throw builds it with — and where the throw carries no construction at all, the one every
      * construction the class writes of itself agrees on ({@see HttpExceptionStatus::agreed()}). Where none of
-     * them reads, the answer carries the record of which fold gave up, which is what {@see diagnostics()}
-     * reports from.
+     * them reads, the answer is a recorded {@see UnreadStatus}, which is what {@see diagnostics()} reports
+     * from.
      *
      * The order is what keeps the last of those honest. A site that DID present a construction has already
      * said what this response is, and a `throw new X($chosenAtRunTime)` that would not fold has said the
      * class's agreement is not it — so the class answers only where nothing at the site could.
+     *
+     * The reason each record carries is what happened at the SITE, while its actionability is the file the
+     * fold that gave up was reading — the rule in docs/design/inference-embedding.md §6, which is also why
+     * only the last branch here, where nothing at the site could speak, may answer `ForeignClass`.
      */
-    private function httpStatus(string $fqcn, Node $node, Scope $scope, Frame $frame): StatusRead
+    private function httpStatus(string $fqcn, Node $node, Scope $scope, Frame $frame): ?int
     {
         // The class's own file now decides what this route publishes, so it joins the dependency set.
         $this->dependOn($this->httpExceptionStatus->filesFor($fqcn));
 
-        $status = $this->httpExceptionStatus->pinned($fqcn);
-        $reason = UnreadStatusReason::DynamicConstruction;
-        if ($status === null) {
-            $site = $this->atThrowSite($fqcn, $node, $scope);
-            if ($site['spoke']) {
-                $status = $site['status'];
-            } else {
-                $agreement = $this->httpExceptionStatus->agreed($fqcn);
-                $status = $agreement['status'];
-                $this->dependOn($agreement['files']);
-                $reason = UnreadStatusReason::UnstatedByClass;
+        $pinned = $this->httpExceptionStatus->pinned($fqcn);
+        if ($pinned !== null) {
+            return $pinned;
+        }
+
+        $site = $this->atThrowSite($fqcn, $node, $scope);
+        if ($site['status'] !== null) {
+            return $site['status'];
+        }
+
+        if ($site['foldedHere']) {
+            return $this->unread(
+                $fqcn,
+                UnreadStatusReason::DynamicConstruction,
+                $frame->location,
+                $this->projectFilter->isProjectFile($scope->getFile()),
+            );
+        }
+
+        if (! $site['spoke']) {
+            $agreement = $this->httpExceptionStatus->agreed($fqcn);
+            $this->dependOn($agreement['files']);
+            if ($agreement['status'] !== null) {
+                return $agreement['status'];
             }
         }
 
-        if ($status !== null) {
-            return StatusRead::of($status);
-        }
-
-        // A class declared outside the project answers for none of the above: this build never opened the
-        // declarations that would have stated a status, so what the SITE did says nothing about why. The
-        // remedy for that one is an edit to code the reader does not own, which is why its reason carries
-        // none — but it is recorded like every other, because the document publishes its 500 either way.
+        // Nothing at this site could state a status — the class forwards no slot to fold into, names a
+        // factory this build may not read, or the throw presented no construction at all — so the fold
+        // that gave up was reading the CLASS's own declarations. Where those are outside the project this
+        // build never opened them, so no edit the reader owns would have made a number readable; the
+        // record is kept all the same, because the document publishes the unplaced status either way.
         $ownClass = $this->declaredInProject($fqcn);
 
-        return $this->recorded(StatusRead::unread(new UnreadStatus(
+        return $this->unread(
             $fqcn,
-            $ownClass ? $reason : UnreadStatusReason::ForeignClass,
+            $ownClass
+                ? ($site['spoke'] ? UnreadStatusReason::DynamicConstruction : UnreadStatusReason::UnstatedByClass)
+                : UnreadStatusReason::ForeignClass,
             $frame->location,
             $ownClass,
-        )));
+        );
     }
 
     /** Whether the exception class itself is the application's, which is whose declarations were read. */
@@ -641,12 +641,16 @@ final class ThrowAnalyzer
      * construction that presented itself and would not fold has spoken: it says the response is whatever
      * was chosen at run time, which the class's own agreement is no evidence for.
      *
-     * @return array{status: int|null, spoke: bool}
+     * `foldedHere` is the narrower fact, and why the two are not one flag: it says the expression this read
+     * gave up on is written in the file the `throw` is. A construction into a class that forwards no status
+     * slot presented itself and folded nothing HERE — there was no argument at this site to read at all.
+     *
+     * @return array{status: int|null, spoke: bool, foldedHere: bool}
      */
     private function atThrowSite(string $fqcn, Node $node, Scope $scope): array
     {
         if (! $node instanceof Node\Expr\Throw_) {
-            return ['status' => null, 'spoke' => false];
+            return ['status' => null, 'spoke' => false, 'foldedHere' => false];
         }
 
         [$thrown, $scope] = $this->localValue($node->expr, $scope);
@@ -662,19 +666,22 @@ final class ThrowAnalyzer
                     $this->httpExceptionStatus->constructorSlot($fqcn, $slot),
                 ),
                 'spoke' => true,
+                'foldedHere' => $slot !== null,
             ];
         }
 
         $factory = $this->factoryName($thrown, $fqcn, $scope);
         if ($factory === null) {
-            return ['status' => null, 'spoke' => false];
+            return ['status' => null, 'spoke' => false, 'foldedHere' => false];
         }
 
         $read = $this->factoryStatus->forFactory($fqcn, $factory);
         // The factory's file decides what this route publishes too, so it joins the dependency set.
         $this->dependOn($read['files']);
 
-        return ['status' => $read['status'], 'spoke' => true];
+        // The factory's body is read where this build is entitled to read it, so what gave up there is a
+        // declaration of the class's rather than a line of this one.
+        return ['status' => $read['status'], 'spoke' => true, 'foldedHere' => false];
     }
 
     /**
