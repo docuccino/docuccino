@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Docuccino\Laravel\Support\MiddlewareAliases;
 use Docuccino\Laravel\Support\MiddlewareResolution;
 use Docuccino\Laravel\Tests\Fixtures\Middleware\ApplicationAuthenticate;
+use Docuccino\Laravel\Tests\Fixtures\Middleware\MergesATenant;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Events\Dispatcher;
@@ -28,30 +29,27 @@ it('answers the framework\'s own default aliases for a router nothing has synced
     // default the framework adds or renames cannot leave this short.
     expect($aliases)->toBe((new Middleware)->getMiddlewareAliases())
         ->and($aliases)->toHaveKey('auth')
-        ->and($aliases['auth'])->toBe(Authenticate::class);
-});
-
-/**
- * And what that fallback is FOR: without it the subtraction stops equating the two spellings of one
- * middleware in a console build, so a route that opts out of its authenticator keeps a 401 it does not
- * enforce — the defect this stack fixed, alive again in the context that matters most.
- */
-it('equates the two spellings of one middleware for an unsynced router', function (): void {
-    $aliases = MiddlewareAliases::of(new Router(new Dispatcher));
-
-    expect(MiddlewareResolution::subtract(['auth:web'], [Authenticate::using('web')], $aliases))->toBe([])
-        ->and(MiddlewareResolution::canonical(Authenticate::using('web'), $aliases))->toBe('auth:web');
+        ->and($aliases['auth'])->toBe(Authenticate::class)
+        // And what the fallback is FOR: without it the subtraction stops equating the two spellings of
+        // one middleware in a console build, so a route that opts out of its authenticator keeps a 401
+        // it does not enforce.
+        ->and(MiddlewareResolution::subtract(['auth:web'], [Authenticate::using('web')], $aliases))->toBe([]);
 });
 
 it('lets an alias the application registered win over the default it replaces', function (): void {
     $router = new Router(new Dispatcher);
     $router->aliasMiddleware('auth', ApplicationAuthenticate::class);
-    $router->aliasMiddleware('tenant', 'Docuccino\\Laravel\\Tests\\Fixtures\\Middleware\\MergesATenant');
+    $router->aliasMiddleware('tenant', MergesATenant::class);
+    // A map is data, and `aliasMiddleware()` types neither half: an application can register a closure
+    // under a name, and the middleware set is a set of strings. Dropped here, at the boundary, so no
+    // reader downstream has to hold a type looser than the one it can act on.
+    $router->aliasMiddleware('closure', fn () => null);
 
     $aliases = MiddlewareAliases::of($router);
 
     expect($aliases['auth'])->toBe(ApplicationAuthenticate::class)
         ->and($aliases)->toHaveKey('tenant')
+        ->and($aliases)->not->toHaveKey('closure')
         // …and the defaults it did not touch are still there.
         ->and($aliases['can'])->toBe(Authorize::class);
 });

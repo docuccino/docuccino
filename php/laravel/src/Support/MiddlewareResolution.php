@@ -4,24 +4,14 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Support;
 
-use Docuccino\Core\Extensions\Context\RouteDescriptor;
-
 /**
  * A route's middleware set the way the framework's own `Router::resolveMiddleware()` reads it: every
  * entry resolved through the application's alias map before an excluded one is subtracted, and the
- * survivors handed back in the short-form vocabulary the detectors speak.
+ * survivors handed back in the spelling the route wrote them in.
  *
- * Both halves need the alias map, and both were wrong without it. An application may register `auth`
- * against its OWN `Authenticate` subclass — the Laravel ≤10 skeleton does, and every app upgraded from
- * one carries it — and then `auth:web` and `Illuminate\Auth\Middleware\Authenticate:web` are two
- * different middleware while `auth:web` and `App\Http\Middleware\Authenticate:web` are one. A reader
- * holding the framework's map instead of the application's gets both of those backwards, in the
- * direction that drops a 401 the server does enforce.
- *
- * The alias map reaches the published document only through the middleware list this returns, and that
- * list is folded into {@see RouteDescriptor::cacheSignature()}
- * verbatim — so a map edited in a service provider invalidates exactly the fragments whose middleware
- * it changed, and needs no environment digest of its own.
+ * The subtraction needs the application's map and was wrong without it — an application may register
+ * `auth` against its OWN `Authenticate` subclass, so which two strings name one middleware is the
+ * application's fact ({@see MiddlewareAliases}).
  *
  * Pure: the map is passed in, so the resolution is dataset-testable. `class_exists()` here autoloads
  * the same middleware classes the framework's own subtraction does, and only for a route that excludes
@@ -41,7 +31,7 @@ final class MiddlewareResolution
      *
      * @param  list<string>  $gathered
      * @param  list<string>  $excluded
-     * @param  array<array-key, mixed>  $aliases  the router's alias map, alias → class
+     * @param  array<string, string>  $aliases  the router's alias map, alias → class
      * @return list<string>
      */
     public static function subtract(array $gathered, array $excluded, array $aliases): array
@@ -70,47 +60,17 @@ final class MiddlewareResolution
     }
 
     /**
-     * An entry in the alias vocabulary wherever the application registered one for its class: the
-     * inverse of the framework's own alias resolution, arguments preserved.
-     *
-     * Every reader downstream speaks that vocabulary — a `security.auto_detect_middleware` pattern is
-     * written in it, and so is every short form the parsers match — so a route naming a middleware by
-     * class is turned back into the name it was registered under here, once, rather than each reader
-     * carrying the application's map. An entry with no registered alias is returned unchanged, which is
-     * what leaves the framework's own family to {@see AuthMiddlewareNames}.
-     *
-     * @param  array<array-key, mixed>  $aliases  the router's alias map, alias → class
-     */
-    public static function canonical(string $entry, array $aliases): string
-    {
-        foreach ($aliases as $alias => $class) {
-            if (! is_string($alias) || ! is_string($class)) {
-                continue;
-            }
-
-            $arguments = MiddlewareName::arguments($entry, $class);
-            if ($arguments === null) {
-                continue;
-            }
-
-            return $alias.(MiddlewareName::bare($entry) ? '' : ':'.$arguments);
-        }
-
-        return $entry;
-    }
-
-    /**
      * `MiddlewareNameResolver::resolve()` for an entry whose groups are already expanded: the alias's
      * class with the arguments reattached, or the entry itself where no alias answers.
      *
-     * @param  array<array-key, mixed>  $aliases
+     * @param  array<string, string>  $aliases
      */
     private static function resolve(string $entry, array $aliases): string
     {
-        [$name, $arguments] = array_pad(explode(':', $entry, 2), 2, null);
-        $class = $aliases[$name] ?? null;
+        $parts = explode(':', $entry, 2);
+        $arguments = $parts[1] ?? null;
 
-        return (is_string($class) ? $class : (string) $name).($arguments === null ? '' : ':'.$arguments);
+        return ($aliases[$parts[0]] ?? $parts[0]).($arguments === null ? '' : ':'.$arguments);
     }
 
     /**

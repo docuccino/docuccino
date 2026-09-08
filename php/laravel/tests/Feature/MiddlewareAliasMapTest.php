@@ -42,7 +42,7 @@ beforeEach(function (): void {
     $router->getRoutes()->refreshNameLookups();
 });
 
-it('reads a route\'s middleware through the application\'s alias map, not the framework\'s', function (): void {
+it('subtracts a route\'s middleware through the application\'s alias map, not the framework\'s', function (): void {
     $document = app(DocumentConfigFactory::class)
         ->make('default', (array) config('docuccino.documents.default'), 'skeleton');
 
@@ -51,7 +51,7 @@ it('reads a route\'s middleware through the application\'s alias map, not the fr
         $middleware[$descriptor->uri] = $descriptor->middleware;
     }
 
-    expect($middleware['/api/aliased/by-app-class'] ?? null)->toBe(['auth:web'])
+    expect($middleware['/api/aliased/by-app-class'] ?? null)->toBe([ApplicationAuthenticate::class.':web'])
         ->and($middleware['/api/aliased/excluded-by-app-class'] ?? null)->toBe([])
         ->and($middleware['/api/aliased/excluded-by-framework-class'] ?? null)->toBe(['auth:web']);
 });

@@ -12,6 +12,7 @@ use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Extensions\Contracts\RouteResolver;
 use Docuccino\Core\Support\Glob;
 use Docuccino\Laravel\Support\MiddlewareAliases;
+use Docuccino\Laravel\Support\MiddlewareName;
 use Docuccino\Laravel\Support\MiddlewareResolution;
 use Docuccino\Laravel\Support\UnknownDocumentPins;
 use Illuminate\Routing\Route;
@@ -58,8 +59,13 @@ final class LaravelRouteResolver implements RouteResolver
         /** @var iterable<Route> $routes */
         $routes = $this->router->getRoutes();
 
+        // Build-constant, and read once rather than per route: the alias map costs a `new Middleware`
+        // and an array merge to assemble ({@see MiddlewareAliases}).
+        $aliases = MiddlewareAliases::of($this->router);
+        $groups = $this->router->getMiddlewareGroups();
+
         foreach ($routes as $route) {
-            $descriptor = $this->describe($route);
+            $descriptor = $this->describe($route, $aliases, $groups);
 
             if (! $this->passesFilters($descriptor, $document)) {
                 continue;
@@ -82,14 +88,18 @@ final class LaravelRouteResolver implements RouteResolver
         }
     }
 
-    private function describe(Route $route): RouteDescriptor
+    /**
+     * @param  array<string, string>  $aliases
+     * @param  array<array-key, mixed>  $groups
+     */
+    private function describe(Route $route, array $aliases, array $groups): RouteDescriptor
     {
         return new RouteDescriptor(
             methods: self::strings($route->methods()),
             uri: '/'.ltrim($route->uri(), '/'),
             name: $route->getName(),
             action: $route->getActionName(),
-            middleware: $this->gatherMiddleware($route),
+            middleware: $this->gatherMiddleware($route, $aliases, $groups),
             // `->withTrashed()` puts a note and a fact on every bound parameter but touches nothing
             // else the signature already carries, so it has to fold itself in or a warm build keeps
             // answering with the note the route dropped. Binding fields are the same shape of input for
@@ -111,23 +121,21 @@ final class LaravelRouteResolver implements RouteResolver
      * vocabulary the detectors read, so this widens detection without the wholesale alias resolution
      * `Router::gatherRouteMiddleware()` does.
      *
-     * The alias map is read for the two questions that cannot be answered without it, and this is the
-     * only place holding it — {@see MiddlewareAliases} for where the map comes from and why the
-     * router's own is not enough, {@see MiddlewareResolution} for what is done with it.
      * `withoutMiddleware(...)` exclusions are subtracted the way the framework subtracts them, in its
-     * resolved-class space, so a route that opts out of `throttle:api` or `auth` isn't documented with
-     * a 429/401 it never enforces, and one that opts out in a spelling the framework does NOT equate
-     * keeps the response it does. And an entry naming a middleware by class comes back under the alias
-     * it is registered against, so a route written `Authenticate::using('web')` reads as the `auth:web`
-     * it resolves to whether the application aliased the framework's authenticator or its own subclass.
+     * resolved-class space ({@see MiddlewareResolution}, {@see MiddlewareAliases} for the map), so a
+     * route that opts out of `throttle:api` or `auth` isn't documented with a 429/401 it never
+     * enforces, and one that opts out in a spelling the framework does NOT equate keeps the response it
+     * does. What survives is handed on in the spelling the route wrote, because the readers downstream
+     * are tables of alias AND class names and rewriting an entry into one vocabulary hides it from
+     * whoever speaks the other. The one rewrite that hides nothing is dropping a leading `\`, which is
+     * not part of a class name ({@see MiddlewareName::normalize()}).
      *
+     * @param  array<string, string>  $aliases
+     * @param  array<array-key, mixed>  $groups
      * @return list<string>
      */
-    private function gatherMiddleware(Route $route): array
+    private function gatherMiddleware(Route $route, array $aliases, array $groups): array
     {
-        $groups = $this->router->getMiddlewareGroups();
-        $aliases = MiddlewareAliases::of($this->router);
-
         $out = [];
         foreach (self::strings($route->gatherMiddleware()) as $entry) {
             $this->expandMiddleware($entry, $groups, $out, []);
@@ -138,10 +146,10 @@ final class LaravelRouteResolver implements RouteResolver
             $this->expandMiddleware($entry, $groups, $excluded, []);
         }
 
-        $kept = [];
-        foreach (MiddlewareResolution::subtract($out, $excluded, $aliases) as $entry) {
-            $kept[] = MiddlewareResolution::canonical($entry, $aliases);
-        }
+        $kept = array_map(
+            MiddlewareName::normalize(...),
+            MiddlewareResolution::subtract($out, $excluded, $aliases),
+        );
 
         return array_values(array_unique($kept));
     }

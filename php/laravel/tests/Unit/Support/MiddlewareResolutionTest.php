@@ -49,22 +49,3 @@ it('keeps what the framework keeps and drops what it drops', function (array $ga
     'the skeleton alias, excluded by the class it points at' => [['auth:web'], [ApplicationAuthenticate::class.':web'], $skeleton, []],
     'the skeleton alias, excluded by the framework class it does not point at' => [['auth:web'], [Authenticate::class.':web'], $skeleton, ['auth:web']],
 ]);
-
-it('brings a class-spelled entry back to the alias it is registered under', function (string $entry, array $aliases, string $canonical): void {
-    expect(MiddlewareResolution::canonical($entry, $aliases))->toBe($canonical);
-})->with([
-    'the framework authenticator' => [Authenticate::class.':web', $framework, 'auth:web'],
-    'bare' => [Authenticate::class, $framework, 'auth'],
-    'an empty argument list stays one' => [Authenticate::class.':', $framework, 'auth:'],
-    'with a leading separator' => ['\\'.Authenticate::class.':web', $framework, 'auth:web'],
-    'the authorization middleware' => [Authorize::using('view'), $framework, 'can:view'],
-    'an alias is already canonical' => ['auth:web', $framework, 'auth:web'],
-    // The reported defect, one namespace over: the application's own authenticator under the alias it
-    // is registered against. Read against the framework's map it is a middleware nobody recognises,
-    // and the route is published as public.
-    'the application\'s own authenticator' => [ApplicationAuthenticate::class.':web', $skeleton, 'auth:web'],
-    'the same class where the application registered no alias for it' => [ApplicationAuthenticate::class.':web', $framework, ApplicationAuthenticate::class.':web'],
-    'a class with no alias at all' => ['Docuccino\\Laravel\\Tests\\Fixtures\\Middleware\\MergesATenant', $framework, 'Docuccino\\Laravel\\Tests\\Fixtures\\Middleware\\MergesATenant'],
-    // A map is data, and an application's may hold a closure or a numeric key.
-    'a closure alias is skipped' => [Authenticate::class, ['closure' => null, 'auth' => Authenticate::class], 'auth'],
-]);

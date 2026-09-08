@@ -16,11 +16,9 @@ namespace Docuccino\Laravel\Support;
  * from the readers.
  *
  * Every question about the family is a function of {@see spellings()}, so no two of them can disagree
- * about the same string. Pure, so the family and the grammar over it are dataset-testable; the grammar
- * itself is {@see MiddlewareName}. What this does NOT know is the application's own alias map — a
- * route naming an app's own `Authenticate` subclass is canonicalised to the alias it is registered
- * under before it gets here ({@see MiddlewareResolution::canonical()}), because only the router holds
- * that map.
+ * about the same string. The grammar over it is {@see MiddlewareName}. An application's own
+ * authenticator counts as one of the family through its parent class, which is the one thing here
+ * that reads more than the string it was given.
  */
 final class AuthMiddlewareNames
 {
@@ -62,6 +60,37 @@ final class AuthMiddlewareNames
             $suffix = MiddlewareName::bare($middleware) ? '' : ':'.$arguments;
 
             return [$alias.$suffix, $class.$suffix];
+        }
+
+        return self::subclassSpellings($middleware);
+    }
+
+    /**
+     * The same two spellings for an application's OWN authenticator: a class extending one of the
+     * family authenticates exactly the way its parent does — the ≤10 skeleton's
+     * `app/Http/Middleware/Authenticate.php` overrides nothing but `redirectTo()` — so the alias half
+     * is the parent's alias and the class half is the class the route actually wrote.
+     *
+     * Read off the class hierarchy rather than off the router's alias map, because the map is EMPTY in
+     * the context the product runs in ({@see MiddlewareAliases}) while the hierarchy answers the same
+     * in every context, aliased or not. The family classes are unrelated to each other, so at most one
+     * of them answers.
+     *
+     * @return list<string>
+     */
+    private static function subclassSpellings(string $middleware): array
+    {
+        $name = MiddlewareName::normalize($middleware);
+        $separator = strpos($name, ':');
+        $class = $separator === false ? $name : substr($name, 0, $separator);
+        $suffix = $separator === false ? '' : substr($name, $separator);
+
+        if (class_exists($class)) {
+            foreach (self::FAMILY as $alias => $parent) {
+                if (is_subclass_of($class, $parent)) {
+                    return [$alias.$suffix, $class.$suffix];
+                }
+            }
         }
 
         return [$middleware];

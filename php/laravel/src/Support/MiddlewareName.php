@@ -34,6 +34,16 @@ final class MiddlewareName
     }
 
     /**
+     * The entry as every reader should see it, with the leading `\` a hand-written class string may
+     * carry taken off. Stated here so a reader matching a class PREFIX — which most of them do, being
+     * vendor tables of their own class names — does not have to know the rule.
+     */
+    public static function normalize(string $middleware): string
+    {
+        return ltrim($middleware, '\\');
+    }
+
+    /**
      * Everything after the name, unsplit — the empty string for a middleware written bare, and null
      * where `$middleware` is none of `$names`.
      *
@@ -43,10 +53,10 @@ final class MiddlewareName
      */
     public static function arguments(string $middleware, string ...$names): ?string
     {
-        $subject = ltrim($middleware, '\\');
+        $subject = self::normalize($middleware);
 
         foreach ($names as $name) {
-            $name = ltrim($name, '\\');
+            $name = self::normalize($name);
 
             if ($subject === $name) {
                 return '';
