@@ -136,6 +136,7 @@ too, alongside what to do about each one.
 | `content.dir-missing` | warning | The configured `content.dir` doesn't exist. |
 | `content.dir-escapes-base` | warning | The configured `content.dir` doesn't name a path inside your application; it was ignored and no pages were compiled. |
 | `content.duplicate-slug` | error | Two pages resolved to the same slug; the later one was dropped. |
+| `content.frontmatter-not-a-switch` | warning | A frontmatter switch — `nav.hidden` — holds something that is neither `true` nor `false`; it was refused and the default used. Frontmatter is YAML, where `no`, `off`, `yes` and `on` are strings. |
 | `content.unresolved-directive` | error | An `::operation`/`::schema` directive resolved to nothing, or is missing its selector attribute. |
 | `content.unknown-directive` | warning | A directive Docuccino doesn't handle; passed through untouched. |
 | `content.unresolved-nav-ref` | error | A `nav.type: operation`/`tag` entry pointed at something absent. |
