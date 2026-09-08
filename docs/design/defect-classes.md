@@ -409,3 +409,58 @@ of reader for a middleware the application aliased. See also
 [A partition that covers everything and agrees on nothing](#a-partition-that-covers-everything-and-agrees-on-nothing):
 the fix here is that entry's fix — one seam, every reader through it — and the family predicate that
 read the map a second way is exactly its tell.
+## A digest that normalises what its reader walks in order
+
+A cache key exists to say "this build is the same build". Sorting or deduping the records it hashes is
+how it stops churning on a change nobody can see — and it is also how it stops seeing the one property
+the reader actually consumes. Where the thing being keyed is resolved by walking a collection and
+taking the FIRST match, or by mutating through it in sequence, order is not noise: it is the answer.
+
+*Instances.* Policy resolution ends in `getPolicyFor()`'s subclass walk, which takes the first
+registration whose subject the model is a subclass of; morph aliasing ends in `array_search($fqcn,
+morphMap(), true)`, which takes the first alias for a class. Both mirror the framework correctly, both
+were keyed by a digest that sorted its records first, so two registration orders produced one digest and
+a warm build replayed a fragment computed under the other resolution — and the morph half reaches
+published bytes, since the alias it resolves to is a discriminator mapping key. The third is core's own:
+`ResolvedExtensions::cacheSignature()` sorted one entry per resolved instance while every chain reading
+those instances is first-match-wins (`RouteContext`'s six resolvers, `SchemaConverter`'s mappers) or
+sequential mutation (`OperationPipeline`). Its docblock had already closed identity and multiplicity
+deliberately; order was the property left open, and `ExtensionSorter` decides it from the registration
+index whenever two instances are of one class — which is every such pair, because `ExtensionOrder` is
+`TARGET_CLASS` and `before`/`after` name classes. The fourth was found by sweeping core for the tell and
+publishes a NAME rather than keying a cache: `ComponentNames::award()` sorted claims by discriminant
+alone, so two claims agreeing on it — one identity claimed twice, or two unidentified claims of one body
+— tied, and `usort` being stable handed the plain name to whichever registered first and the `_2` tail
+to the other. The class owning the rule that a published name is never a function of arrival was
+deciding one that way, and its own docblock said the tail was already settled by the contesting set.
+
+*The tell.* A `sort()`, `ksort()` or `array_unique()` immediately before a `hash()`, with a `foreach` in
+some other file that `return`s out of its first match over the same collection. The sharper form asks it
+of the ordering itself: where a sort's key can TIE, whatever produced the input decides — and a key
+derived from arrival is that tie by construction, so a docblock promising order-independence beside a
+tie-break on the original index is falsified by its own sentence. See also
+[A node located by line, where the offset is its identity](#a-node-located-by-line-where-the-offset-is-its-identity),
+which is the multiplicity half of the same shape: a key that collapses two records the reader needs apart.
+
+*The fix that worked.* Carry order only where order can be observed, because dropping the normalisation
+outright makes every reorder a cold rebuild for the overwhelming majority of applications, where it
+changes nothing. For the walks, that is the registrations the walk can reach at all; for the extension
+signature, the members of a same-class run, each carrying its position in that run while every other
+entry stays order-free. Anything undecidable answers yes: over-keying costs a rebuild, under-keying
+serves a stale document. Both directions need holding, and by separate guards — a fix that keys every
+order passes the recognising test and fails the product. `ExtensionSignatureTest` states the pair: two
+differently-configured instances of one class in both registration orders key differently and reach
+different fragment keys, while two instances of DIFFERENT classes, and two indistinguishable instances
+of one class, key alike whichever order they arrived in — asserted on the signature directly, since
+putting them through the sorter would pass whether the signature read order or not. Beside them, an
+entry no sibling contests is pinned as BYTES, so nobody pays a cold rebuild for a run they do not have.
+`ExtensionSorterTest` holds the other half, that the residual order is real and author-controlled, so
+the day the sort becomes arrival-free it says the position has gone redundant.
+
+Where the answer is a published NAME the trade-off does not apply, because there is no cache to churn:
+give the comparison somewhere intrinsic to fall through to instead. `ComponentNames::award()` reads the
+claim's content and then the registration name it arrived under — both data the claims map holds, the
+second being its keys — so the ordering is total over the set with nothing left to arrive. Its guard is
+a dataset of the pairs that actually tie, and it stands where no golden can: the registry upstream
+cannot form such a pair, so the reachable seam is the public `mint()` the test calls. A guard written
+over claims with different identities, which is what was there, never reaches the tie-break at all.
