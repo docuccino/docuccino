@@ -555,6 +555,11 @@ turning it on rewrites no byte of the UIR: it shapes the projection, never the d
 | `cdn` | `false` | `true` loads the active driver's script from jsDelivr instead of the bundle shipped with the package. |
 | `configuration` | `[]` | Passed verbatim to [Scalar's `data-configuration`](https://github.com/scalar/scalar/blob/main/documentation/configuration.md) — theme, layout, `hideModels`, and the rest of Scalar's own options. Ignored by drivers that take no page configuration. |
 
+Nothing under `viewer` shapes the document: it is boot-time wiring, read only by the runtime endpoints
+and the console. So it stays out of the document's `configHash` exactly as [`export`](#export) does —
+moving a route, naming a gate or switching drivers rewrites no emitted byte and retires no warm
+fragment.
+
 :::caution[Multi-tenant or domain-gated apps: override `middleware`]
 The default includes `web`, which is right for a single-domain app (and a `gate`-protected viewer needs
 it for session state). But if your `web` group resolves a **domain or tenant**, the viewer's

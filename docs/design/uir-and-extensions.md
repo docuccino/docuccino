@@ -1990,11 +1990,22 @@ inference recovers without touching one analysed file. Tool ver additionally car
 own installed source reference where Composer can answer for it, so a `path`/dev checkout edited in
 place — the maintainer's loop, invisible to the app's lock file — doesn't share fragments with the
 release it was checked out from. The document id is keyed separately from the configHash because a fragment carries ids MINTED from it
-(§2) while the configHash deliberately excludes `export` — so the same shaping config written twice
-under two export destinations, or two API versions that have not yet stated an `info.version`, hash
-alike, and without the id the second document would be served the first's identity tree. Widening the
-configHash instead is not the fix: it is the document's published fingerprint, so it would move emitted
-bytes over a filename. The store itself is emptied by `docuccino:clear --fragments`.
+(§2) while the configHash deliberately excludes `export` and `viewer` — so the same shaping config
+written twice under two export destinations or behind two viewer routes, and two API versions that
+have not yet stated an `info.version`, hash alike, and without the id the second document would be
+served the first's identity tree. Widening the configHash instead is not the fix: it is the document's
+published fingerprint, so it would move emitted bytes over a filename. The store itself is emptied by
+`docuccino:clear --fragments`.
+
+Both exclusions answer the same test — does the key shape an emitted byte? `export` says where
+artifacts land, never what they hold. `viewer` is boot-time wiring for the runtime endpoints: the
+route the provider registers, its middleware and gate, which source the served spec comes from, which
+driver renders the page, and where that driver's script loads. Every reader of it is a request or a
+console command downstream of a finished document — the provider's route loop, `DocsController`,
+`ViewerPage`, the drivers, `ViewerDrivers`, `docuccino:install` — and none of them is document
+assembly. `viewer.driver` does pick which OpenAPI minor the runtime endpoint and `docuccino:cache`
+serve, but that is a PROJECTION of the document taken after it exists, and the runtime cache records
+its own format beside the bytes so a driver switch is a miss there regardless of the configHash.
 
 Two consequences of the cache being the fast path. A build resolves its `TypeEngine` before it
 starts, but a fully warm one asks it nothing, so the adapter hands out an `Engine\LazyTypeEngine`
