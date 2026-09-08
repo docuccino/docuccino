@@ -42,7 +42,9 @@ documents:
     routes:
       include: ['api/*']
       exclude: []
-      # A filter applied after the wildcards above. Configured in PHP, so it stays null here.
+      # A filter applied after the wildcards above, once there is a way to name one here: a file
+      # cannot hold a closure. Written empty rather than left out, because a key that is present is
+      # part of the configuration this document is fingerprinted from.
       closure: null
       # Also document routes whose controller lives under vendor/. Off by default, matching
       # `php artisan route:list --except-vendor`; closures and your own controllers are unaffected
