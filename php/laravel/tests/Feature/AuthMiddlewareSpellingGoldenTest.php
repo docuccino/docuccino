@@ -7,6 +7,7 @@ use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
+use Docuccino\Laravel\Support\AuthMiddlewareNames;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Routing\Router;
@@ -15,9 +16,8 @@ use Workbench\App\Http\Controllers\FormController;
 /**
  * The two spellings of the authentication middleware, side by side under byte-lock: `auth:web`, and the
  * `Illuminate\Auth\Middleware\Authenticate:web` that `Authenticate::using('web')` renders. Both feed the
- * one signal that decides the implicit 401 AND the per-operation security requirement, so a reader that
- * knew only the alias published an authenticated route as PUBLIC — no 401, no scheme, and a generated
- * client that omits the credential.
+ * one signal that decides the implicit 401 AND the per-operation security requirement — what a reader of
+ * one spelling costs is stated in {@see AuthMiddlewareNames}.
  *
  * `auto_detect_middleware` + a `security.default` + error responses is the population that decides both
  * of those facts, and no committed document stood in it, which is why nothing said so.
