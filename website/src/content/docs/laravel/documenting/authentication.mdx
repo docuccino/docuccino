@@ -15,6 +15,10 @@ compose in a fixed order:
 | Your **`security` config** | integration / config | You declared `schemes` — which also stands the integrations down — plus a `default` requirement for auth-detected routes, or a `document`-wide one. |
 | An **attribute** (`#[Security]`, `#[OptionallyAuthenticated]`, `#[Unauthenticated]`) | attribute | Always wins over both, per operation. |
 
+Middleware a route **inherits** counts the same as middleware written on it: a group's members are read
+as if each route in the group carried them, so an `api` group holding `auth:sanctum` protects every
+route in it as far as the document is concerned. Groups nested inside groups are expanded too.
+
 Routes marked [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) are documented as
 public (`security: []`) whatever the middleware says.
 
@@ -317,14 +321,13 @@ document built against the wrong environment from ever being released.
 so opting out of `auth:web` with `Authenticate::using('web')` really does remove it and the route is
 documented without its `401`.
 
-One thing to know: the middleware aliases **you** register are applied when the HTTP kernel is
-constructed, and a documentation build is an artisan command, which never constructs one. So a build
-knows the aliases the framework ships and the class names on your routes, but not the short names you
-bound yourself. Write both sides of an opt-out in the same spelling — the class name on both, or the
-alias on both — and the answer is exact either way. Where an exclusion resolves to nothing and removed
-nothing, the build says so with
+Your own aliases and your own middleware groups are read too: they are registered on the router when
+the HTTP kernel is constructed, and a build resolves that kernel so it reads the same map a request
+does. Where an exclusion still resolves to nothing and removed nothing — a typo, usually — the build
+says so with
 [`route.unmatched-exclusion`](/laravel/reference/diagnostics/#routes-operations-and-names) rather than
-leaving you to find it.
+leaving you to find it. Writing both sides of an opt-out in the same spelling — the class name on both,
+or the alias on both — reads best either way.
 
 ## Implicit `401`
 
