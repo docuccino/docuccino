@@ -2,23 +2,29 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Config\ConfigFile;
 use Docuccino\Laravel\Commands\RefusesUnreadConfig;
+use Docuccino\Laravel\Config\BuildConfig;
 use Docuccino\Laravel\DocuccinoServiceProvider;
 use Docuccino\Laravel\Tests\Support\BuildSettings;
 use Illuminate\Container\Container;
 use Spatie\LaravelPackageTools\Package;
 
 /**
- * An application with no `docuccino.yaml` and its build settings still in `config/docuccino.php` is
- * not read at all: the document would be assembled from defaults rather than from what its author
- * wrote. `config.not-migrated` says so, and the commands stop — before the build, and whatever
- * `--fail-on` asks for.
+ * A configuration somebody wrote that the build could not read: the commands stop, before the build,
+ * whatever `--fail-on` asks for.
+ *
+ * Four ways in, and they are one class rather than four cases — no `docuccino.yaml` while the build
+ * settings sit in `config/docuccino.php` (`config.not-migrated`), or the file there and unreadable,
+ * not YAML, or not a map of settings (the three `config.file-*` errors). Every one leaves the document
+ * assembled from defaults instead of from what its author wrote, so an artifact written out of it is
+ * wrong and about to be committed.
  *
  * `--fail-on` is a gate over what a build FOUND, so its quietest setting is `none` and it is also the
  * default: an error raised from inside the build printed and still exited 0, after a full analysis,
- * having written the wrong artifact. {@see ExportDiagnostics} already refuses a document that cannot
- * say where its artifacts go on exactly those terms, and this follows it rather than inventing a
- * second status.
+ * having written that artifact. {@see ExportDiagnostics} already refuses a document that cannot say
+ * where its artifacts go on exactly those terms, and this follows it rather than inventing a second
+ * status.
  *
  * Every registered command carries a ROW here, refusing or not, and the rows are held to the
  * provider's own registration — the two guards would otherwise cover their two subsets and say
@@ -71,6 +77,31 @@ function arrangeUnmigrated(): void
     config()->set('docuccino.on_route_error', 'omit');
 }
 
+/**
+ * Every state the refusal covers, as the code it reports. One class, four ways in — and the class is
+ * what the fix is sized to: closing only the reported one would leave three siblings that each arrive
+ * as their own report, with the same exit 0 and the same wrong artifact behind it.
+ *
+ * @return array<string, array{Closure, string}>
+ */
+function unreadConfigStates(): array
+{
+    return [
+        'build settings left in the framework config' => [arrangeUnmigrated(...), 'config.not-migrated'],
+        'a file that is not YAML' => [function (): void {
+            BuildSettings::yaml("documents:\n\tdefault: {}\n");
+        }, 'config.file-invalid'],
+        'a file holding a list' => [function (): void {
+            BuildSettings::yaml("- one\n- two\n");
+        }, 'config.file-not-a-map'],
+        // An empty file is this state too, which is the point of refusing it: `touch docuccino.yaml`
+        // otherwise built a plausible document that had nothing to do with the file.
+        'an empty file' => [function (): void {
+            BuildSettings::yaml("# nothing yet\n");
+        }, 'config.file-not-a-map'],
+    ];
+}
+
 it('gives every registered command a row', function (): void {
     $rows = [];
     foreach (unreadConfigRefusalRows() as [$class, $refuses, $arguments]) {
@@ -112,6 +143,23 @@ it('refuses, naming the code, before it builds anything', function (string $name
         ->assertExitCode(1);
 })->with(array_keys(array_filter(unreadConfigRefusalRows(), static fn (array $row): bool => $row[1])));
 
+it('refuses every state a configuration can be unreadable in, not only the one that was reported', function (Closure $arrange, string $code): void {
+    $arrange();
+    bindStubEngine();
+
+    $out = sys_get_temp_dir().'/docuccino-unread-'.uniqid().'.json';
+
+    try {
+        test()->artisan('docuccino:export', ['--format' => 'uir', '--out' => $out])
+            ->expectsOutputToContain($code)
+            ->assertExitCode(1);
+
+        expect(is_file($out))->toBeFalse();
+    } finally {
+        @unlink($out);
+    }
+})->with(unreadConfigStates());
+
 it('refuses even where the run explicitly asks for no gate', function (): void {
     // `--fail-on=none` is a project saying "report, do not fail". It is a say over what a build FOUND,
     // never over whether the configuration was read at all.
@@ -149,6 +197,33 @@ it('runs the commands that owe no refusal', function (string $name): void {
         ->doesntExpectOutputToContain('config.not-migrated')
         ->assertExitCode(0);
 })->with(array_keys(array_filter(unreadConfigRefusalRows(), static fn (array $row): bool => ! $row[1])));
+
+it('says nothing about the one file state that is not an error', function (): void {
+    // A file named nearly right beside no real one is a WARNING, and stays one: there is no
+    // `docuccino.yaml`, zero configuration is a supported state, and the document built from defaults
+    // is genuinely the product. What that severity should be is a question about the diagnostic rather
+    // than about this gate, so the gate reads the severity and does not second-guess the state.
+    $directory = sys_get_temp_dir().'/docuccino-misnamed-'.uniqid();
+    mkdir($directory, 0777, true);
+    file_put_contents($directory.'/docuccino.yml', "documents:\n  default: {}\n");
+
+    app()->instance(BuildConfig::class, new BuildConfig(ConfigFile::read($directory)));
+    bindStubEngine();
+
+    $out = $directory.'/out.json';
+
+    try {
+        test()->artisan('docuccino:export', ['--format' => 'uir', '--out' => $out])
+            ->expectsOutputToContain('config.file-misnamed')
+            ->assertExitCode(0);
+
+        expect(is_file($out))->toBeTrue();
+    } finally {
+        @unlink($out);
+        @unlink($directory.'/docuccino.yml');
+        @rmdir($directory);
+    }
+});
 
 it('says nothing about a migrated application', function (): void {
     // The refusal's firing population is the unmigrated shape and nothing else: the suite's own

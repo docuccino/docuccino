@@ -19,7 +19,29 @@ use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
  *
  * Stated over the states rather than over the reader, because the reader is one line and the states
  * are the population: each row here is a way an application arrives with no `documents` bag.
+ *
+ * The six then part in two. Three are configurations nobody wrote — no file, a file naming no
+ * documents, a `documents` key the typed reader refused — and those BUILD the default document, which
+ * is the product. Three are configurations somebody wrote that the build could not read, and a command
+ * refuses those before it builds anything (`UnreadConfigRefusalTest`). Either way the document set is
+ * resolved, which is what this file is about; what a command then does with it is what that one is.
  */
+
+/**
+ * The rows of {@see emptyDocumentBagStates()} a command refuses rather than builds: a configuration
+ * its author wrote that the build could not read. Named here so the two halves cannot both claim a row
+ * or both leave one out.
+ *
+ * @return list<string>
+ */
+function unreadableConfigStates(): array
+{
+    return [
+        'settings still in the framework config',
+        'a file that is not YAML',
+        'a file holding a list',
+    ];
+}
 
 /** @return array<string, array{Closure}> */
 function emptyDocumentBagStates(): array
@@ -69,10 +91,9 @@ it('builds and writes that document rather than exiting 0 with nothing to show',
     // The measured failure this closes: `forEachDocument` over an empty list never entered its
     // closure, so `docuccino:export --fail-on=error` exited 0, printed nothing and wrote no file.
     //
-    // Every state but one, and the exception is not an omission: an application whose build settings
-    // are still in `config/docuccino.php` is refused before the build, because its document would be
-    // assembled from defaults rather than from what its author wrote. That row is checked in
-    // `UnreadConfigRefusalTest`, including that nothing reaches disk.
+    // The three states where nobody wrote a configuration the build failed to read. The other three
+    // are refused instead, which is `UnreadConfigRefusalTest`'s half — including that nothing reaches
+    // disk while they are.
     $arrange();
     bindStubEngine();
 
@@ -86,10 +107,11 @@ it('builds and writes that document rather than exiting 0 with nothing to show',
     } finally {
         @unlink($out);
     }
-})->with(array_diff_key(emptyDocumentBagStates(), ['settings still in the framework config' => null]));
+})->with(array_diff_key(emptyDocumentBagStates(), array_flip(unreadableConfigStates())));
 
 it('names the file error a reader has to fix, which no build could reach before', function (): void {
-    // Each of these prints from inside the build, so a build that never ran reported none of them.
+    // This prints from inside the build, so a build that never ran reported it nowhere: an application
+    // with a malformed docuccino.yaml got exit 0 and complete silence.
     BuildSettings::yaml("documents:\n\tdefault: {}\n");
     bindStubEngine();
 
