@@ -28,6 +28,45 @@ it('reads a middleware under either spelling, with or without arguments', functi
     'a name that only ends the same way' => ['app.signed', null],
 ]);
 
+/**
+ * A leading `\` is not part of a class name — `Foo::class` never renders one and a hand-written string
+ * often does — so it is trimmed off both sides. A route naming the authenticator that way ran it and
+ * was published as public.
+ */
+it('reads a class name written with a leading separator', function (): void {
+    expect(MiddlewareName::arguments('\\Illuminate\\Routing\\Middleware\\ValidateSignature:relative', 'signed', ValidateSignature::class))->toBe('relative')
+        ->and(MiddlewareName::arguments('\\Illuminate\\Routing\\Middleware\\ValidateSignature', 'signed', ValidateSignature::class))->toBe('')
+        // …and on the NAME side too, since a caller may hold its list either way.
+        ->and(MiddlewareName::arguments('Illuminate\\Routing\\Middleware\\ValidateSignature:relative', 'signed', '\\'.ValidateSignature::class))->toBe('relative')
+        // Case is deliberately not folded: see the class docblock.
+        ->and(MiddlewareName::arguments('illuminate\\routing\\middleware\\validatesignature', 'signed', ValidateSignature::class))->toBeNull();
+});
+
+/**
+ * Bareness, which is the one fact {@see MiddlewareName::arguments()} cannot report: it answers `''` for
+ * a bare name AND for an empty argument list, and the framework treats those as two different
+ * middleware — it compares its resolved names with the arguments still attached, so `Authenticate` and
+ * `Authenticate:` never match each other.
+ */
+it('tells a bare name from an empty argument list', function (string $middleware, bool $bare): void {
+    expect(MiddlewareName::bare($middleware))->toBe($bare);
+})->with([
+    'the alias, bare' => ['signed', true],
+    'the alias with an empty argument list' => ['signed:', false],
+    'the alias with an argument' => ['signed:relative', false],
+    'the class name, bare' => ['Illuminate\\Routing\\Middleware\\ValidateSignature', true],
+    'the class name with an empty argument list' => ['Illuminate\\Routing\\Middleware\\ValidateSignature:', false],
+    'a middleware this reader knows nothing about' => ['tenant', true],
+]);
+
+/** The pair that makes the reader above necessary: `arguments()` cannot tell these two apart. */
+it('separates the two names arguments() answers alike', function (): void {
+    expect(MiddlewareName::arguments('signed', 'signed'))->toBe('')
+        ->and(MiddlewareName::arguments('signed:', 'signed'))->toBe('')
+        ->and(MiddlewareName::bare('signed'))->toBeTrue()
+        ->and(MiddlewareName::bare('signed:'))->toBeFalse();
+});
+
 it('answers for the first of several names that matches', function (): void {
     expect(MiddlewareName::arguments('can:view,App\\Widget', 'signed', 'can'))->toBe('view,App\\Widget')
         ->and(MiddlewareName::arguments('nothing:here', 'signed', 'can'))->toBeNull()

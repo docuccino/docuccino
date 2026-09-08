@@ -51,6 +51,37 @@ it('reads the guard arguments of the guard-selecting authenticator in either spe
     'a longer class that starts with the authenticator' => [Authenticate::class.'Session', null],
 ]);
 
+/**
+ * An empty argument list is its own name. `MiddlewareName::arguments()` answers `''` for `auth` and for
+ * `auth:` alike, so a reader reconstructing the name from the arguments alone claimed the bare `auth`
+ * as a spelling of `auth:` — and the framework does not agree: it compares its resolved names with the
+ * arguments attached, so `Authenticate` and `Authenticate:` are two middleware to it. Through a
+ * subtraction that equivalence removed a 401 the server does enforce.
+ */
+it('never claims a bare name as a spelling of an empty argument list', function (string $alias, string $class): void {
+    expect(AuthMiddlewareNames::spellings($alias.':'))->toBe([$alias.':', $class.':'])
+        ->and(AuthMiddlewareNames::spellings($class.':'))->toBe([$alias.':', $class.':'])
+        ->and(AuthMiddlewareNames::spellings($alias))->toBe([$alias, $class])
+        ->and(AuthMiddlewareNames::spellings($class))->toBe([$alias, $class])
+        // Stated as the disjointness it is, so a reader that reintroduces the collision fails here.
+        ->and(array_intersect(AuthMiddlewareNames::spellings($alias.':'), AuthMiddlewareNames::spellings($alias)))->toBe([]);
+})->with([
+    'auth' => ['auth', Authenticate::class],
+    'auth.basic' => ['auth.basic', AuthenticateWithBasicAuth::class],
+    'auth.session' => ['auth.session', AuthenticateSession::class],
+]);
+
+/**
+ * A leading `\` names the same class — `Foo::class` never renders one, a hand-written middleware string
+ * often does — so the entry is read as the family member it is rather than as a middleware nobody
+ * recognises, which published the route as public.
+ */
+it('reads a class spelling written with a leading separator', function (): void {
+    expect(AuthMiddlewareNames::spellings('\\'.Authenticate::class.':web'))->toBe(['auth:web', Authenticate::class.':web'])
+        ->and(AuthMiddlewareNames::matches('\\'.Authenticate::class))->toBeTrue()
+        ->and(AuthMiddlewareNames::guardArguments('\\'.Authenticate::class.':web'))->toBe('web');
+});
+
 it('leaves a middleware outside the family as its own only spelling', function (string $middleware): void {
     expect(AuthMiddlewareNames::spellings($middleware))->toBe([$middleware])
         ->and(AuthMiddlewareNames::matches($middleware))->toBeFalse();
