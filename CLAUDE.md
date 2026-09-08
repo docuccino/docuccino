@@ -268,13 +268,20 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   was asked for: inheritance and traits answer most of what the build recovers, so a class's own file
   is only the start (`DeclarationFiles`), and an enum whose cases were copied is a file of its own.
   Under-keying is a correctness bug and over-keying only a cost — key more when in doubt.
-- **Config surface**: `php/laravel/config/docuccino.php` is framework-config style — every
-  option present, optional ones commented out, one short comment each. Commenting out is not
-  cosmetic: a key shipped PRESENT, even as `null`, is part of the resolved config and so changes
-  every document's `configHash`, churning every golden for a feature nobody turned on. A key the
-  code reads must appear there, and the website's configuration reference must document it — key
-  for key, commented options included, which `ConfigReferenceSyncTest` checks in both directions
-  (a new section of that page needs a line in `CONFIG_REFERENCE_SECTIONS`). It must also stay
+- **Config surface, over two files**: everything a BUILD reads lives in the tool's own
+  `docuccino.yaml` (shipped at `php/laravel/config/docuccino.yaml`, written to the project root by
+  `docuccino:install`); `config/docuccino.php` keeps only what the framework reads at BOOT or on a
+  viewer REQUEST — `enabled`, each document's `viewer` bag, `cache.store`. Nothing left in the PHP
+  file is merged or given precedence: it is detected and reported (`ConfigSplit`). Both files are
+  framework-config style — every option present, optional ones commented out, one short comment
+  each. Commenting out is not cosmetic: a key shipped PRESENT, even as `null`, is part of the
+  resolved config and so changes every document's `configHash`, churning every golden for a feature
+  nobody turned on — and in YAML an empty collection must be spelled `[]`/`{}`, because a blank
+  value parses to null and `Json::stable()` fingerprints null and `[]` differently
+  (`ShippedSettingsTest`). A key the code reads must appear in its file, the two files must declare
+  the same build settings key for key, and the website's configuration reference must document them —
+  commented options included, which `ConfigReferenceSyncTest` checks in every direction (a new
+  section of that page needs a line in `CONFIG_REFERENCE_SECTIONS`). The PHP file must also stay
   **pure data** — no imports, no class references, `env()` the only call — so a dev-only install
   survives a `--no-dev` production boot, which loads every `config/` file (`ShippedConfigTest`).
 - **Comment style**: comments are small and informal. Class docblocks are 1–3 short sentences

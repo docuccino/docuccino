@@ -704,7 +704,7 @@ are the pipeline's ExceptionToResponse job. Known limitation (accepted): an inco
 - User's own PHPStan extensions improve their docs with zero Docuccino-specific API — headline
   feature, and the one sanctioned way to teach the analysis about a project's own code (which is
   why §6's registry stays internal). The wiring, end to end:
-  `engine.neon` (adapter config, a path relative to the app base path) → `EngineNeon::path()` →
+  `engine.config` (a path relative to the app base path) → `EngineConfigFile::path()` →
   the core `TypeEngineBuilder::build(configFile:)` seam → `RuntimeConfig::$userNeon` → an extra
   entry under `includes:` in the generated neon, after Larastan's. So the file is a normal PHPStan
   config: whatever it registers (dynamic return-type extensions, stub files, parameters) is in play
@@ -713,7 +713,7 @@ are the pipeline's ExceptionToResponse job. Known limitation (accepted): an inco
   Two consequences the wiring owes: the file's CONTENT joins `BuildFingerprint`, since an edited
   extension changes inferred types with no analysed file moving; and a configured path that names
   no file is skipped by the engine and reported by the adapter as one
-  `config.engine-neon-missing` warning — the build is honest without it, just vaguer than
+  `config.engine-config-missing` warning — the build is honest without it, just vaguer than
   configured, so it degrades rather than failing.
 
 ## 8. Determinism
