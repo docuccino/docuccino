@@ -153,6 +153,18 @@ coverage locally and the ratchet policy for the CI gate.
   than reshaping the fixture until the analyzer looks like it succeeds. Stub-engine fixtures are for
   mapper *mechanics* only and never substitute for a real-engine recovery proof.
 
+- **Harness honesty (binding).** A harness boots the application, and which facts are on the live
+  framework objects a reader consults is a function of HOW it booted. Testbench resolves the HTTP
+  kernel before the first test; a documentation build is an artisan command and resolves the console
+  kernel, which writes neither the middleware alias map, nor the middleware groups, nor the middleware
+  priority to the router. A reader can therefore be correct in every test and blind in production
+  without a single test disagreeing with it — that population is **unrepresented**, not
+  under-covered, and no route added to the standard harness reaches it. So a suite describing what the
+  product publishes for a route that inherits anything from the application's own wiring boots the way
+  the product boots (`refreshWithoutHttpKernel()`), and the harness **asserts its own premise** against
+  what a real console boot was measured to hold rather than assuming it. Reading one application twice —
+  once each way — against ONE golden is what makes the two readings owe each other an answer.
+
 ## Running coverage locally
 
 Line coverage needs a coverage driver. The project uses **pcov** (fast, statement-level):

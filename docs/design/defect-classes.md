@@ -464,3 +464,48 @@ second being its keys — so the ordering is total over the set with nothing lef
 a dataset of the pairs that actually tie, and it stands where no golden can: the registry upstream
 cannot form such a pair, so the reachable seam is the public `mint()` the test calls. A guard written
 over claims with different identities, which is what was there, never reaches the tie-break at all.
+
+## A map the test harness fills that the product's own context leaves empty
+
+The adapter reads facts off live framework objects, and which facts are ON those objects depends on how
+the application was booted. Testbench boots one way and `artisan` boots another, so a reader can be
+correct in every test and blind in production without a single test disagreeing with it. The corpus is
+then not under-covered but SILENT: the population the product runs in is unrepresented, and no route
+added to the standard harness reaches it.
+
+The concrete asymmetry is `Illuminate\Foundation\Http\Kernel::__construct()`, which is what calls
+`syncMiddlewareToRouter()` and so what writes the alias map, the middleware groups and the middleware
+priority onto the router. Testbench resolves that kernel before the first test. A documentation build is
+an artisan command and resolves the CONSOLE kernel, which writes none of it — measured on a stock
+Laravel 12 application booted that way: every route present, no aliases and no groups at all.
+
+*Instances.* The alias map first: a route naming its authenticator by class where the application had
+aliased its own subclass came out public, and a `withoutMiddleware()` written in the other spelling
+subtracted nothing. Then the group map, which is the same asymmetry one layer out and worse, because a
+group's contents are the application's own data and there is no default table to fall back on — so a
+route INHERITING its middleware, which is the idiomatic shape, had that middleware read as an opaque
+name. Measured on a conventional API surface: six of nine routes lost everything they inherited — the
+`api` group's `throttle` and therefore the `429` and its rate-limit headers, Sanctum's stateful
+middleware and therefore its scheme, `auth:sanctum` and therefore the `401` and the security
+requirement. The one route writing its middleware itself was unaffected, which is exactly why the
+defect survived: the harness's routes wrote theirs.
+
+*The tell.* A read of a live framework object whose contents were put there by a lifecycle step, where
+the step that puts them there is not the step the product performs. `$router->getMiddleware()`,
+`$router->getMiddlewareGroups()` and `$router->middlewarePriority` are the three this kernel writes;
+anything the kernel holds and never syncs — its global middleware — is invisible to both contexts alike
+and is a feature gap rather than an instance of this. The second tell is a golden that MOVED when the
+fix landed only under a boot no committed document performs: stillness across the corpus is then
+evidence that the corpus has no fixture in the population, not evidence that nothing changed.
+
+*The fix that worked.* Perform the lifecycle step rather than reconstruct what it would have written:
+`MiddlewareRegistrations` resolves the HTTP kernel once, for its effect on the router, and reads both
+maps off the ROUTER afterwards — which is also where a service provider's own registrations land, and
+which keeps the grammar a function of the version the application resolved rather than of a table copied
+into the adapter. A resolution that cannot be performed degrades to whatever the router holds and says
+so, because a route published with no middleware because a map could not be read is a confident false
+claim rather than a vague one. What recognises the class is the harness rather than an assertion:
+`refreshWithoutHttpKernel()` rebuilds the application in the product's own boot state and ASSERTS that
+state against what a real console boot was measured to hold, and the suite standing in the population
+reads one application twice — once unsynced, once synced — against one golden, so a reader that only
+comes out right when something else constructed a kernel first cannot pass.

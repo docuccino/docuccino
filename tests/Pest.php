@@ -78,6 +78,10 @@ use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Docuccino\Laravel\Tests\TestCase;
 use Docuccino\Laravel\Watch\BuildRunner;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Contracts\Http\Kernel as HttpKernelContract;
+use Illuminate\Foundation\Configuration\ApplicationBuilder;
+use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Foundation\Http\Kernel as HttpKernel;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Routing\MiddlewareNameResolver;
@@ -200,6 +204,64 @@ function assertMiddlewareAgreesWithRouter(string $uriPrefix, int $atLeast): void
     }
 
     expect($compared)->toBeGreaterThanOrEqual($atLeast);
+}
+
+/**
+ * Rebuild the application the way a documentation build finds it: the HTTP kernel bound and never
+ * constructed, so the router holds NEITHER the alias map nor the middleware groups.
+ * `Illuminate\Foundation\Http\Kernel::__construct()` is what calls `syncMiddlewareToRouter()`, and a
+ * console process resolves no HTTP kernel — while testbench's own boot resolves one before the first
+ * test runs, which is why every other suite here reads a fully synced router.
+ *
+ * That is not an under-covered population, it is an unrepresented one: no route added to the standard
+ * harness reaches it, because the standard harness is already synced. Suites that mean to describe what
+ * the product publishes for a route INHERITING middleware start here.
+ *
+ * The premise is asserted rather than assumed, against the state measured on a real provisioned
+ * application booted through its console kernel — HTTP kernel bound but unresolved, application
+ * bootstrapped, no aliases, no groups, every route present. A harness that quietly stopped reproducing
+ * that would let everything built on it pass for the wrong reason.
+ *
+ * Routes and middleware registrations belong AFTER this call: it replaces the container, so anything
+ * written to the previous router is gone with it.
+ */
+function refreshWithoutHttpKernel(): void
+{
+    test()->refreshApplication();
+
+    /** @var Router $router */
+    $router = app('router');
+
+    expect(app()->bound(HttpKernelContract::class))->toBeTrue()
+        ->and(app()->resolved(HttpKernelContract::class))->toBeFalse()
+        ->and(app()->hasBeenBootstrapped())->toBeTrue()
+        ->and($router->getMiddleware())->toBe([])
+        ->and($router->getMiddlewareGroups())->toBe([])
+        ->and(count($router->getRoutes()))->toBeGreaterThan(0);
+}
+
+/**
+ * Register a middleware group the way an application's own `bootstrap/app.php` registers one: as a
+ * group on the `Illuminate\Foundation\Configuration\Middleware` object the framework applies when the
+ * HTTP kernel resolves ({@see ApplicationBuilder::withMiddleware()}).
+ *
+ * Writing it straight onto the router with `middlewareGroup()` would put it there without any kernel,
+ * which is the one thing a suite standing in this population must not do — the group's absence from an
+ * unsynced router is the whole fact under test.
+ *
+ * @param  list<string>  $middleware
+ */
+function registerAppMiddlewareGroup(string $name, array $middleware): void
+{
+    app()->afterResolving(
+        HttpKernelContract::class,
+        static function (HttpKernel $kernel) use ($name, $middleware): void {
+            $configuration = new Middleware;
+            $configuration->group($name, $middleware);
+
+            $kernel->setMiddlewareGroups($configuration->getMiddlewareGroups());
+        },
+    );
 }
 
 /**
