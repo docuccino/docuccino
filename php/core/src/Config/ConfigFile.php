@@ -67,6 +67,9 @@ final class ConfigFile
      */
     public const int FLAGS = Yaml::PARSE_EXCEPTION_ON_INVALID_TYPE;
 
+    /** The largest magnitude at which a float still names exactly one integer. */
+    private const float EXACT_INTEGER_LIMIT = 9007199254740992.0;
+
     /** No file of that name in the directory. Not an error: zero configuration is a supported state. */
     public const string ABSENT = 'absent';
 
@@ -175,7 +178,101 @@ final class ConfigFile
         // A reader downstream distinguishes them — a key nobody named has expressed nothing and takes
         // its documented fallback, while a key present and unreadable has an author behind it and
         // degrades loudly. Dropping nulls here would collapse the two into one, silently.
-        return new self(null, Arr::stringKeyed($value), null);
+        $diagnostics = [];
+        $settled = self::settled($value, '', $diagnostics);
+
+        return new self(null, Arr::stringKeyed($settled), null, $diagnostics);
+    }
+
+    /**
+     * The parse with every numeric reading the PARSER was free to choose settled to one answer.
+     *
+     * Which is not a hypothetical. Across the range of `symfony/yaml` this package allows, one patch
+     * release apart, `+1` reads as the int 1 or as the float 1.0, and `.nan` reads as NAN or as INF.
+     * A parsed value is a fragment-cache key input and a published byte, so a reading that depends on
+     * which patch a machine's lockfile resolved is a determinism break arriving from a dependency.
+     *
+     * Two settlements, and they are different in kind:
+     *
+     * An integer and its integral-float twin become the INT. This is not the reader inventing a
+     * convention — `Json::stable()` fingerprints 1 and 1.0 to the same bytes, and the canonical
+     * writer documents an integral float losing its decimal point as a property of the canonical
+     * form. Both layers downstream already hold that these are one value;
+     * the reader was the only one of the three that disagreed, which is how the same setting came to
+     * be accepted on one patch release and refused on the next.
+     *
+     * A non-finite float becomes NULL, with a diagnostic. `.nan` and `.inf` are the one reading whose
+     * VALUE — not just its type — differs across the range, so no type-shaped guard would see it, and
+     * they are the reading that survives into a hash as a bare word rather than a number. They are
+     * also not values a document can carry at all: the canonical writer refuses them outright. Null is
+     * the honest answer rather than a hole, because present-and-null is already exactly what this
+     * reader means by "an intent expressed and unreadable" — so the key stays written, every typed
+     * read answers its documented default, and the value that reaches a hash is the same either way.
+     *
+     * Nothing else is touched. Non-integral floats, strings that look like numbers and absent keys all
+     * come through as parsed, because none of them is a choice the parser made for us.
+     *
+     * @param  array<mixed, mixed>  $value
+     * @param  list<Diagnostic>  $diagnostics
+     * @return array<mixed, mixed>
+     */
+    private static function settled(array $value, string $path, array &$diagnostics): array
+    {
+        $out = [];
+
+        foreach ($value as $key => $member) {
+            $child = $path === '' ? (string) $key : $path.'.'.$key;
+
+            if (is_array($member)) {
+                $out[$key] = self::settled($member, $child, $diagnostics);
+
+                continue;
+            }
+
+            if (! is_float($member)) {
+                $out[$key] = $member;
+
+                continue;
+            }
+
+            if (! is_finite($member)) {
+                $diagnostics[] = new Diagnostic(
+                    severity: Severity::Warning,
+                    code: 'config.value-not-finite',
+                    message: sprintf(
+                        // Deliberately NOT distinguishing not-a-number from an infinity. `.nan` reads
+                        // as one on some versions in the range and as the other on others, so a
+                        // message that told them apart would put a dependency's patch level into the
+                        // build's report — the same leak as the value, one layer out.
+                        '%s is not a finite number, which is not a value a document can carry, so the setting is read as empty.',
+                        $child,
+                    ),
+                    help: 'Write a finite number, or drop the key.',
+                );
+
+                $out[$key] = null;
+
+                continue;
+            }
+
+            $out[$key] = self::asInteger($member);
+        }
+
+        return $out;
+    }
+
+    /**
+     * A float that is some integer exactly, as that integer; anything else unchanged.
+     *
+     * Capped at 2^53 rather than at PHP_INT_MAX because past 2^53 a float cannot hold consecutive
+     * integers, so there is no single integer it is the twin OF — and `(float) PHP_INT_MAX` rounds up
+     * past PHP_INT_MAX, which makes the obvious range check admit a value the cast then mangles.
+     */
+    private static function asInteger(float $value): int|float
+    {
+        return $value === floor($value) && abs($value) <= self::EXACT_INTEGER_LIMIT
+            ? (int) $value
+            : $value;
     }
 
     public function ok(): bool

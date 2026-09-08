@@ -56,7 +56,6 @@ it('reads each hostile spelling as exactly one type and value', function (string
     '0x1A' => ['0x1A', 'int', 26],
     '0o17' => ['0o17', 'int', 15],
     '1_000' => ['1_000', 'int', 1000],
-    '+1' => ['+1', 'int', 1],
 
     // And the two that look like notations and are not: a leading zero is NOT octal here, so a file
     // mode stays text — which is the spelling somebody reaches for first.
@@ -71,6 +70,46 @@ it('reads each hostile spelling as exactly one type and value', function (string
     'null' => ['null', 'null', null],
     'blank' => ['', 'null', null],
 ]);
+
+/**
+ * The spellings whose reading the PARSER chooses, and which choice it makes is not stable across the
+ * versions of it this package allows. Measured one patch release apart, inside the range `php/core`
+ * declares:
+ *
+ * | spelling | 7.4.12 | 7.4.15 |
+ * |---|---|---|
+ * | `+1`, `+0`, `+1_000` | float | int |
+ * | `.nan`, `.NaN` | INF | NAN |
+ *
+ * So these rows say what is true across the whole range rather than what this lockfile happens to
+ * resolve — a number, and which KIND of number is the parser's business. What must not vary is what
+ * the reader does with it, and that is asserted where the reader is, not here.
+ */
+it('reads a signed integer as some number, without promising which kind', function (string $spelling, int|float $number): void {
+    $parsed = Yaml::parse('k: '.$spelling);
+
+    expect($parsed)->toBeArray();
+
+    // Deliberately not toBe(): pinning `int` here is what failed CI on a --prefer-lowest leg, and
+    // pinning `float` would fail on the lockfile. Both readings are correct; the number is the fact.
+    expect($parsed['k'])->toBeNumeric()
+        ->and((float) $parsed['k'])->toBe((float) $number);
+})->with([
+    '+1' => ['+1', 1],
+    '+0' => ['+0', 0],
+    '+1_000' => ['+1_000', 1000],
+]);
+
+it('reads a non-finite spelling as some non-finite float, without promising which', function (string $spelling): void {
+    // The worse half of the same class, and the reason a guard shaped around TYPES would have missed
+    // it: `.nan` is a float on both versions and a different VALUE on each. Nothing here can assert
+    // which; what the reader must do with either is asserted where the reader is.
+    $parsed = Yaml::parse('k: '.$spelling);
+
+    expect($parsed)->toBeArray()
+        ->and($parsed['k'])->toBeFloat()
+        ->and(is_finite($parsed['k']))->toBeFalse();
+})->with(['.nan', '.NaN', '.inf', '-.inf', '.Inf']);
 
 it('lists enough spellings to still be a corpus', function (): void {
     // A dataset proves the rows it lists and nothing else, so a corpus quietly emptied out would pass

@@ -45,8 +45,12 @@ $table = [
     // Quoted in the file, so it survives as text rather than becoming the float 1.1.
     'documents.default.version' => 'string',
     'documents.v2.title' => 'string',
-    // Unquoted in the file, so a version number arrived as a number and lost its trailing zero.
-    'documents.v2.version' => 'float',
+    // Unquoted in the file, so a version number arrived as a number. An INT, because the parser is
+    // free to read that spelling either way and the reader settles it — see ConfigVersionStabilityTest.
+    'documents.v2.version' => 'int',
+    'documents.v3.title' => 'string',
+    // Also unquoted, and not an integer, so nothing settles it: it stays the float the parser gave.
+    'documents.v3.version' => 'float',
     'engine.memory_limit' => 'int',
     'engine.mode' => 'string',
     'engine.paths.0' => 'string',
@@ -66,8 +70,14 @@ it('parses the representative configuration to the bytes committed beside it', f
         ->and($read->error)->toBeNull()
         ->and($read->diagnostics)->toBe([]);
 
-    // Order-preserving and zero-fraction-preserving on purpose: sorting the keys would hide a
-    // reordering, and dropping the fraction would let an int and a float share a byte sequence.
+    // Order-preserving on purpose: sorting the keys would hide a reordering.
+    //
+    // Zero-fraction-preserving is belt-and-braces rather than load-bearing, and worth a line so it is
+    // not deleted as dead. The reader settles every integral float to an int, so nothing in a resolved
+    // parse can carry a fraction to preserve — the flag changes no byte today. It earns its place on
+    // the day that settling regresses: without it an escaped float 1.0 would render as `1` and match
+    // the golden anyway, and this net would be the one that stayed quiet. The invariant itself is
+    // asserted in ConfigVersionStabilityTest, which does not depend on an encoder's flags at all.
     $json = json_encode(
         $read->values,
         JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR,

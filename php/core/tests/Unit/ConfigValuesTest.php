@@ -42,7 +42,10 @@ it('refuses a wrong type and answers the default it names', function (string $ya
     // The trap the reader exists for. `(string) 1.1` publishes "1.1" where the author wrote 1.10 —
     // a different version number in a document somebody's client is generated from.
     'a version that became a float' => ["setting: 1.10\n", 'string', 'API', 'API', 'the decimal number 1.1', 'text'],
-    'a version that lost its zero' => ["setting: 1.0\n", 'string', 'API', 'API', 'the decimal number 1.0', 'text'],
+    // Settled to the int 1 before this reader sees it, so it is described as one — see
+    // ConfigVersionStabilityTest for why the reader may not leave that spelling as a float. The
+    // refusal is the same either way, which is the point: the answer does not depend on the parser.
+    'a version that lost its zero' => ["setting: 1.0\n", 'string', 'API', 'API', 'the whole number 1', 'text'],
     'a whole number as text' => ["setting: 3\n", 'string', 'API', 'API', 'the whole number 3', 'text'],
     'a date as text' => ["setting: 2024-01-15\n", 'string', 'API', 'API', 'the whole number 1705276800', 'text'],
     'a boolean as text' => ["setting: true\n", 'string', 'API', 'API', 'the boolean true', 'text'],
@@ -62,7 +65,9 @@ it('refuses a wrong type and answers the default it names', function (string $ya
     // `0777` and `08` are text, not numbers, because neither is a notation YAML has.
     'a file mode' => ["setting: 0777\n", 'int', 8, 8, 'the text "0777"', 'a whole number'],
     'a padded number' => ["setting: 08\n", 'int', 8, 8, 'the text "08"', 'a whole number'],
-    'a whole float' => ["setting: 2.0\n", 'int', 8, 8, 'the decimal number 2.0', 'a whole number'],
+    // A float that is not some integer stays a float, and is still refused.
+    'a fractional number' => ["setting: 1.5\n", 'int', 8, 8, 'the decimal number 1.5', 'a whole number'],
+    'a version that became a float' => ["setting: 1.10\n", 'int', 8, 8, 'the decimal number 1.1', 'a whole number'],
     'past PHP_INT_MAX' => ["setting: 9223372036854775808\n", 'int', 8, 8, 'the text "9223372036854775808"', 'a whole number'],
 
     // A list is refused WHOLE. A list of paths short by one silently changes what the build looks at.
@@ -95,6 +100,14 @@ it('takes a value of the right type without a word', function (string $yaml, str
     'false' => ["setting: false\n", 'bool', false],
     'true' => ["setting: true\n", 'bool', true],
     'a number' => ["setting: 2048\n", 'int', 2048],
+    // Taken, not refused — and this row reverses what it used to assert, so here is why the new
+    // answer is right. The parser is free to hand back either the int 2 or the float 2.0 for a
+    // spelling like `+2`, so the reader settles an integral float to its integer before any typed
+    // read happens. Refusing it, as this used to, made the same file behave differently on two
+    // machines whose lockfiles differed by one patch release of the YAML parser.
+    'a whole float' => ["setting: 2.0\n", 'int', 2],
+    'a signed whole number' => ["setting: +2\n", 'int', 2],
+    'a signed zero' => ["setting: -0.0\n", 'int', 0],
     'a hex number' => ["setting: 0x1A\n", 'int', 26],
     'an underscored number' => ["setting: 1_000\n", 'int', 1000],
     'a list of text' => ["setting:\n  - app\n  - modules\n", 'strings', ['app', 'modules']],

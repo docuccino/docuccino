@@ -24,9 +24,15 @@ documents:
     error_responses:
   v2:
     title: Forms API (v2)
-    # Deliberately NOT quoted, so this is the float 1.0 and not the version "1.0". The golden records
-    # what that costs, and the reader refuses it rather than publishing "1" in its place.
+    # Deliberately NOT quoted, so this is a number and not the version "1.0". The parser is free to
+    # hand back the int 1 or the float 1.0 for a spelling like this, so the reader settles it to the
+    # int — the golden records that, and it is what stops a dependency's patch level reaching a hash.
     version: 1.0
+  v3:
+    title: Forms API (v3)
+    # The same mistake with a different outcome: 1.10 is not an integer, so it stays the float 1.1 and
+    # the trailing zero is simply gone. Neither of these is the version anybody typed.
+    version: 1.10
 
 engine:
   mode: strict
