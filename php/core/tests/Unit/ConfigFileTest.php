@@ -196,6 +196,10 @@ it('reads a root that is not a map as no configuration, loudly', function (strin
     'comment only' => ["# to be written\n", 'nothing (the file is empty, or its only content is a comment)'],
     'explicit null' => ["~\n", 'nothing (the file is empty, or its only content is a comment)'],
     'a list' => ["- documents\n- lint\n", 'a list'],
+    // Both spellings of an empty root, which parse to the same empty array — so the wording says what
+    // is true of either rather than guessing which one was typed.
+    'an empty map' => ["{}\n", 'no settings at all'],
+    'an empty list' => ["[]\n", 'no settings at all'],
     'one line of text' => ["documents\n", 'a single line of text'],
     'a number' => ["42\n", 'a single number'],
     'a float' => ["4.2\n", 'a single number'],

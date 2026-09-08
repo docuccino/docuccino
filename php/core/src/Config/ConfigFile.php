@@ -236,6 +236,9 @@ final class ConfigFile
     {
         return match (true) {
             $value === null => 'nothing (the file is empty, or its only content is a comment)',
+            // `{}` and `[]` parse to the same empty PHP array, so there is nothing left to tell an
+            // empty map from an empty list. The wording has to be true of whichever was written.
+            $value === [] => 'no settings at all',
             is_array($value) => 'a list',
             is_bool($value) => sprintf('the single value %s', $value ? 'true' : 'false'),
             is_string($value) => 'a single line of text',
