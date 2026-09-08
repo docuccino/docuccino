@@ -11,6 +11,7 @@ use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Extensions\Contracts\RouteResolver;
 use Docuccino\Core\Support\Glob;
+use Docuccino\Laravel\Support\MiddlewareAliases;
 use Docuccino\Laravel\Support\MiddlewareResolution;
 use Docuccino\Laravel\Support\UnknownDocumentPins;
 use Illuminate\Routing\Route;
@@ -110,21 +111,22 @@ final class LaravelRouteResolver implements RouteResolver
      * vocabulary the detectors read, so this widens detection without the wholesale alias resolution
      * `Router::gatherRouteMiddleware()` does.
      *
-     * The application's alias map is read for the two questions that cannot be answered without it, and
-     * this is the only place holding it ({@see MiddlewareResolution}): `withoutMiddleware(...)`
-     * exclusions are subtracted the way the framework subtracts them, in its resolved-class space, so a
-     * route that opts out of `throttle:api` or `auth` isn't documented with a 429/401 it never enforces
-     * and one that opts out in a spelling the framework does NOT equate keeps the response it does; and
-     * an entry naming a middleware by class comes back under the alias it is registered against, so a
-     * route written `Authenticate::using('web')` reads as the `auth:web` it resolves to whether the
-     * application aliased the framework's authenticator or its own subclass of it.
+     * The alias map is read for the two questions that cannot be answered without it, and this is the
+     * only place holding it — {@see MiddlewareAliases} for where the map comes from and why the
+     * router's own is not enough, {@see MiddlewareResolution} for what is done with it.
+     * `withoutMiddleware(...)` exclusions are subtracted the way the framework subtracts them, in its
+     * resolved-class space, so a route that opts out of `throttle:api` or `auth` isn't documented with
+     * a 429/401 it never enforces, and one that opts out in a spelling the framework does NOT equate
+     * keeps the response it does. And an entry naming a middleware by class comes back under the alias
+     * it is registered against, so a route written `Authenticate::using('web')` reads as the `auth:web`
+     * it resolves to whether the application aliased the framework's authenticator or its own subclass.
      *
      * @return list<string>
      */
     private function gatherMiddleware(Route $route): array
     {
         $groups = $this->router->getMiddlewareGroups();
-        $aliases = $this->router->getMiddleware();
+        $aliases = MiddlewareAliases::of($this->router);
 
         $out = [];
         foreach (self::strings($route->gatherMiddleware()) as $entry) {
