@@ -155,12 +155,8 @@ final class GateInternals
      * nothing is a subclass of one. Anything this cannot decide answers yes: over-keying costs a
      * rebuild, under-keying replays a resolution that is no longer true.
      */
-    public static function shadowable(int|string $subject): bool
+    public static function shadowable(string $subject): bool
     {
-        if (! is_string($subject)) {
-            return true;
-        }
-
         try {
             if (interface_exists($subject)) {
                 return true;
