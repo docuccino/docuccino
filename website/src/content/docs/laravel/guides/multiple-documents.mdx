@@ -73,18 +73,34 @@ Route selection is a filter chain, and every step must pass:
 <Tabs>
 	<TabItem label="By route glob">
 	```php
-	use Docuccino\Core\Extensions\Context\RouteDescriptor;
-
-	// documents.<key>.routes — include, then exclude, then an optional closure
+	// documents.<key>.routes — include, then exclude, then an optional filter class
 	'routes' => [
 	    'include' => ['api/v2/*'],
 	    'exclude' => ['api/v2/internal/*'],
-	    'closure' => fn (RouteDescriptor $route): bool => $route->name !== null,
+	    'filter' => \App\Docs\NamedRoutes::class,
 	],
 	```
-	Patterns match the URI **without** its leading slash, using Laravel's `Str::is` wildcards. The
-	closure runs last and receives the discovered route — its `methods`, `uri`, `name`, `action` and
-	fully-gathered `middleware`.
+	Patterns match the URI **without** its leading slash, using Laravel's `Str::is` wildcards.
+	`filter` runs last, and is a class the container builds:
+
+	```php
+	namespace App\Docs;
+
+	use Docuccino\Core\Extensions\Context\RouteDescriptor;
+	use Docuccino\Core\Extensions\Contracts\RouteFilter;
+
+	class NamedRoutes implements RouteFilter
+	{
+	    public function includes(RouteDescriptor $route): bool
+	    {
+	        return $route->name !== null;
+	    }
+	}
+	```
+	It receives the discovered route — its `methods`, `uri`, `name`, `action`, `domain` and
+	fully-gathered `middleware` — and returning `false` omits it. Because the container builds it,
+	anything the decision needs (a tenant registry, a feature flag) is a constructor dependency, and
+	the whole config file stays `config:cache`-able.
 	</TabItem>
 	<TabItem label="By attribute">
 	```php

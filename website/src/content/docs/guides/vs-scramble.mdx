@@ -253,7 +253,7 @@ routes, info, security, and viewer — so a few top-level Scramble settings move
 | Scramble (`config/scramble.php`) | Docuccino (`config/docuccino.php`) |
 | --- | --- |
 | `api_path: 'api'` | `documents.default.routes.include: ['api/*']` |
-| `api_domain` | `documents.default.routes.closure` (or an include glob) |
+| `api_domain` | `documents.default.routes.filter` (or an include glob) |
 | `export_path` | `documents.default.export.path` |
 | `info.version` / `info.description` | `documents.default.info.version` / `.description` |
 | `servers` | `documents.default.servers` |
@@ -263,6 +263,16 @@ routes, info, security, and viewer — so a few top-level Scramble settings move
 | `extensions` | `extensions`, or `Docuccino::extend()` |
 | security via config/callbacks | `documents.default.security` + the Sanctum/Passport integrations |
 | a single document | as many named `documents` as you need |
+
+**`api_domain` is the one row worth a second look.** Scramble takes a single host string;
+[`routes.filter`](/laravel/reference/configuration/#routes) takes a class implementing `RouteFilter`,
+handed each route's `domain` along with its URI, name, action and middleware — so "this document is
+the admin host" is a `return $route->domain === 'admin.example.com';`, and anything more involved
+than a literal (a tenant registry, a hosts table) is a constructor dependency, because the container
+builds the class. It is also the reason the key is a class name and not an inline predicate: a
+closure in a config file cannot be serialized, so `php artisan config:cache` would fail for the whole
+application. See [`config/docuccino.php` survives
+`config:cache`](/laravel/guides/production/#configdocuccinophp-survives-configcache).
 
 See the [configuration reference](/laravel/reference/configuration/) for every option.
 

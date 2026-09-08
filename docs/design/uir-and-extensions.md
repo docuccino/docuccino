@@ -1873,7 +1873,7 @@ return [
         'default' => [
             'info' => ['title' => '…', 'version' => …, 'description' => ['file' => '…md']],
             'servers' => [['url' => 'https://{tenant}.example.com', 'variables' => [...]]],
-            'routes' => ['include' => ['api/*'], 'exclude' => [...], 'closure' => null],
+            'routes' => ['include' => ['api/*'], 'exclude' => [...], 'filter' => PublicRoutes::class],
             'security' => [...full scheme set..., 'auto_detect_middleware' => 'auth*'],
             'error_responses' => 'default',
             'tags' => ['mapper' => PrefixTagMapper::class, 'map' => [...], 'default_strategy' => 'controller'],
