@@ -610,3 +610,19 @@ refused the cache rather than keyed on nothing: a manifest records an absent fil
 compares FRESH for as long as it stays absent, so recording an unhashable path looks keyed and is not.
 The guard reads the manifest the cache STORED and the freshness the cache itself answers
 (`TagMapperCacheTest`), because a rebuild count cannot say which fragments an edit retired.
+
+*The half a file cannot hold.* Keying on where the answer is written closes the edit and leaves the
+CONSTRUCTION open: two instances of one class share every file there is, so a collaborator resolved from
+a container binding — the shape `tags.mapper` documents, and the only shape a mapper needing anything but
+constructor DI can take — answers differently on every value with a byte-identical key behind it. What an
+instance was handed is a VALUE, and a dependency manifest holds only files, because it is validated by
+re-hashing what it names. So the two halves go in two places: files into the route's manifest at the point
+of use, state into the document-level part of the key (`ConfigurationDigest`, the digest
+`ResolvedExtensions::cacheSignature()` already read every extension's own properties with). Files stay
+local and state cannot be — the collaborator is resolved once per document, and nothing before the lookup
+knows which routes it will answer for, so over-keying there buys a rebuild where under-keying publishes
+the old answer. Neither digest reaches an emitted byte: an anonymous class names the absolute file it was
+written in and a closure names its line span, which is a cache key on one machine and never a document.
+`DocumentCollaboratorKeyingTest` reads the collaborator set off `DocumentConfig`'s own constructor and
+makes each member state what keys it, so a third one arrives as a failure rather than as a member nobody
+asked.

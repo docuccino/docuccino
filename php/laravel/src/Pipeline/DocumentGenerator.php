@@ -119,11 +119,15 @@ final class DocumentGenerator
         [$content, $contentDiagnostics] = $this->contentCompiler->compile($document);
         $bag->addAll($contentDiagnostics);
 
-        // Document config, booted-app facts and the build environment the engine runs in: three of the
-        // document-level inputs every route's fragment-cache key carries. The fourth is $documentId,
-        // which the key takes separately — a fragment holds ids minted from it, and two documents can
-        // legitimately hash their shaping config alike ({@see FragmentCache::key()}).
+        // Document config, the tag mapper's own state, booted-app facts and the build environment the
+        // engine runs in: four of the document-level inputs every route's fragment-cache key carries.
+        // The fifth is $documentId, which the key takes separately — a fragment holds ids minted from
+        // it, and two documents can legitimately hash their shaping config alike
+        // ({@see FragmentCache::key()}). The mapper is here rather than in a route's manifest because
+        // what it was constructed with is a value and a manifest holds only files
+        // ({@see TagMapperKeying::stateDigest()}).
         $configHash = $document->hash()
+            .'|tags:'.TagMapperKeying::stateDigest($document)
             .'|env:'.$this->environmentDigest($resolved)
             .'|build:'.$this->fingerprint->digest($engine);
         $extensionClasses = $resolved->cacheSignature();

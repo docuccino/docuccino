@@ -3,13 +3,17 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Emit\UirEmitter;
+use Docuccino\Core\Extensions\Context\TagMapperKeying;
 use Docuccino\Core\Extensions\Contracts\TagMapper;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Tests\Fixtures\Tags\BaseTagMapper;
 use Docuccino\Laravel\Tests\Fixtures\Tags\InheritedTagMapper;
 use Docuccino\Laravel\Tests\Fixtures\Tags\PrefixesTags;
+use Docuccino\Laravel\Tests\Fixtures\Tags\StatefulTagMapper;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\EditableTagMapper;
+use Docuccino\Laravel\Tests\Support\EvaldTagMapper;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 
 /*
@@ -19,7 +23,9 @@ use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
  * the old body produced warm.
  *
  * The mapper the rows edit lives in a file the test owns ({@see EditableTagMapper}), because the file is
- * the whole of what the cache can notice.
+ * one half of what the cache has to notice. The other half is what the resolved INSTANCE was handed:
+ * a mapper built from the application's own config ({@see StatefulTagMapper}) answers differently with
+ * every file behind it byte-identical, so the rows below cover both.
  */
 afterEach(function (): void {
     removeFragmentCacheDirs('tagmapper');
@@ -137,14 +143,7 @@ it('refuses to cache the operations a mapper with no file tagged, and says which
     $dir = fragmentCacheDir('tagmapper');
     bindStubEngine();
 
-    // eval()'d code reports a file like `/path/Test.php(12) : eval()'d code`, which is a path no
-    // `is_file()` matches — and a manifest records a file that isn't there as ABSENT, which reads FRESH
-    // for as long as it stays absent. So there is nothing here to key a fragment on.
-    if (! class_exists('Docuccino\Laravel\Tests\Temp\EvaldTagMapper', false)) {
-        eval('namespace Docuccino\Laravel\Tests\Temp; class EvaldTagMapper implements \Docuccino\Core\Extensions\Contracts\TagMapper { public function map(string $tag): string { return "Evald: ".$tag; } }');
-    }
-
-    $result = generateDocumentWithTagMapper('Docuccino\Laravel\Tests\Temp\EvaldTagMapper');
+    $result = generateDocumentWithTagMapper(EvaldTagMapper::ensure());
     $entries = fragmentEntries($dir);
 
     expect($result->document->toArray()['paths']['/api/forms']['get']['tags'])->toBe(['Evald: Forms'])
@@ -156,4 +155,95 @@ it('refuses to cache the operations a mapper with no file tagged, and says which
 
     expect($reported)->toHaveCount(1)
         ->and($reported[0]->message)->toContain('EvaldTagMapper');
+});
+
+it('says nothing about an unhashable mapper when the fragment cache is off', function (): void {
+    setBuild('cache.enabled', false);
+    bindStubEngine();
+
+    // The gate on the line that raises it: with nothing kept there is no rebuild to warn about, and a
+    // line about a cost nobody is paying is what teaches a reader to skip the channel.
+    $result = generateDocumentWithTagMapper(EvaldTagMapper::ensure());
+
+    expect($result->document->toArray()['paths']['/api/forms']['get']['tags'])->toBe(['Evald: Forms'])
+        ->and(diagnosticsCoded($result->diagnostics, 'config.tag-mapper-unhashable'))->toBe([]);
+});
+
+it('rebuilds an operation whose tags went through a mapper handed a different value', function (): void {
+    fragmentCacheDir('tagmapper');
+    bindStubEngine();
+
+    // A binding that builds its mapper out of the application's own config — so between the two builds
+    // below the mapper's class, its file and this document's config bag are all byte-identical, and the
+    // only thing that moved is what the instance was constructed with.
+    config()->set('docuccino-test.tag-prefix', 'V1');
+    app()->bind('tags.stateful-mapper', static fn (): TagMapper => new StatefulTagMapper((string) config('docuccino-test.tag-prefix')));
+
+    $cold = generateDocumentWithTagMapper('tags.stateful-mapper');
+    expect($cold->document->toArray()['paths']['/api/forms']['get']['tags'])->toBe(['V1-Forms']);
+
+    config()->set('docuccino-test.tag-prefix', 'V2');
+    $warm = generateDocumentWithTagMapper('tags.stateful-mapper');
+
+    // What a build with nothing cached says — the truth the warm one owes, diagnostics included.
+    fragmentCacheDir('tagmapper');
+    $truth = generateDocumentWithTagMapper('tags.stateful-mapper');
+
+    expect($warm->document->toArray()['paths']['/api/forms']['get']['tags'])->toBe(['V2-Forms'])
+        ->and([(new UirEmitter)->emit($warm->document), diagnosticRecords($warm->diagnostics)])
+        ->toBe([(new UirEmitter)->emit($truth->document), diagnosticRecords($truth->diagnostics)]);
+});
+
+it('serves every fragment warm when the mapper is handed the same value twice', function (): void {
+    // The cost half of the row above: the state of a mapper nobody reconfigured has to key alike, or
+    // every application with a container-built mapper pays a cold build on every run.
+    fragmentCacheDir('tagmapper');
+    config()->set('docuccino-test.tag-prefix', 'V1');
+    app()->bind('tags.stateful-mapper', static fn (): TagMapper => new StatefulTagMapper((string) config('docuccino-test.tag-prefix')));
+
+    $engine = new CountingTypeEngine(WorkbenchEngine::make());
+    app()->instance(TypeEngine::class, $engine);
+
+    generateDocumentWithTagMapper('tags.stateful-mapper');
+    $engine->analyzeCount = 0;
+
+    generateDocumentWithTagMapper('tags.stateful-mapper');
+
+    expect($engine->analyzeCount)->toBe(0);
+});
+
+it('keeps the mapper out of every byte the document publishes', function (): void {
+    // The state digest is a cache key and nothing else. An anonymous mapper's class-string names the
+    // absolute file it was written in, and a closure held as one of its settings names where it was
+    // written — so folding either into an emitted byte would make the document a fact about the machine
+    // that built it. One binding name, two mappers behind it, one answer: the key has to tell them
+    // apart and the document has to not.
+    bindStubEngine();
+
+    $digest = static fn (): string => TagMapperKeying::stateDigest(
+        app(DocumentConfigFactory::class)->make('default', ['tags' => ['mapper' => 'tags.rebound-mapper']], 'skeleton'),
+    );
+
+    app()->bind('tags.rebound-mapper', static fn (): TagMapper => new class implements TagMapper
+    {
+        public function map(string $tag): string
+        {
+            return 'Bound: '.$tag;
+        }
+    });
+    $first = generateDocumentWithTagMapper('tags.rebound-mapper');
+    $firstDigest = $digest();
+
+    app()->bind('tags.rebound-mapper', static fn (): TagMapper => new class implements TagMapper
+    {
+        public function map(string $tag): string
+        {
+            return 'Bound: '.$tag;
+        }
+    });
+    $second = generateDocumentWithTagMapper('tags.rebound-mapper');
+
+    expect($first->document->toArray()['paths']['/api/forms']['get']['tags'])->toBe(['Bound: Forms'])
+        ->and($digest())->not->toBe($firstDigest)
+        ->and((new UirEmitter)->emit($second->document))->toBe((new UirEmitter)->emit($first->document));
 });
