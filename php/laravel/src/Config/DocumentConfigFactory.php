@@ -5,20 +5,18 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Config;
 
 use Docuccino\Core\Extensions\Context\DocumentConfig;
-use Docuccino\Core\Extensions\Contracts\TagMapper;
 use Docuccino\Core\Support\ConfiguredFlag;
 use Docuccino\Core\Support\ConfinedPath;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Core\Support\LineEndings;
 use Docuccino\Laravel\Registry\ConfigDiagnostics;
-use Docuccino\Laravel\Tags\PrefixTagMapper;
 use Illuminate\Contracts\Container\Container;
 
 /**
  * Builds a framework-agnostic {@see DocumentConfig} from one `documents.*` entry of `docuccino.yaml`:
  * relativises every path-like key ({@see ConfigPaths}), reads `info.description.file` into its contents
- * so the pipeline never touches the filesystem, and resolves the tag mapper (a container-resolved
- * `tags.mapper`, else {@see PrefixTagMapper} over `tags.map`) and the route filter
+ * so the pipeline never touches the filesystem, and resolves the two collaborators a document names by
+ * class — the tag mapper ({@see ConfiguredTagMapper}) and the route filter
  * ({@see ConfiguredRouteFilter}).
  */
 final readonly class DocumentConfigFactory
@@ -78,7 +76,7 @@ final readonly class DocumentConfigFactory
             // so carrying it here lets the runtime ask the document config and not the config files.
             viewer: ViewerConfig::for($key),
             versioning: is_string($config['versioning'] ?? null) ? $config['versioning'] : 'none',
-            tagMapper: $this->resolveTagMapper($tags),
+            tagMapper: (new ConfiguredTagMapper($this->container))->resolve($tags),
             raw: $config,
         );
     }
@@ -103,26 +101,6 @@ final readonly class DocumentConfigFactory
         }
 
         return $config['error_responses'] === 'none' ? 'none' : 'default';
-    }
-
-    /**
-     * A `tags.mapper` class-string is container-resolved so custom mappers get constructor DI; else a
-     * non-empty `tags.map` builds a {@see PrefixTagMapper}. Null means tags pass through unchanged.
-     *
-     * @param  array<string, mixed>  $tags
-     */
-    private function resolveTagMapper(array $tags): ?TagMapper
-    {
-        $mapper = $tags['mapper'] ?? null;
-        if (is_string($mapper) && $mapper !== '') {
-            $resolved = $this->container->make($mapper);
-
-            return $resolved instanceof TagMapper ? $resolved : null;
-        }
-
-        $map = Hydrate::stringMap($tags['map'] ?? null);
-
-        return $map === [] ? null : new PrefixTagMapper($map);
     }
 
     /**

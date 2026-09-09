@@ -322,6 +322,13 @@ run through `map`) or `none` (leave it untagged). Closure routes are never auto-
 `map` is a raw-tag → display-tag table (exact match wins, else the first matching prefix).
 `mapper` swaps in a custom `TagMapper`. `definitions` supplies OAS top-level tag objects.
 
+`mapper` names a class because a YAML file cannot hold a callable, so the name is resolved out of
+the container and your mapper can take its own constructor dependencies. Setting it means it
+decides: `map` is not consulted. A name no mapper can be got from — a typo, a class that doesn't
+implement the contract, one the container can't build — is reported as
+`config.tag-mapper-unusable` and the build carries on with your tags unmapped, because the names
+your controllers and `#[Group]` attributes wrote are still your API's real tags.
+
 A definition carries the full OAS 3.2 Tag Object: `name` (required), plus optional `summary`,
 `description`, `parent` and `kind`. `weight` is Docuccino's own — it orders the emitted array
 (ascending weight, then name) and is never emitted.
