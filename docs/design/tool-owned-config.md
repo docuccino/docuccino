@@ -73,9 +73,10 @@ Any of those silently changing a parsed value changes the hash, which invalidate
 invalidate* the right fragments. This needs explicit parse flags, and a guard that round-trips the
 shipped config and fails when a value's type changes. That guard is part of the work, not a follow-up.
 
-### Shape: one document, with the adapter under its own key
+### Shape: one document, and no framework section
 
-App-shaped keys live in the same file under a framework key, the way PHPStan holds Larastan's config:
+The plan was that app-shaped keys live in the same file under a framework key, the way PHPStan holds
+Larastan's config:
 
 ```yaml
 documents: …
@@ -85,7 +86,26 @@ laravel:
   project_paths: [app, modules]
 ```
 
-Not a second file. A framework adapter contributes *discovery*, not a separate configuration surface.
+**Not built, and deferred rather than pending.** Neither of the two keys illustrating it shipped there:
+`on_route_error` is at the root and `project_paths` is under `engine`. A key-by-key audit disqualified
+both, because both concepts exist in every framework — every generator has to decide what to do with a
+route it cannot read, and every analyser has to be told which directories are the project — and only
+their *default values* are Laravel-shaped. A proposed namespace whose only two illustrations do not
+qualify has not found its members.
+
+That audit left exactly one candidate, the auth-middleware wildcard, and it was rejected on the test
+that matters: the section is for a key whose **concept** has no counterpart in another framework. "Which
+requests count as authenticated" has one — Symfony has firewalls. What differs is only the value's
+grammar, which is the case the audit's own principle already covers: **an adapter contributes the value
+space, not a new key.** `engine.project_paths: ['app']` is the same shape and wants no prefix either.
+
+So a section built now would be seeded with the one key a second adapter would most likely want back
+out, and every key that moves in or out of it costs a golden regeneration — the config hash is over the
+document's whole bag, so the price is paid twice for a namespace nothing yet needs.
+
+The section stays deferred until a key turns up whose concept a second adapter cannot honour at all. If
+one does, it is still one file and not a second: a framework adapter contributes *discovery*, not a
+separate configuration surface.
 
 ### Migration: not a flag day
 

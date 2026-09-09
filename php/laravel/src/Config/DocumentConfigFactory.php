@@ -61,7 +61,7 @@ final readonly class DocumentConfigFactory
             routeExclude: Hydrate::stringList($routes['exclude'] ?? []),
             routeFilter: (new ConfiguredRouteFilter($this->container))->resolve($key, $routes),
             includeVendor: ConfiguredFlag::read($routes, 'include_vendor', false)->on,
-            authMiddleware: is_string($security['auto_detect_middleware'] ?? null) ? $security['auto_detect_middleware'] : null,
+            authMiddleware: is_string($security['auth_middleware'] ?? null) ? $security['auth_middleware'] : null,
             errorResponses: self::errorResponses($config),
             // A glob holding a NUL byte raises out of `glob()` and takes the build with it, so it never
             // reaches one — the same refusal every other path key gets, reported by ConfigDiagnostics.
