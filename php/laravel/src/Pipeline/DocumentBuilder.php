@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Pipeline;
 
+use Docuccino\Core\Config\ConfigFile;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
 use Docuccino\Core\Diagnostics\Severity;
@@ -285,7 +286,10 @@ final class DocumentBuilder
                 'engine.config names %s, which does not exist — inference ran without it, so nothing that file registers shaped this document.',
                 $paths->relative($analyser),
             ),
-            help: 'Check the path in docuccino.yaml; it is read relative to the application base path. Remove the key to analyse with the engine\'s own configuration.',
+            help: sprintf(
+                'Check the path in %s; it is read relative to the application base path. Remove the key to analyse with the engine\'s own configuration.',
+                ConfigFile::NAME,
+            ),
         )];
     }
 

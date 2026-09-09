@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Registry;
 
+use Docuccino\Core\Config\ConfigFile;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Laravel\Config\BuildConfig;
@@ -48,7 +49,10 @@ final class ConfigExtensions
                 message: is_string($extension)
                     ? sprintf('extensions lists "%s", which no autoloadable class defines — it contributed nothing to this document.', $extension)
                     : sprintf('extensions holds a %s where a class-string was expected — it contributed nothing to this document.', get_debug_type($extension)),
-                help: 'Check the class name and its namespace in docuccino.yaml, and that the class is autoloadable (composer dump-autoload). An extension you have to construct yourself goes in through Docuccino::extend().',
+                help: sprintf(
+                    'Check the class name and its namespace in %s, and that the class is autoloadable (composer dump-autoload). An extension you have to construct yourself goes in through Docuccino::extend().',
+                    ConfigFile::NAME,
+                ),
             );
         }
 
