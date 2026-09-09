@@ -69,7 +69,7 @@ controller calls still becomes a documented error response. The walk is bounded 
 own code — `engine.project_paths` says where to descend, and `vendor/` is never analyzed.
 
 Because it really is PHPStan, the analyzer extensions you already maintain apply here too: point
-[`engine.neon`](/laravel/reference/configuration/#engine) at your own `phpstan.neon` and whatever it
+[`engine.config`](/laravel/reference/configuration/#engine) at your own `phpstan.neon` and whatever it
 registers shapes your documentation, with no Docuccino-specific API to write.
 
 Each route is analyzed in isolation, so one route that can't be understood never breaks the build.
@@ -135,7 +135,7 @@ field by field:
 | `docblock` | PHPDoc on the action or class | A summary and description — the leading prose, or `@summary`/`@description` where the prose is for maintainers — plus `@param`/`@return` detail |
 | `attribute` | A Docuccino [attribute](/laravel/reference/attributes/) | `#[Response]`, `#[QueryParameter]`, `#[Group]`, `#[Hidden]` |
 | `overlay` | An [OpenAPI Overlay](/laravel/guides/customizing-output/) file | Corrections to routes you don't own, spec-side polish |
-| `config` | `config/docuccino.php` | `info`, `servers`, security schemes, tag definitions, representation policies |
+| `config` | `docuccino.yaml` | `info`, `servers`, security schemes, tag definitions, representation policies |
 
 Higher layers win individual fields without discarding the rest, and every contribution is recorded
 in the document's provenance — including the value it replaced — so you can always answer *why* a

@@ -12,6 +12,11 @@ readers can call your API from the docs.
 Scalar is the default, not the only option: `viewer.driver` swaps in [Redoc](#choosing-a-driver), or
 [a renderer you write yourself](#writing-your-own-driver).
 
+Every `viewer` key on this page lives in `config/docuccino.php`, under the document it belongs to —
+not in `docuccino.yaml` with the settings that shape the document. These four routes are registered
+on every boot, and a gate is checked on every request, so they have to be readable without parsing a
+project file. Nothing under `viewer` changes an emitted byte.
+
 <Aside type="caution" title="It's closed outside `local` until you open it">
 With `viewer.gate` unset — the default — the viewer answers only when the app environment is `local`.
 Everywhere else, every viewer route returns **403** until you [name a gate](#access-control). Nothing

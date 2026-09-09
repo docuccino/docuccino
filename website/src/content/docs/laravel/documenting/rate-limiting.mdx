@@ -161,11 +161,13 @@ name an attribute on the user rather than a number — all state their own limit
 
 ## Configuration
 
-The integration is always on, and has one switch:
+The integration is always on, and has one switch, in `docuccino.yaml`:
 
-```php
-// config/docuccino.php → documents.default.integrations
-'rate_limit' => ['enabled' => false], // stop documenting 429s in this document
+```yaml
+documents:
+  default:
+    integrations:
+      rate_limit: { enabled: false } # stop documenting 429s in this document
 ```
 
 Turning it off for a document emits one `integration.disabled` info diagnostic per build, so the choice

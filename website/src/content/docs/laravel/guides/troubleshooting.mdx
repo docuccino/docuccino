@@ -47,10 +47,11 @@ PHP Fatal error: Allowed memory size of 134217728 bytes exhausted
 
 Docuccino ran out of memory while analyzing your code.
 …
-  * Raise the ceiling — set docuccino.engine.memory_limit (e.g. '2G'), or pass
+  * Raise the ceiling — set engine.memory_limit in docuccino.yaml (e.g. '2G'), or pass
     --memory-limit=2G to this command.
-  * Narrow the analysis — docuccino.engine.project_paths decides how far interprocedural
-    descent goes, and a wide value costs memory. Vendor code is never analyzed.
+  * Narrow the analysis — engine.project_paths, in the same file, decides how far
+    interprocedural descent goes, and a wide value costs memory. Vendor code is never
+    analyzed.
 ```
 
 PHP can't catch memory exhaustion, so this is the one failure Docuccino explains on the way out instead
@@ -73,13 +74,12 @@ php artisan docuccino:export --memory-limit=2G
 </TabItem>
 <TabItem label="Every build">
 
-```php
-// config/docuccino.php
-'engine' => [
-    'mode' => env('DOCUCCINO_ENGINE', 'in-process'),
-    'memory_limit' => '2G',
-    'project_paths' => ['app'],
-],
+```yaml
+# docuccino.yaml
+engine:
+  mode: 'in-process' # DOCUCCINO_ENGINE overrides this
+  memory_limit: '2G'
+  project_paths: ['app']
 ```
 
 Every console entry point picks it up — `export`, `validate`, `diff`, `cache` — so nobody has to
@@ -129,9 +129,10 @@ it. Nothing is remembered between runs.
 
 **Fix.** Turn on the fragment cache:
 
-```php
-// config/docuccino.php
-'cache' => ['enabled' => true],
+```yaml
+# docuccino.yaml
+cache:
+  enabled: true
 ```
 
 Subsequent builds re-analyze only the operations whose inputs changed, and a build where every route

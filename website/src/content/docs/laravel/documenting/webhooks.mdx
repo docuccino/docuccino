@@ -12,13 +12,12 @@ it exactly as it documents any other body.
 
 ## Point the document at your webhook classes
 
-```php
-// config/docuccino.php
-'documents' => [
-    'default' => [
-        'webhooks' => ['dir' => 'app/Webhooks'],
-    ],
-],
+In `docuccino.yaml`:
+
+```yaml
+documents:
+  default:
+    webhooks: { dir: 'app/Webhooks' }
 ```
 
 Every class under that directory carrying `#[Webhook]` is published. Leave the key out and the

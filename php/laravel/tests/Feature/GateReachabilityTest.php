@@ -19,22 +19,28 @@ use Docuccino\Laravel\Support\GateInternals;
 use Docuccino\Laravel\Support\GatePoliciesDigestContributor;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Awning;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Banner;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\Fascia;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Hoarding;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Illuminated;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Kiosk;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\KioskController;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\Lightbox;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Marquee;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\MarqueeAccess;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Placard;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\BannerPolicy;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\BaseSignagePolicy;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\FasciaPolicy;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\IlluminatedPolicy;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\KioskPolicy;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\PlacardPolicy;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\SignagePolicy;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\TurnstilePolicy;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\WeatherproofPolicy;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\Pylon;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\PylonAccess;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Signage;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\Totem;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Turnstile;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Weatherproof;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
@@ -564,7 +570,7 @@ it('contributes the gate registrations whatever a document turns off', function 
     // Gates are the framework's own authorization vocabulary, so the contributor is in the set for a
     // document with every integration disabled — the accident an integration-gated one would be.
     /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.default');
+    $raw = documentSettings();
     foreach (array_keys((array) ($raw['integrations'] ?? [])) as $integration) {
         $raw['integrations'][$integration]['enabled'] = false;
     }
@@ -578,11 +584,20 @@ it('digests every gate registration that can change a verdict', function (): voi
     $gate = app(GateContract::class);
     $digest = static fn (): string => (new GatePoliciesDigestContributor(static fn (): GateContract => $gate))->digest();
 
+    // A segment is "\0"-joined label/value pairs ({@see EnvironmentDigestContributor}), so a fact is
+    // read back as the entry after its label.
+    $reads = static function (string $digest, string $label): ?string {
+        $parts = explode("\0", $digest);
+        $at = array_search($label, $parts, true);
+
+        return $at === false ? null : ($parts[$at + 1] ?? null);
+    };
+
     $base = $digest();
-    expect($base)->toContain('gate-policies:')
-        ->and($base)->toContain('before:0')
-        ->and($base)->toContain('after:0')
-        ->and($base)->toContain('guesser:n');
+    expect(explode("\0", $base))->toContain('gate-policies')
+        ->and($reads($base, 'before'))->toBe('0')
+        ->and($reads($base, 'after'))->toBe('0')
+        ->and($reads($base, 'guesser'))->toBe('n');
 
     // A registration beforeEach has not already made, so the difference is this call's.
     Gate::policy(Placard::class, PlacardPolicy::class);
@@ -597,7 +612,7 @@ it('digests every gate registration that can change a verdict', function (): voi
     expect($withPolicy)->not->toBe($base)
         ->and($withHook)->not->toBe($withPolicy)
         ->and($withGuesser)->not->toBe($withHook)
-        ->and($withGuesser)->toContain('guesser:y');
+        ->and($reads($withGuesser, 'guesser'))->toBe('y');
 });
 
 /**
@@ -808,25 +823,27 @@ it('stays silent when the application own policy-name guesser throws', function 
 });
 
 it('stays silent when the Gate resolution step it calls throws', function (): void {
-    // The other half of the resolution an application can reach into: a Gate SUBCLASS. The methods are
-    // invoked by reflection because none of them is public, so what one of them raises has to answer
-    // "a gate this could not resolve" and never reach the build.
-    $gate = new class(app(), static fn () => null) extends IlluminateGate
-    {
-        protected function getPolicyFromAttribute(string $class): ?string
-        {
-            throw new RuntimeException('nope');
-        }
-    };
-
+    // The other half of the resolution an application can reach into: the `#[UsePolicy]` step, which the
+    // Gate keeps protected and this therefore invokes by reflection. What provokes the raise is the
+    // MODEL — {@see Fascia} repeats an attribute PHP refuses to instantiate — so the throw comes out of
+    // the framework's own method, and what it raises has to answer "a gate this could not resolve" and
+    // never reach the build.
+    $gate = new IlluminateGate(app(), static fn () => null);
+    $denial = new GateDenial(static fn (): GateContract => $gate, static fn (): bool => false);
     $context = gateDenialContext();
-    $canGate = CanGate::parse('can:viewAny,'.Kiosk::class);
+    $raises = CanGate::parse('can:viewAny,'.Fascia::class);
+    $reads = CanGate::parse('can:viewAny,'.Pylon::class);
 
-    expect($canGate)->not->toBeNull()
-        ->and((new GateDenial(static fn (): GateContract => $gate, static fn (): bool => false))->undeniablePolicyMethod($context, $canGate))->toBeNull()
-        // Anti-vacuity: the same subclass without the throw resolves the very same gate.
-        ->and((new GateDenial(static fn (): GateContract => new IlluminateGate(app(), static fn () => null), static fn (): bool => false))
-            ->undeniablePolicyMethod($context, $canGate))->toBe(KioskPolicy::class.'::viewAny');
+    expect($raises)->not->toBeNull()
+        ->and($denial->undeniablePolicyMethod($context, $raises))->toBeNull()
+        // Anti-vacuity, in the two ways this row can go vacuous. The conventional policy the resolution
+        // falls through to is really there, and really named, so the silence is the raise rather than a
+        // model nothing answers for…
+        ->and(GateInternals::read($gate)?->guessedNames(Fascia::class))->toContain(FasciaPolicy::class)
+        ->and(class_exists(FasciaPolicy::class))->toBeTrue()
+        // …and the step that raised is really on the path: the same gate resolves a model whose attribute
+        // CAN be read to the policy that attribute names, which no convention here would find.
+        ->and($denial->undeniablePolicyMethod($context, $reads))->toBe(PylonAccess::class.'::viewAny');
 });
 
 it('says nothing it cannot read, rather than guessing', function (): void {
@@ -925,4 +942,32 @@ it('says nothing it cannot read, rather than guessing', function (): void {
         // Gate this cannot read and not about the fixture.
         ->and((new GateDenial(static fn (): GateContract => app(GateContract::class), static fn (): bool => false))->undeniablePolicyMethod($context, $gate))
         ->toBe(KioskPolicy::class.'::viewAny');
+});
+
+it('keys the fragment on every file a policy-naming attribute could be written into', function (): void {
+    // The `#[UsePolicy]` branches read a model's attributes, and Laravel 13's walks the PARENTS as well
+    // — so a base model is a file that decides which policy the gate resolves to. Keying only on the
+    // model's own file leaves a warm build replaying the verdict from before the attribute was added,
+    // and no route file reflects the edit either.
+    $context = new RouteContext(
+        route: new RouteDescriptor(['GET'], 'api/lightboxes', middleware: ['auth:web', 'can:viewAny,'.Lightbox::class]),
+        actionRef: new ActionRef('', KioskController::class, 'index'),
+        attributes: new AttributeSet([]),
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', [], authMiddleware: 'auth*'),
+    );
+
+    $gate = CanGate::parse('can:viewAny,'.Lightbox::class);
+    expect($gate)->not->toBeNull();
+
+    (new GateDenial(static fn (): GateContract => app(GateContract::class), static fn (): bool => false))
+        ->undeniablePolicyMethod($context, $gate);
+
+    $files = $context->dependencies()->files();
+
+    // Recorded on every version, because where a fact can be WRITTEN is not a function of which
+    // framework happens to read it — and the row is the same on both, so it cannot quietly stop
+    // proving anything on the older one.
+    expect($files)->toContain((new ReflectionClass(Lightbox::class))->getFileName())
+        ->and($files)->toContain((new ReflectionClass(Totem::class))->getFileName());
 });

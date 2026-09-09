@@ -1295,7 +1295,7 @@ body matches the document's error style:
 
 | Status | Signal | Synthesized exception |
 |---|---|---|
-| 401 | auth middleware matches `security.auto_detect_middleware`, and the route is not `#[Unauthenticated]` | `AuthenticationException` |
+| 401 | auth middleware matches `security.auth_middleware`, and the route is not `#[Unauthenticated]` | `AuthenticationException` |
 | 422 | a request extension recovered a validated body (its integration producer owns `requestBody`) | `ValidationException` |
 
 > **Deliberate gap:** the 422 signal is body-verb only. A validated GET/HEAD applies its rules as query
@@ -1866,60 +1866,84 @@ it.
 
 ## 9. Config shape (docuccino/laravel)
 
+Two files, and which one a setting sits in is part of the contract. **`docuccino.yaml`**, at the
+project root, holds everything that shapes a document and is read once per build.
+**`config/docuccino.php`** holds only what Laravel reads while it BOOTS or on a viewer request — the
+master switch, each document's `viewer` bag, `cache.store` — because the viewer's routes are
+registered on every boot, and a boot that had to parse a project file to decide whether a route
+exists would fail on a file somebody is halfway through editing. The split is a PARTITION: nothing is
+read from both, and a build setting left in the PHP file is reported (`config.stale-php-keys`) and
+ignored, never merged. `ConfigFile` owns the reading of the YAML, `ConfigSplit` the report.
+
+`docuccino.yaml` — the build surface, abridged (the shipped file at
+`php/laravel/config/docuccino.yaml` is the full one, every option present and the optional ones
+commented out):
+
+```yaml
+documents:
+  default:
+    info: { title: '…', version: '…', description: { file: '…md' } }
+    servers: [{ url: 'https://{tenant}.example.com', variables: {} }]
+    routes: { include: ['api/*'], exclude: [], filter: App\Docs\PublicRoutes, include_vendor: false }
+    # …full scheme set…
+    security: { auth_middleware: 'auth*' }
+    error_responses: 'default'
+    tags: { mapper: App\Docs\PrefixTagMapper, map: {}, default_strategy: 'controller' }
+    content: { dir: 'resources/docs/api' }
+    overlays: ['resources/docs/overlays/*.yaml']
+    representation: { filters: 'bracketed|deepObject', nullable: '…', enums: '…', operation_id: '…' }
+    # Per-integration document-level knobs — one bag per integration, keyed by its config name
+    # (snake_case); each integration reads ONLY its own bag (via DocumentConfig::integration()).
+    # Every bag also accepts `enabled` (bool), resolved per-document at extension-resolution time:
+    # an integration contributes only when its package is installed AND the document enables it.
+    # Default on when installed, EXCEPT `permission` (default OFF — opt-in; see below).
+    integrations:
+      api_resources: { wrap: true }                        # resource `data` wrapping (false | true | '<key>')
+      sanctum: { modes: ['token', 'stateful'], cookie: 'myapp_session' }
+      passport: { url: 'https://auth.example.com' }        # oauth2 flow base URL (default app.url)
+      query_builder: { pagination_terminals: ['paginateList'] }  # extra paginating method names
+      permission: { enabled: true }                        # opt in (default OFF): role/permission requirements
+    export: { path: '…', formats: ['openapi-3.2'] }
+extensions: []
+# Document lints, all diagnostics-only. `leakage` also takes `patterns` (extra token → label
+# heuristics merged over the built-in sensitive-name table); the rest take enabled + allow.
+lint:
+  leakage: { enabled: true, allow: [], patterns: {} }
+  descriptions: { enabled: false, allow: [] }
+  operation_ids: { enabled: true, allow: [] }
+  tags: { enabled: false, allow: [] }
+  vacuous_union: { enabled: true, allow: [] }
+  examples: { enabled: true, allow: [] }
+  unpinned_redirect: { enabled: true, allow: [] }
+on_route_error: 'skeleton'
+cache: { enabled: true }
+```
+
+`config/docuccino.php` — the boot surface, in full:
+
 ```php
 return [
     'enabled' => env('DOCUCCINO_ENABLED', true),
     'documents' => [
         'default' => [
-            'info' => ['title' => '…', 'version' => …, 'description' => ['file' => '…md']],
-            'servers' => [['url' => 'https://{tenant}.example.com', 'variables' => [...]]],
-            'routes' => ['include' => ['api/*'], 'exclude' => [...], 'closure' => null],
-            'security' => [...full scheme set..., 'auto_detect_middleware' => 'auth*'],
-            'error_responses' => 'default',
-            'tags' => ['mapper' => PrefixTagMapper::class, 'map' => [...], 'default_strategy' => 'controller'],
-            'content' => ['dir' => 'resources/docs/api'],
-            'overlays' => ['resources/docs/overlays/*.yaml'],
-            'representation' => ['filters' => 'bracketed|deepObject', 'nullable' => …, 'enums' => …, 'operation_id' => …],
-            // Per-integration document-level knobs — one bag per integration, keyed by its config
-            // name (snake_case); each integration reads ONLY its own bag (via DocumentConfig::integration()).
-            // Every bag also accepts `enabled` (bool), resolved per-document at extension-resolution
-            // time: an integration contributes only when its package is installed AND the document
-            // enables it. Default on when installed, EXCEPT `permission` (default OFF — opt-in; see below).
-            'integrations' => [
-                'api_resources' => ['wrap' => true],                      // top-level resource `data` wrapping (false | true | '<key>')
-                'sanctum'       => ['modes' => ['token', 'stateful'], 'cookie' => 'myapp_session'],
-                'passport'      => ['url' => 'https://auth.example.com'], // oauth2 flow base URL (default app.url)
-                'query_builder' => ['pagination_terminals' => ['paginateList']], // extra paginating method names
-                'permission'    => ['enabled' => true],                   // opt in (default OFF): document role/permission requirements
-            ],
-            'export' => ['path' => '…', 'formats' => ['openapi-3.2']],
             'viewer' => ['driver' => 'scalar', 'route' => '/docs/api', 'gate' => 'viewApiDocs', 'source' => 'generate|artifact'],
         ],
     ],
-    'extensions' => [],
-    // Document lints, all diagnostics-only. `leakage` also takes `patterns` (extra token → label
-    // heuristics merged over the built-in sensitive-name table); the rest take enabled + allow.
-    'lint' => [
-        'leakage' => ['enabled' => true, 'allow' => [], 'patterns' => []],
-        'descriptions' => ['enabled' => false, 'allow' => []],
-        'operation_ids' => ['enabled' => true, 'allow' => []],
-        'tags' => ['enabled' => false, 'allow' => []],
-    ],
-    'on_route_error' => 'skeleton',
-    'cache' => ['enabled' => true, 'store' => null],
+    'cache' => ['store' => null],
 ];
 ```
 
+A document declared in the YAML with no entry here simply has no page to serve, which is what an
+export-only document is.
+
 `error_responses` says what is published for the exceptions the application does not render itself:
 `default` (framework-default JSON error shapes, plus the implicit responses) or `none` (neither). It is a
-closed set of two, and any other value is read as `default` and reported as
-`config.unknown-error-responses` — a document's whole error contract is not a thing to change on a
-misspelling, in either direction. There is no preset: what an application's own handler returns, down to
+closed set of two, and any other value is read as `default` and reported as `config.unknown-value` —
+a document's whole error contract is not a thing to change on a misspelling, in either direction. There is no preset: what an application's own handler returns, down to
 the media type it sends it as, is read from its code and published over both.
 `tags.default_strategy` chooses how an operation
 with no `#[Group]` gets its default tag: `controller` (the controller's short name → `tags.map`, the
-default) or `none` (no default tag); an unknown value coerces to `controller` and emits a
-`config.unknown-tag-strategy` info diagnostic. `tags.definitions` entries are full OAS 3.2 Tag
+default) or `none` (no default tag); an unknown value is read as `controller` and reported. `tags.definitions` entries are full OAS 3.2 Tag
 Objects (`name` + optional `summary`/`description`/`parent`/`kind`) plus Docuccino's own `weight`,
 which orders the emitted array (weight, then name) and is not emitted. Parents are resolved AFTER
 that sort, so the result never depends on definition order: a `parent` naming no defined tag emits
@@ -1975,7 +1999,7 @@ Extensions/Integrations line and an extension may not import an integration.
 Unit = OperationFragment (operation + registered components + diagnostics + document-level notes +
 provenance, serialized as UIR JSON fragments). Key = sha256(tool ver ‖ spec ver ‖ identity-algo ver ‖
 document id ‖ doc configHash ‖ environment digest ‖ build fingerprint ‖ resolved extension list (FQCNs +
-package versions) ‖ route cache-signature ‖ sha256 of each file in
+package versions + source digests) ‖ route cache-signature ‖ sha256 of each file in
 `ActionAnalysis::$dependencyFiles`). Assembly → canonicalize → validate always run fresh.
 Watch mode later = loop incremental build + SSE push.
 
@@ -2074,11 +2098,49 @@ discovery scan itself is never cached, so a webhook added or deleted is seen the
 **The extension signature is per INSTANCE.** Extensions are registrable as objects on every surface
 there is (`Registrar::add`, `ExtensionRegistry::extend`, config), so `new MyExtension(mode: 'a')` and
 `mode: 'b'` are two different builds under one class name. `ResolvedExtensions::cacheSignature()`
-therefore emits one entry per resolved instance — class, owning package version, and a digest of the
-instance's own properties, reading enum cases as cases and a closure as where it was written plus what
-it captured. Its honest limit: it does not descend into a collaborator OBJECT a property holds (an
-injected container would be an unbounded walk, and a collaborator is a dependency rather than a
-setting), so two instances differing only inside one still key alike — hold the setting itself.
+therefore emits one entry per resolved instance — class, owning package version, a digest of the
+instance's own properties (reading enum cases as cases and a closure as where it was written plus what
+it captured), and a digest of the BYTES the class is written in: its own file, its parents' and its
+traits' (`DeclarationFiles`). Its honest limit: it does not descend into a collaborator OBJECT a
+property holds (an injected container would be an unbounded walk, and a collaborator is a dependency
+rather than a setting), so two instances differing only inside one still key alike — hold the setting
+itself, or key it through the environment digest.
+
+**Why the version needs the source digest beside it.** A package's version is a proxy for its author
+having released; a class in the APPLICATION's own tree has no such author — its "package" is the root,
+whose version does not move when a file is saved — so an author who edited their own extension was
+served the output the old body produced. The two components are complementary rather than redundant and
+neither is a heuristic about where a class lives: a digest over CONTENT is inert exactly where the
+version is informative, because a release nobody edited reinstalls byte-identically, and informative
+exactly where the version is inert. So a `composer install`, or a `composer update` that leaves an
+extension's own bytes alone, costs nobody a rebuild, while the version still covers a package changing
+another file the extension calls.
+
+Where an extension's declaration cannot be hashed back — `eval()`'d code reports a path no `is_file()`
+matches, and a manifest records an absent file as ABSENT, which compares FRESH while it stays absent —
+the DOCUMENT is refused the cache, with one `extension.unhashable` info diagnostic naming the class.
+Unlike a tag mapper there is no per-route bag to refuse with: an operation extension is run over every
+operation and nothing records which of them its answer reached (an extension that wrote nothing still
+ran, and withholding a value is an answer), so the entry keys every fragment and the refusal has the
+same scope. The refusal and the key read the same instance set for that reason.
+
+**The leakage bag is keyed unconditionally too.** `Support\LeakageDigestContributor` feeds
+`lint.leakage`'s safelist and heuristics table into the environment digest, because they decide whether
+a recorded example is PUBLISHED at all — `RecordedExamplesExtension` withholds a body `ExampleRedaction`
+still finds a credential in. Nothing else could see them: `lint.*` is deliberately top-level, so no
+document's config bag holds it and `DocumentConfig::hash()` cannot reach it, and the extension carries
+the options inside a collaborator object, which is the limit named above. The safelist goes in sorted,
+since it is consulted by membership and re-ordering it changes no answer; the heuristics table goes in
+as written, since a name matches a token it CONTAINS and the first hit wins. `enabled` is left out: it
+turns a REPORT off, redaction is handed its options with the switch unhonoured, and the lint that reads
+it is a document transformer re-run on every build.
+
+**A "was the bag readable" flag is a cache input, not a value.** `QueryBuilderConfig::$recovered` and
+`JsonApiPaginateConfig::$recovered` each gate a per-route diagnostic that rides the fragment, and
+`vendor:publish` writes the package's own DEFAULTS — so the bag going from absent to present moves not
+one of the values those contributors digest. Digesting the values alone left an author who followed
+that diagnostic's own advice rebuilding and still being told the config was unreadable, so both
+contributors carry the flag.
 
 **Auth config is keyed unconditionally.** `Integrations\Support\AuthConfigDigestContributor` feeds
 `auth.guards` and `auth.defaults.guard` into the environment digest whether or not Sanctum or Passport

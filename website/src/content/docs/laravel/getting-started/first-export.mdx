@@ -172,7 +172,7 @@ gate ability and define it:
 
 <Steps>
 
-1. Set the ability in `config/docuccino.php`:
+1. Set the ability in `config/docuccino.php`, which is where the viewer is configured:
 
    ```php
    // documents.default.viewer.gate
@@ -246,18 +246,17 @@ stable identity for every operation and schema plus the provenance of each detai
 
 ### Several artifacts at once
 
-If you ship more than one of these, configure them as targets rather than running the command once
-per format — analysis is the expensive half, and targets share one:
+If you ship more than one of these, configure them as targets in `docuccino.yaml` rather than running
+the command once per format — analysis is the expensive half, and targets share one:
 
-```php
-// config/docuccino.php → documents.default
-'export' => [
-    'targets' => [
-        ['format' => 'openapi-3.2', 'path' => 'docs/openapi.json'],
-        ['format' => 'openapi-3.1', 'path' => 'docs/openapi-3.1.yaml'],
-        ['format' => 'postman',     'path' => 'docs/collection.json'],
-    ],
-],
+```yaml
+documents:
+  default:
+    export:
+      targets:
+        - { format: 'openapi-3.2', path: 'docs/openapi.json' }
+        - { format: 'openapi-3.1', path: 'docs/openapi-3.1.yaml' }
+        - { format: 'postman', path: 'docs/collection.json' }
 ```
 
 ```bash

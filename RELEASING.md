@@ -73,7 +73,8 @@ apart in the fragment cache, whose tool version appends the installed source ref
 No goldens need regenerating. The golden comparison (`withoutGeneratorVersion()` in `tests/Pest.php`)
 replaces that one member on both sides, so the committed bytes keep the version they were recorded
 with and a bump changes nothing else — `info.version`, `specVersion` and `contentHash` all stay
-byte-locked.
+byte-locked. A later regeneration keeps it too: it writes the new bytes with the version that golden
+already records, so a release never arrives on a golden that had to be touched for some other reason.
 
 ### The changelogs
 

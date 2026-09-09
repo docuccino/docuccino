@@ -107,11 +107,10 @@ mapper — the contract Docuccino uses to turn a PHP type into a JSON Schema.
    ```
    </TabItem>
    <TabItem label="From config">
-   ```php
-   // config/docuccino.php
-   'extensions' => [
-       \App\Docs\MoneyToSchema::class,
-   ],
+   ```yaml
+   # docuccino.yaml
+   extensions:
+     - 'App\Docs\MoneyToSchema'
    ```
    </TabItem>
    </Tabs>
@@ -252,6 +251,7 @@ And these cover the rest of the surface:
 | Contract | Implement it to… | Methods |
 | --- | --- | --- |
 | `RouteResolver` | Contribute routes beyond Laravel's router. | `resolve(DocumentConfig $document): iterable` |
+| `RouteFilter` | Decide whether one discovered route belongs in a document, after the `routes.include`/`routes.exclude` globs. Configured by name under [`routes.filter`](/laravel/reference/configuration/#routes) rather than registered. | `includes(RouteDescriptor $route): bool` |
 | `ValidationRulesToSchema` | Replace the whole rule-set → request-schema step. Almost always the wrong lever: add a `RuleTransformer` instead. | `convert(RuleSet $rules, SchemaContext $context): ValidationSchema` |
 | `ResponseAnalysisTarget` | Point success-body inference at a different method than the dispatched action (the way Laravel Actions' `jsonResponse()` is read). | `resolve(RouteContext $context): ?ResponseAnalysisRedirect` |
 | `ResponseStatusResolver` | Override the success status a returned class documents (a `201` from a Data class's `calculateResponseStatus()`, say). | `resolveStatuses(RouteContext $context, string $fqcn): array` |
@@ -270,18 +270,21 @@ The resolver contracts are **chains resolved per document**, and each returns a 
 answers wins, and a chain nobody answers falls back to Docuccino's default behavior, so registering
 yours is additive: anything you don't claim is untouched.
 
-<Aside title="TagMapper is configured, not registered">
-`TagMapper` is the one contract you don't hand to `Docuccino::extend()`. Name your class in a
-document's [`tags.mapper`](/laravel/reference/configuration/#tags) config key instead — it's resolved
-from the container per document, so two documents can name tags differently. Everything else in the
-tables above is registered.
+<Aside title="Two contracts are configured, not registered">
+`TagMapper` and `RouteFilter` are the two contracts you don't hand to `Docuccino::extend()`. Name
+your class in a document's [`tags.mapper`](/laravel/reference/configuration/#tags) or
+[`routes.filter`](/laravel/reference/configuration/#routes) config key instead — both are resolved
+from the container per document, so two documents can name tags differently and cover different
+slices of the route set. Everything else in the tables above is registered.
 </Aside>
 
-An `EnvironmentDigestContributor` is worth a second look if your extension reads anything outside the
-route's own files — a config value, a registered guard, a global default. The fragment cache keys on
-files; a fact you read from booted state is invisible to it, and a warm cache would keep serving the
-old answer. Return a short deterministic string built from that state (the empty string when nothing
-resolves) and the cache invalidates when it changes.
+An `EnvironmentDigestContributor` is worth a second look if your extension reads anything outside its
+own code and the route's own files — a config value, a registered guard, a global default. Your
+extension's own source is keyed for you: the cache hashes the files your class, its parents and its
+traits are written in, so editing it rebuilds without your doing anything. A fact you read from booted
+state is a different matter — nothing hashes it, and a warm cache would keep serving the old answer.
+Return a short deterministic string built from that state (the empty string when nothing resolves) and
+the cache invalidates when it changes.
 
 A `RouteNoteCollector` answers a different cache question: what to do when a finding belongs to the
 whole document but is discovered one route at a time. Reporting it per route gives a 200-route app 200

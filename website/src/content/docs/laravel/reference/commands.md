@@ -1,6 +1,6 @@
 ---
 title: Commands
-description: The docuccino artisan commands — install, export, validate, diff, cache, clear, watch, coverage, explain and version-changes — with every flag, default and exit code.
+description: The docuccino artisan commands — install, migrate-config, export, validate, diff, cache, clear, watch, coverage, explain and version-changes — with every flag, default and exit code.
 ---
 
 
@@ -40,23 +40,25 @@ Set Docuccino up in this application and generate a first document.
 
 ```
 docuccino:install
-    {--force : Replace an existing config/docuccino.php with the shipped defaults}
+    {--force : Replace existing configuration files with the shipped defaults}
     {--no-export : Set up without generating a first document}
     {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}
 ```
 
 | Flag | Values / default | Effect |
 | --- | --- | --- |
-| `--force` | flag / off | Replaces an existing `config/docuccino.php` with the shipped defaults. Without it an existing file is never touched — the command says it left it alone and names this flag. |
+| `--force` | flag / off | Replaces an existing `docuccino.yaml` or `config/docuccino.php` with the shipped defaults. Without it an existing file is never touched — the command says which it left alone and names this flag — and an application whose build settings are still in `config/docuccino.php` gets `docuccino.yaml` written from *those* rather than from the defaults. |
 | `--no-export` | flag / off | Finishes the setup without generating a document. Otherwise the command offers one, and `--no-interaction` takes the prompt's default, which is yes. |
 | `--memory-limit` | php.ini value, e.g. `2G` / unset | Raises the process memory limit before the first export runs — see the shared-behavior note above. |
 
 The one command you run once rather than on every change, and the only one that writes anything
 outside an export path. Four steps, in order:
 
-1. **Config.** Publishes `config/docuccino.php` — the same file, byte for byte, that
-   `vendor:publish --tag=docuccino-config` writes. An existing file is left exactly as it is unless
-   you pass `--force`, so a second run changes nothing.
+1. **Config.** Publishes both configuration files — `docuccino.yaml` at your project root, then
+   `config/docuccino.php` — byte for byte the same two that
+   `vendor:publish --tag=docuccino-config` writes. It decides that per file: an existing one is left
+   exactly as it is unless you pass `--force`, so an application that already keeps one gets the
+   other and a second run changes nothing.
 2. **Routes.** Reads your router and reports how many routes each configured document really matches.
    The count comes from the same resolver a build uses — attribute exclusions, closure filters and
    vendor package routes already subtracted — so it is the number your next export will document.
@@ -83,13 +85,95 @@ Routes
   v1/*     31
   admin/*  11
 
-Set documents.default.routes.include in config/docuccino.php — e.g. ['v1/*'].
+Set documents.default.routes.include in docuccino.yaml — e.g. ['v1/*'].
 ```
 
 An application with no routes to document yet gets a sentence saying so, not a failure.
 
-Exits `1` on a disabled install, a `config/docuccino.php` it could not write, or a failed first
+Exits `1` on a disabled install, a configuration file it could not write, or a failed first
 export — setup succeeding while the export fails is still a failure.
+
+**On an application that hasn't migrated yet.** Build settings still sitting in `config/docuccino.php`
+are a decision somebody made, the same way an existing file is, so the config step does *not* publish
+the shipped `docuccino.yaml` over them. It runs [`docuccino:migrate-config`](#docuccinomigrate-config)
+instead and you get a file holding your own settings. `--force` still publishes the defaults.
+
+## `docuccino:migrate-config`
+
+Write docuccino.yaml from the build settings left in config/docuccino.php.
+
+```
+docuccino:migrate-config
+    {--force : Replace an existing docuccino.yaml with the settings from config/docuccino.php}
+    {--dry-run : Print the file that would be written, and write nothing}
+```
+
+| Flag | Values / default | Effect |
+| --- | --- | --- |
+| `--force` | flag / off | Replaces an existing `docuccino.yaml`. Without it an existing file is never touched. It **replaces** rather than merges — there is no precedence rule between two files of settings — so read what is there first. |
+| `--dry-run` | flag / off | Prints the file it would write and writes nothing. Reports and exits exactly as the real run would. |
+
+The way out of [`config.not-migrated`](/laravel/reference/diagnostics/), which refuses a build whose
+settings are all still in `config/docuccino.php`. It reads `config('docuccino')`, writes the build
+settings to `docuccino.yaml` at your project root, and leaves the framework's three keys —
+`enabled`, `cache.store` and each document's `viewer` — where they are.
+
+It writes **one** file and never edits the other. `config/docuccino.php` keeps three of its keys, so
+tidying it would be surgery on a file you wrote rather than a file replaced, and the comments,
+formatting and `env()` calls in it cannot be put back from a parsed array. It is also your only
+remaining copy of what you configured while you check the new file against it. So the command prints
+the exact list of keys to delete and leaves the deleting to you —
+[`config.stale-php-keys`](/laravel/reference/diagnostics/) goes on naming them until you do.
+
+The file it writes carries **only what your application configured** — no defaults and no commented
+catalogue, unlike the template `docuccino:install` publishes. A key written there that you never set
+still joins the resolved configuration and changes the document's `configHash`, so a migration that
+helpfully filled in the defaults would change every fingerprint it touched.
+
+**What it changes on the way over.** Two settings moved to the names they have now, and a migration
+writing the old spelling would hand you a file the build reports as naming no setting:
+
+| Written in `config/docuccino.php` | Written to `docuccino.yaml` |
+| --- | --- |
+| `documents.*.security.auto_detect_middleware` | `documents.*.security.auth_middleware` |
+| `engine.neon` | `engine.config` |
+
+**What it cannot carry.** Two keys have no `docuccino.yaml` equivalent at all, and the two are
+reported differently because they cost different things:
+
+- `documents.*.representation.lists` had no reader — both of its values emitted the same document — so
+  it is dropped and the run still exits `0`.
+- `documents.*.routes.closure` **filtered routes**. A closure has no form in a configuration file, so
+  it cannot come with you: [`routes.filter`](/laravel/reference/configuration/#routes) names a class
+  instead. The file is still written, the omission is printed, a comment naming it goes into
+  `docuccino.yaml` where it outlives the console, and the command exits `1` — the routes that closure
+  held back are documented again until you write a `RouteFilter`. A `closure` left at its shipped
+  `null` filtered nothing, so that one is only a drop.
+
+A **value** can be one the file has no form for too, whatever key it sits under: an enum case, a
+closure, a resource, a date, an object. `config/docuccino.php` is PHP and can hold any of them;
+`docuccino.yaml` holds numbers, strings, booleans and lists and maps of those. Such a setting is left
+out rather than written as something else — an absent key takes its documented default, where a value
+the file changed on the way in would build a document you never configured. It is reported and
+commented exactly like `routes.closure`, and the run exits `1`. Write the value as a literal in
+`docuccino.yaml` and the next run is clean.
+
+**`env()` calls.** `config('docuccino')` hands over *resolved* values, so an `env()` call in
+`config/docuccino.php` arrived as whatever the variable said where you ran this, and the indirection
+is not recoverable from the value. Where the framework config reads a setting through `DOCUCCINO_ENGINE`
+or `DOCUCCINO_FRAGMENT_CACHE` **and** that variable is set, the command names the setting and the
+variable — both still override the file, so the lever keeps working. Where any other `env()` call is
+in the file, it says so once and tells you to check those keys, rather than guessing which they were.
+
+Every file it writes is one the build reads: the command parses its own output back before putting it
+on disk and, where those settings do not survive the round trip, writes **nothing** and says why. Your
+`config/docuccino.php` is untouched in that case, so nothing is lost — and that matters, because the
+last thing a successful run tells you is to delete it.
+
+Exits `0` when everything came over, `1` on a disabled install, a file it could not write, a setting
+it could not carry, or settings it could not write at all — the file is written in the "could not
+carry" case and in no other, and the exit code is what a script reads. Running it twice writes the
+same bytes.
 
 ## `docuccino:export`
 
@@ -614,25 +698,27 @@ as its inputs:
 - **Everything behind an operation.** Each cached operation stores the files it was recovered from:
   the controller, everything a parent class or trait answered for it, every file a traced helper
   walked, and any file an attribute read. Editing one controller rebuilds one operation.
-- **Everything that decides all of them.** `config/`, `routes/`, `composer.json` and `composer.lock`,
-  each document's [`content.dir`](/laravel/reference/configuration/#content) tree, its
+- **Everything that decides all of them.** `docuccino.yaml`, `config/`, `routes/`, `composer.json`
+  and `composer.lock`, each document's [`content.dir`](/laravel/reference/configuration/#content) tree, its
   [`webhooks.dir`](/laravel/reference/configuration/#webhooks) tree, its
   [overlay](/laravel/reference/configuration/#overlays) files, and the
-  [`engine.neon`](/laravel/reference/configuration/#engine) file if you name one. These are watched
+  [`engine.config`](/laravel/reference/configuration/#engine) file if you name one. These are watched
   as directories, so a route file, a content page or a webhook class you add mid-session counts too.
+  `docuccino.yaml` is watched whether or not it is there, because the file appearing is itself the
+  edit a session has to notice.
 
 The artifacts a build writes are deliberately excluded — watching its own output would rebuild
 forever.
 
 Watch mode turns the [fragment cache](/laravel/guides/speeding-up-builds/) on for the builds it runs
 (via `DOCUCCINO_FRAGMENT_CACHE`), which is what makes a rebuild incremental and what gives it the
-list above.
+list above. `php artisan config:cache` cannot get in the way of that: `cache.enabled` is read from
+`docuccino.yaml` and the override from the environment the rebuild is handed, so neither goes through
+the config a cache would bake.
 
-If you have run `php artisan config:cache`, that env value was read and baked in when you cached, so
-the override reaches nothing: every rebuild re-analyzes your whole application and stores none of it,
-and editing a controller stops triggering one. Watch says so on startup, before the first build, so
-you can stop and fix it. Run `php artisan config:clear`, or set `DOCUCCINO_FRAGMENT_CACHE=true` and
-cache again.
+If the first build stored nothing, watch says so rather than leaving you to notice that editing a
+controller changes nothing: only the roots above are watched, and the usual cause is a fragment
+directory it could not write to.
 
 ### Live viewer refresh
 
@@ -818,7 +904,7 @@ gets one line saying how to take it:
 | `fallback`, `inference`, `integration`, `docblock`, and **no** attribute writes it | The generic truth — `no attribute writes this — an overlay outranks docblock` |
 | `attribute` | `edit the attribute above, or outrank it with an overlay` — the `file:line` above it is the attribute |
 | `overlay` | `edit the overlay that set it; only config outranks an overlay` |
-| `config` | `config is the top rung — edit config/docuccino.php` |
+| `config` | `config is the top rung — edit docuccino.yaml` |
 
 An attribute is named **only where it genuinely writes that field on that node**: `#[Group]` really is
 what sets `tags`, and the name a shared error body publishes under is written by `#[ErrorComponent]` or
@@ -1081,7 +1167,7 @@ What counts as failure:
 
 | Command | Exits `1` when |
 | --- | --- |
-| `install` | disabled; `config/docuccino.php` could not be written; the first export failed |
+| `install` | disabled; a configuration file could not be written; the first export failed |
 | `export` | disabled; unknown `--format`, `--fail-on` or `--provenance` value; `--out` given while exporting multiple documents, or without `--format` against a multi-target document; unknown document key; an unaccepted diagnostic matches `--fail-on` |
 | `validate` | disabled; unknown `--fail-on` value; unknown document key; **any** schema violation (regardless of `--fail-on`, and never acceptable — it's an error); an unaccepted diagnostic matches `--fail-on` |
 | `diff` | disabled; unknown document key; `old` missing, unreadable or not valid JSON; `git show` fails; a ref or path starting with `-`; the two documents are incomparable; `--enforce` with an unsatisfied verdict |

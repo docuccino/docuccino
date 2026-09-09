@@ -98,11 +98,13 @@ generic-looking parameter names are never a mystery.
 ## Configuration
 
 Docuccino itself has nothing to configure here. The only switch is the shared `enabled` opt-out, per
-document:
+document, in `docuccino.yaml`:
 
-```php
-// config/docuccino.php → documents.default.integrations
-'json_api_paginate' => ['enabled' => false],
+```yaml
+documents:
+  default:
+    integrations:
+      json_api_paginate: { enabled: false }
 ```
 
 See the [`integrations` reference](/laravel/reference/configuration/#integrations).

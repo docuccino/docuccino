@@ -73,6 +73,7 @@ use Docuccino\Laravel\Routing\LaravelRouteResolver;
 use Docuccino\Laravel\Testing\ApiContract;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Almanac;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\NestedWrapItemData;
+use Docuccino\Laravel\Tests\Support\BuildSettings;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\FragmentCacheDirs;
 use Docuccino\Laravel\Tests\Support\ScriptedBuildRunner;
@@ -111,17 +112,55 @@ function bindStubEngine(): void
 }
 
 /**
+ * Set one build setting, addressed the way `docuccino.yaml` nests it — `documents.default.info.title`,
+ * `lint.tags.enabled`, `cache.enabled`.
+ *
+ * The one way a test configures a build. The setting becomes YAML text and goes through the reader
+ * the product uses — {@see BuildSettings} states why that seam and not a parsed array, and what
+ * scans the other way in.
+ */
+function setBuild(string $path, mixed $value): void
+{
+    BuildSettings::set($path, $value);
+}
+
+/**
+ * Replace the whole `documents` bag, for a suite that declares its own documents rather than changing
+ * one setting of the shipped `default`.
+ *
+ * @param  array<string, mixed>  $documents
+ */
+function setDocuments(array $documents): void
+{
+    BuildSettings::documents($documents);
+}
+
+/**
+ * One document's build settings as they stand, for a test that reads the bag rather than writing it.
+ *
+ * @return array<string, mixed>
+ */
+function documentSettings(string $key = 'default'): array
+{
+    return BuildSettings::document($key);
+}
+
+/**
  * Build one workbench document, optionally mutating its raw config first. The one shared build helper
  * the Laravel feature tests use, so none of them re-rolls the config → generator wiring or reaches for
  * a peer test's file-level function. `$key` names the document; a suite declaring its own `documents`
  * bag — several versions of one API, an admin document beside the default — passes the one it wants.
  *
+ * The bag comes off the bound `BuildConfig`, so it is the one a build hands the factory, refusals
+ * and all. `$mutateConfig` edits it after that read rather than instead of it — for a shape a test
+ * wants that no YAML has to carry — so a test whose subject is the SETTING sets it with
+ * {@see setBuild()} and gets the reader's answer.
+ *
  * @param  callable(array<string, mixed>): array<string, mixed>|null  $mutateConfig
  */
 function generateDocument(?callable $mutateConfig = null, string $key = 'default'): GenerationResult
 {
-    /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.'.$key);
+    $raw = documentSettings($key);
     if ($mutateConfig !== null) {
         $raw = $mutateConfig($raw);
     }
@@ -129,6 +168,33 @@ function generateDocument(?callable $mutateConfig = null, string $key = 'default
     $config = app(DocumentConfigFactory::class)->make($key, $raw, 'skeleton');
 
     return app(DocumentGenerator::class)->generate($config, app(TypeEngine::class));
+}
+
+/**
+ * The `default` document with `$mapper` configured under `tags.mapper` — a class-string, or any string
+ * the container resolves a tag mapper from.
+ */
+function generateDocumentWithTagMapper(string $mapper): GenerationResult
+{
+    return generateDocument(static function (array $raw) use ($mapper): array {
+        $raw['tags']['mapper'] = $mapper;
+
+        return $raw;
+    });
+}
+
+/**
+ * The `default` document reading committed example recordings out of `$dir` — for a suite whose only
+ * variable is something else entirely, such as the leakage bag that decides whether a recording
+ * publishes at all.
+ */
+function generateDocumentWithRecordings(string $dir): GenerationResult
+{
+    return generateDocument(static function (array $raw) use ($dir): array {
+        $raw['examples'] = ['recordings' => $dir];
+
+        return $raw;
+    });
 }
 
 /**
@@ -185,9 +251,7 @@ function assertMiddlewareAgreesWithRouter(string $uriPrefix, int $atLeast): void
         return array_values(array_unique($out));
     };
 
-    /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.default');
-    $document = app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton');
+    $document = app(DocumentConfigFactory::class)->make('default', documentSettings(), 'skeleton');
 
     $ours = [];
     foreach (app(LaravelRouteResolver::class)->resolve($document) as $descriptor) {
@@ -1001,6 +1065,35 @@ function golden(string $name): string
 }
 
 /**
+ * The bytes `x-docuccino.generator.version` occupies in a rendered document, captured as prefix and
+ * value. ONE pattern, deliberately: the rule below has two sides — a comparison that looks past the
+ * version and a regeneration that carries the recorded one forward — and a pattern each is how the
+ * two come to disagree about which bytes they are talking about.
+ */
+const GOLDEN_GENERATOR_VERSION_PATTERN = '/("generator"\s*:\s*\{[^{}]*"version"\s*:\s*)"([^"]*)"/';
+
+/**
+ * The rendered document with `x-docuccino.generator.version` set to $version.
+ */
+function withGeneratorVersion(string $document, string $version): string
+{
+    return (string) preg_replace_callback(
+        GOLDEN_GENERATOR_VERSION_PATTERN,
+        static fn (array $matches): string => $matches[1].'"'.$version.'"',
+        $document,
+    );
+}
+
+/**
+ * The `x-docuccino.generator.version` a rendered document records, or null when it records none —
+ * a document without the member, and equally a file too mangled or truncated to read one out of.
+ */
+function generatorVersionOf(string $document): ?string
+{
+    return preg_match(GOLDEN_GENERATOR_VERSION_PATTERN, $document, $matches) === 1 ? $matches[2] : null;
+}
+
+/**
  * Replaces `x-docuccino.generator.version` with a placeholder — the ONE member of an emitted document
  * that tracks the release rather than the application it documents.
  *
@@ -1008,31 +1101,74 @@ function golden(string $name): string
  * and a regeneration diff nobody reads is exactly where a real drift hides.
  * So the version travels honestly into every emitted document (and into the fragment cache's tool
  * version, which is why an upgrade cannot serve an older release's fragments) and the golden
- * COMPARISON looks past it. Applied to both sides; never to what a regeneration writes, so the
- * goldens on disk keep the real version they were recorded with. Nothing else is normalised —
- * `info.version`, `specVersion` and `contentHash` are all still byte-locked.
+ * COMPARISON looks past it, on both sides. The other side of that rule lives in
+ * {@see assertGoldenAt()}, which substitutes the version a golden already records into the bytes it
+ * writes: skipping the version on the way IN while writing it on the way OUT is what silently moved
+ * every touched golden to the current release, whatever else the regeneration was for. Nothing else
+ * is normalised — `info.version`, `specVersion` and `contentHash` are all still byte-locked.
  */
 function withoutGeneratorVersion(string $document): string
 {
-    return (string) preg_replace(
-        '/("generator"\s*:\s*\{[^{}]*"version"\s*:\s*)"[^"]*"/',
-        '${1}"@generator-version@"',
-        $document,
-    );
+    return withGeneratorVersion($document, '@generator-version@');
 }
 
 /**
- * Reads a golden, or (under DOCUCCINO_UPDATE_GOLDEN=1) writes the freshly generated bytes first.
+ * Reads a golden, or (under DOCUCCINO_UPDATE_GOLDEN=1) writes the freshly generated bytes over it
+ * first. {@see assertGoldenAt()} is the whole of it; this only names the path.
  */
 function assertGolden(string $name, string $actual): void
 {
-    $path = golden($name);
+    assertGoldenAt(golden($name), $actual);
+}
+
+/**
+ * As {@see assertGolden()}, for a golden addressed by path — which is what lets the regeneration
+ * itself be put under test ({@see regenerateGolden()}) without a scratch file in a byte-locked tree.
+ */
+function assertGoldenAt(string $path, string $actual): void
+{
     if (getenv('DOCUCCINO_UPDATE_GOLDEN') === '1') {
         @mkdir(dirname($path), 0777, true);
-        file_put_contents($path, $actual);
+        $existing = @file_get_contents($path);
+        $recorded = is_string($existing) ? generatorVersionOf($existing) : null;
+
+        // A regeneration re-records CONTENT, not the release that happened to run it: the golden keeps
+        // the version it already records, so one whose content did not move does not move at all.
+        // Recording none — a new golden, or bytes no version could be read out of — takes the current
+        // version, which is both the honest answer and a visible one, since it lands in the diff.
+        // Deleting a golden is therefore how you deliberately re-record its version.
+        file_put_contents($path, $recorded === null ? $actual : withGeneratorVersion($actual, $recorded));
     }
 
     expect(withoutGeneratorVersion($actual))->toBe(withoutGeneratorVersion((string) file_get_contents($path)));
+}
+
+/**
+ * Drives the regeneration path — {@see assertGoldenAt()} under DOCUCCINO_UPDATE_GOLDEN=1 — over a
+ * scratch golden holding $recorded (or absent, when null), and hands back the bytes it wrote.
+ *
+ * The flag is put back to whatever it was, always: leaking it would turn every later golden assertion
+ * in the same worker into a silent re-record of a real golden.
+ */
+function regenerateGolden(string $actual, ?string $recorded): string
+{
+    $path = sys_get_temp_dir().'/docuccino-regenerate-'.getmypid().'-'.uniqid().'.uir.json';
+
+    if ($recorded !== null) {
+        file_put_contents($path, $recorded);
+    }
+
+    $was = getenv('DOCUCCINO_UPDATE_GOLDEN');
+    putenv('DOCUCCINO_UPDATE_GOLDEN=1');
+
+    try {
+        assertGoldenAt($path, $actual);
+
+        return (string) file_get_contents($path);
+    } finally {
+        putenv($was === false ? 'DOCUCCINO_UPDATE_GOLDEN' : 'DOCUCCINO_UPDATE_GOLDEN='.$was);
+        @unlink($path);
+    }
 }
 
 /**
@@ -2084,8 +2220,8 @@ function fragmentCacheDir(string $slug): string
     $dir = sys_get_temp_dir().'/docuccino-'.$slug.'-'.uniqid('', true);
     FragmentCacheDirs::record($slug, $dir);
 
-    config()->set('docuccino.cache.enabled', true);
-    config()->set('docuccino.cache.path', $dir);
+    setBuild('cache.enabled', true);
+    setBuild('cache.path', $dir);
 
     return $dir;
 }
@@ -2108,6 +2244,57 @@ function removeFragmentCacheDirs(string $slug): void
     foreach (FragmentCacheDirs::take($slug) as $dir) {
         removeFragmentCacheDir($dir);
     }
+}
+
+/**
+ * What the fragments in $dir recorded, read back as the cache stored it: the operation each entry holds
+ * (`method /path`) → the cache key it is filed under, and the dependency manifest freshness is checked
+ * against. A suite asserting WHICH fragments an input keys reads this rather than counting rebuilds.
+ *
+ * @return array<string, array{key: string, dependencies: list<string>}>
+ */
+function fragmentEntries(string $dir): array
+{
+    $entries = [];
+
+    foreach (glob($dir.'/*.json') ?: [] as $file) {
+        /** @var array{fragment: array{method: string, path: string}, dependencies: list<array{file: string, hash: string}>} $decoded */
+        $decoded = json_decode((string) file_get_contents($file), true, flags: JSON_THROW_ON_ERROR);
+
+        $entries[$decoded['fragment']['method'].' '.$decoded['fragment']['path']] = [
+            'key' => basename($file, '.json'),
+            'dependencies' => array_column($decoded['dependencies'], 'file'),
+        ];
+    }
+
+    return $entries;
+}
+
+/**
+ * Every cache key $dir currently holds an entry for, sorted. What a row needs when the input it changed
+ * keys the fragment rather than joining its dependency manifest: an entry the key no longer addresses
+ * stays on disk and goes on reading fresh forever, so `array_diff(after, before)` is what says which
+ * fragments a build had to write again.
+ *
+ * @return list<string>
+ */
+function fragmentKeys(string $dir): array
+{
+    $keys = array_map(static fn (string $file): string => basename($file, '.json'), glob($dir.'/*.json') ?: []);
+    sort($keys);
+
+    return $keys;
+}
+
+/**
+ * Whether the entry filed under $key in $dir still reads FRESH — the cache's own answer, over a
+ * digest memo made now, so a row can ask which fragments an edit retired rather than inferring it
+ * from a rebuild count. Only the stored manifest decides freshness, so the version strings a key
+ * would be minted from are irrelevant here.
+ */
+function fragmentEntryFresh(string $dir, string $key): bool
+{
+    return (new FragmentCache(true, $dir, '', '', ''))->get($key) !== null;
 }
 
 /**
@@ -2800,7 +2987,7 @@ function parameterRefs(array $document, string $path = '/api/versioned-forms', s
  */
 function versioningDiagnostics(?string $dir, string $version = '2026-06-01', string $route = 'api/versioned-forms'): array
 {
-    config()->set('docuccino.documents', [
+    setDocuments([
         'v' => [
             'info' => ['title' => 'Forms API', 'version' => $version],
             'routes' => ['include' => [$route]],

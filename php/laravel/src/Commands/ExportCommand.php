@@ -17,6 +17,7 @@ use Docuccino\Core\Support\AtomicFile;
 use Docuccino\Core\Support\Directory;
 use Docuccino\Laravel\Config\DocumentEmitOptions;
 use Docuccino\Laravel\Config\ExportDiagnostics;
+use Docuccino\Laravel\Config\UnusableRouteFilterException;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Support\Paths;
 use Illuminate\Console\Command;
@@ -36,6 +37,7 @@ final class ExportCommand extends Command
     use FailsOnSeverity;
     use GuardsEnabled;
     use IteratesDocuments;
+    use RefusesUnreadConfig;
     use RendersDiagnostics;
     use StringOptions;
 
@@ -53,11 +55,11 @@ final class ExportCommand extends Command
 
     public function handle(DocumentBuilder $builder, TypeEngine $engine): int
     {
-        if ($this->abortIfDisabled()) {
+        if ($this->abortIfDisabled() || $this->abortIfConfigUnread()) {
             return self::FAILURE;
         }
 
-        if (! $this->validateOptions($builder) || ! $this->validateTargets($builder)) {
+        if (! $this->validateRouteFilters($builder) || ! $this->validateOptions($builder) || ! $this->validateTargets($builder)) {
             return self::FAILURE;
         }
 
@@ -72,6 +74,32 @@ final class ExportCommand extends Command
         });
 
         return $this->reportStaleAcceptances($exit);
+    }
+
+    /**
+     * A configured route filter that cannot be applied, checked before anything else reads the config.
+     * The refusal is thrown where the filter is resolved, so every later check would meet it first and
+     * as a stack trace; rendered here it reads as the config error it is, and nothing is written.
+     */
+    private function validateRouteFilters(DocumentBuilder $builder): bool
+    {
+        $only = $this->argument('document');
+        $ok = true;
+
+        foreach ($builder->documentKeys() as $key) {
+            if (is_string($only) && $key !== $only) {
+                continue;
+            }
+
+            try {
+                $builder->config($key);
+            } catch (UnusableRouteFilterException $refusal) {
+                $this->renderDiagnostics($key, [$refusal->diagnostic]);
+                $ok = false;
+            }
+        }
+
+        return $ok;
     }
 
     /**

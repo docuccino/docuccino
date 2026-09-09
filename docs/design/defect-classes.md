@@ -201,6 +201,27 @@ swapped budgets — 8 of 8 on Laravel 12, 6 of 8 on Laravel 13, on a table whose
 budget arithmetic had not moved. It had never once run on the plain leg: the frontier was written after the
 last verification anyone did there.
 
+The third was not an assertion at all but a DECLARATION, and so it failed harder. The row proving that
+whatever the Gate's policy-resolution step raises is answered with silence provoked the raise by
+subclassing the framework's `Gate` and overriding `getPolicyFromAttribute()` to throw. That method is
+protected — not a promise the framework made to anyone, and a framework changes protected members in
+patch releases — and a patch gave it a second, optional parameter. The one-parameter child then fails
+PHP's own compatibility check when the class is DECLARED, which is a fatal rather than a failed
+expectation: the paratest worker dies, the leg reports a crashed worker naming a file, and there is no
+assertion to read. Every locked leg stayed green because the lockfile pinned the older framework, so the
+two legs that re-resolve the tree went red on pull requests that had touched none of it — and the next
+`composer update` here would have done the same.
+
+The fourth was the product's own copy of one of these steps, and it failed in the quiet direction.
+`GateInternals::policyClassFor()` mirrors `Gate::getPolicyFor()` so a build can learn which policy backs
+a `->can()` gate without constructing one, and it walked the four branches Laravel 12 resolves through.
+Laravel 13 added a fifth — the `#[UsePolicy]` step again, this time over the model's PARENTS — so a model
+whose policy comes only from a base class's attribute resolves in the framework and answered nothing in
+the mirror. Nothing anywhere went red. A mirror gone short degrades to silence, which is the safe
+direction and publishes no false claim, and silence is also what a gate with no policy at all looks like:
+the locked legs were right to be green, since on 12 that silence IS the framework's answer, and the
+re-resolving legs were green too because no row asked the question on either version.
+
 *The tell.* A fixture whose assertion depends on what a VENDOR method's signature says, rather than on
 what the fixture's own code says — a return type, a generic, a `@throws`, a by-reference parameter. Ask of
 every real-engine row: which half of this answer is the fixture's, and which half is the installed
@@ -209,6 +230,14 @@ many files a walk had room for, or which of two hops it took first, is answering
 tree contributes to that number. The sharp version, which would have caught the second instance where the
 signature question does not: any tie in an ordering the product introduced to be deterministic — a sort
 whose key two candidates can share hands the decision straight back to the library that produced them.
+The declaration form has a tell of its own, and it is visible without running anything: a double that
+RE-declares a member of a vendor type is asserting that member's signature, and a NON-PUBLIC one is an
+assertion no vendor ever agreed to. Ask what the double is standing in for — a resolution step that can
+raise is far more often provoked by data the step chokes on than by an override of it.
+The product form's tell is a COUNT and not a signature: a mirror of a vendor algorithm carries a number
+of steps, and that number is a fact about the version the application resolved rather than about the one
+the mirror was written against. Ask of any such mirror how many branches the installed vendor walks, and
+what in the tree would notice if the answer grew — degrading to silence is the answer that no leg reports.
 
 *The fix that worked.* Move the fact being counted out from behind the vendor's decision — for the first,
 write the counted throw before the closure it is measured against, so no vendor return type governs
@@ -220,6 +249,41 @@ then restates its frontier from what the bounds MEAN, with a row beside it asser
 the counted path is one this repo writes and none of them sits under `vendor/` — the tell, executed. The
 matrix leg is the executor; nothing in a single-version run can catch either, and a single-version run is
 what a new table gets by default.
+
+The third was fixed by deleting the double. A model annotated twice with a non-repeatable attribute is a
+shape PHP accepts in the source and refuses only when something instantiates the attribute — which is
+exactly what resolving a policy does — so the raise now comes out of the framework's own method on every
+supported version, and the fixture declares nothing of the vendor's. Beside it, a model whose attribute
+CAN be read resolves to the policy that attribute names, so the row cannot go quiet by ceasing to reach
+the step at all, and the conventional policy the resolution falls through to is there and named, so the
+silence cannot be a model nothing answers for.
+
+The fourth was fixed by reading the branch off the installed GRAMMAR rather than off a version: 13's
+`getPolicyFromAttribute()` takes an `includeParents` flag and 12's takes none, so the signature the
+framework shipped decides whether the fifth branch runs. `class_exists()` is a presence check both majors
+pass, `method_exists()` on a known class the analyser folds to constant true, and a lockfile lookup would
+answer about a package name the container was never asked for — the class that resolves may come from a
+bare `illuminate/auth` and may be a subclass of either. The branches then became an ordered LIST rather
+than four `if`s, so the mirror states its own count in code, and a guard reads `Gate::getPolicyFor()`'s
+source for the framework's — every branch there ends in `return $this->resolvePolicy(...)` — and fails
+naming both numbers when they disagree. A sixth branch is now a red row on whichever leg resolves it. No
+diagnostic came with it: on 12 the silence is correct, so a notice would have fired only where the
+document was already right.
+
+*The guard that was not built, and why.* An arch test can find this shape statically: parse the test tree,
+resolve each declaration's vendor parent, and ask reflection whether a redeclared method is one the parent
+declares concretely. Run over the 1276 files of the test tree it finds 76 redeclarations — 63 public, of
+which 32 are constructors, which PHP exempts from the compatibility check entirely, and the rest documented
+extension points; and 13 non-public: this defect, plus 12 that cannot be written any other way, because the
+product's own recovery reads the very method the fixture overrides (`Data::calculateResponseStatus`,
+`Model::casts`, `Model::serializeDate`) or because it is the harness's own documented API (testbench's
+`defineRoutes`, `defineEnvironment`, `getPackageProviders`). A guard whose allow-list is twelve times its
+catch fires mostly where the reader can do nothing but excuse it, and the twelve carry the same exposure the
+guard claims to remove: if one of those vendors moves a signature the product moves with it, and the fixture
+failing loudly is the correct outcome rather than the one to suppress. Detection was never the gap either —
+PHP checks every declaration against the installed parent on every leg, so the re-resolving legs ARE the
+detector. What was missing is legibility, and that is paratest reporting a crashed worker rather than
+anything a test of ours can state.
 ## A member reached through inheritance, read as though it were the class's own
 
 PHP hands an inherited or trait-imported member back looking like the class's, and a reader that asks
@@ -355,7 +419,7 @@ route written the other way, and the route is documented as if the middleware we
 *Instances.* The authorization signal read `can` only, so a `403` the route really enforces went
 missing; `signed` and `verified` the same, and the reachability check then reported a `403` the signature
 genuinely denies. Worse, the authentication signal read the `auth` alias only — in three separate readers
-(the `auto_detect_middleware` wildcard, Sanctum's mode detection, and the guard→driver resolution behind
+(the `auth_middleware` wildcard, Sanctum's mode detection, and the guard→driver resolution behind
 both Sanctum and Passport) — so a route behind `Authenticate::using('web')` published no `401` and no
 security scheme: not an under-described error but a misdescribed endpoint, read by a consumer as public
 and by a generated client as needing no credential. The subtraction side had it too: a
@@ -539,3 +603,124 @@ rather than off either site (`ComponentIdentityTest`): every entry of `component
 node, so an id two of them carry addresses neither, asserted over a dataset of pairs differing on each
 axis in turn, with rows for what the registry DOES merge so a mint that simply numbered its registrations
 would fail too. A guard that asks either site for its own rule agrees with whatever that site does.
+
+## A cached answer keyed by the name its author was resolved by
+
+A fragment holds what a collaborator ANSWERED, and the key holds how that collaborator was NAMED. The two
+move independently: swapping the name moves the key and the answer together, so the obvious edit is
+caught, while editing the collaborator's body — the edit its author makes far more often — moves the
+answer and nothing else. Determinism is untouched and every golden holds, because a golden is one build's
+bytes and this is the second build disagreeing with them.
+
+*Instances.* `documents.*.tags.mapper` names a class the container resolves, and `mapTag()` runs inside an
+`OperationExtension`, so the mapped tags live in the operation fragment; the config bag hashed into the key
+held the class-STRING, which an edit to that class never moves — a warm build published the tags the old
+body produced. `ResolvedExtensions::cacheSignature()` paired each resolved extension with its composer
+package's version as a proxy for its behaviour: sound for a package, and inert for a class in the
+application's own tree, whose "package" is the root and whose version does not move when the file is
+saved — so an author edited their own extension, rebuilt, and was served the previous output, on the
+primary extension point. The version and the source digest turn out to be complementary rather than
+alternatives, and telling "a version that can move" from one that cannot needs no heuristic at all: a
+digest over CONTENT is inert exactly where the version is informative, since a release nobody edited
+reinstalls byte-identically, and informative exactly where the version is inert.
+
+The other half of the class is an input that reaches NO key input at all, which is a different fix rather
+than a milder version of the same one. `lint.leakage`'s safelist and heuristics decide whether a recorded
+example is PUBLISHED — the recorder withholds a body redaction still finds a credential in — and it is a
+VALUE, not a file: `lint.*` is deliberately top-level, so no document's config bag holds it, and the
+extension carries the options inside a collaborator object, which the configuration digest reads as
+nothing but a class name. A dependency manifest can only name files, so the instrument there is a digest
+contributor (`LeakageDigestContributor`) and not a recorded path. Two more found by sweeping the same
+question across every fragment-level extension: `QueryBuilderConfig::$recovered` and
+`JsonApiPaginateConfig::$recovered` each gate a per-route diagnostic, and `vendor:publish` writes the
+package's own DEFAULTS — so publishing the config moves not one value the contributor digested, and an
+author who followed that diagnostic's own advice rebuilt and was told it again.
+
+*The tell.* Name the thing whose output a fragment holds, then ask what in the key changes when its code
+changes — not when its NAME or its VERSION changes. A collaborator resolved by string, a class-string in
+config, a `Closure` in a config bag (`Json::stable()` collapses any object to its class, and reads a
+closure as file plus line span), a package version standing in for a body: each answers "nothing".
+
+*The fix that worked.* Key the fragment on where the answer is WRITTEN, at the point the answer was read.
+`TagMapperKeying::record()` puts the mapper's `DeclarationFiles` — its own file, its parents', its traits'
+— into the route's dependency manifest, and it is called from the two places a tag actually goes through
+the mapper, so a route the mapper never answered for records nothing and stays warm. Where the mapper's
+declaration cannot be hashed back (`eval()`'d code reports a file no `is_file()` matches), the fragment is
+refused the cache rather than keyed on nothing: a manifest records an absent file as ABSENT, which
+compares FRESH for as long as it stays absent, so recording an unhashable path looks keyed and is not.
+The guard reads the manifest the cache STORED and the freshness the cache itself answers
+(`TagMapperCacheTest`), because a rebuild count cannot say which fragments an edit retired.
+
+*The half a file cannot hold.* Keying on where the answer is written closes the edit and leaves the
+CONSTRUCTION open: two instances of one class share every file there is, so a collaborator resolved from
+a container binding — the shape `tags.mapper` documents, and the only shape a mapper needing anything but
+constructor DI can take — answers differently on every value with a byte-identical key behind it. What an
+instance was handed is a VALUE, and a dependency manifest holds only files, because it is validated by
+re-hashing what it names. So the two halves go in two places: files into the route's manifest at the point
+of use, state into the document-level part of the key (`ConfigurationDigest`, the digest
+`ResolvedExtensions::cacheSignature()` already read every extension's own properties with). Files stay
+local and state cannot be — the collaborator is resolved once per document, and nothing before the lookup
+knows which routes it will answer for, so over-keying there buys a rebuild where under-keying publishes
+the old answer. Neither digest reaches an emitted byte: an anonymous class names the absolute file it was
+written in and a closure names its line span, which is a cache key on one machine and never a document.
+`DocumentCollaboratorKeyingTest` reads the collaborator set off `DocumentConfig`'s own constructor and
+makes each member state what keys it, so a third one arrives as a failure rather than as a member nobody
+asked.
+
+An extension's answer is written the same way and keyed the same way, one level up: the source digest goes
+into the signature rather than into a manifest, because an operation extension is run over every operation
+and nothing records which of them its answer reached — an extension that wrote nothing still ran, and
+withholding a value is an answer too. So the locality the mapper fix has is unobtainable here, and saying
+so is the fix: an edit retires the whole document, which is the blast radius the paired package version
+always had rather than a new one. The refusal follows the key's scope for the same reason — an extension
+declared in no file leaves the DOCUMENT uncacheable, with one `extension.unhashable` diagnostic — and the
+refusal reads the same instance set the signature does, or a fragment keyed on an entry nothing checked is
+keyed on nothing again.
+
+*The guard the instrument dictates.* Manifest freshness answers nothing about a key input: the entry filed
+under the old key stays on disk and reads FRESH forever, it is simply never addressed again. So a row for
+a key input counts what the second build had to WRITE (`array_diff(fragmentKeys(), $before)`), and a row
+for a manifest input asks the cache's own freshness. Getting these the wrong way round is a guard that
+passes on the unfixed code. The cost direction needs executing too, and can be: the same bytes written
+again with a newer timestamp must leave every fragment warm, which is what makes `composer install` free,
+and a re-ordered safelist must leave them warm, which is what the sort is for.
+
+## A message that names where a setting used to live
+
+Configuration moves. When it does, the reader that reads it is rewritten and every SENTENCE about it is
+not: a diagnostic, a console line or a page still names the old file, and the author who follows it edits
+a key nothing reads. That is worse than a stale doc page, because the message arrived from the tool
+itself and so carries the tool's authority — the author has no reason to doubt it, and the setting they
+just wrote is silently ignored.
+
+The asymmetry that makes it survive is that nothing fails. The reader is correct, the tests of the reader
+pass, and the string is a string: no type, no call, nothing an analyser or a golden can disagree with. So
+the population is not under-covered, it is unrepresented — a message is only ever wrong to the person
+holding it.
+
+*Instances.* Six printed strings survived the split between `docuccino.yaml` and `config/docuccino.php`:
+`docuccino:explain`'s top-rung hint, the `config.accept-unused` report's own header, the out-of-memory
+notice's two levers, the contract assertions' unknown-document failure, and the response recorder's
+"say where recordings live" — which also printed a PHP array for a YAML file, so following it produced
+neither the right file nor the right syntax. Thirty-two documentation pages carried the same defect, and
+three of them named no file at all, which is the shape a scan for the OLD filename walks straight past.
+
+*The tell.* A filename or a config path spelled as a literal inside a message. Every one of the six was
+a literal; not one of them had asked the reader that owns the setting where it lives. The second tell is
+a mechanism whose whole premise was the old location: `docuccino:watch` warned that `config:cache` bakes
+`DOCUCCINO_FRAGMENT_CACHE`, which was true while `cache.enabled` was in the config repository and became
+unreachable the moment it left — so the warning, its check, and both of its tests were asserting a state
+the product can no longer be in.
+
+*The fix that worked.* Name the file off the reader that owns it — `ConfigFile::NAME` — so a message
+cannot disagree with the file it points at, and delete the mechanisms whose premise moved rather than
+rewording them. For the pages, `DocsConfigSplitTest` reads the KEYS in every `php` fenced block on the
+site and refuses one that shows a setting the build reads from the YAML, with the boot surface derived
+from the shipped framework config rather than listed in the guard; the guard also asserts it agrees with
+`ConfigSplit::FRAMEWORK_KEYS`, because the build checks a leftover key against that list and a surface
+tightened in one place only would leave a page admitted here and reported by a build.
+
+The tell is a config PATH, not the token `docuccino.`. The emitted document's own extension keys
+(`x-docuccino.id`, `x-docuccino.provenance`, `x-docuccino.diagnostics`) share the prefix and are a
+different namespace, and a live `config('docuccino.enabled')` names a key that really is still there —
+so a find-and-replace on the prefix corrupts three readers to fix one comment.

@@ -36,16 +36,19 @@ it('reads a plausible number of lints, and reads only lints', function (): void 
 });
 
 /**
- * The rule keys the shipped config declares under `lint`, commented options included — the config
- * surface IS the set here, since a key the code reads has to appear there and `ConfigReferenceSyncTest`
- * holds it to that in both directions.
+ * The rule keys the shipped configuration declares under `lint`, commented options included — the
+ * config surface IS the set here, since a key the code reads has to appear there and
+ * `ConfigReferenceSyncTest` holds it to that in both directions.
+ *
+ * Read out of `docuccino.yaml`, because lint is a build setting: the framework's own config file has
+ * nothing to say about it.
  *
  * @return list<string>
  */
 function lintConfigRuleKeys(): array
 {
-    $declared = config_reference_declared_keys(
-        (string) file_get_contents(dirname(__DIR__, 2).'/php/laravel/config/docuccino.php'),
+    $declared = config_reference_yaml_keys(
+        (string) file_get_contents(dirname(__DIR__, 2).'/php/laravel/config/'.CONFIG_REFERENCE_SETTINGS),
     );
 
     $keys = [];
@@ -118,5 +121,9 @@ it('gives every shipped lint a config bag and a row in the reference table', fun
         // key without a lint switches nothing.
         ->and(count($keys))->toBe(count(shippedLints()))
         // Anti-vacuity: two readers that both stopped seeing their shapes would agree on nothing.
-        ->and(count($rows))->toBeGreaterThanOrEqual(7);
+        // A floor of ONE, not of today's seven — removing a lint is a legitimate change, and a floor
+        // at the count would fail here and point at the reference table, which is not what moved.
+        // Anything short of total is caught by the line above, since the count has to be the source
+        // of truth's, and the source of truth carries its own floor in the test above.
+        ->and(count($rows))->toBeGreaterThanOrEqual(1);
 });

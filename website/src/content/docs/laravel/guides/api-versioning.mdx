@@ -69,26 +69,23 @@ serving `2026-06-01` for callers who haven't moved.
    constant — the constructors accept nothing else — which is what lets Docuccino compile the
    declaration without running your app.
 
-2. **Configure a document per version.** Each one is an ordinary document with an `api_version` block:
+2. **Configure a document per version** in `docuccino.yaml`. Each one is an ordinary document with an
+   `api_version` block:
 
-   ```php
-   // config/docuccino.php
-   'documents' => [
-       'v2026-09-01' => [
-           'info'       => ['title' => 'Billing API', 'version' => '2026-09-01'],
-           'routes'     => ['include' => ['api/*']],
-           'versioning' => 'date',
-           'api_version' => ['changes' => ['app/Api/Versions']],
-           'export'      => ['path' => 'docs/2026-09-01.openapi.json'],
-       ],
-       'v2026-06-01' => [
-           'info'       => ['title' => 'Billing API', 'version' => '2026-06-01'],
-           'routes'     => ['include' => ['api/*']],
-           'versioning' => 'date',
-           'api_version' => ['changes' => ['app/Api/Versions']],
-           'export'      => ['path' => 'docs/2026-06-01.openapi.json'],
-       ],
-   ],
+   ```yaml
+   documents:
+     v2026-09-01:
+       info: { title: 'Billing API', version: '2026-09-01' }
+       routes: { include: ['api/*'] }
+       versioning: 'date'
+       api_version: { changes: ['app/Api/Versions'] }
+       export: { path: 'docs/2026-09-01.openapi.json' }
+     v2026-06-01:
+       info: { title: 'Billing API', version: '2026-06-01' }
+       routes: { include: ['api/*'] }
+       versioning: 'date'
+       api_version: { changes: ['app/Api/Versions'] }
+       export: { path: 'docs/2026-06-01.openapi.json' }
    ```
 
    Both documents read the same directory of changes. What separates them is `info.version`: each

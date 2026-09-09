@@ -15,21 +15,26 @@ analyzer at all.
 
 ## Turn it on
 
-```php
-// config/docuccino.php
-'cache' => [
-    'enabled' => true,
-],
+```yaml
+# docuccino.yaml
+cache:
+  enabled: true
 ```
 
 That's the whole setup. Fragments are written to `storage/docuccino/fragments` as one small JSON file
 per operation; set `cache.path` to move them. The output doesn't change — a warm build emits the same
 bytes as a cold one, which is what makes the cache safe to leave on.
 
+Set `DOCUCCINO_FRAGMENT_CACHE=true` to turn it on for one run without editing the file — the only
+other way in, and how [`docuccino:watch`](/laravel/reference/commands/#docuccinowatch) turns it on for
+the builds it drives.
+
 <Aside type="note" title="Two different caches">
-`cache.enabled` is the build-time **fragment** cache described here. `cache.store` belongs to the
-runtime **document** cache that [`docuccino:cache`](/laravel/reference/commands/#docuccinocache) warms
-for the viewer. They share a config block and nothing else — you can run either, both, or neither.
+`cache.enabled` is the build-time **fragment** cache described here, and it lives in `docuccino.yaml`
+where a build reads it. `cache.store` belongs to the runtime **document** cache that
+[`docuccino:cache`](/laravel/reference/commands/#docuccinocache) warms for the viewer, so it lives in
+`config/docuccino.php` where a request can reach it. They share a key name and nothing else — you can
+run either, both, or neither.
 </Aside>
 
 ## A warm build never starts the analyzer

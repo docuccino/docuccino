@@ -55,6 +55,12 @@ accurate document — with no annotations to start.
      </TabItem>
    </Tabs>
 
+   `docuccino/inference-phpstan` goes under `require-dev` in every one of those shapes. It carries a
+   static analyser and runs wherever you generate the document, so a production host has no business
+   installing it. `docuccino/laravel` is a `require-dev` package too *by default* — a production
+   dependency only in the first shape, where serving `/docs/api` from the application is its one
+   runtime job.
+
    The engine is the same package either way: it runs PHPStan with Larastan's model and container
    knowledge to read the real types in your code — a build-time job, like your test suite. It never
    executes your application; [How it works](/laravel/guides/how-it-works/) walks the whole pipeline.
@@ -72,6 +78,7 @@ accurate document — with no annotations to start.
    ```text
    Config
    ──────
+   Published docuccino.yaml.
    Published config/docuccino.php.
 
    Routes
@@ -88,23 +95,23 @@ accurate document — with no annotations to start.
     Export one now? (yes/no) [yes]:
    ```
 
-   One command covers the whole first run. It publishes `config/docuccino.php`, tells you how many
+   One command covers the whole first run. It publishes both configuration files, tells you how many
    of **your** routes the default `api/*` pattern really matches — and which prefixes they sit under
    when it matches none — reports whether the analysis engine is installed, and offers to write your
    first document.
 
    Out of the box the defaults document every `api/*` route in your own application, export to
    `docs/openapi.json`, and serve an interactive viewer at `/docs/api`. They are already active
-   without the published file; the file is there so you can change them. It is plain data on purpose
-   — no imports, no class references — so a dev-only install stays safe when production boots with
-   the packages pruned.
+   without either published file; the files are there so you can change them.
 
 </Steps>
 
-The installer never replaces a `config/docuccino.php` you already have (pass `--force` if that's what
-you want), so it is safe to run again. In a provisioning script, `--no-interaction` takes the
-prompt's default and exports, and `--no-export` finishes the setup without one. Prefer to publish the
-config on its own? `php artisan vendor:publish --tag=docuccino-config` writes exactly the same file.
+The installer never replaces a configuration file you already have (pass `--force` if that's what
+you want), and it decides that per file — an application that already keeps a `docuccino.yaml` gets
+the framework half and nothing else touched — so it is safe to run again. In a provisioning script,
+`--no-interaction` takes the prompt's default and exports, and `--no-export` finishes the setup
+without one. Prefer to publish the files on their own?
+`php artisan vendor:publish --tag=docuccino-config` writes exactly the same two.
 [The commands reference](/laravel/reference/commands/#docuccinoinstall) has every flag.
 
 That's it. Open `docs/openapi.json`, or visit `/docs/api` in your browser — the bundled viewer is
@@ -124,9 +131,9 @@ That keeps a CI export safe without letting thin output pass unremarked.
 
 <CardGrid>
 	<Card title="Artisan commands" icon="seti:powershell">
-		`docuccino:install`, `docuccino:export`, `docuccino:validate`, `docuccino:diff`,
-		`docuccino:cache`, `docuccino:clear`, `docuccino:watch`, `docuccino:coverage`,
-		`docuccino:explain`, and `docuccino:version-changes`. See the
+		`docuccino:install`, `docuccino:migrate-config`, `docuccino:export`, `docuccino:validate`,
+		`docuccino:diff`, `docuccino:cache`, `docuccino:clear`, `docuccino:watch`,
+		`docuccino:coverage`, `docuccino:explain`, and `docuccino:version-changes`. See the
 		[commands reference](/laravel/reference/commands/).
 	</Card>
 	<Card title="A built-in viewer" icon="laptop">
@@ -147,14 +154,24 @@ That keeps a CI export safe without letting thin output pass unremarked.
 
 <FileTree>
 
+- docuccino.yaml     everything a build reads — documents, routes, info, security, lint
 - config/
-  - docuccino.php    the single config file — documents, routes, security, viewer
+  - docuccino.php    what Laravel reads while it boots — the master switch and each viewer
 - docs/
   - openapi.json     your exported document (commit this)
 - storage/
   - docuccino/       engine scratch files and the fragment cache (add to .gitignore)
 
 </FileTree>
+
+Two files, and they do not overlap. Everything that shapes a document lives in `docuccino.yaml`,
+which a command reads once per build — so nothing your application serves ever parses it. What
+Laravel needs while it **boots** stays in `config/docuccino.php`: the master switch, and each
+document's viewer, whose routes are registered on every boot. Nothing left in the framework file is
+merged over the other one — a build setting still sitting there is reported and ignored, never read.
+
+`config/docuccino.php` is plain data besides — no imports, no class references — so a dev-only
+install survives a `--no-dev` production boot, which loads every file in `config/`.
 
 <Aside type="tip" title="Commit the output">
 Docuccino's output is deterministic — identical code always produces byte-for-byte identical
@@ -172,5 +189,5 @@ everything as a dev dependency, because there's nothing on that host to turn off
 
 <CardGrid>
 	<LinkCard title="Your first export" href="/laravel/getting-started/first-export/" description="See what Docuccino read from your code, and what it emitted." />
-	<LinkCard title="Configuration reference" href="/laravel/reference/configuration/" description="Every option in config/docuccino.php, with its default." />
+	<LinkCard title="Configuration reference" href="/laravel/reference/configuration/" description="Every option in both configuration files, with its default." />
 </CardGrid>

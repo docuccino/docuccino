@@ -7,36 +7,45 @@ import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
 One application often has more than one API: a public API and an admin API, or a `v1` you still support
 alongside a `v2`. Docuccino models each as an independent **document** — its own route filters, info,
-security, viewer, and export target — all in one config file.
+security, viewer, and export target.
 
 ## Defining documents
 
 `documents` is a map, and the keys are yours. The published config ships one entry, `default`; add as
 many as you need. Each is a full, self-contained pipeline:
 
+```yaml
+documents:
+  public:
+    info: { title: 'Public API', version: '2.0.0' }
+    routes: { include: ['api/*'], exclude: ['api/admin/*'] }
+    error_responses: 'default'
+    export: { path: 'docs/public.openapi.json' }
+  admin:
+    info: { title: 'Admin API', version: '1.4.0' }
+    routes: { include: ['api/admin/*'] }
+    error_responses: 'default'
+    export: { path: 'docs/admin.openapi.json' }
+```
+
+Each document's **viewer** is the one half that lives in `config/docuccino.php`, keyed the same way,
+because its routes are registered on every boot:
+
 ```php
-// config/docuccino.php
 'documents' => [
-    'public' => [
-        'info'   => ['title' => 'Public API', 'version' => '2.0.0'],
-        'routes' => ['include' => ['api/*'], 'exclude' => ['api/admin/*']],
-        'error_responses' => 'default',
-        'viewer' => ['route' => '/docs/api'],
-        'export' => ['path' => 'docs/public.openapi.json'],
-    ],
-    'admin' => [
-        'info'   => ['title' => 'Admin API', 'version' => '1.4.0'],
-        'routes' => ['include' => ['api/admin/*']],
-        'error_responses' => 'default',
-        'viewer' => ['route' => '/docs/admin', 'gate' => 'viewAdminDocs'],
-        'export' => ['path' => 'docs/admin.openapi.json'],
-    ],
+    'public' => ['viewer' => ['route' => '/docs/api']],
+    'admin'  => ['viewer' => ['route' => '/docs/admin', 'gate' => 'viewAdminDocs']],
 ],
 ```
 
 Here the two documents split by route glob, expose their viewers on different routes (the admin one
 gated), and export to different files. The same pattern covers a `v1` and a `v2` you serve on separate
 route prefixes — one document each, over `api/v1/*` and `api/v2/*`, with its own `info.version`.
+
+The two maps are keyed independently, so they can disagree — and a build says so rather than leaving
+you to find out from a `404`. A document with no viewer entry simply has no page to serve, which is
+what an export-only document is; a viewer keyed by a document `docuccino.yaml` doesn't define
+registers routes that fail every request, and the build reports `config.viewer-orphan`.
 
 If instead your versions share one set of routes and differ only in the shape of what they return,
 [API versioning](/laravel/guides/api-versioning/) derives each version's document from the changes you
@@ -57,11 +66,12 @@ to what the `default` document says. The three that catch people out:
 
 | Per document (`documents.<key>.*`) | Global (top level) |
 | --- | --- |
-| `info`, `servers`, `routes`, `security` | `enabled` — the master switch |
-| `error_responses`, `tags`, `representation` | `engine` — inference mode and project paths |
-| `content`, `overlays`, `versioning` | `extensions` — your own extension classes |
-| `integrations` — per-document toggles | `lint` — document lint rules |
-| `export`, `viewer` | `on_route_error`, `cache` |
+| `info`, `servers`, `routes`, `security` | `engine` — inference mode and project paths |
+| `error_responses`, `tags`, `representation` | `extensions` — your own extension classes |
+| `content`, `overlays`, `versioning` | `lint` — document lint rules |
+| `integrations` — per-document toggles | `diagnostics` — the codes you have accepted |
+| `export` | `on_route_error`, `cache.enabled` |
+| `viewer` — in `config/docuccino.php` | `enabled` and `cache.store` — in `config/docuccino.php` |
 
 So the analysis engine, your extensions and the lint rules are shared, while everything about *what a
 document contains and where it goes* is yours to set per document.
@@ -72,19 +82,34 @@ Route selection is a filter chain, and every step must pass:
 
 <Tabs>
 	<TabItem label="By route glob">
-	```php
-	use Docuccino\Core\Extensions\Context\RouteDescriptor;
-
-	// documents.<key>.routes — include, then exclude, then an optional closure
-	'routes' => [
-	    'include' => ['api/v2/*'],
-	    'exclude' => ['api/v2/internal/*'],
-	    'closure' => fn (RouteDescriptor $route): bool => $route->name !== null,
-	],
+	```yaml
+	# docuccino.yaml, under documents.<key> — include, then exclude, then an optional filter class
+	routes:
+	  include: ['api/v2/*']
+	  exclude: ['api/v2/internal/*']
+	  filter: App\Docs\NamedRoutes
 	```
-	Patterns match the URI **without** its leading slash, using Laravel's `Str::is` wildcards. The
-	closure runs last and receives the discovered route — its `methods`, `uri`, `name`, `action` and
-	fully-gathered `middleware`.
+	Patterns match the URI **without** its leading slash, using Laravel's `Str::is` wildcards.
+	`filter` runs last, and is a class the container builds:
+
+	```php
+	namespace App\Docs;
+
+	use Docuccino\Core\Extensions\Context\RouteDescriptor;
+	use Docuccino\Core\Extensions\Contracts\RouteFilter;
+
+	class NamedRoutes implements RouteFilter
+	{
+	    public function includes(RouteDescriptor $route): bool
+	    {
+	        return $route->name !== null;
+	    }
+	}
+	```
+	It receives the discovered route — its `methods`, `uri`, `name`, `action`, `domain` and
+	fully-gathered `middleware` — and returning `false` omits it. The key names a class rather than
+	taking a predicate because a configuration file has no form for one; the container builds it, so
+	anything the decision needs (a tenant registry, a feature flag) is a constructor dependency.
 	</TabItem>
 	<TabItem label="By attribute">
 	```php
@@ -105,7 +130,7 @@ partner docs but not the admin one.
 
 Two more filters run for every document: `#[ExcludeFromDocs]` drops a route everywhere, and routes
 whose controller lives under `vendor/` are skipped unless the document sets
-`routes.include_vendor => true`.
+`routes.include_vendor: true`.
 
 ## Building them
 

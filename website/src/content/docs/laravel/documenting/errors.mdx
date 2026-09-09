@@ -471,7 +471,7 @@ errors:
 
 | Status | When it's added | How to opt out |
 | --- | --- | --- |
-| `401` | The route has authentication middleware (matching `security.auto_detect_middleware`). | Mark the route [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) — or `#[IgnoreResponse(401)]`. |
+| `401` | The route has authentication middleware (matching `security.auth_middleware`). | Mark the route [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) — or `#[IgnoreResponse(401)]`. |
 | `422` | A validated request body was recovered (Spatie Data, a form request, or an action's `rules()`). | `#[IgnoreResponse(422)]`. |
 | `404` | The route binds a model to a path parameter (implicit binding). One `404` per operation. | `#[IgnoreResponse(404)]`. |
 | `403` | The route has `can:` / `signed` / `verified` middleware, or a form request `authorize()` gate that isn't a literal `return true`. | `#[IgnoreResponse(403)]`. |
@@ -930,11 +930,12 @@ keep every copy inline.
 
 ## Configuration
 
-One key:
+One key, in `docuccino.yaml`:
 
-```php
-// config/docuccino.php → documents.default
-'error_responses' => 'default',
+```yaml
+documents:
+  default:
+    error_responses: 'default'
 ```
 
 | Key | Values | Default | Effect |
