@@ -78,14 +78,34 @@ it('refuses a documents section written as a list rather than inventing document
         ->toContain('documents is a list, where the setting takes a map of settings');
 });
 
-it('reads on_route_error off the file, and refuses a value that is not text', function (): void {
+/**
+ * `on_route_error` names one of two behaviours, so it is read as the closed set it is rather than as
+ * text that happens to be compared against two words. That is why a wrong-typed value is reported by
+ * the keyword catalogue and not by the typed reader: the setting's defect is never "this is not text",
+ * it is "this is not one of skeleton and omit" — and the advice a reader can act on is the two values,
+ * where "quote it" would leave a quoted typo behaving exactly as the unquoted one did. Reported ONCE,
+ * for the same reason: two readers refusing one key is two pieces of advice about one line.
+ */
+it('reads on_route_error off the file as a keyword, and refuses anything else once', function (): void {
     BuildSettings::set('on_route_error', 'omit');
     expect(app(DocumentBuilder::class)->config('default')->onRouteError)->toBe('omit');
 
     BuildSettings::set('on_route_error', true);
+
+    $refusals = diagnosticsCoded(
+        app(DocumentBuilder::class)->build('default', WorkbenchEngine::make())->diagnostics,
+        'config.unknown-value',
+    );
+
     expect(app(DocumentBuilder::class)->config('default')->onRouteError)->toBe('skeleton')
-        ->and(app(BuildConfig::class)->values()->diagnostics()[0]->message)
-        ->toContain('on_route_error is the boolean true, where the setting takes text');
+        ->and($refusals)->toHaveCount(1)
+        ->and($refusals[0]->message)->toBe(
+            'on_route_error is the boolean true, which is none of the values it takes'
+            .' — it is read as "skeleton", its default.',
+        )
+        ->and($refusals[0]->help)->toBe('Write one of: "skeleton", "omit".')
+        // And the typed reader keeps out of it, so the author is sent to one line with one answer.
+        ->and(diagnosticsCoded(app(BuildConfig::class)->values()->diagnostics(), 'config.value-type'))->toBe([]);
 });
 
 // --- The two environment levers -------------------------------------------------------------------

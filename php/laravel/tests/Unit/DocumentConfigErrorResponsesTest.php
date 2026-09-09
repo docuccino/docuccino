@@ -31,7 +31,7 @@ function resolvedErrorResponses(mixed $value): string
 }
 
 /**
- * The `config.unknown-error-responses` codes raised for a document whose `error_responses` holds $value.
+ * The `config.unknown-value` codes raised for a document whose `error_responses` holds $value.
  *
  * @return list<string>
  */
@@ -46,14 +46,14 @@ function errorResponsesDiagnosticCodes(mixed $value): array
         static fn (Diagnostic $diagnostic): string => $diagnostic->code,
         array_filter(
             ConfigDiagnostics::for($document),
-            static fn (Diagnostic $diagnostic): bool => $diagnostic->code === 'config.unknown-error-responses',
+            static fn (Diagnostic $diagnostic): bool => $diagnostic->code === 'config.unknown-value',
         ),
     ));
 }
 
 it('resolves a present error_responses key, and says so wherever it is not one of the two', function (mixed $value, string $strategy, bool $reported): void {
     expect(resolvedErrorResponses($value))->toBe($strategy)
-        ->and(errorResponsesDiagnosticCodes($value))->toBe($reported ? ['config.unknown-error-responses'] : []);
+        ->and(errorResponsesDiagnosticCodes($value))->toBe($reported ? ['config.unknown-value'] : []);
 })->with([
     // The two the key accepts. Neither is reported, and each resolves to itself.
     'the shipped strategy' => ['default', 'default', false],
@@ -84,7 +84,7 @@ it('reads an absent error_responses key as the opt-out, and says nothing about i
     expect($document->errorResponses)->toBe('none')
         ->and(array_filter(
             ConfigDiagnostics::for($document),
-            static fn (Diagnostic $diagnostic): bool => $diagnostic->code === 'config.unknown-error-responses',
+            static fn (Diagnostic $diagnostic): bool => $diagnostic->code === 'config.unknown-value',
         ))->toBe([]);
 });
 
@@ -94,13 +94,13 @@ it('warns rather than informs, because the value it names decides every error in
     $raw['error_responses'] = null;
     $diagnostics = array_values(array_filter(
         ConfigDiagnostics::for(app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton')),
-        static fn (Diagnostic $diagnostic): bool => $diagnostic->code === 'config.unknown-error-responses',
+        static fn (Diagnostic $diagnostic): bool => $diagnostic->code === 'config.unknown-value',
     ));
 
     expect($diagnostics)->toHaveCount(1)
         ->and($diagnostics[0]->severity)->toBe(Severity::Warning)
         // The message has to name the value as the author would recognise it — a key they wrote holding
         // nothing — and the strategy the build settled on, which is the half they can act against.
-        ->and($diagnostics[0]->message)->toContain('null')
-        ->and($diagnostics[0]->message)->toContain("as if it said 'default'");
+        ->and($diagnostics[0]->message)->toContain('is empty')
+        ->and($diagnostics[0]->message)->toContain('read as "default", its default');
 });

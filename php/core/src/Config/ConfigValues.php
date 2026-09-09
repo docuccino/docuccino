@@ -7,7 +7,7 @@ namespace Docuccino\Core\Config;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Support\Arr;
-use Docuccino\Core\Support\PlainText;
+use Docuccino\Core\Support\ConfiguredValue;
 
 /**
  * The parsed configuration, read one setting at a time by a reader that REFUSES a value of the wrong
@@ -104,7 +104,7 @@ final class ConfigValues
             return $value ?? $default;
         }
 
-        $this->refuse($path, self::described($value), 'text', self::fallback($default), match (true) {
+        $this->refuse($path, ConfiguredValue::described($value), 'text', self::fallback($default), match (true) {
             is_float($value) => 'Quote it. An unquoted number is read as a number, and a trailing zero does not survive that — `1.10` becomes 1.1.',
             is_bool($value) => 'Quote it. Unquoted `true` and `false` are the only two words YAML reads as booleans.',
             default => 'Quote it, so it is read as text rather than as a number.',
@@ -121,7 +121,7 @@ final class ConfigValues
             return $value ?? $default;
         }
 
-        $this->refuse($path, self::described($value), 'true or false', self::fallback($default), match (true) {
+        $this->refuse($path, ConfiguredValue::described($value), 'true or false', self::fallback($default), match (true) {
             // The one that catches people. YAML reads `no`, `off`, `yes` and `on` as TEXT, so the
             // author who wrote the shortest possible "off" wrote a non-empty string — which anything
             // willing to convert would read as ON.
@@ -140,7 +140,7 @@ final class ConfigValues
             return $value ?? $default;
         }
 
-        $this->refuse($path, self::described($value), 'a whole number', self::fallback($default), match (true) {
+        $this->refuse($path, ConfiguredValue::described($value), 'a whole number', self::fallback($default), match (true) {
             is_float($value) => 'Write it without a decimal point.',
             // `0777` and `08` are text, not numbers, because neither is valid in any of YAML's integer
             // notations — which is exactly the spelling somebody reaches for first.
@@ -170,7 +170,7 @@ final class ConfigValues
         }
 
         if (! is_array($value) || ! array_is_list($value)) {
-            $this->refuse($path, self::described($value), 'a list of text', self::fallback($default), 'Write it as a YAML list, one `- entry` per line.');
+            $this->refuse($path, ConfiguredValue::described($value), 'a list of text', self::fallback($default), 'Write it as a YAML list, one `- entry` per line.');
 
             return $default;
         }
@@ -186,7 +186,7 @@ final class ConfigValues
 
             $this->refuse(
                 $path,
-                sprintf('a list whose entry %d is %s', $index + 1, self::described($member)),
+                sprintf('a list whose entry %d is %s', $index + 1, ConfiguredValue::described($member)),
                 'a list of text',
                 self::fallback($default),
                 'Quote that entry, or remove it. One entry the build cannot read makes the whole list untrustworthy, so none of it is used.',
@@ -221,7 +221,7 @@ final class ConfigValues
         // anything reads as an empty section rather than a refusal, because refusing it would name a
         // defect in a file that says exactly what it means.
         if ($value !== null && $value !== []) {
-            $this->refuse($path, self::described($value), 'a map of settings', 'an empty section', 'Write the section as `key: value` pairs, indented under the section name.');
+            $this->refuse($path, ConfiguredValue::described($value), 'a map of settings', 'an empty section', 'Write the section as `key: value` pairs, indented under the section name.');
         }
 
         return new self([], $this->prefix.$path.'.', $root);
@@ -297,33 +297,6 @@ final class ConfigValues
      */
     private static function fallback(mixed $default): string
     {
-        return $default === null || $default === [] ? 'the built-in default' : self::rendered($default);
-    }
-
-    /** What was written, as a phrase naming both the type and — for a scalar — the value itself. */
-    private static function described(mixed $value): string
-    {
-        return match (true) {
-            $value === null => 'empty',
-            is_bool($value) => sprintf('the boolean %s', $value ? 'true' : 'false'),
-            is_int($value) => sprintf('the whole number %s', self::rendered($value)),
-            is_float($value) => sprintf('the decimal number %s', self::rendered($value)),
-            is_string($value) => sprintf('the text %s', self::rendered($value)),
-            is_array($value) => array_is_list($value) ? 'a list' : 'a map',
-            default => 'a value of a kind YAML has no notation for',
-        };
-    }
-
-    /**
-     * A value as it should be read back to its author.
-     *
-     * Through {@see PlainText} because every byte here came out of a file: a setting can hold anything
-     * somebody typed, and a diagnostic goes to a terminal and to CI logs.
-     */
-    private static function rendered(mixed $value): string
-    {
-        $json = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
-
-        return PlainText::of($json === false ? '(unprintable)' : $json);
+        return $default === null || $default === [] ? 'the built-in default' : ConfiguredValue::rendered($default);
     }
 }

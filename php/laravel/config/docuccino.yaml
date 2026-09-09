@@ -65,12 +65,12 @@ documents:
 
     # 'default' documents the framework's own JSON error shapes for the exceptions it renders itself,
     # 'none' emits no error responses. What your own handlers return is read either way.
-    error_responses: 'default'
+    error_responses: 'default' # default | none
 
     tags:
       # How an operation with no #[Group] is tagged: 'controller' (InvoiceController → "Invoice",
       # then through `map`) or 'none'. Closure routes are never auto-tagged.
-      default_strategy: 'controller'
+      default_strategy: 'controller' # controller | none
       # Raw tag => display tag. An exact match wins, else the first prefix the tag starts with.
       map: {}
       # A container-resolved TagMapper, replacing the prefix mapper over `map`.
@@ -247,7 +247,7 @@ engine:
   # 'in-process' runs PHPStan; 'null' skips inference entirely. Inference needs the dev-only
   # docuccino/inference-phpstan package — without it 'in-process' warns and falls back. Anything else
   # warns and runs in-process rather than failing the build. DOCUCCINO_ENGINE overrides this.
-  mode: 'in-process'
+  mode: 'in-process' # in-process | null
   # PHP memory limit for inference, which runs PHPStan inside the calling process. Applied on console
   # builds only, and only ever RAISES — an already-higher (or unlimited) process is left alone, and
   # `-1` isn't accepted here. `--memory-limit` on the build commands overrides it.
@@ -264,7 +264,7 @@ engine:
 
 # What a route whose analysis fails leaves behind: 'skeleton' keeps the path with a diagnostic,
 # 'omit' drops it from the document.
-on_route_error: 'skeleton'
+on_route_error: 'skeleton' # skeleton | omit
 
 cache:
   # The per-operation fragment cache: incremental rebuilds. `docuccino:watch` turns it on for the

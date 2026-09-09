@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Contracts\TagMapper;
+use Docuccino\Laravel\Config\ConfiguredFlags;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParameters;
 use Docuccino\Laravel\Registry\ConfigDiagnostics;
 use Docuccino\Laravel\Registry\IntegrationToggles;
@@ -23,6 +24,11 @@ function configDoc(array $integrations = [], array $tags = [], array $representa
     }
     if ($representation !== []) {
         $raw['representation'] = $representation;
+    }
+    // The raw bag is the whole of what the document was configured with, so a modelled section is in
+    // BOTH — which is what the config factory builds and what the readers that scan the raw bag see.
+    if ($tags !== []) {
+        $raw['tags'] = $tags;
     }
 
     return new DocumentConfig('default', [], tags: $tags, representation: $representation, raw: $raw);
@@ -89,6 +95,14 @@ it('does not flag a key some integration actually reads', function (string $key)
     ]),
 ]);
 
+/**
+ * `error_responses` reports under the one code the whole keyword family reports under, and no longer
+ * under a name of its own. The fact is not specific to this key — a value outside a closed set, so the
+ * documented default was used — and the remedy is not either: write one of the values the message
+ * lists. A code per setting made an author who wanted to accept the family list every one of them, and
+ * had this key warning where `tags.default_strategy` next to it merely informed, for no reason anyone
+ * could state.
+ */
 it('warns, and names what was built instead, for an error_responses value that is not one of the two', function (mixed $configured, string $named): void {
     // The key decides what EVERY error response in the document says, so a value nothing recognises is
     // reported rather than quietly read as one of them — including a shape (an array, say) that once meant
@@ -97,18 +111,18 @@ it('warns, and names what was built instead, for an error_responses value that i
 
     expect($diagnostics)->toHaveCount(1)
         ->and($diagnostics[0]->severity)->toBe(Severity::Warning)
-        ->and($diagnostics[0]->code)->toBe('config.unknown-error-responses')
+        ->and($diagnostics[0]->code)->toBe('config.unknown-value')
         ->and($diagnostics[0]->message)->toContain($named)
-        ->and($diagnostics[0]->message)->toContain("as if it said 'default'")
-        ->and($diagnostics[0]->help)->toContain("'default'");
+        ->and($diagnostics[0]->message)->toContain('read as "default", its default')
+        ->and($diagnostics[0]->help)->toBe('Write one of: "default", "none".');
 })->with([
-    'a strategy name nothing recognises' => ['problem-details', "'problem-details'"],
-    'a misspelling' => ['defualt', "'defualt'"],
-    'an array where a strategy name belongs' => [['preset' => 'problem-details'], 'array'],
-    'a boolean' => [false, 'bool'],
+    'a strategy name nothing recognises' => ['problem-details', 'the text "problem-details"'],
+    'a misspelling' => ['defualt', 'the text "defualt"'],
+    'an array where a strategy name belongs' => [['preset' => 'problem-details'], 'a map'],
+    'a boolean' => [false, 'the boolean false'],
     // The key written with nothing after the colon. It is a PRESENT key, so it reads as `default` like
     // every other unrecognised value — only deleting the key gets you `none`.
-    'a key with nothing after the colon' => [null, 'null'],
+    'a key with nothing after the colon' => [null, 'empty'],
 ]);
 
 it('says nothing about the two error_responses values there are, or about a document that sets neither', function (): void {
@@ -119,13 +133,24 @@ it('says nothing about the two error_responses values there are, or about a docu
         ->and(ConfigDiagnostics::for(configDoc()))->toBe([]);
 });
 
-it('emits an info diagnostic for an unknown tags.default_strategy value', function (): void {
+/**
+ * And a WARNING where it used to inform, for the reason its neighbours warn: the build did not ignore a
+ * switch nobody reads, it discarded an instruction somebody wrote — every operation with no `#[Group]`
+ * is tagged by this, so a value read as something else regroups the whole document. What the severity
+ * is a function of is the KIND of defect, not the setting's blast radius; that is what
+ * {@see ConfiguredFlags} settled for the switches, where the master switch
+ * and `viewer.cdn` both warn.
+ */
+it('warns for an unknown tags.default_strategy value', function (): void {
     $diagnostics = ConfigDiagnostics::for(configDoc(tags: ['default_strategy' => 'wibble']));
 
     expect($diagnostics)->toHaveCount(1)
-        ->and($diagnostics[0]->severity)->toBe(Severity::Info)
-        ->and($diagnostics[0]->code)->toBe('config.unknown-tag-strategy')
-        ->and($diagnostics[0]->message)->toContain('wibble');
+        ->and($diagnostics[0]->severity)->toBe(Severity::Warning)
+        ->and($diagnostics[0]->code)->toBe('config.unknown-value')
+        ->and($diagnostics[0]->message)->toBe(
+            'tags.default_strategy is the text "wibble", which is none of the values it takes'
+            .' — it is read as "controller", its default.',
+        );
 });
 
 it('does not flag a known tags.default_strategy value', function (string $strategy): void {
