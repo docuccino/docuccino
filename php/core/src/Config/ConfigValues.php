@@ -16,14 +16,15 @@ use Docuccino\Core\Support\ConfiguredValue;
  *
  * Casting is what this class exists to not do, and YAML is why. `version: 1.10` parses to the float
  * 1.1, so `(string)` publishes "1.1" — a different version number in a document somebody's client is
- * generated from. `enabled: no` parses to the STRING "no", so a forgiving boolean read makes it TRUE,
- * which is the opposite of what the author wrote. Neither is a value to salvage; both are a line to go
- * and fix, and a diagnostic is the only thing that gets the author there.
+ * generated from. That is not a value to salvage; it is a line to go and fix, and a diagnostic is the
+ * only thing that gets the author there. A switch and a closed-set keyword are the same trap one layer
+ * over, and each has a reader of its own — `ConfiguredFlag` and `ConfiguredKeyword`. `enabled: no` is
+ * the string "no", which anything willing to coerce reads as ON.
  *
- * Absent and present-null are different questions with different answers. {@see has()} answers the
- * first and nothing else does — a reader that needs to tell "the author never mentioned this" from
- * "the author mentioned it and the value did not survive" asks it, and a typed read answers the
- * default for both because there is no value either way.
+ * A typed read answers the setting's default for absent and for present-null alike, because there is
+ * no value either way. The two stay distinguishable all the same, off {@see all()}: a key written with
+ * an empty value is still a key the author wrote, so whatever walks the parsed map sees it and holds it
+ * to the same reporting as any other key.
  *
  * Diagnostics are keyed by setting and handed back in the setting's alphabetical order, so a build
  * reports the same lines however many readers asked and in whatever order they asked.
@@ -64,22 +65,10 @@ final class ConfigValues
         return new self($values);
     }
 
-    /**
-     * Whether the setting is written in the file AT ALL — true for a key present and null.
-     *
-     * The distinction is load-bearing rather than pedantic. A key nobody wrote has expressed no
-     * intent, and its documented fallback is the right answer; a key written with an unreadable value
-     * has an author behind it, and the two readings of some settings are opposites.
-     */
-    public function has(string $path): bool
-    {
-        return $this->find($path)[0];
-    }
-
     /** The value exactly as parsed, with nothing rejected and nothing converted. Null when absent. */
     public function raw(string $path): mixed
     {
-        return $this->find($path)[1];
+        return $this->find($path);
     }
 
     /**
@@ -98,7 +87,7 @@ final class ConfigValues
 
     public function string(string $path, ?string $default = null): ?string
     {
-        $value = $this->find($path)[1];
+        $value = $this->find($path);
 
         if ($value === null || is_string($value)) {
             return $value ?? $default;
@@ -113,96 +102,11 @@ final class ConfigValues
         return $default;
     }
 
-    public function bool(string $path, ?bool $default = null): ?bool
-    {
-        $value = $this->find($path)[1];
-
-        if ($value === null || is_bool($value)) {
-            return $value ?? $default;
-        }
-
-        $this->refuse($path, ConfiguredValue::described($value), 'true or false', self::fallback($default), match (true) {
-            // The one that catches people. YAML reads `no`, `off`, `yes` and `on` as TEXT, so the
-            // author who wrote the shortest possible "off" wrote a non-empty string — which anything
-            // willing to convert would read as ON.
-            is_string($value) && in_array(strtolower($value), ['no', 'off', 'n', 'yes', 'on', 'y'], true) => 'Write `false` or `true`. Those are the only two words read as booleans — `no`, `off`, `yes` and `on` are read as text.',
-            default => 'Write `false` or `true`, unquoted.',
-        });
-
-        return $default;
-    }
-
-    public function int(string $path, ?int $default = null): ?int
-    {
-        $value = $this->find($path)[1];
-
-        if ($value === null || is_int($value)) {
-            return $value ?? $default;
-        }
-
-        $this->refuse($path, ConfiguredValue::described($value), 'a whole number', self::fallback($default), match (true) {
-            is_float($value) => 'Write it without a decimal point.',
-            // `0777` and `08` are text, not numbers, because neither is valid in any of YAML's integer
-            // notations — which is exactly the spelling somebody reaches for first.
-            is_string($value) => 'Write it unquoted, without a leading zero and without thousands separators.',
-            default => 'Write a whole number.',
-        });
-
-        return $default;
-    }
-
-    /**
-     * A list of text, refused WHOLE when any member is not text.
-     *
-     * Dropping the offending member instead would be the quiet kind of wrong: a list of paths or
-     * patterns short by one silently changes what the build looks at, and the document that comes out
-     * is missing things rather than visibly broken.
-     *
-     * @param  list<string>|null  $default
-     * @return list<string>|null
-     */
-    public function strings(string $path, ?array $default = null): ?array
-    {
-        $value = $this->find($path)[1];
-
-        if ($value === null) {
-            return $default;
-        }
-
-        if (! is_array($value) || ! array_is_list($value)) {
-            $this->refuse($path, ConfiguredValue::described($value), 'a list of text', self::fallback($default), 'Write it as a YAML list, one `- entry` per line.');
-
-            return $default;
-        }
-
-        $strings = [];
-
-        foreach ($value as $index => $member) {
-            if (is_string($member)) {
-                $strings[] = $member;
-
-                continue;
-            }
-
-            $this->refuse(
-                $path,
-                sprintf('a list whose entry %d is %s', $index + 1, ConfiguredValue::described($member)),
-                'a list of text',
-                self::fallback($default),
-                'Quote that entry, or remove it. One entry the build cannot read makes the whole list untrustworthy, so none of it is used.',
-            );
-
-            return $default;
-        }
-
-        return $strings;
-    }
-
     /**
      * A list, refused when the value is not one. The ENTRIES are the caller's to read: a `servers` entry
      * is an OAS Server Object and an `exclude` entry is a glob, and there is no one reading of both.
      *
-     * Listness alone, and deliberately not {@see strings()}, because the fallback has to be one the
+     * Listness alone, and deliberately not the entries too, because the fallback has to be one the
      * caller actually takes. Every reader of a configured list answers its own built-in default for a
      * value that is no list, which is what this refusal claims — while a reader that keeps the members
      * it could read does NOT discard the list over one bad entry, so refusing the whole of it here
@@ -212,7 +116,7 @@ final class ConfigValues
      */
     public function entries(string $path): ?array
     {
-        $value = $this->find($path)[1];
+        $value = $this->find($path);
 
         if ($value === null) {
             return null;
@@ -224,7 +128,7 @@ final class ConfigValues
             return $value;
         }
 
-        $this->refuse($path, self::described($value), 'a list', self::fallback(null), 'Write it as a YAML list, one `- entry` per line.');
+        $this->refuse($path, ConfiguredValue::described($value), 'a list', self::fallback(null), 'Write it as a YAML list, one `- entry` per line.');
 
         return null;
     }
@@ -239,7 +143,7 @@ final class ConfigValues
     public function map(string $path): self
     {
         return new self(
-            $this->section($path, $this->find($path)[1]) ?? [],
+            $this->section($path, $this->find($path)) ?? [],
             $this->prefix.$path.'.',
             $this->root ?? $this,
         );
@@ -293,10 +197,8 @@ final class ConfigValues
         return null;
     }
 
-    /**
-     * @return array{0: bool, 1: mixed} [written in the file, the value]
-     */
-    private function find(string $path): array
+    /** The value at a dotted path, or null when nothing is written there. */
+    private function find(string $path): mixed
     {
         $segments = explode('.', $path);
         $last = count($segments) - 1;
@@ -308,7 +210,7 @@ final class ConfigValues
         // key there, which is how the settings whose keys are author-supplied patterns are read.
         foreach ($segments as $index => $segment) {
             if (! is_array($node) || ! array_key_exists($segment, $node)) {
-                return [false, null];
+                return null;
             }
 
             $node = $node[$segment];
@@ -318,11 +220,11 @@ final class ConfigValues
             // under its own name — see section(). The walk stops there either way: there is no key to
             // reach under a value that has none.
             if ($index !== $last && $this->section($walked, $node) === null) {
-                return [false, null];
+                return null;
             }
         }
 
-        return [true, $node];
+        return $node;
     }
 
     /**
@@ -353,12 +255,12 @@ final class ConfigValues
     }
 
     /**
-     * The answer a refused setting is about to give, named for its author. One place, because four
-     * typed readers say it and a fifth answer that disagreed with the other four is exactly the drift
-     * this phrasing exists to prevent.
+     * The answer a refused setting is about to give, named for its author. One place, because both
+     * typed reads say it and a second phrasing that disagreed with the first is exactly the drift this
+     * wording exists to prevent.
      */
-    private static function fallback(mixed $default): string
+    private static function fallback(?string $default): string
     {
-        return $default === null || $default === [] ? 'the built-in default' : ConfiguredValue::rendered($default);
+        return $default === null ? 'the built-in default' : ConfiguredValue::rendered($default);
     }
 }

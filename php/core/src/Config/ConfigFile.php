@@ -12,10 +12,9 @@ use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 /**
- * One read of the tool's own configuration file: the absolute path it was found at, the top-level map
- * it parsed to, why it isn't one when it isn't, and the diagnostics that say so. Every failure is a
- * value here — nothing this class does throws, because a build must survive a config file somebody is
- * halfway through editing.
+ * One read of the tool's own configuration file: the top-level map it parsed to, why it isn't one when
+ * it isn't, and the diagnostics that say so. Every failure is a value here — nothing this class does
+ * throws, because a build must survive a config file somebody is halfway through editing.
  *
  * The seam is deliberate. The CALLER supplies the directory, because finding a project root is a
  * question about the host, and this package knows nothing about hosts. Everything downstream of that
@@ -87,7 +86,6 @@ final class ConfigFile
      * @param  list<Diagnostic>  $diagnostics
      */
     private function __construct(
-        public readonly ?string $path,
         public readonly array $values,
         public readonly ?string $error,
         public readonly array $diagnostics = [],
@@ -99,22 +97,21 @@ final class ConfigFile
     /**
      * Read the configuration out of `$directory`, which is the project root the caller resolved.
      *
-     * {@see $path} is set whenever a file was found, failure included, because the caller registers it
-     * as a cache dependency either way — a file that does not parse today must rebuild when it does.
-     * An ABSENT read carries the path it looked at for the same reason: the build has to notice the
-     * file appearing.
+     * The path it looked at is not part of the answer: a diagnostic names the file by its root-relative
+     * name, and the adapter that watches the file builds the same path from `$directory` and
+     * {@see NAME}.
      */
     public static function read(string $directory): self
     {
         $path = rtrim($directory, '/\\').DIRECTORY_SEPARATOR.self::NAME;
 
         if (! is_file($path)) {
-            return new self($path, [], self::ABSENT, self::misnamed($directory));
+            return new self([], self::ABSENT, self::misnamed($directory));
         }
 
         $contents = @file_get_contents($path);
         if ($contents === false) {
-            return new self($path, [], self::UNREADABLE, [new Diagnostic(
+            return new self([], self::UNREADABLE, [new Diagnostic(
                 severity: Severity::Error,
                 code: 'config.file-unreadable',
                 message: sprintf(
@@ -127,7 +124,7 @@ final class ConfigFile
 
         $parsed = self::parse($contents);
 
-        return new self($path, $parsed->values, $parsed->error, $parsed->diagnostics);
+        return new self($parsed->values, $parsed->error, $parsed->diagnostics);
     }
 
     /**
@@ -144,7 +141,7 @@ final class ConfigFile
         try {
             $value = Yaml::parse($contents, self::FLAGS);
         } catch (ParseException $exception) {
-            return new self(null, [], self::INVALID, [new Diagnostic(
+            return new self([], self::INVALID, [new Diagnostic(
                 severity: Severity::Error,
                 code: 'config.file-invalid',
                 message: sprintf(
@@ -162,7 +159,7 @@ final class ConfigFile
         // an empty array is the failure worth the most care here: the build would then run on every
         // default and produce a plausible document, so the author's file looks applied and is not.
         if (! is_array($value) || array_is_list($value)) {
-            return new self(null, [], self::NOT_A_MAP, [new Diagnostic(
+            return new self([], self::NOT_A_MAP, [new Diagnostic(
                 severity: Severity::Error,
                 code: 'config.file-not-a-map',
                 message: sprintf(
@@ -181,7 +178,7 @@ final class ConfigFile
         $diagnostics = [];
         $settled = self::settled($value, '', $diagnostics);
 
-        return new self(null, Arr::stringKeyed($settled), null, $diagnostics);
+        return new self(Arr::stringKeyed($settled), null, $diagnostics);
     }
 
     /**

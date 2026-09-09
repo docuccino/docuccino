@@ -55,7 +55,7 @@ final class BuildConfig
 
     public function __construct(private readonly ConfigFile $file) {}
 
-    /** The read itself — its path, its error, and the diagnostics that say what went wrong. */
+    /** The read itself — its error, and the diagnostics that say what went wrong. */
     public function file(): ConfigFile
     {
         return $this->file;
