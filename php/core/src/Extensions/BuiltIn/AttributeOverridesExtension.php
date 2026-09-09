@@ -23,7 +23,6 @@ use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Support\ConfinedPath;
 use Docuccino\Core\Support\Fqcn;
 use Docuccino\Core\Support\LineEndings;
-use Docuccino\Core\Support\PlainText;
 
 /**
  * The overrides layer: docblock summary/description (docblock precedence), then the operation
@@ -226,9 +225,7 @@ final class AttributeOverridesExtension implements OperationExtension
      */
     private function describedFile(RouteContext $context, string $path): ?string
     {
-        // The path is the author's own text on its way into a published message, so it is escaped
-        // before it is quoted — a NUL byte is exactly what gets one refused below.
-        $quoted = PlainText::of($path);
+        $quoted = $path;
         $resolved = ConfinedPath::resolve($this->basePath, $path);
         if ($resolved === null) {
             $this->report($context, Severity::Error, 'description-file.escapes-base-path', sprintf(

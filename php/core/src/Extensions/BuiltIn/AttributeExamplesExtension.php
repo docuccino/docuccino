@@ -16,7 +16,6 @@ use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Support\ConfinedPath;
 use Docuccino\Core\Support\ExampleFile;
-use Docuccino\Core\Support\PlainText;
 
 /**
  * Applies `#[Example]`. An unnamed declaration pins the singular `example`; named ones build the
@@ -337,9 +336,7 @@ final class AttributeExamplesExtension implements OperationExtension
             return $read->value;
         }
 
-        // The path is the author's own text on its way into a published message, so it is escaped
-        // before it is quoted — a NUL byte is exactly what gets one refused below.
-        $quoted = PlainText::of($path);
+        $quoted = $path;
 
         if ($read->error === ExampleFile::ESCAPED) {
             $this->report($context, Severity::Error, 'example-file.escapes-base-path', sprintf(
