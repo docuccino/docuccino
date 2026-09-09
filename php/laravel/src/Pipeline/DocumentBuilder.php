@@ -88,10 +88,6 @@ final class DocumentBuilder
         [$overlays, $overlayDiagnostics] = $this->overlays($config);
         [$extensions, $extensionDiagnostics] = ConfigExtensions::read();
         $preDiagnostics = [
-            // The configuration FILE itself, before anything read out of it: whether it was found and
-            // parsed, every setting whose type it refused, and what is left in the framework config
-            // that nothing reads. First, because an unreadable file is why the rest of this is empty.
-            ...$this->settings()->diagnostics(),
             // The switches outside every document — the master one, the fragment cache, the lint rules —
             // and the keyword settings beside them. Reported here because they are read at container
             // binds and inside a viewer request, where nothing can carry a report.
@@ -106,9 +102,19 @@ final class DocumentBuilder
 
         $result = $this->generator->generate($config, $engine, $extensions, $overlays);
 
-        // The half of the inference report no one can read before the build: the engine boots on the
-        // first question a route asks it, and a build that asks none never finds out.
-        $diagnostics = [...$preDiagnostics, ...$this->bootFailureDiagnostics($engine)];
+        $diagnostics = [
+            // The configuration FILE itself: whether it was found and parsed, every setting whose type
+            // it refused, and what is left in the framework config that nothing reads. First in the
+            // list, because an unreadable file is why the rest of this is empty — and read AFTER the
+            // build, because a setting is refused where it is READ. The lint bindings, the accept-list
+            // and the fragment cache are all read while the build runs, so a report taken beforehand
+            // was missing exactly the refusals the build itself provoked.
+            ...$this->settings()->diagnostics(),
+            ...$preDiagnostics,
+            // The half of the inference report no one can read before the build: the engine boots on
+            // the first question a route asks it, and a build that asks none never finds out.
+            ...$this->bootFailureDiagnostics($engine),
+        ];
 
         if ($diagnostics === []) {
             return $result;
