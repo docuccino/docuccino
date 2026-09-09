@@ -75,8 +75,32 @@ final class ConfigFile
     /** The file is there and could not be read. */
     public const string UNREADABLE = 'unreadable';
 
-    /** The file is there and is not YAML this parses — malformed, a duplicate key, a tab, a PHP tag. */
+    /**
+     * The file is there and is not configuration this can hold — malformed YAML, a duplicate key, a
+     * tab, a PHP tag, or a file that parses and expands past {@see MAX_VALUES}.
+     */
     public const string INVALID = 'invalid';
+
+    /**
+     * How many values a configuration file may expand to before it is refused.
+     *
+     * The expansion is the point, not the file size. A YAML alias repeated inside another anchor
+     * multiplies at every level, so 691 bytes over seven levels of ten parse to 4 MB and then cost
+     * over 512 MB in {@see settled()} — which REBUILDS the tree, materialising every copy the
+     * parser was sharing. The fatal that follows is an out-of-memory, not an exception, so
+     * `catch (ParseException)` never sees it and the contract this class is built on — that nothing
+     * it does throws, because a build must survive a file somebody is halfway through editing —
+     * fails exactly where it matters. Two more walkers downstream rebuild the same tree
+     * (`Json::stable()` while hashing the config, and the unknown-setting report), which is why the
+     * bound is here, at the one place all three are downstream of, rather than three times over.
+     *
+     * The number is measured against what a configuration file is: the shipped `docuccino.yaml`
+     * writes about 130 values, and a hundred-document application would write a few tens of
+     * thousands. This is far above both and far below the expansion that costs anything — a tree
+     * this size settles in tens of megabytes, where the refused ones cost hundreds. Nothing anybody
+     * wrote by hand reaches it.
+     */
+    private const int MAX_VALUES = 100_000;
 
     /** The file parses, and to something other than a map. An empty file is this. */
     public const string NOT_A_MAP = 'not-a-map';
@@ -171,6 +195,22 @@ final class ConfigFile
             )]);
         }
 
+        // Before anything WALKS it. Everything below this line rebuilds the tree, and a rebuild is
+        // what an alias expansion costs — so the file is measured while it is still the parser's
+        // shared structure, by a count that visits members without copying one and stops at the
+        // bound rather than at the end.
+        if (self::oversized($value)) {
+            return new self([], self::INVALID, [new Diagnostic(
+                severity: Severity::Error,
+                code: 'config.file-invalid',
+                message: sprintf(
+                    '%s expands to more settings than a configuration can hold, so the document is built from defaults alone.',
+                    self::NAME,
+                ),
+                help: 'This is what a YAML alias (`*name`) repeated inside an anchor does — it multiplies at every level. Write the settings out instead.',
+            )]);
+        }
+
         // Absent and present-null stay different all the way through, so nothing is stripped here.
         // A reader downstream distinguishes them — a key nobody named has expressed nothing and takes
         // its documented fallback, while a key present and unreadable has an author behind it and
@@ -179,6 +219,39 @@ final class ConfigFile
         $settled = self::settled($value, '', $diagnostics);
 
         return new self(Arr::stringKeyed($settled), null, $diagnostics);
+    }
+
+    /**
+     * Whether the parse holds more than {@see MAX_VALUES} values.
+     *
+     * Deliberately not a rebuild and deliberately not recursive: members are pushed onto a stack as
+     * the references the parser handed back, so an alias shared ten times costs ten pointers rather
+     * than ten copies of its subtree, and the count stops the moment it passes the bound rather than
+     * measuring how far past it the file goes. What is counted is the EXPANSION — every occurrence of
+     * an aliased subtree, since every occurrence is what a walker downstream pays for.
+     *
+     * @param  array<mixed, mixed>  $value
+     */
+    private static function oversized(array $value): bool
+    {
+        $counted = 0;
+        $pending = [$value];
+
+        while ($pending !== []) {
+            $node = array_pop($pending);
+
+            foreach ($node as $member) {
+                if (++$counted > self::MAX_VALUES) {
+                    return true;
+                }
+
+                if (is_array($member)) {
+                    $pending[] = $member;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
