@@ -40,7 +40,7 @@ Set Docuccino up in this application and generate a first document.
 
 ```
 docuccino:install
-    {--force : Replace an existing config/docuccino.php with the shipped defaults}
+    {--force : Replace existing configuration files with the shipped defaults}
     {--no-export : Set up without generating a first document}
     {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}
 ```
@@ -618,7 +618,7 @@ as its inputs:
   each document's [`content.dir`](/laravel/reference/configuration/#content) tree, its
   [`webhooks.dir`](/laravel/reference/configuration/#webhooks) tree, its
   [overlay](/laravel/reference/configuration/#overlays) files, and the
-  [`engine.neon`](/laravel/reference/configuration/#engine) file if you name one. These are watched
+  [`engine.config`](/laravel/reference/configuration/#engine) file if you name one. These are watched
   as directories, so a route file, a content page or a webhook class you add mid-session counts too.
 
 The artifacts a build writes are deliberately excluded — watching its own output would rebuild

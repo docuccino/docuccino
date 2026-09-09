@@ -7,7 +7,7 @@ namespace Docuccino\Laravel\Engine;
 use Docuccino\Laravel\Support\Paths;
 
 /**
- * The application's own PHPStan config file, when `engine.neon` names one: the engine includes it in
+ * The application's own analyser config file, when `engine.config` names one: the engine includes it in
  * the config it generates, so a project's existing extensions and stubs sharpen its documentation with
  * no Docuccino-specific API. Configured relative to the application base path (an absolute path is
  * taken as given).
@@ -17,7 +17,7 @@ use Docuccino\Laravel\Support\Paths;
  *
  * @internal
  */
-final class EngineNeon
+final class EngineConfigFile
 {
     /**
      * The configured file, resolved against the base path — null when nothing is configured. A path
@@ -28,7 +28,7 @@ final class EngineNeon
      */
     public static function path(array $engineConfig, string $basePath): ?string
     {
-        $configured = $engineConfig['neon'] ?? null;
+        $configured = $engineConfig['config'] ?? null;
 
         return is_string($configured) && $configured !== ''
             ? Paths::absolute($configured, $basePath)

@@ -1,0 +1,180 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Docuccino\Laravel\Tests\Support;
+
+use Docuccino\Core\Config\ConfigFile;
+use Docuccino\Laravel\Config\BuildConfig;
+use Docuccino\Laravel\Tests\TestCase;
+use Symfony\Component\Yaml\Yaml;
+
+/**
+ * How a test configures a build now that a build reads `docuccino.yaml`: by writing YAML, and handing
+ * it to the reader the product uses.
+ *
+ * This exists because there is exactly one seam worth having. A test that reached past the reader and
+ * bound a parsed array would prove the adapter works on input nothing validated — a `1.10` that never
+ * became a float, a `no` that never became a string, a `documents:` list that was never refused — and
+ * every one of those is a defect {@see ConfigFile} exists to catch. So a setting set here becomes
+ * YAML text, and that text goes through {@see ConfigFile::parse()}: the same byte-order-mark strip, the
+ * same parse flags, the same numeric settling and the same refusals a real project gets. What is NOT
+ * exercised here is finding the file — which name it has, where it is, what an absent or unreadable one
+ * means — and that half is stated against real files on disk instead, in the reader's own tests and in
+ * the adapter's configuration-file tests. Judging one seam per half is the point: this one covers every
+ * test that has an opinion about a SETTING, and no test can configure a build through a path the
+ * product no longer reads.
+ *
+ * The baseline is the SHIPPED file, parsed. So the ~2000 tests that override one setting are all
+ * standing on the bytes an application gets from `docuccino:install`, which is a stronger footing than
+ * the framework config they used to inherit — a shipped default that stopped making sense would now
+ * fail somewhere rather than only in the file's own test.
+ */
+final class BuildSettings
+{
+    /** The shipped file's text, read once per process. */
+    private static ?string $shipped = null;
+
+    /**
+     * This test's settings, or null before anything asked for them.
+     *
+     * @var array<string, mixed>|null
+     */
+    private static ?array $settings = null;
+
+    /**
+     * Point `BuildConfig` at the shipped configuration and forget the last test's edits.
+     *
+     * Called from {@see TestCase::setUp()} after the container exists, so it
+     * replaces the provider's binding rather than racing it.
+     */
+    public static function boot(): void
+    {
+        self::$settings = null;
+        self::bind();
+    }
+
+    /**
+     * Set one build setting, addressed the way the YAML nests it — `documents.default.info.title`,
+     * `lint.tags.enabled`, `cache.enabled`.
+     *
+     * The whole file is rewritten and reparsed, because a setting is only worth what the reader makes
+     * of it: a test that pushed a PHP value straight into the parsed map would be asserting against
+     * something no author can write.
+     */
+    public static function set(string $path, mixed $value): void
+    {
+        $settings = self::settings();
+        $node = &$settings;
+
+        foreach (explode('.', $path) as $segment) {
+            if (! is_array($node[$segment] ?? null)) {
+                $node[$segment] = [];
+            }
+            $node = &$node[$segment];
+        }
+
+        $node = $value;
+        unset($node);
+
+        self::replace($settings);
+    }
+
+    /**
+     * Replace the whole `documents` bag — a suite that wants its own documents rather than the shipped
+     * `default` with one key changed.
+     *
+     * @param  array<string, mixed>  $documents
+     */
+    public static function documents(array $documents): void
+    {
+        self::set('documents', $documents);
+    }
+
+    /**
+     * Replace every setting there is, for a test whose subject is the FILE rather than one value.
+     *
+     * @param  array<string, mixed>  $settings
+     */
+    public static function replace(array $settings): void
+    {
+        self::$settings = $settings;
+        self::bind();
+    }
+
+    /** Leave the build with no configuration file at all, which is a supported state. */
+    public static function none(): void
+    {
+        self::$settings = null;
+        app()->instance(BuildConfig::class, new BuildConfig(ConfigFile::read(self::emptyDirectory())));
+    }
+
+    /** Hand the build this YAML verbatim, for a test about what the file SAYS rather than what it holds. */
+    public static function yaml(string $yaml): void
+    {
+        self::$settings = null;
+        app()->instance(BuildConfig::class, new BuildConfig(ConfigFile::parse($yaml)));
+    }
+
+    /**
+     * The settings as they stand — the shipped file's, with whatever this test has changed.
+     *
+     * @return array<string, mixed>
+     */
+    public static function settings(): array
+    {
+        if (self::$settings === null) {
+            /** @var array<string, mixed> $parsed */
+            $parsed = Yaml::parse(self::shipped(), ConfigFile::FLAGS) ?? [];
+            self::$settings = $parsed;
+        }
+
+        return self::$settings;
+    }
+
+    /**
+     * One document's settings, for a test that reads the bag rather than writing it.
+     *
+     * @return array<string, mixed>
+     */
+    public static function document(string $key = 'default'): array
+    {
+        /** @var array<string, mixed> $bag */
+        $bag = self::settings()['documents'][$key] ?? [];
+
+        return $bag;
+    }
+
+    /** The shipped `docuccino.yaml`, as the bytes an install writes. */
+    public static function shipped(): string
+    {
+        return self::$shipped ??= (string) file_get_contents(
+            dirname(__DIR__, 2).'/config/'.ConfigFile::NAME,
+        );
+    }
+
+    /**
+     * Bind the current settings, dumped to YAML and read back.
+     *
+     * The inline depth is deep enough that nothing in a document bag collapses into a flow scalar the
+     * parser then has to guess at, and `Yaml::DUMP_EMPTY_ARRAY_AS_SEQUENCE` is deliberately not set —
+     * `{}` and `[]` parse to the same empty array, so the dumper's default already round-trips.
+     */
+    private static function bind(): void
+    {
+        app()->instance(BuildConfig::class, new BuildConfig(
+            ConfigFile::parse(Yaml::dump(self::settings(), 12, 2)),
+        ));
+    }
+
+    /** A directory this process owns that holds no configuration file, made once and left empty. */
+    private static function emptyDirectory(): string
+    {
+        $dir = sys_get_temp_dir().'/docuccino-no-config-'.getmypid();
+        if (! is_dir($dir)) {
+            @mkdir($dir, 0777, true);
+        }
+
+        return $dir;
+    }
+}

@@ -110,7 +110,7 @@ final readonly class TypeEngineFactory
             vendorPath: $this->basePath.'/vendor',
             primePaths: $this->primePaths($descendPaths),
             descendPaths: $descendPaths,
-            configFile: EngineNeon::path($config, $this->basePath),
+            configFile: EngineConfigFile::path($config, $this->basePath),
         );
     }
 

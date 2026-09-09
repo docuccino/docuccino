@@ -82,6 +82,20 @@ final class ConfigValues
         return $this->find($path)[1];
     }
 
+    /**
+     * This reader's whole map, exactly as parsed — for a caller that type-checks a section itself and
+     * would report the same defect twice if it also read that section a key at a time.
+     *
+     * A section reader made by {@see map()} answers its own keys and nothing else, and a section that
+     * was REFUSED answers none, so the refusal and the empty answer stay one fact rather than two.
+     *
+     * @return array<string, mixed>
+     */
+    public function all(): array
+    {
+        return $this->values;
+    }
+
     public function string(string $path, ?string $default = null): ?string
     {
         $value = $this->find($path)[1];

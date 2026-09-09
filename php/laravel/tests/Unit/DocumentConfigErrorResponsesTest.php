@@ -24,7 +24,7 @@ use Docuccino\Laravel\Registry\ConfigDiagnostics;
 function resolvedErrorResponses(mixed $value): string
 {
     /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.default');
+    $raw = documentSettings();
     $raw['error_responses'] = $value;
 
     return app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton')->errorResponses;
@@ -38,7 +38,7 @@ function resolvedErrorResponses(mixed $value): string
 function errorResponsesDiagnosticCodes(mixed $value): array
 {
     /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.default');
+    $raw = documentSettings();
     $raw['error_responses'] = $value;
     $document = app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton');
 
@@ -77,7 +77,7 @@ it('reads an absent error_responses key as the opt-out, and says nothing about i
     // and a second document inherits none of the first's configuration — which is why deleting the key
     // is how you get a document with no error responses, and why it is not a misconfiguration to report.
     /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.default');
+    $raw = documentSettings();
     unset($raw['error_responses']);
     $document = app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton');
 
@@ -90,7 +90,7 @@ it('reads an absent error_responses key as the opt-out, and says nothing about i
 
 it('warns rather than informs, because the value it names decides every error in the document', function (): void {
     /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.default');
+    $raw = documentSettings();
     $raw['error_responses'] = null;
     $diagnostics = array_values(array_filter(
         ConfigDiagnostics::for(app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton')),

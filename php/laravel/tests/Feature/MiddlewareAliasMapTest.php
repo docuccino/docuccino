@@ -51,7 +51,7 @@ beforeEach(function (): void {
 
 it('subtracts a route\'s middleware through the application\'s alias map, not the framework\'s', function (): void {
     $document = app(DocumentConfigFactory::class)
-        ->make('default', (array) config('docuccino.documents.default'), 'skeleton');
+        ->make('default', documentSettings(), 'skeleton');
 
     $middleware = [];
     foreach (app(LaravelRouteResolver::class)->resolve($document) as $descriptor) {

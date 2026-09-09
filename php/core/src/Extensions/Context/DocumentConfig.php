@@ -24,6 +24,14 @@ final readonly class DocumentConfig
     public const string DEFAULT_VERSION = '1.0.0';
 
     /**
+     * The `info.title` a document that names none falls back to. Here rather than at the reader
+     * because two of them answer it now — the one that BUILDS the info object and the one that
+     * reports a title it had to refuse — and a fallback named in a diagnostic that the document does
+     * not actually use is worse than no diagnostic, because it is checkable and wrong.
+     */
+    public const string DEFAULT_TITLE = 'API Documentation';
+
+    /**
      * @param  array<string, mixed>  $info  OAS info object (title, version, description …)
      * @param  list<array<string, mixed>>  $servers
      * @param  list<string>  $routeInclude  wildcard patterns of URIs to include

@@ -1,8 +1,15 @@
 <?php
 
 declare(strict_types=1);
+use Docuccino\Core\Config\ConfigFile;
 
 require_once dirname(__DIR__, 2).'/tools/config-reference-sync.php';
+
+/** The tool's own configuration filename, off the reader that owns it rather than restated here. */
+function docuccino_settings_name(): string
+{
+    return ConfigFile::NAME;
+}
 
 /*
  * The gate that keeps the website's configuration reference honest about the shipped config file.
@@ -253,6 +260,97 @@ it('holds the shipped config and the configuration reference to each other', fun
         implode("\n", $problems)."\n\nDocument the key in ".
         "website/src/content/docs/laravel/reference/configuration.md, in the section\n".
         "tools/config-reference-sync.php maps to it, or drop it from the config file.\n");
+});
+
+/**
+ * The shipped `docuccino.yaml` and the shipped `config/docuccino.php` are one surface written twice
+ * over, and only one of them is held to the website. So this is the join: the settings a BUILD reads
+ * have to be declared identically in both files, commented options included, or the page can be in
+ * sync with the PHP file and silent about the file a build actually reads.
+ *
+ * Stated as a set comparison over the two files rather than by asking either one what it thinks it
+ * owns: the three framework keys are named here, literally, and everything else has to appear on both
+ * sides. A guard that filtered with the adapter's own idea of the split would agree with a bug in it.
+ */
+it('declares the same build settings in both shipped configuration files', function (): void {
+    $yaml = config_reference_checkable(config_reference_yaml_keys(
+        (string) file_get_contents(dirname(__DIR__, 2).'/php/laravel/config/'.docuccino_settings_name()),
+    ));
+    $php = config_reference_checkable(config_reference_declared_keys(
+        (string) file_get_contents(dirname(__DIR__, 2).'/php/laravel/config/docuccino.php'),
+    ));
+
+    // What the framework keeps, because it reads these while it boots and on a viewer request.
+    $framework = array_values(array_filter(
+        $php,
+        static fn (string $key): bool => $key === 'enabled'
+            || $key === 'cache.store'
+            || preg_match('/^documents\.\*\.viewer(\.|$)/', $key) === 1,
+    ));
+
+    expect(array_values(array_diff($php, $framework, $yaml)))
+        ->toBe([], 'build settings in config/docuccino.php that docuccino.yaml does not declare')
+        ->and(array_values(array_diff($yaml, $php)))
+        ->toBe([], 'settings in docuccino.yaml that config/docuccino.php does not declare');
+
+    // Per-file floors, because the two files are about to stop being the same size: the framework half
+    // keeps ten keys — the bag plus its seven members, the master switch and the cache store — and the
+    // build half keeps the rest. One shared floor would be nonsense on the small side and a hole on the
+    // big one, so the small side is stated in full rather than counted.
+    expect(count($yaml))->toBeGreaterThan(100)
+        ->and($framework)->toBe([
+            'cache.store',
+            'documents.*.viewer',
+            'documents.*.viewer.cdn',
+            'documents.*.viewer.configuration',
+            'documents.*.viewer.driver',
+            'documents.*.viewer.gate',
+            'documents.*.viewer.middleware',
+            'documents.*.viewer.route',
+            'documents.*.viewer.source',
+            'enabled',
+        ]);
+});
+
+it('reads a commented option out of the YAML the way it reads one out of the PHP', function (): void {
+    // The whole reason the YAML reader exists: an optional setting ships commented, and a commented
+    // setting nobody documented is exactly the drift this guard is for. The nesting matters as much as
+    // the key — a commented child under a shipped `{}` belongs to that key, not beside it.
+    $settings = <<<'YAML'
+        documents:
+          default:
+            # The OpenAPI `info` object.
+            info:
+              title: 'API Documentation'
+            # Where #[Webhook] classes live. Absent means the document has none.
+            # webhooks: { dir: 'app/Webhooks' }
+            integrations: {}
+            #   eloquent: { enabled: true }
+        YAML;
+
+    expect(config_reference_yaml_keys($settings))->toBe([
+        'documents',
+        'documents.*',
+        'documents.*.info',
+        'documents.*.info.title',
+        'documents.*.integrations',
+        'documents.*.integrations.eloquent',
+        'documents.*.integrations.eloquent.enabled',
+        'documents.*.webhooks',
+        'documents.*.webhooks.dir',
+    ]);
+});
+
+it('reads no key out of a comment that is only prose', function (): void {
+    // A sentence with a colon in it is the one thing that would otherwise parse as a setting.
+    $settings = <<<'YAML'
+        engine:
+          # Declares that this document IS an API version: the one below is `info.version`.
+          # Absent means the document is not a version at all.
+          mode: 'in-process'
+        YAML;
+
+    expect(config_reference_yaml_keys($settings))->toBe(['engine', 'engine.mode']);
 });
 
 it('reads enough of both sides for that comparison to mean something', function (): void {

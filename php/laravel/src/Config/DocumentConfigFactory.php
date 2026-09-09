@@ -15,7 +15,7 @@ use Docuccino\Laravel\Tags\PrefixTagMapper;
 use Illuminate\Contracts\Container\Container;
 
 /**
- * Builds a framework-agnostic {@see DocumentConfig} from one `config('docuccino.documents.*')` entry:
+ * Builds a framework-agnostic {@see DocumentConfig} from one `documents.*` entry of `docuccino.yaml`:
  * relativises every path-like key ({@see ConfigPaths}), reads `info.description.file` into its contents
  * so the pipeline never touches the filesystem, and resolves the tag mapper (a container-resolved
  * `tags.mapper`, else {@see PrefixTagMapper} over `tags.map`) and the route filter
@@ -73,7 +73,10 @@ final readonly class DocumentConfigFactory
             security: $security,
             tags: $tags,
             representation: Hydrate::map($config['representation'] ?? []),
-            viewer: Hydrate::map($config['viewer'] ?? []),
+            // The one member that comes from the OTHER file: the viewer is framework-owned, because
+            // boot and every viewer request read it ({@see ViewerConfig}). It shapes no emitted byte,
+            // so carrying it here lets the runtime ask the document config and not the config files.
+            viewer: ViewerConfig::for($key),
             versioning: is_string($config['versioning'] ?? null) ? $config['versioning'] : 'none',
             tagMapper: $this->resolveTagMapper($tags),
             raw: $config,
@@ -145,8 +148,13 @@ final readonly class DocumentConfigFactory
             }
         }
 
-        $info['title'] = is_string($info['title'] ?? null) ? $info['title'] : 'API Documentation';
-        $info['version'] = Hydrate::stringOr($info['version'] ?? DocumentConfig::DEFAULT_VERSION, DocumentConfig::DEFAULT_VERSION);
+        // Refused rather than coerced, both of them, and for the reason the configuration reader that
+        // REPORTS them gives: `version: 1.10` parses to the float 1.1, and a coercing read publishes
+        // "1.1" — a version number nobody wrote, in a document somebody's client is pinned to. The
+        // fallback here is the one {@see \Docuccino\Laravel\Pipeline\DocumentBuilder::config()}
+        // names in that report, so the diagnostic and the document say the same thing.
+        $info['title'] = is_string($info['title'] ?? null) ? $info['title'] : DocumentConfig::DEFAULT_TITLE;
+        $info['version'] = is_string($info['version'] ?? null) ? $info['version'] : DocumentConfig::DEFAULT_VERSION;
 
         return $info;
     }

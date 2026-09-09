@@ -13,7 +13,7 @@ use Docuccino\Laravel\Watch\WatchSignal;
  */
 beforeEach(function (): void {
     $this->fixture = WatchFixture::make();
-    config()->set('docuccino.cache.path', $this->fixture->path('fragments'));
+    setBuild('cache.path', $this->fixture->path('fragments'));
 
     // See WatchViewerTest: the shipped signal path is shared by every worker, so each run gets one
     // of its own rather than switching a peer's reload endpoint on.
@@ -52,7 +52,7 @@ it('refuses an interval that is not a number of seconds', function (string $inte
 })->with(['a word' => ['soon'], 'zero' => ['0'], 'negative' => ['-1'], 'empty' => ['']]);
 
 it('refuses to watch an installation with no documents', function (): void {
-    config()->set('docuccino.documents', []);
+    setDocuments([]);
     scriptWatch(1);
 
     $this->artisan('docuccino:watch')
@@ -116,7 +116,7 @@ it('says that a cached configuration pins the fragment cache off, and how to unp
 
 it('says nothing about a cached configuration that baked the fragment cache on', function (): void {
     app()->instance('config_loaded_from_cache', true);
-    config()->set('docuccino.cache.enabled', true);
+    setBuild('cache.enabled', true);
     scriptWatch(1);
 
     $this->artisan('docuccino:watch')
@@ -163,7 +163,7 @@ it('rebuilds when a watched file moves', function (): void {
 
 it('rebuilds when a webhook class appears where the directory had none', function (): void {
     mkdir($this->fixture->path('webhooks'), 0755, true);
-    config()->set('docuccino.documents.default.webhooks.dir', $this->fixture->path('webhooks'));
+    setBuild('documents.default.webhooks.dir', $this->fixture->path('webhooks'));
     $this->fixture->storeFragment([$this->fixture->path('app/InvoiceController.php')], 'watched');
 
     $created = $this->fixture->path('webhooks/InvoicePaid.php');

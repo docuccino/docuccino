@@ -72,7 +72,7 @@ it('404s a reload channel for a document that is not configured', function (): v
     Gate::before(static fn ($user = null): bool => true);
     $this->signal->publish($this->token);
 
-    config()->set('docuccino.documents', []);
+    setDocuments([]);
 
     $this->get('/docs/api/reload')->assertNotFound();
 });

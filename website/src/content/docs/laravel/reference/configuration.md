@@ -1,14 +1,29 @@
 ---
 title: Configuration reference
-description: Every live key in config/docuccino.php and what it does.
+description: Every configuration key Docuccino reads and what it does.
 ---
 
 
-The published `config/docuccino.php` drives everything. Every key is listed in the file itself —
-required keys active, optional ones commented out — so you can discover the whole surface by
-scrolling through it. This page is the long-form version: what each key does, what it defaults to,
-and where its behavior is explained in full. The file is plain data — no imports, no class
-references — so it stays safe to load even where Docuccino itself isn't installed.
+:::note[Docuccino reads two files]
+Everything that shapes a **document** lives in `docuccino.yaml`, at the root of your project —
+`documents`, `extensions`, `lint`, `diagnostics`, `engine`, `on_route_error` and `cache.enabled`.
+`config/docuccino.php` keeps only what Laravel reads while it **boots** or on a **viewer request**:
+`enabled`, each document's `viewer` block, and `cache.store`. `php artisan docuccino:install` writes
+both.
+
+Nothing left in `config/docuccino.php` is merged over `docuccino.yaml` — a build setting still sitting
+there is reported (`config.stale-php-keys`) and ignored, and an application with no `docuccino.yaml` at
+all is refused rather than built from defaults (`config.not-migrated`).
+
+The key names and nesting are identical in both spellings, so this page's PHP blocks still name every
+key; the YAML examples land with the rest of this page's rewrite.
+:::
+
+Every key is listed in the shipped files themselves — required keys active, optional ones commented
+out — so you can discover the whole surface by scrolling through them. This page is the long-form
+version: what each key does, what it defaults to, and where its behavior is explained in full.
+`config/docuccino.php` is plain data — no imports, no class references — so it stays safe to load even
+where Docuccino itself isn't installed.
 
 The **Default** column is the value the published file ships with. For most keys that is also the
 built-in fallback you get by deleting the key, but not for all of them: `error_responses` ships as
@@ -214,18 +229,17 @@ route set you'd get by skipping the filter is a superset you explicitly narrowed
 would describe a surface you'd said wasn't yours.
 
 :::caution[`routes.closure` is gone — use `filter`]
-`closure` took the same predicate inline, and **an application that filled it in could not run `php
-artisan config:cache`**: the framework serializes the config array with `var_export()`, a closure has
-no serializable form, and the command fails with *"your configuration files could not be serialized
-because the value at documents.default.routes.closure is non-serializable"*. There was no version in
-which the key both held a closure and survived a cached config, so it is removed outright rather than
-deprecated.
+`closure` took the same predicate inline, and no configuration file has a form for one. `config/`
+has to survive `config:cache`, which serializes the whole config array with `var_export()` and
+failed with *"your configuration files could not be serialized because the value at
+documents.default.routes.closure is non-serializable"*; `docuccino.yaml` has no callable at all.
+There was no version in which the key both held a closure and survived a cached config, so it is
+removed outright rather than deprecated.
 
 Move the predicate into a `filter` class — anything the closure closed over becomes a constructor
-dependency. A `closure` key still holding a value is reported as a
-[`config.route-closure-removed`](/laravel/reference/diagnostics/) error and the build refuses, for
-the same reason an unusable `filter` does: quietly ignoring it would publish exactly the routes it
-was written to keep out. A `closure` key left at `null` is read as unset and says nothing.
+dependency. Nothing reads `closure` any more, and neither file ships it, so a line left behind under
+it does nothing on its own; build settings still sitting in `config/docuccino.php` are named by
+[`config.stale-php-keys`](/laravel/reference/diagnostics/), at the file that holds them.
 :::
 
 Routes whose resolved controller class file lives under the application's `vendor/` directory are
@@ -883,7 +897,7 @@ billing` never reports an entry the document it skipped fires on.
     'mode' => env('DOCUCCINO_ENGINE', 'in-process'),
     // 'memory_limit' => '2G',
     'project_paths' => ['app'],
-    // 'neon' => 'phpstan.neon',
+    // 'config' => 'phpstan.neon',
 ],
 ```
 
@@ -892,7 +906,7 @@ billing` never reports an entry the document it skipped fires on.
 | `mode` | `in-process` | `in-process` runs PHPStan; `null` skips inference entirely (docblocks and attributes still work). Those are the two modes. Set it per environment with `DOCUCCINO_ENGINE`. A boot failure degrades to no inference rather than failing the build. |
 | `memory_limit` | unset | PHP memory limit for inference, applied on **console builds only**. Only ever **raises** — an already-higher or unlimited process is left alone, and `-1` isn't accepted here — so the knob can't introduce the exhaustion it exists to prevent. `--memory-limit` on the build commands overrides it. |
 | `project_paths` | `['app']` | The **descend** scope: directories the engine follows for general interprocedural analysis (throw classification, inline `Validator::make()` rules). Bounds descent into callee bodies. |
-| `neon` | unset | Your own PHPStan config file, included by the one the engine writes for itself. Relative to the application base path. A file that isn't there warns (`config.engine-neon-missing`) and inference runs without it. |
+| `config` | unset | Your own PHPStan config file, included by the one the engine writes for itself. Relative to the application base path. A file that isn't there warns (`config.engine-config-missing`) and inference runs without it. |
 
 PHP cannot catch memory exhaustion, so it's the one failure that kills a build instead of degrading —
 `memory_limit` and `--memory-limit` exist to prevent it. Full walkthrough:
@@ -917,14 +931,14 @@ modular helpers resolvable, which priming already handles.
 :::
 
 :::tip[Your PHPStan extensions are already Docuccino extensions]
-The engine really is PHPStan, so `neon` is the one escape hatch you need when the analyzer can't work
+The engine really is PHPStan, so `config` is the one escape hatch you need when the analyzer can't work
 something out on its own. Point it at the `phpstan.neon` you already maintain:
 
 ```php
 'engine' => [
     'mode' => env('DOCUCCINO_ENGINE', 'in-process'),
     'project_paths' => ['app'],
-    'neon' => 'phpstan.neon',
+    'config' => 'phpstan.neon',
 ],
 ```
 

@@ -568,7 +568,7 @@ it('contributes the gate registrations whatever a document turns off', function 
     // Gates are the framework's own authorization vocabulary, so the contributor is in the set for a
     // document with every integration disabled — the accident an integration-gated one would be.
     /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.default');
+    $raw = documentSettings();
     foreach (array_keys((array) ($raw['integrations'] ?? [])) as $integration) {
         $raw['integrations'][$integration]['enabled'] = false;
     }

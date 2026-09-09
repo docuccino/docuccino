@@ -8,6 +8,7 @@ use Docuccino\Laravel\DocuccinoServiceProvider;
 use Docuccino\Laravel\Testing\AssertsApiContract;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Gadget;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Widget;
+use Docuccino\Laravel\Tests\Support\BuildSettings;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
@@ -51,13 +52,40 @@ abstract class TestCase extends Orchestra
     {
         $app['config']->set('app.key', 'base64:AckfSECXIvnK5r28GVIWUAxmbBSjTsmF0FYqwoDL18E=');
 
-        // api/moderated-forms documents authorization requirements, so the default document opts into the
-        // spatie/laravel-permission integration. Doing it here rather than in the shipped config keeps the
-        // opt-in default for real apps while the permission goldens stay byte-stable.
-        $app['config']->set('docuccino.documents.default.integrations.permission.enabled', true);
+        // The framework config, trimmed to the keys the framework itself reads. Testbench loads the
+        // shipped `config/docuccino.php` whole, and it still carries the build settings that moved into
+        // `docuccino.yaml` — left in place every build here would report a `config.stale-php-keys`
+        // warning it is not the subject of. So the suite runs against the split as it will be, and
+        // ConfigSplitTest holds this list to the one
+        // ConfigSplit says the framework owns.
+        $app['config']->set('docuccino', [
+            'enabled' => $app['config']->get('docuccino.enabled'),
+            'documents' => array_map(
+                static fn (mixed $bag): array => ['viewer' => is_array($bag) ? ($bag['viewer'] ?? []) : []],
+                (array) $app['config']->get('docuccino.documents', []),
+            ),
+            'cache' => ['store' => $app['config']->get('docuccino.cache.store')],
+        ]);
 
         // The morph map the /api/attachments discriminator resolves its aliases from.
         Relation::morphMap(['widget' => Widget::class, 'gadget' => Gadget::class], false);
+    }
+
+    /**
+     * Every test starts on the shipped `docuccino.yaml`, read the way the product reads it
+     * ({@see BuildSettings}). Bound here rather than in `defineEnvironment()` because the provider
+     * registers its own binding afterwards and would win.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        BuildSettings::boot();
+
+        // api/moderated-forms documents authorization requirements, so the default document opts into
+        // the spatie/laravel-permission integration. Doing it here rather than in the shipped file
+        // keeps the opt-in default for real apps while the permission goldens stay byte-stable.
+        BuildSettings::set('documents.default.integrations.permission.enabled', true);
     }
 
     protected function defineRoutes($router): void

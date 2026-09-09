@@ -30,7 +30,7 @@ beforeEach(function (): void {
     $router->get('api/spelling/by-alias', [FormController::class, 'index'])->middleware('auth:web');
     $router->get('api/spelling/by-class', [FormController::class, 'index'])->middleware(Authenticate::using('web'));
 
-    config()->set('docuccino.documents', [
+    setDocuments([
         'spelling' => [
             'info' => ['title' => 'Auth Spelling', 'version' => '1.0.0'],
             'routes' => ['include' => ['api/spelling/*']],
@@ -47,7 +47,7 @@ beforeEach(function (): void {
 function spellingDocument(): array
 {
     /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.spelling');
+    $raw = documentSettings('spelling');
     $config = app(DocumentConfigFactory::class)->make('spelling', $raw, 'skeleton');
 
     return app(DocumentGenerator::class)->generate($config, app(TypeEngine::class))->document->toArray();

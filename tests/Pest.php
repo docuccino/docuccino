@@ -73,6 +73,7 @@ use Docuccino\Laravel\Routing\LaravelRouteResolver;
 use Docuccino\Laravel\Testing\ApiContract;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Almanac;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\NestedWrapItemData;
+use Docuccino\Laravel\Tests\Support\BuildSettings;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\FragmentCacheDirs;
 use Docuccino\Laravel\Tests\Support\ScriptedBuildRunner;
@@ -111,6 +112,41 @@ function bindStubEngine(): void
 }
 
 /**
+ * Set one build setting, addressed the way `docuccino.yaml` nests it — `documents.default.info.title`,
+ * `lint.tags.enabled`, `cache.enabled`.
+ *
+ * The one way a test configures a build, so a future test cannot reach a build through a path the
+ * product no longer reads: the framework's config now keeps only what boot and the viewer's request
+ * path need. The setting becomes YAML text and goes through the reader the product uses —
+ * {@see BuildSettings} states why that seam and not a parsed array.
+ */
+function setBuild(string $path, mixed $value): void
+{
+    BuildSettings::set($path, $value);
+}
+
+/**
+ * Replace the whole `documents` bag, for a suite that declares its own documents rather than changing
+ * one setting of the shipped `default`.
+ *
+ * @param  array<string, mixed>  $documents
+ */
+function setDocuments(array $documents): void
+{
+    BuildSettings::documents($documents);
+}
+
+/**
+ * One document's build settings as they stand, for a test that reads the bag rather than writing it.
+ *
+ * @return array<string, mixed>
+ */
+function documentSettings(string $key = 'default'): array
+{
+    return BuildSettings::document($key);
+}
+
+/**
  * Build one workbench document, optionally mutating its raw config first. The one shared build helper
  * the Laravel feature tests use, so none of them re-rolls the config → generator wiring or reaches for
  * a peer test's file-level function. `$key` names the document; a suite declaring its own `documents`
@@ -120,8 +156,7 @@ function bindStubEngine(): void
  */
 function generateDocument(?callable $mutateConfig = null, string $key = 'default'): GenerationResult
 {
-    /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.'.$key);
+    $raw = documentSettings($key);
     if ($mutateConfig !== null) {
         $raw = $mutateConfig($raw);
     }
@@ -185,9 +220,7 @@ function assertMiddlewareAgreesWithRouter(string $uriPrefix, int $atLeast): void
         return array_values(array_unique($out));
     };
 
-    /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.default');
-    $document = app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton');
+    $document = app(DocumentConfigFactory::class)->make('default', documentSettings(), 'skeleton');
 
     $ours = [];
     foreach (app(LaravelRouteResolver::class)->resolve($document) as $descriptor) {
@@ -2084,8 +2117,8 @@ function fragmentCacheDir(string $slug): string
     $dir = sys_get_temp_dir().'/docuccino-'.$slug.'-'.uniqid('', true);
     FragmentCacheDirs::record($slug, $dir);
 
-    config()->set('docuccino.cache.enabled', true);
-    config()->set('docuccino.cache.path', $dir);
+    setBuild('cache.enabled', true);
+    setBuild('cache.path', $dir);
 
     return $dir;
 }
@@ -2800,7 +2833,7 @@ function parameterRefs(array $document, string $path = '/api/versioned-forms', s
  */
 function versioningDiagnostics(?string $dir, string $version = '2026-06-01', string $route = 'api/versioned-forms'): array
 {
-    config()->set('docuccino.documents', [
+    setDocuments([
         'v' => [
             'info' => ['title' => 'Forms API', 'version' => $version],
             'routes' => ['include' => [$route]],

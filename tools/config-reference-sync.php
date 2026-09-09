@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use Symfony\Component\Yaml\Yaml;
 
 // Configuration-reference sync guard.
 //
@@ -175,6 +176,128 @@ function config_reference_declared_keys(string $php, string $base = ''): array
     }
 
     return config_reference_normalize($paths);
+}
+
+/**
+ * The key paths the tool's own `docuccino.yaml` declares, live and commented-out alike, dotted and
+ * sorted — the same answer {@see config_reference_declared_keys()} gives for the framework's PHP
+ * config, so the two shipped files can be compared key for key.
+ *
+ * A commented-out key is still a key here for the same reason it is there: the shipped file shows
+ * every option, with the optional ones commented, and an option nobody documented is the drift this
+ * guard exists to catch. So the comment marker is removed IN PLACE — `#` plus the one space after it
+ * become nothing, and the indentation on either side is untouched, which is what keeps a commented
+ * child nested under its commented parent.
+ *
+ * Prose is dropped by being unable to look like YAML. The key pattern is deliberately strict —
+ * lower-case, no spaces, a colon immediately after — because a sentence with a colon in it is the one
+ * thing that would otherwise parse as a setting: "Declares that this document IS an API version:"
+ * has a capital and spaces, and fails on both counts.
+ *
+ * @return list<string>
+ *
+ * @internal
+ */
+function config_reference_yaml_keys(string $yaml): array
+{
+    $kept = [];
+
+    foreach (explode("\n", $yaml) as $line) {
+        $marker = strpos($line, '#');
+
+        if ($marker === false || trim($line) === '') {
+            $kept[] = $line;
+
+            continue;
+        }
+
+        if (trim(substr($line, 0, $marker)) !== '') {
+            // A live setting with a trailing comment: YAML reads it correctly as it stands.
+            $kept[] = $line;
+
+            continue;
+        }
+
+        $content = substr($line, 0, $marker).preg_replace('/^# ?/', '', substr($line, $marker));
+
+        if (preg_match('/^\s*(?:[A-Za-z_][A-Za-z0-9_.-]*:(?:\s|$)|- )/', $content) === 1) {
+            $kept[] = $content;
+        }
+    }
+
+    /** @var array<string, mixed>|null $parsed */
+    $parsed = Yaml::parse(implode("\n", config_reference_yaml_reopened($kept)));
+
+    return config_reference_normalize(config_reference_yaml_paths($parsed ?? [], ''));
+}
+
+/**
+ * The kept lines with a shipped empty collection re-opened where commented children follow it.
+ *
+ * `integrations: {}` beside a commented `api_resources:` bag is ONE key written two ways: the `{}` is
+ * there because an empty value has to be spelled out — a blank one parses to null and hashes
+ * differently — and the children are there because the file shows every option. Uncommenting them
+ * would otherwise put a block under a value that is already closed, so the marker comes off and the
+ * children nest where they were written to.
+ *
+ * @param  list<string>  $lines
+ * @return list<string>
+ *
+ * @internal
+ */
+function config_reference_yaml_reopened(array $lines): array
+{
+    $indent = static fn (string $line): int => strlen($line) - strlen(ltrim($line, ' '));
+
+    foreach ($lines as $index => $line) {
+        if (preg_match('/^(\s*[A-Za-z_][A-Za-z0-9_.-]*:)\s*(?:\{\}|\[\])\s*(?:#.*)?$/', $line, $match) !== 1) {
+            continue;
+        }
+
+        for ($next = $index + 1; $next < count($lines); $next++) {
+            if (trim($lines[$next]) === '') {
+                continue;
+            }
+
+            if ($indent($lines[$next]) > $indent($line)) {
+                $lines[$index] = $match[1];
+            }
+
+            break;
+        }
+    }
+
+    return $lines;
+}
+
+/**
+ * Every dotted path in a parsed tree, with a list ENTRY contributing the wildcard segment its index
+ * is not — which is how {@see config_reference_declared_keys()} reads the same shape on the PHP side,
+ * so `export.targets.*.format` is the one answer both files give.
+ *
+ * @param  array<array-key, mixed>  $bag
+ * @return list<string>
+ *
+ * @internal
+ */
+function config_reference_yaml_paths(array $bag, string $prefix): array
+{
+    $paths = [];
+    $list = array_is_list($bag);
+
+    foreach ($bag as $key => $value) {
+        $path = $list ? config_reference_join($prefix, '*') : config_reference_join($prefix, (string) $key);
+
+        if (! $list) {
+            $paths[] = $path;
+        }
+
+        if (is_array($value)) {
+            $paths = array_merge($paths, config_reference_yaml_paths($value, $path));
+        }
+    }
+
+    return $paths;
 }
 
 /**

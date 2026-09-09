@@ -1,7 +1,24 @@
 # Tool-owned config
 
-Status: **decided, not built.** This records the decision and what it commits us to, so the work can be
-picked up without re-arguing it.
+Status: **built, with three refinements to the plan below.** The record of the decision stands; where it
+and this section disagree, this section is what shipped.
+
+- **`config/docuccino.php` does not disappear.** It keeps what the framework reads while it BOOTS and on
+  a viewer REQUEST: `enabled`, each document's whole `viewer` bag, and `cache.store`.
+  `packageBooted()` registers viewer routes on every application boot, so wiring read from a project
+  file would mean every boot parsing a file somebody may be halfway through editing — and `gate`,
+  `driver`, `cdn`, `configuration` and `source` are read per request for the same reason.
+- **There is no override and no merge.** A build key left in `config/docuccino.php` is DETECTED and
+  reported, never read. That deletes the per-leaf recursive merge, the precedence rule and the
+  duplicate-key report this document proposed, along with the failure mode it named as the worst one —
+  a document that quietly stops matching the file somebody edited. `ConfigSplit` owns the reporting:
+  an unmigrated application is an ERROR and a finished migration with leftovers is a WARNING, one
+  diagnostic each naming the keys with the list capped and the rest counted.
+- **The three `env()` toggles landed as a closed allow-list**, not as `${VAR}` interpolation.
+  `BuildConfig::ENV_OVERRIDES` names two — `DOCUCCINO_ENGINE` over `engine.mode` and
+  `DOCUCCINO_FRAGMENT_CACHE` over `cache.enabled`, both of which a RUN has an opinion about — and
+  `enabled` never left the framework config, so it keeps its own `env()` there. `--memory-limit`
+  reaches `engine.memory_limit` through the container, beside the console marker.
 
 ## The decision
 
