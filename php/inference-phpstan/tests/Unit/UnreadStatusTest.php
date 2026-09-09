@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Inference\PhpStan\Tests\Unit;
 
 use Docuccino\Core\Inference\SourceLocation;
+use Docuccino\Inference\PhpStan\Tests\Support\MissingStatusProducers;
 use Docuccino\Inference\PhpStan\Throwing\ThrowAnalyzer;
 use Docuccino\Inference\PhpStan\Throwing\UnreadStatus;
 use Docuccino\Inference\PhpStan\Throwing\UnreadStatusReason;
@@ -139,14 +140,16 @@ it('produces a missing status in one place only, and files a reason there', func
     $finder = new NodeFinder;
     $src = dirname(__DIR__, 2).'/src';
 
-    $sources = [];
+    $texts = [];
     /** @var SplFileInfo $entry */
     foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($src, RecursiveDirectoryIterator::SKIP_DOTS)) as $entry) {
         if ($entry->isFile() && $entry->getExtension() === 'php') {
-            $sources[$entry->getPathname()] = $parser->parse((string) file_get_contents($entry->getPathname())) ?? [];
+            $texts[$entry->getPathname()] = (string) file_get_contents($entry->getPathname());
         }
     }
-    ksort($sources);
+    ksort($texts);
+
+    $sources = array_map(static fn (string $text): array => $parser->parse($text) ?? [], $texts);
 
     // A walk that stopped finding the package would agree with everything below.
     expect(count($sources))->toBeGreaterThan(20);
@@ -207,57 +210,18 @@ it('produces a missing status in one place only, and files a reason there', func
     $analyzer = $src.'/Throwing/ThrowAnalyzer.php';
     expect(array_keys($sinkFiles))->toBe([$analyzer]);
 
-    // The producers, derived from what each method's declared type admits rather than from a list of
-    // names: a scalar `?int`/`null`, or an array shape carrying a nullable `status`.
-    $nullableStatus = '/status\s*:\s*(\?int|int\|null|null\|int)/';
+    // A package that declared no shape alias would leave the alias half of the reading dead and silent.
+    expect(MissingStatusProducers::aliases($texts))->not->toBeEmpty();
 
-    // The array shapes a `@phpstan-type` alias names, so a producer handing one back is not invisible
-    // here. Declaring a shape ONCE as an alias and pointing at it is what this repo asks for, and a
-    // scan that only understood the inline spelling answered "not a producer" for a method whose
-    // return admits a missing status — which is the one answer that lets a producer skip its row.
-    $aliases = [];
-    foreach (array_keys($sources) as $file) {
-        preg_match_all('/@phpstan-type\s+(\w+)\s+(.+)$/m', (string) file_get_contents($file), $found, PREG_SET_ORDER);
-        foreach ($found as $definition) {
-            if (preg_match($nullableStatus, $definition[2]) === 1) {
-                $aliases[$definition[1]] = true;
-            }
-        }
-    }
-
-    // A package that stopped declaring any such alias would make the branch below dead and silent.
-    expect($aliases)->not->toBeEmpty();
-
-    $admitsMissing = static function (Node\Stmt\ClassMethod $method) use ($nullableStatus, $aliases): bool {
-        $type = $method->returnType;
-        if ($type instanceof Node\Identifier && $type->toLowerString() === 'null') {
-            return true;
-        }
-
-        if ($type instanceof Node\NullableType && (string) $type->type === 'int') {
-            return true;
-        }
-
-        if ($type instanceof Node\UnionType) {
-            $names = array_map(static fn (Node $part): string => strtolower((string) $part), $type->types);
-            if (in_array('int', $names, true) && in_array('null', $names, true)) {
-                return true;
-            }
-        }
-
-        $docblock = (string) $method->getDocComment()?->getText();
-        if (preg_match($nullableStatus, $docblock) === 1) {
-            return true;
-        }
-
-        return preg_match('/@return\s+([A-Za-z_]\w*)\s*$/m', $docblock, $named) === 1
-            && isset($aliases[$named[1]]);
-    };
+    // The producers, derived from what each method's declared type ADMITS rather than from a list of
+    // names — and from the type rather than from a spelling of it, which is what
+    // `MissingStatusProducersTest` executes one producer per spelling against.
+    $named = MissingStatusProducers::in($texts, $analyzer);
 
     $producers = [];
     foreach ($finder->find($sources[$analyzer], static fn (Node $node): bool => $node instanceof Node\Stmt\ClassMethod) as $method) {
         /** @var Node\Stmt\ClassMethod $method */
-        if ($admitsMissing($method)) {
+        if (in_array($method->name->toString(), $named, true)) {
             $producers[$method->name->toString()] = $method;
         }
     }

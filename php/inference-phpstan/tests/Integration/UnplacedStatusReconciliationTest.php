@@ -177,40 +177,49 @@ function throwCorpusControllers(): array
 }
 
 /**
- * Every action one controller declares, read off the file rather than listed here: a new action whose
- * unplaced status goes unreported has to fail this guard, and it cannot if the guard only knows the
- * actions somebody remembered to add.
+ * Every action one controller declares, name → its source, read off the file rather than listed here: a
+ * new action whose unplaced status goes unreported has to fail this guard, and it cannot if the guard only
+ * knows the actions somebody remembered to add.
  *
+ * The two readers below share this ONE grammar. A sweep that recognised a declaration the slicer did not
+ * would hand a row an empty body to judge its own excuse against, and the row would pass on nothing; the
+ * modifiers are read rather than assumed for the same reason a member is — `final public function` is an
+ * action, and a guard blind to the spelling answers "no such action" where the honest answer is a failure.
+ *
+ * @return array<string, string>
+ */
+function throwActions(string $relPath): array
+{
+    $source = (string) file_get_contents(FixtureRunner::path($relPath));
+
+    preg_match_all('/^    (?:final\s+|abstract\s+)?public(?:\s+static)?\s+function\s+(\w+)\s*\(/m', $source, $matches, PREG_OFFSET_CAPTURE);
+
+    $actions = [];
+    foreach ($matches[1] as $index => $name) {
+        $start = (int) $matches[0][$index][1];
+        $end = isset($matches[0][$index + 1]) ? (int) $matches[0][$index + 1][1] : strlen($source);
+        $actions[(string) $name[0]] = substr($source, $start, $end - $start);
+    }
+
+    // A scan that matched nothing must fail rather than pass forever — both files are real and hold
+    // actions, so a pattern that stopped seeing them is the defect, not an empty corpus.
+    expect($actions)->not->toBeEmpty();
+
+    return $actions;
+}
+
+/**
  * @return list<string>
  */
 function throwActionMethods(string $relPath): array
 {
-    $source = (string) file_get_contents(FixtureRunner::path($relPath));
-
-    preg_match_all('/^    public function (\w+)\(/m', $source, $matches);
-
-    /** @var list<string> $methods */
-    $methods = $matches[1];
-
-    // A scan that matched nothing must fail rather than pass forever — both files are real and hold
-    // actions, so a pattern that stopped seeing them is the defect, not an empty corpus.
-    expect($methods)->not->toBeEmpty();
-
-    return $methods;
+    return array_keys(throwActions($relPath));
 }
 
 /** The source of one swept action, for a ledger row that has to check its own excuse. */
 function throwActionSource(string $relPath, string $method): string
 {
-    $source = (string) file_get_contents(FixtureRunner::path($relPath));
-    $start = strpos($source, '    public function '.$method.'(');
-    if ($start === false) {
-        return '';
-    }
-
-    $next = strpos($source, "\n    public function ", $start + 1);
-
-    return $next === false ? substr($source, $start) : substr($source, $start, $next - $start);
+    return throwActions($relPath)[$method] ?? '';
 }
 
 /**
