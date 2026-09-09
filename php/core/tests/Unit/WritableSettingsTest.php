@@ -55,8 +55,9 @@ it('says which values a configuration file can carry, and which it cannot', func
     'a stdClass, which the writer writes as a map' => [true, (object) ['a' => 1]],
     // And everything it has none for. Three different wrong answers, which is why the predicate is a
     // round trip and not a list of types: the enums are REFUSED by the reader, the closure, the
-    // resource and the plain object come back as null, the date comes back as an integer, and the
-    // non-finite floats come back as null with a diagnostic.
+    // resource and the plain object come back as null, and the date comes back as an integer. The
+    // non-finite floats are the one pair NOT probed: the round trip answers them differently on
+    // different symfony/yaml minors, so they are refused outright rather than asked about.
     'a backed enum case' => [false, WritableBackedEnum::Scalar],
     'a pure enum case' => [false, WritablePureEnum::Scalar],
     'an object of an ordinary class' => [false, new WritablePlainObject],

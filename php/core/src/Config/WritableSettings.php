@@ -78,9 +78,21 @@ final readonly class WritableSettings
             && Json::stable($file->values) === Json::stable($settings);
     }
 
-    /** Whether a configuration file can carry `$value` as itself — {@see reads()} of a one-key file. */
+    /**
+     * Whether a configuration file can carry `$value` as itself — {@see reads()} of a one-key file.
+     *
+     * A non-finite float is refused without probing, because the round trip answers it differently
+     * depending on the installed `symfony/yaml` minor: `.NaN` comes back as NAN on some and not on
+     * others, so probing would make what a migration writes depend on a patch bump. Neither NAN nor
+     * an infinity is a value a document can publish, so the refusal costs nothing and is the same
+     * answer everywhere.
+     */
     public static function carries(mixed $value): bool
     {
+        if (is_float($value) && ! is_finite($value)) {
+            return false;
+        }
+
         $settings = [self::PROBE => $value];
 
         return self::reads((new YamlSerializer)->serialize($settings), $settings);
