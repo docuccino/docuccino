@@ -203,28 +203,15 @@ final class ConfigValues
      * full names.
      *
      * An absent section and an empty one answer the same reader over no values, because a section is
-     * addressed by its keys and there are none either way. A section written as a LIST is refused:
-     * `documents:` followed by `- name` is a different document from `documents:` followed by
-     * `name:`, and reading the first as the second would invent structure the author did not write.
+     * addressed by its keys and there are none either way.
      */
     public function map(string $path): self
     {
-        $value = $this->find($path)[1];
-        $root = $this->root ?? $this;
-
-        if (is_array($value) && ! array_is_list($value)) {
-            return new self(Arr::stringKeyed($value), $this->prefix.$path.'.', $root);
-        }
-
-        // An empty map arrives from YAML as an empty LIST — `{}` and `[]` parse to the same PHP array,
-        // and there is nothing left in the parsed value to tell one from the other. So an empty
-        // anything reads as an empty section rather than a refusal, because refusing it would name a
-        // defect in a file that says exactly what it means.
-        if ($value !== null && $value !== []) {
-            $this->refuse($path, ConfiguredValue::described($value), 'a map of settings', 'an empty section', 'Write the section as `key: value` pairs, indented under the section name.');
-        }
-
-        return new self([], $this->prefix.$path.'.', $root);
+        return new self(
+            $this->section($path, $this->find($path)[1]) ?? [],
+            $this->prefix.$path.'.',
+            $this->root ?? $this,
+        );
     }
 
     /**
@@ -243,21 +230,65 @@ final class ConfigValues
     }
 
     /**
+     * The section at `$path` as a map, or null when there is none there — refusing a value that is no
+     * section on the way.
+     *
+     * The one place that decides what a section IS, because two answers to that question is a hole:
+     * {@see map()} hands a section back as a reader, and {@see find()} walks THROUGH a section to
+     * reach a key under it. A walk that quietly accepted what map() refuses left a whole subtree
+     * unread with nothing said — `routes: 'api/*'` emptied a document's route filter, and every route
+     * in the application was published.
+     *
+     * A section written as a LIST is refused with the rest: `documents:` followed by `- name` is a
+     * different document from `documents:` followed by `name:`, and reading the first as the second
+     * would invent structure the author did not write.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function section(string $path, mixed $value): ?array
+    {
+        if (is_array($value) && ! array_is_list($value)) {
+            return Arr::stringKeyed($value);
+        }
+
+        // An empty map arrives from YAML as an empty LIST — `{}` and `[]` parse to the same PHP array,
+        // and there is nothing left in the parsed value to tell one from the other. So an empty
+        // anything reads as an empty section rather than a refusal, because refusing it would name a
+        // defect in a file that says exactly what it means.
+        if ($value !== null && $value !== []) {
+            $this->refuse($path, ConfiguredValue::described($value), 'a map of settings', 'an empty section', 'Write the section as `key: value` pairs, indented under the section name.');
+        }
+
+        return null;
+    }
+
+    /**
      * @return array{0: bool, 1: mixed} [written in the file, the value]
      */
     private function find(string $path): array
     {
+        $segments = explode('.', $path);
+        $last = count($segments) - 1;
         $node = $this->values;
+        $walked = '';
 
         // A dot addresses STRUCTURE — `documents.title` is the `title` key of the `documents` section.
         // A key whose own name holds a dot is reached by taking its section with map() and reading the
         // key there, which is how the settings whose keys are author-supplied patterns are read.
-        foreach (explode('.', $path) as $segment) {
+        foreach ($segments as $index => $segment) {
             if (! is_array($node) || ! array_key_exists($segment, $node)) {
                 return [false, null];
             }
 
             $node = $node[$segment];
+            $walked = $walked === '' ? $segment : $walked.'.'.$segment;
+
+            // Every segment but the last addresses a section, so one holding something else is refused
+            // under its own name — see section(). The walk stops there either way: there is no key to
+            // reach under a value that has none.
+            if ($index !== $last && $this->section($walked, $node) === null) {
+                return [false, null];
+            }
         }
 
         return [true, $node];

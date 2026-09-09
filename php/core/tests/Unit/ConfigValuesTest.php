@@ -161,13 +161,53 @@ it('addresses a nested setting by its path, and reports a refusal under its full
         ->and($values->diagnostics()[0]->message)->toStartWith('documents.default.title is ');
 });
 
-it('stops walking a path at the first thing that is not a map', function (): void {
+it('refuses the section a path stops walking at, rather than reading it as an absent key', function (): void {
+    // The answers are the same as for a key nobody wrote — there is no value under text either way —
+    // and the REPORT cannot be. A section is refused when it is asked for directly, on the stated
+    // ground that a build would otherwise run on every default and produce a plausible document, so
+    // the author's file looks applied and is not; a path walking through the same section reaches the
+    // same defaults by the same route, so the same refusal is owed. Silence here is the worse half of
+    // the two, because nobody asked about `documents` and so nobody could report it either.
     $values = ConfigFile::parse("documents: strict\n")->values();
 
     expect($values->has('documents.default.title'))->toBeFalse()
         ->and($values->raw('documents.default.title'))->toBeNull()
         ->and($values->string('documents.default.title', 'API'))->toBe('API')
-        ->and($values->diagnostics())->toBe([]);
+        // Named `documents` and not `documents.default.title`: the section is what the author has to
+        // go and rewrite, and the key under it does not exist to be wrong.
+        ->and(array_map(static fn (object $d): string => $d->message, $values->diagnostics()))->toBe([
+            'documents is the text "strict", where the setting takes a map of settings — an empty section is used instead.',
+        ]);
+});
+
+it('refuses a section written as a list on the way through it, like one asked for directly', function (): void {
+    // The list reading is the one a walk used to pass over in silence: a list IS an array, so it
+    // answered array_key_exists() for every key it does not have.
+    $values = ConfigFile::parse("documents:\n  default:\n    - info\n    - routes\n")->values();
+
+    expect($values->string('documents.default.info.title', 'API'))->toBe('API')
+        ->and(array_map(static fn (object $d): string => $d->message, $values->diagnostics()))->toBe([
+            'documents.default is a list, where the setting takes a map of settings — an empty section is used instead.',
+        ]);
+});
+
+it('reports one refusal for a section however many keys were read under it', function (): void {
+    // One defect is one line to go and fix. Two readers asking two keys under the same unreadable
+    // section is still that one line, and reporting it twice would make the count depend on how many
+    // readers there happened to be.
+    $values = ConfigFile::parse("lint: 'yes'\n")->values();
+
+    $values->bool('lint.leakage.enabled', true);
+    $values->strings('lint.leakage.allow', []);
+
+    expect($values->diagnostics())->toHaveCount(1)
+        ->and($values->diagnostics()[0]->message)->toStartWith('lint is the text "yes", ');
+
+    // And the section asked for by name is that same one fact rather than a second line, which is
+    // what keeps map() and the walk from reporting a section twice between them.
+    $values->map('lint');
+
+    expect($values->diagnostics())->toHaveCount(1);
 });
 
 it('reads a section as a reader of its own, and its refusals come back up', function (): void {
