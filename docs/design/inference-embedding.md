@@ -523,7 +523,8 @@ effort); the `$casts` property form is recovered today.
 ### The status an `HttpException` subclass carries
 
 A subclass that IS a status states it in its own `parent::__construct()`, which no name-keyed table can
-see, so four reads sit under layer 1 and answer in this order:
+see, so five reads sit under layer 1 and answer in this order — most specific first, each speaking only
+where the one above it could not:
 
 - **What the class pins on every instance** (`HttpExceptionStatus`) — a constant reaching the parent call,
   or, for a class only it can construct (private constructor, no trait, no write to the parameter before it
@@ -535,14 +536,35 @@ see, so four reads sit under layer 1 and answer in this order:
   written at it or one assignment behind it (`$e = new X(451); … throw $e;`), through the same local
   reader the closure hop uses; a rethrow of an exception this body did not build stays silent.
 - **What the factory the throw names builds with** (`FactoryStatus`) — one hop, no further.
+- **What the callee that DECLARED the throw builds with** (`ThrowAnalyzer::inDeclaringCallee()`) — for a
+  throw point that is a CALL, carrying a `@throws` and no construction of its own. **A `@throws` is
+  authoritative about which CLASS a call raises and says nothing about which STATUS**, and conflating the
+  two was the whole defect: layer 1 took the declaration and stopped, so an application that documents its
+  guards — the idiomatic thing to do — lost every per-factory status and published the placeholder 500 for
+  a 409 written two lines into the callee. The read is the same grammar the throw site's is, one hop on:
+  each `throw` of this class in the callee's body folded by `atThrowSite()` in its own scope, and they
+  either agree or the callee states nothing. A `throw` there that presents no construction at all — a
+  rethrow, one hop further down — takes the whole reading with it rather than letting the rest agree for a
+  subset, and the class's own agreement is then still entitled to answer.
 - **What the class's own constructions agree on** (`HttpExceptionStatus::agreed()`) — the same fold as the
   first read, without the private-constructor condition, and therefore a weaker claim: the constructions
   are a subset of the application's rather than all of them. It answers only where the throw point carried
-  NO construction for the two reads above to fold, which is where the fold used to be asked for a literal
-  `throw` node alone and every other way an exception reached the analysis got no status at all — a throw
-  inside a closure, one written in a trait and declared at the caller, a rethrow. A construction that
-  presented itself and would not fold has spoken: the response is whatever was chosen at run time, and the
-  class's agreement is no evidence for it, so the order (not a `??` chain) is what keeps this honest.
+  NO construction for the reads above to fold and no declaring callee built one either, which is where the
+  fold used to be asked for a literal `throw` node alone and every other way an exception reached the
+  analysis got no status at all — a throw inside a closure, one written in a trait and declared at the
+  caller, a rethrow. A construction that presented itself and would not fold has spoken: the response is
+  whatever was chosen at run time, and the class's agreement is no evidence for it, so the order (not a
+  `??` chain) is what keeps this honest.
+
+**Reading a body is not walking into it.** What interprocedural DESCENT decides is which errors the
+document CARRIES, and `project_paths` bounds that on purpose; the declaring-callee read changes only what
+the error the document already carries SAYS, so its gate is the application's own source — the same scope
+every other status read uses, for the priming reason below. That is what lets a modular guard state its
+status as plainly as one in `app/`. Measured over one build of the fixture's throw corpus (57 actions on
+two controllers), the analysed-file count is 163 with the read and 163 without, so no recorded walk is
+discarded; the cost is two extra live file walks (25 against 23), one per callee body whose `throw` states
+a status — `app/Services/ManifestDeclaredQuery.php` and `modules/Billing/LedgerReviewQuery.php` — and no
+measurable wall time (1.2s either way).
 
 **What counts as a construction the class makes of ITSELF** is one rule, and both readers of it obey it:
 a `new` written in the class's own declared code OR in a class it inherits from. `new static(…)` in a base
@@ -683,24 +705,29 @@ of it, the class that defaults its status and is built with the argument left of
 removes the last non-actionable part: a second application reported six classes named by the notice whose
 authors had each written the status exactly once, in the class's only factory, and whose only fault was
 being reached by a throw point that carried no construction — nothing they could have changed would have
-helped, because the fold was never asked. What remains is the part an author CAN act on: a status chosen at
-run time, a construction behind an unreadable spread, a factory that builds the class two ways. The notice
-is gated on the code the fold read being the APPLICATION's — every primed source root, not the descend
-scope — because the remedy it names is an edit to that code, and a reader owns a modular root as much as
-`app/`. Measured over the fixture's throw corpus, both controllers: 16 unplaced statuses published, 15
-reported, 1 silent (Symfony's own `ConflictHttpException`, whose status is written in a `vendor/`
-constructor whose body PHPStan strips). Three of the firings are `abort($chosen)`,
+helped, because the fold was never asked. The declaring-callee read removes the last of it, and it was the
+largest: a callee's `@throws` made layer 1 take the declaration and stop, so an application documenting its
+guards had every per-factory status replaced by the placeholder — correct code, three factories each naming
+their own status, and a notice whose remedy was wrong in both clauses (pinning one status in a class that
+has three would make the document lie, and "write the status at each `throw`" cannot be done through a
+private constructor, which is the shape that makes named factories worth having). What remains is the part
+an author CAN act on: a status chosen at run time, a construction behind an unreadable spread, a factory or
+a guard that builds the class two ways. The notice is gated on the code the fold read being the
+APPLICATION's — every primed source root, not the descend scope — because the remedy it names is an edit to
+that code, and a reader owns a modular root as much as `app/`. Measured over the fixture's throw corpus,
+both controllers: 15 unplaced statuses published, 14 reported, 1 silent (Symfony's own
+`ConflictHttpException`, whose status is written in a `vendor/` constructor whose body PHPStan strips), and
+**no reported firing that nobody can act on**. Three of the firings are `abort($chosen)`,
 `abort_if($flag, $chosen)` and `throw new HttpException($chosen, …)` — the same defect at three spellings,
 where the constant the notice asks for goes on the line it names — and one more is that third spelling
 written in a modular root, which the scope fix stopped suppressing.
 
-One firing in that population is NOT actionable, and it is the known `@throws` limitation rather than the
-scope: a callee's `@throws` makes descent take layer 1 and stop, so the throw point carries no construction,
-the class's own factories disagree, and `UnstatedByClass` fires. Its remedy is wrong for the factory idiom
-in both clauses — pinning one status in a class that has three would make the document lie, and "write the
-status at each `throw`" cannot be done through a private constructor. The fold that would answer is one hop
-further on (`FactoryStatus` reads `X::notFound()` to a 404 whenever the `throw` names it directly), so the
-fix is descent past the `@throws`, not the notice's wording.
+`UnstatedByClass` now names one population and one only: nothing on the way to the throw built the
+exception — not the site, not a declaring callee — and the class agrees on no status of its own. A rethrow
+of a class built two ways is the shape, pinned as `rethrownAgreementStatus`, and its remedy names the edit
+that shape actually has: two responses sharing one exception class are two exception classes, or two
+`#[Response(status: …)]` declarations. The reason had no member of that population left once the
+declaring-callee read landed, which is why the fixture was written with it.
 
 The sentence leaves the engine publishable, through the same `MessagePaths` relativiser every other message
 this engine composes goes through: the site comes straight off the analyser as an absolute path, the
@@ -720,7 +747,9 @@ vendor-declared 500-class exceptions are demoted to `internal`, project-declared
 **Exception identity = (fqcn, httpStatusHint)**: two aborts (403/404) are two responses;
 never dedupe by fqcn alone. Engine stops at "exceptions + status hints"; response bodies
 are the pipeline's ExceptionToResponse job. Known limitation (accepted): an incomplete
-`@throws` docblock suppresses descent, hiding deeper exceptions — docblock is trusted.
+`@throws` docblock suppresses descent, hiding deeper exceptions — the docblock is trusted about WHICH
+classes a call raises. It is not trusted about their statuses, which is a separate claim it never makes:
+that read goes one hop past the declaration into the callee's own `throw` (`inDeclaringCallee()` above).
 
 ## 7. Bundled PHPStan extensions (BC-stable APIs)
 

@@ -209,7 +209,26 @@ it('produces a missing status in one place only, and files a reason there', func
 
     // The producers, derived from what each method's declared type admits rather than from a list of
     // names: a scalar `?int`/`null`, or an array shape carrying a nullable `status`.
-    $admitsMissing = static function (Node\Stmt\ClassMethod $method): bool {
+    $nullableStatus = '/status\s*:\s*(\?int|int\|null|null\|int)/';
+
+    // The array shapes a `@phpstan-type` alias names, so a producer handing one back is not invisible
+    // here. Declaring a shape ONCE as an alias and pointing at it is what this repo asks for, and a
+    // scan that only understood the inline spelling answered "not a producer" for a method whose
+    // return admits a missing status — which is the one answer that lets a producer skip its row.
+    $aliases = [];
+    foreach (array_keys($sources) as $file) {
+        preg_match_all('/@phpstan-type\s+(\w+)\s+(.+)$/m', (string) file_get_contents($file), $found, PREG_SET_ORDER);
+        foreach ($found as $definition) {
+            if (preg_match($nullableStatus, $definition[2]) === 1) {
+                $aliases[$definition[1]] = true;
+            }
+        }
+    }
+
+    // A package that stopped declaring any such alias would make the branch below dead and silent.
+    expect($aliases)->not->toBeEmpty();
+
+    $admitsMissing = static function (Node\Stmt\ClassMethod $method) use ($nullableStatus, $aliases): bool {
         $type = $method->returnType;
         if ($type instanceof Node\Identifier && $type->toLowerString() === 'null') {
             return true;
@@ -226,7 +245,13 @@ it('produces a missing status in one place only, and files a reason there', func
             }
         }
 
-        return preg_match('/status\s*:\s*(\?int|int\|null|null\|int)/', (string) $method->getDocComment()?->getText()) === 1;
+        $docblock = (string) $method->getDocComment()?->getText();
+        if (preg_match($nullableStatus, $docblock) === 1) {
+            return true;
+        }
+
+        return preg_match('/@return\s+([A-Za-z_]\w*)\s*$/m', $docblock, $named) === 1
+            && isset($aliases[$named[1]]);
     };
 
     $producers = [];
@@ -245,6 +270,7 @@ it('produces a missing status in one place only, and files a reason there', func
         'atThrowSite' => 'intermediate',
         'foldStatusArg' => 'intermediate',
         'httpStatus' => 'terminal',
+        'inDeclaringCallee' => 'intermediate',
         'statusForType' => 'terminal',
         'unread' => 'recorder',
     ];

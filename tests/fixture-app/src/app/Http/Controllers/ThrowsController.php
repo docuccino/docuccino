@@ -419,6 +419,20 @@ class ThrowsController extends Controller
     }
 
     /**
+     * Case 10p'': the same class reached by a RETHROW, which subtracts the guard's own declared throw and
+     * leaves a `throw $e` that builds nothing. Nothing on the way here says which of the two statuses this
+     * is, and the class agrees on neither — the one shape left where only the class could have answered.
+     */
+    public function rethrownAgreementStatus(bool $offline, bool $oversized): void
+    {
+        try {
+            $this->guardProbeReachable($offline, $oversized);
+        } catch (\App\Exceptions\ExportOfflineException $e) {
+            throw $e;
+        }
+    }
+
+    /**
      * Case 10q: the construction one assignment behind the throw, which is how a
      * body that decorates the exception before throwing it is written.
      */
@@ -559,6 +573,15 @@ class ThrowsController extends Controller
     public function manifestStatusDeclaredByCallee(ManifestDeclaredQuery $query): void
     {
         $query->results(true);
+    }
+
+    /**
+     * Case 10x': the same declared guard naming the factory {@see manifestStatusAtAction} writes at the
+     * action itself. Two spellings of one construction, so they owe one answer.
+     */
+    public function manifestStatusDeclaredNotFound(ManifestDeclaredQuery $query): void
+    {
+        $query->missingResults(true);
     }
 
     /**

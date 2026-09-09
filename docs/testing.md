@@ -286,7 +286,7 @@ would sit a fraction of a statement above the figure (see `laravel` below).
 |---------------------|------------|-------|--------------------------------------------------|
 | `core`              | **97.31%** | 97    | fully in-process-measurable; 0.31pp behind it, ~39 statements |
 | `laravel`           | **96.30%** | 96    | ratcheted 95 → 96; 0.30pp behind it, ~35 statements |
-| `inference-phpstan` | **49.70%** | 49    | real path is subprocess-only → `fixture`-proven; ratcheted 48 → 49; 0.70pp, ~17 statements |
+| `inference-phpstan` | **49.49%** | 49    | real path is subprocess-only → `fixture`-proven; ratcheted 48 → 49; 0.49pp, ~13 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
 | Overall             | 92.44%     | —     | informational only; no longer a gate             |
 
@@ -362,7 +362,7 @@ is 1206.87 statements, so 1209 covered leaves **2.13** — two lines, against th
 and `core` floors carry. It is taken because the two decisions before it declined at 0.4 of a statement
 (`laravel` at 96.00%) and at 1.0 (this package at 49.05%), which are a next-line trigger and a one-line
 one, and because a floor of 48 would let 26 statements regress here without a word. When it does fire,
-the answer is the one it has been five times already: close a gap the standards were asking for anyway.
+the answer is the one it has been six times already: close a gap the standards were asking for anyway.
 
 It very nearly fired, and the sixth answer was the second shape again. Folding the throw analyser's status
 reads into one recording call deleted a small, fully covered class and grew `ThrowAnalyzer` — a file at 0
@@ -375,6 +375,20 @@ go out in — and no PHPStan scope drives any of it, so it is unit-drivable in t
 analyser around it is not. 49.70% (1253/2521), and 17 statements of headroom. The tests that came with it
 are worth more than the ratio: the relativised throw site and the record-ordered notices were pinned only in
 the `fixture` group, so reverting either passed every one of the 10502 tests the coverage job ran at the time.
+
+The seventh was the same shape once more, and the largest drop yet. Reading a status past a callee's
+`@throws` — descending one hop to the `throw` the callee writes, because a `@throws` says which CLASS a
+call raises and nothing about which status — put 47 Scope-driven statements into `ThrowAnalyzer`, taking
+49.70% to 48.87% against a floor of 49. What came out was the DECISION rather than the walk:
+`ThrowSiteStatus` answers what a SET of throw readings states — all folded and agreeing, or one of three
+ways a set fails to speak, each naming whose code the fold gave up in — and it is
+`ConstructionStatus::agreedIn()` one level up, so it belonged in its own class on the design's own terms
+rather than for the ratio. Nothing about it needs a scope, so a dataset drives every branch, including the
+two that only a set can have: two `throw`s at two statuses, and one unreadable `throw` discarding the
+others. 49.49% (1271/2568), about thirteen statements of headroom. The test that came with it also caught
+a hole in a neighbour: the guard deriving `ThrowAnalyzer`'s missing-status producers from their declared
+types could not see one whose return is a `@phpstan-type` ALIAS — the spelling this repo asks for — so it
+read the new producer as not being one and would have let it ship with no row.
 
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the

@@ -757,3 +757,41 @@ now asserted to hold a controller on BOTH sides of the descend scope — the def
 suite because the sweep's denominator was one directory — and whose four columns are asserted to partition
 every swept action, so a throw the document carries nothing for, or demotes, can no longer sit in the gap
 between two scans.
+
+## A declaration trusted for more than it declares
+
+A docblock, a default or a name states one fact, and a reader that acts on it acts on two. `@throws
+ManifestRejectedException` says WHICH class a call raises. It says nothing about which STATUS that class
+carries at this call, because the author never wrote one there — and layer 1 took the declaration and
+`continue`d, so the deeper read that would have found the construction never ran. An application that
+documents its guards therefore lost every per-factory status: the throw point became the CALL, no
+construction presented itself, the class's three factories disagreed, and the document published
+`UNPLACED_STATUS` — a placeholder 500 — for a rejection whose 409 was two lines into the callee. The
+notice beside it asked for an edit that could not be made: pinning one status in a class that has three
+would make the document lie, and "write the status at each `throw`" is impossible through the private
+constructor that makes named factories worth having.
+
+*Instances, and the two that already carry their gate.* The `@throws` short-circuit is the one that
+shipped. A constructor parameter's DEFAULT is the same shape — it states what a call leaving the slot
+empty passes, not what every instance carries — and `HttpExceptionStatus` only reads it as a pin where the
+class controls every construction (private constructor, no trait, no write to the parameter). A bare
+METHOD NAME is the third: `KnownThrowers` is keyed on one, which is a guess about a callee rather than a
+fact, so it speaks only for callees this build cannot read. Two of the three were already gated; the tell
+is that nobody had asked what the third one's declaration actually claimed.
+
+*The tell.* A reader that stops at a declaration and a reader that stops at a VALUE look identical in the
+code — both are an early return with the answer in hand — and only the first is trusting something. Ask
+what sentence the author wrote, and what sentence the code is now acting on. Where they differ, the extra
+claim is a guess, and the fix is to go and read the thing the author really did write. `class_exists()` as
+a version check is the same defect outside this file: presence is what it states, and a grammar is what an
+integration then emits from it.
+
+*The fix that worked.* Split the two claims rather than the reader: take the declared CLASS from layer 1
+and read the STATUS one hop on, off the callee's own `throw` (`ThrowAnalyzer::inDeclaringCallee()`), with
+the same `atThrowSite()` grammar the direct throw uses so one construction cannot mean two answers a hop
+apart. The hop is a READ and not a walk — descent decides which errors the document carries, this decides
+only what the error it already carries says — so it is gated on the application's own source rather than
+the descend scope, and MEASURED: 163 analysed files either way, two extra live file walks. The remedy text
+was rewritten in the same change, because a diagnostic asking for an impossible edit is its own defect,
+and `UnstatedByClass` had no member of its population left afterwards, so the fixture that stands in the
+narrowed one (`rethrownAgreementStatus`) was written as part of the fix.

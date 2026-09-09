@@ -49,7 +49,7 @@ const FLOORS = [
     // does the trace's file bookkeeping (`TraceFiles`, 10/10) — while the `Tracer` wiring around them is
     // Scope-driven and pcov-invisible either way (0/86). Raising this floor means moving more of the
     // package into the first half; docs/testing.md records each move.
-    // Measured 49.70% (1253/2521) — the floor RATCHETED 48 → 49 when the figure was 49.09% (1209/2463),
+    // The floor RATCHETED 48 → 49 when the figure was 49.09% (1209/2463),
     // and the arithmetic went on the record because the margin was two lines: 49% of that denominator is
     // 1206.87 statements against the 1209 covered, where `laravel` carries about thirty-five and `core`
     // about thirty-nine. Taken anyway, for two reasons. The two decisions before it declined at four
@@ -65,9 +65,15 @@ const FLOORS = [
     // read's reflection and its decisions in process behind a source seam, so only the bodies-and-fold
     // adapter is subprocess-only; the hop into the static factory a throw names, the one rule both
     // construction readers share, the response-key range check and the file a folded constant is declared
-    // in (`ConstantSource`, native reflection over a declaration) are all written the same way. Recorded
-    // as measured so the number cannot drift silently, and read the same way as before: mostly proven
-    // out-of-process, never untested.
+    // in (`ConstantSource`, native reflection over a declaration) are all written the same way. It has
+    // since fired a second time, the same way: reading a status past a callee's `@throws` grew the
+    // Scope-driven half by 47 statements, 49.70% → 48.87%, and the answer was again the one the standards
+    // were asking for — the rule deciding what a SET of throw readings states came out into
+    // `ThrowSiteStatus`, where no scope reaches it and a dataset can drive every way a set fails to speak
+    // (18 statements, all covered). Measured 49.49% (1271/2568), about thirteen statements of margin, so
+    // the floor stays at the measured integer rather than ratcheting. Recorded as measured so the number
+    // cannot drift silently, and read the same way as before: mostly proven out-of-process, never
+    // untested.
     'inference-phpstan' => 49,
 ];
 

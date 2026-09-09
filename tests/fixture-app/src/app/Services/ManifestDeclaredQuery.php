@@ -25,4 +25,21 @@ final class ManifestDeclaredQuery
 
         return ['manifest-2'];
     }
+
+    /**
+     * The same guard naming the factory an action writes for itself elsewhere, so the two spellings can be
+     * held against each other: where a `throw` is written is not a fact about the response.
+     *
+     * @return list<string>
+     *
+     * @throws ManifestRejectedException
+     */
+    public function missingResults(bool $missing): array
+    {
+        if ($missing) {
+            throw ManifestRejectedException::notFound();
+        }
+
+        return ['manifest-3'];
+    }
 }
