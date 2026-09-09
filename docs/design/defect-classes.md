@@ -212,6 +212,16 @@ assertion to read. Every locked leg stayed green because the lockfile pinned the
 two legs that re-resolve the tree went red on pull requests that had touched none of it — and the next
 `composer update` here would have done the same.
 
+The fourth was the product's own copy of one of these steps, and it failed in the quiet direction.
+`GateInternals::policyClassFor()` mirrors `Gate::getPolicyFor()` so a build can learn which policy backs
+a `->can()` gate without constructing one, and it walked the four branches Laravel 12 resolves through.
+Laravel 13 added a fifth — the `#[UsePolicy]` step again, this time over the model's PARENTS — so a model
+whose policy comes only from a base class's attribute resolves in the framework and answered nothing in
+the mirror. Nothing anywhere went red. A mirror gone short degrades to silence, which is the safe
+direction and publishes no false claim, and silence is also what a gate with no policy at all looks like:
+the locked legs were right to be green, since on 12 that silence IS the framework's answer, and the
+re-resolving legs were green too because no row asked the question on either version.
+
 *The tell.* A fixture whose assertion depends on what a VENDOR method's signature says, rather than on
 what the fixture's own code says — a return type, a generic, a `@throws`, a by-reference parameter. Ask of
 every real-engine row: which half of this answer is the fixture's, and which half is the installed
@@ -224,6 +234,10 @@ The declaration form has a tell of its own, and it is visible without running an
 RE-declares a member of a vendor type is asserting that member's signature, and a NON-PUBLIC one is an
 assertion no vendor ever agreed to. Ask what the double is standing in for — a resolution step that can
 raise is far more often provoked by data the step chokes on than by an override of it.
+The product form's tell is a COUNT and not a signature: a mirror of a vendor algorithm carries a number
+of steps, and that number is a fact about the version the application resolved rather than about the one
+the mirror was written against. Ask of any such mirror how many branches the installed vendor walks, and
+what in the tree would notice if the answer grew — degrading to silence is the answer that no leg reports.
 
 *The fix that worked.* Move the fact being counted out from behind the vendor's decision — for the first,
 write the counted throw before the closure it is measured against, so no vendor return type governs
@@ -243,6 +257,18 @@ supported version, and the fixture declares nothing of the vendor's. Beside it, 
 CAN be read resolves to the policy that attribute names, so the row cannot go quiet by ceasing to reach
 the step at all, and the conventional policy the resolution falls through to is there and named, so the
 silence cannot be a model nothing answers for.
+
+The fourth was fixed by reading the branch off the installed GRAMMAR rather than off a version: 13's
+`getPolicyFromAttribute()` takes an `includeParents` flag and 12's takes none, so the signature the
+framework shipped decides whether the fifth branch runs. `class_exists()` is a presence check both majors
+pass, `method_exists()` on a known class the analyser folds to constant true, and a lockfile lookup would
+answer about a package name the container was never asked for — the class that resolves may come from a
+bare `illuminate/auth` and may be a subclass of either. The branches then became an ordered LIST rather
+than four `if`s, so the mirror states its own count in code, and a guard reads `Gate::getPolicyFor()`'s
+source for the framework's — every branch there ends in `return $this->resolvePolicy(...)` — and fails
+naming both numbers when they disagree. A sixth branch is now a red row on whichever leg resolves it. No
+diagnostic came with it: on 12 the silence is correct, so a notice would have fired only where the
+document was already right.
 
 *The guard that was not built, and why.* An arch test can find this shape statically: parse the test tree,
 resolve each declaration's vendor parent, and ask reflection whether a redeclared method is one the parent
