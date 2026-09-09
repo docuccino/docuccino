@@ -1866,49 +1866,75 @@ it.
 
 ## 9. Config shape (docuccino/laravel)
 
+Two files, and which one a setting sits in is part of the contract. **`docuccino.yaml`**, at the
+project root, holds everything that shapes a document and is read once per build.
+**`config/docuccino.php`** holds only what Laravel reads while it BOOTS or on a viewer request — the
+master switch, each document's `viewer` bag, `cache.store` — because the viewer's routes are
+registered on every boot, and a boot that had to parse a project file to decide whether a route
+exists would fail on a file somebody is halfway through editing. The split is a PARTITION: nothing is
+read from both, and a build setting left in the PHP file is reported (`config.stale-php-keys`) and
+ignored, never merged. `ConfigFile` owns the reading of the YAML, `ConfigSplit` the report.
+
+`docuccino.yaml` — the build surface, abridged (the shipped file at
+`php/laravel/config/docuccino.yaml` is the full one, every option present and the optional ones
+commented out):
+
+```yaml
+documents:
+  default:
+    info: { title: '…', version: '…', description: { file: '…md' } }
+    servers: [{ url: 'https://{tenant}.example.com', variables: {} }]
+    routes: { include: ['api/*'], exclude: [], filter: App\Docs\PublicRoutes, include_vendor: false }
+    # …full scheme set…
+    security: { auth_middleware: 'auth*' }
+    error_responses: 'default'
+    tags: { mapper: App\Docs\PrefixTagMapper, map: {}, default_strategy: 'controller' }
+    content: { dir: 'resources/docs/api' }
+    overlays: ['resources/docs/overlays/*.yaml']
+    representation: { filters: 'bracketed|deepObject', nullable: '…', enums: '…', operation_id: '…' }
+    # Per-integration document-level knobs — one bag per integration, keyed by its config name
+    # (snake_case); each integration reads ONLY its own bag (via DocumentConfig::integration()).
+    # Every bag also accepts `enabled` (bool), resolved per-document at extension-resolution time:
+    # an integration contributes only when its package is installed AND the document enables it.
+    # Default on when installed, EXCEPT `permission` (default OFF — opt-in; see below).
+    integrations:
+      api_resources: { wrap: true }                        # resource `data` wrapping (false | true | '<key>')
+      sanctum: { modes: ['token', 'stateful'], cookie: 'myapp_session' }
+      passport: { url: 'https://auth.example.com' }        # oauth2 flow base URL (default app.url)
+      query_builder: { pagination_terminals: ['paginateList'] }  # extra paginating method names
+      permission: { enabled: true }                        # opt in (default OFF): role/permission requirements
+    export: { path: '…', formats: ['openapi-3.2'] }
+extensions: []
+# Document lints, all diagnostics-only. `leakage` also takes `patterns` (extra token → label
+# heuristics merged over the built-in sensitive-name table); the rest take enabled + allow.
+lint:
+  leakage: { enabled: true, allow: [], patterns: {} }
+  descriptions: { enabled: false, allow: [] }
+  operation_ids: { enabled: true, allow: [] }
+  tags: { enabled: false, allow: [] }
+  vacuous_union: { enabled: true, allow: [] }
+  examples: { enabled: true, allow: [] }
+  unpinned_redirect: { enabled: true, allow: [] }
+on_route_error: 'skeleton'
+cache: { enabled: true }
+```
+
+`config/docuccino.php` — the boot surface, in full:
+
 ```php
 return [
     'enabled' => env('DOCUCCINO_ENABLED', true),
     'documents' => [
         'default' => [
-            'info' => ['title' => '…', 'version' => …, 'description' => ['file' => '…md']],
-            'servers' => [['url' => 'https://{tenant}.example.com', 'variables' => [...]]],
-            'routes' => ['include' => ['api/*'], 'exclude' => [...], 'filter' => PublicRoutes::class],
-            'security' => [...full scheme set..., 'auth_middleware' => 'auth*'],
-            'error_responses' => 'default',
-            'tags' => ['mapper' => PrefixTagMapper::class, 'map' => [...], 'default_strategy' => 'controller'],
-            'content' => ['dir' => 'resources/docs/api'],
-            'overlays' => ['resources/docs/overlays/*.yaml'],
-            'representation' => ['filters' => 'bracketed|deepObject', 'nullable' => …, 'enums' => …, 'operation_id' => …],
-            // Per-integration document-level knobs — one bag per integration, keyed by its config
-            // name (snake_case); each integration reads ONLY its own bag (via DocumentConfig::integration()).
-            // Every bag also accepts `enabled` (bool), resolved per-document at extension-resolution
-            // time: an integration contributes only when its package is installed AND the document
-            // enables it. Default on when installed, EXCEPT `permission` (default OFF — opt-in; see below).
-            'integrations' => [
-                'api_resources' => ['wrap' => true],                      // top-level resource `data` wrapping (false | true | '<key>')
-                'sanctum'       => ['modes' => ['token', 'stateful'], 'cookie' => 'myapp_session'],
-                'passport'      => ['url' => 'https://auth.example.com'], // oauth2 flow base URL (default app.url)
-                'query_builder' => ['pagination_terminals' => ['paginateList']], // extra paginating method names
-                'permission'    => ['enabled' => true],                   // opt in (default OFF): document role/permission requirements
-            ],
-            'export' => ['path' => '…', 'formats' => ['openapi-3.2']],
             'viewer' => ['driver' => 'scalar', 'route' => '/docs/api', 'gate' => 'viewApiDocs', 'source' => 'generate|artifact'],
         ],
     ],
-    'extensions' => [],
-    // Document lints, all diagnostics-only. `leakage` also takes `patterns` (extra token → label
-    // heuristics merged over the built-in sensitive-name table); the rest take enabled + allow.
-    'lint' => [
-        'leakage' => ['enabled' => true, 'allow' => [], 'patterns' => []],
-        'descriptions' => ['enabled' => false, 'allow' => []],
-        'operation_ids' => ['enabled' => true, 'allow' => []],
-        'tags' => ['enabled' => false, 'allow' => []],
-    ],
-    'on_route_error' => 'skeleton',
-    'cache' => ['enabled' => true, 'store' => null],
+    'cache' => ['store' => null],
 ];
 ```
+
+A document declared in the YAML with no entry here simply has no page to serve, which is what an
+export-only document is.
 
 `error_responses` says what is published for the exceptions the application does not render itself:
 `default` (framework-default JSON error shapes, plus the implicit responses) or `none` (neither). It is a
