@@ -276,3 +276,50 @@ it('hands back the same reader every time, so its refusals accumulate', function
         ->and($read->values())->toBe($read->values())
         ->and($read->values()->diagnostics())->toHaveCount(2);
 });
+
+it('refuses a file that expands past what a configuration can hold, rather than dying inside a walk', function (): void {
+    // 583 bytes. An alias repeated inside an anchor multiplies at every level, so this parses to a
+    // few megabytes and then cost over 512 MB in the walk that settles it — an out-of-memory, which
+    // is a fatal rather than an exception, so nothing here could report it and the whole contract
+    // (nothing this class does throws) failed where it mattered. Reachable from every command and
+    // from a viewer request.
+    $yaml = "a0: &a0 1\n";
+    for ($level = 1; $level <= 5; $level++) {
+        $yaml .= 'a'.$level.": &a$level\n";
+        for ($member = 0; $member < 10; $member++) {
+            $yaml .= '  k'.$member.': *a'.($level - 1)."\n";
+        }
+    }
+
+    expect(strlen($yaml))->toBeLessThan(1024);
+
+    $before = memory_get_peak_usage(true);
+    $read = ConfigFile::parse($yaml);
+
+    expect($read->error)->toBe(ConfigFile::INVALID)
+        ->and($read->values)->toBe([])
+        ->and($read->diagnostics)->toHaveCount(1)
+        ->and($read->diagnostics[0]->code)->toBe('config.file-invalid')
+        ->and($read->diagnostics[0]->message)->toContain('expands to more settings')
+        // The bound is only worth what it costs to find out: measured while the tree is still the
+        // parser's shared structure, refusing this file costs the parse and nothing more.
+        ->and(memory_get_peak_usage(true) - $before)->toBeLessThan(64 * 1024 * 1024);
+});
+
+it('reads a configuration far larger than anybody writes by hand', function (): void {
+    // The other side of the bound, so it cannot be tightened onto real files without a failure: a
+    // thousand documents, each with an info object, a route filter and a representation policy.
+    $documents = [];
+    for ($index = 0; $index < 1000; $index++) {
+        $documents[] = sprintf(
+            "  doc%d:\n    info:\n      title: 'Doc %d'\n      version: '1.0.0'\n    routes:\n      include: ['api/*']\n      exclude: []\n    representation:\n      filters: 'bracketed'\n      nullable: 'type-array'\n",
+            $index,
+            $index,
+        );
+    }
+
+    $read = ConfigFile::parse("documents:\n".implode('', $documents));
+
+    expect($read->error)->toBeNull()
+        ->and($read->values['documents'])->toHaveCount(1000);
+});
