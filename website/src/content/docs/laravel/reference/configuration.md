@@ -18,11 +18,25 @@ would fail on a file somebody is halfway through editing.
 `php artisan docuccino:install` writes both. Nothing left in `config/docuccino.php` is merged over
 `docuccino.yaml` — a build setting still sitting there is reported (`config.stale-php-keys`) and
 ignored, and an application whose build settings are all still there, with no `docuccino.yaml` at all,
-is refused rather than built from defaults (`config.not-migrated`).
+is refused rather than built from defaults (`config.not-migrated`). The refusal is the whole of it: no
+command that builds a document runs in that state, whatever `--fail-on` says, until `docuccino:install`
+has written the file. The same goes for a `docuccino.yaml` that is there and cannot be read — not
+valid YAML, not a map of settings, or unreadable on disk. A document built from defaults in any of
+those states would look plausible and have nothing to do with the file you edited, so nothing builds
+one.
+
+Neither file is required. With no configuration at all you get one document, called `default`, built
+from the defaults below: every route documented, titled "API Documentation" at version `1.0.0`, and
+exported to `docs/openapi.json`.
 
 Every key is listed in the shipped files themselves — required keys active, optional ones commented
 out — so you can discover the whole surface by scrolling through them. This page is the long-form
 version: what each key does, what it defaults to, and where its behavior is explained in full.
+
+A key in `docuccino.yaml` that isn't one of them is reported (`config.unknown-setting`) rather than
+passed over, and the message names the one it was probably meant to be. That matters most for
+indentation: a block one level too far in doesn't misspell a key, it moves the whole bag under the
+wrong parent, and everything in it goes quiet together.
 
 The **Default** column is the value the published file ships with. For most keys that is also the
 built-in fallback you get by deleting the key, but not for all of them: `error_responses` ships as

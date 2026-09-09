@@ -51,13 +51,16 @@ it('refuses an interval that is not a number of seconds', function (string $inte
         ->assertExitCode(1);
 })->with(['a word' => ['soon'], 'zero' => ['0'], 'negative' => ['-1'], 'empty' => ['']]);
 
-it('refuses to watch an installation with no documents', function (): void {
+it('watches the default document when the configuration names none', function (): void {
+    // There is no such thing as an installation with no documents: a configuration that names none
+    // resolves to the one `default` document, so the watcher has something to watch rather than a
+    // refusal. This is the guard on that invariant reaching the command — the loop used to stop here.
     setDocuments([]);
     scriptWatch(1);
 
     $this->artisan('docuccino:watch')
-        ->expectsOutputToContain('nothing to watch')
-        ->assertExitCode(1);
+        ->expectsOutputToContain('Watching default.')
+        ->assertExitCode(0);
 });
 
 it('builds, publishes a refresh, and takes the refresh channel away again on exit', function (): void {

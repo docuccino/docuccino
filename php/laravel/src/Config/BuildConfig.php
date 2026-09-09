@@ -113,12 +113,13 @@ final class BuildConfig
     }
 
     /**
-     * Everything wrong with the configuration a build could see: the file itself, every setting whose
-     * type was refused, and the two-file split.
+     * Everything wrong with the configuration a build could see: the file itself, every key in it that
+     * names no setting, every setting whose type was refused, and the two-file split.
      *
      * Collected here rather than at each reader because a build reports once and the readers run at
      * container binds, inside a viewer request, in a value object — most of them with nowhere to put
-     * a report. Ordered file-first: an unparseable file is why every setting under it is missing.
+     * a report. Ordered file-first: an unparseable file is why every setting under it is missing, and
+     * the unknown keys come before the refused types because a key nothing reads has no type to refuse.
      *
      * @return list<Diagnostic>
      */
@@ -126,6 +127,7 @@ final class BuildConfig
     {
         return [
             ...$this->file->diagnostics,
+            ...UnknownSettings::report($this),
             ...$this->values()->diagnostics(),
             ...ConfigSplit::report($this),
         ];

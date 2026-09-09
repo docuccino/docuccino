@@ -9,6 +9,7 @@ use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Core\Support\NameList;
+use Docuccino\Laravel\Commands\RefusesUnreadConfig;
 use Docuccino\Laravel\Http\DocsController;
 
 /**
@@ -124,13 +125,34 @@ final class ConfigSplit
     }
 
     /**
+     * The refusal an unmigrated application meets, or null for every other shape.
+     *
+     * Asked BEFORE a build by every command that reads the configuration to produce or check a
+     * document ({@see RefusesUnreadConfig}), which is what makes the error an error: raised only from
+     * inside the build it would print and still exit 0 under the default `--fail-on=none`, after a
+     * full analysis. {@see ExportDiagnostics} sets that precedent for the other configuration state
+     * that leaves nothing sensible to write, and this is the same call — the document would be built
+     * from defaults rather than from what the author wrote, which is nearer "cannot proceed" than "a
+     * finding you may accept". `--fail-on` picks a gate over what a build FOUND; it is not a say over
+     * whether the configuration was read.
+     */
+    public static function notMigrated(BuildConfig $build): ?Diagnostic
+    {
+        $stale = self::staleKeys();
+
+        return $stale === [] || $build->file()->error !== ConfigFile::ABSENT
+            ? null
+            : self::refusal($stale);
+    }
+
+    /**
      * What to say about build settings left in the framework config, whose severity is the situation
      * rather than the keys.
      *
      * No configuration file AND settings in `config/docuccino.php` is an application that has not been
      * migrated, and building it from defaults would answer confidently and wrongly: the routes, the
      * info, the security it configured are all silently gone, and the document that comes out looks
-     * plausible. That is an ERROR and the build refuses it.
+     * plausible. That is an ERROR, and the commands refuse before they build ({@see notMigrated()}).
      *
      * A configuration file that IS there beside leftovers is a migration somebody finished and did not
      * tidy. Nothing is lost — the YAML says what the document is — so it is a WARNING naming what to
@@ -147,26 +169,11 @@ final class ConfigSplit
             return null;
         }
 
-        $names = NameList::of($stale) ?? '';
-
         if ($build->file()->error === ConfigFile::ABSENT) {
-            return new Diagnostic(
-                severity: Severity::Error,
-                code: self::NOT_MIGRATED,
-                message: sprintf(
-                    'There is no %s, and config/docuccino.php holds %d setting%s the build no longer reads, so the document would have been built from defaults alone: %s.',
-                    ConfigFile::NAME,
-                    count($stale),
-                    count($stale) === 1 ? '' : 's',
-                    $names,
-                ),
-                help: sprintf(
-                    'Run `php artisan docuccino:install` to write %s, move those settings into it, and delete them from config/docuccino.php — which keeps only %s.',
-                    ConfigFile::NAME,
-                    implode(', ', self::FRAMEWORK_KEYS),
-                ),
-            );
+            return self::refusal($stale);
         }
+
+        $names = NameList::of($stale) ?? '';
 
         return new Diagnostic(
             severity: Severity::Warning,
@@ -182,6 +189,32 @@ final class ConfigSplit
                 'Delete them from config/docuccino.php, which keeps only %s. Nothing there is merged over %s.',
                 implode(', ', self::FRAMEWORK_KEYS),
                 ConfigFile::NAME,
+            ),
+        );
+    }
+
+    /**
+     * The one construction site for {@see NOT_MIGRATED}, so the refusal a command prints and the
+     * report a build carries are the same sentence.
+     *
+     * @param  list<string>  $stale
+     */
+    private static function refusal(array $stale): Diagnostic
+    {
+        return new Diagnostic(
+            severity: Severity::Error,
+            code: self::NOT_MIGRATED,
+            message: sprintf(
+                'There is no %s, and config/docuccino.php holds %d setting%s the build no longer reads, so the document would have been built from defaults alone: %s.',
+                ConfigFile::NAME,
+                count($stale),
+                count($stale) === 1 ? '' : 's',
+                NameList::of($stale) ?? '',
+            ),
+            help: sprintf(
+                'Run `php artisan docuccino:install` to write %s, move those settings into it, and delete them from config/docuccino.php — which keeps only %s.',
+                ConfigFile::NAME,
+                implode(', ', self::FRAMEWORK_KEYS),
             ),
         );
     }
@@ -208,7 +241,10 @@ final class ConfigSplit
         $diagnostics = [];
 
         if ($build->present()) {
-            $defined = $build->documents();
+            // Asked of ConfiguredDocuments and not of the raw bag: the build's document set is the one
+            // with the fallback applied, and judging a viewer against the raw bag would report the
+            // `default` document's own viewer as an orphan on a file that declares no documents.
+            $defined = ConfiguredDocuments::of($build);
             $orphans = array_values(array_filter(
                 array_keys($viewers),
                 static fn (string $key): bool => ! array_key_exists($key, $defined),

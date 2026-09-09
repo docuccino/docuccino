@@ -13,6 +13,11 @@ use Docuccino\Core\Versioning\VersionOrder;
  * raw entry for one of them. Every reader of the key set comes here, so the set a build resolves and
  * the set an `#[InDocs]` key is judged against cannot disagree.
  *
+ * The set is never empty ({@see of()}). No configuration is a legitimate state — an absent file, one
+ * that would not parse, one that names no `documents` at all — and each of those states already says
+ * the document is built from defaults alone. With no document there would BE no document: the build
+ * loop would run zero times, so nothing would be written and none of those sentences would be said.
+ *
  * Asked of {@see BuildConfig} rather than memoised here. That reader holds ONE parse per build for
  * its own reasons, and a second cache in front of it would answer a build with the configuration of
  * the build before it.
@@ -21,14 +26,40 @@ use Docuccino\Core\Versioning\VersionOrder;
  */
 final class ConfiguredDocuments
 {
+    /** The document an application gets when its configuration names none. */
+    public const string DEFAULT_KEY = 'default';
+
     /**
-     * The bag as configured, keyed by document key.
+     * The bag as configured, keyed by document key, with the fallback applied.
      *
      * @return array<string, mixed>
      */
     public function all(): array
     {
-        return app(BuildConfig::class)->documents();
+        return self::of(app(BuildConfig::class));
+    }
+
+    /**
+     * `$build`'s documents, falling back to one `default` document when it names none.
+     *
+     * Stated here once and asked for by the readers that hold a {@see BuildConfig} already, because a
+     * reader working off the raw bag would judge viewers, `#[InDocs]` keys and route filters against a
+     * document set the build does not have.
+     *
+     * A default rather than the shipped file folded in as defaults: the shipped `docuccino.yaml` shows
+     * every option with its default, so merging it under an author's file would put ~130 keys they
+     * never wrote into the bag `document.configHash` is taken over — changing emitted bytes for every
+     * application with a partial file — and would add a `default` document beside the ones a
+     * multi-document app declared. The readers already own their defaults, so an empty bag resolves to
+     * exactly the document the shipped file describes.
+     *
+     * @return array<string, mixed>
+     */
+    public static function of(BuildConfig $build): array
+    {
+        $configured = $build->documents();
+
+        return $configured === [] ? [self::DEFAULT_KEY => []] : $configured;
     }
 
     /**

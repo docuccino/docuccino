@@ -339,6 +339,7 @@ it('names the construction sites whose code is not written beside it', function 
     expect(diagnostic_code_sites(diagnosticSourceDirectories()))->toBe([
         'Config/ConfigSplit.php',
         'Config/ConfiguredFlags.php',
+        'Config/UnknownSettings.php',
         'Emit/OpenApi31DownlevelEmitter.php',
         'Extensions/BuiltIn/AttributeExamplesExtension.php',
         'Extensions/BuiltIn/AttributeOverridesExtension.php',
