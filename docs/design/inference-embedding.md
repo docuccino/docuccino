@@ -633,10 +633,11 @@ list and the read declines anyway — measured against Symfony's own `ConflictHt
 `__construct` has zero statements — while asking for it primes that file, grows the analysed set and
 discards every walk the replay layer had recorded. That argument is about PRIMING, so it reaches vendor and
 stops there: a primed root is already in the analysed set, its bodies intact, and reading one grows nothing.
-Measured over one build of the fixture app's 51 throw actions, the analysed-file count is 163 whether the
-status reads are scoped to the application or to the descend paths — identical, so nothing recorded is
-discarded — and the wider scope costs one extra live file walk (22 against 21) for an exception class
-nothing else opened. Scoping these reads to the descend paths instead published a placeholder 500 for a
+Measured over one build of the fixture app's 57 throw actions, the analysed-file count is the same whether
+the status reads are scoped to the application or to the descend paths — so nothing recorded is discarded —
+and the wider scope costs one extra live file walk, for an exception class nothing else opened. (The
+absolute counts this paragraph used to give were taken against a smaller corpus than the one above it, and
+two adjacent paragraphs disagreeing about one corpus is what stops a reader trusting either.) Scoping these reads to the descend paths instead published a placeholder 500 for a
 modular exception whose 409 was written in a file the build was already holding open, and recorded nothing
 for a notice to be actionable about. **How far a walk may go and whose declaration this is are two
 questions**: `project_paths` is the knob for the first and has no business answering the second. A folded
@@ -790,11 +791,14 @@ The application's PSR-4 map is therefore a fragment-cache key input (`BuildFinge
 one input `composer.lock` cannot stand in for: composer's content hash does not cover `autoload`, so
 mapping a new root and running `dump-autoload` moves no locked byte while moving both scopes.
 
-**Where a narrowing costs something, the build says so.** `applyDescent` records a `SkippedDescent` when
-it declines a callee whose file the application declares — the app scope says yes, the descend scope says
-no — and `SkippedDescents` publishes one `inference.descend-scope-narrowed` info per callee and call site.
-Every firing is actionable by construction: the file is the application's own and the knob is the same
-author's, so there is no actionability filter here the way `UnreadStatuses` has one. Sized on the fixture
+**Where a narrowing costs something, the build says so.** `applyDescent` hands every declined callee to
+`SkippedDescents::record()`, which keeps the ones the DECLARED scope would have opened — the scope
+descent runs with when nothing narrows it, which the adapter passes alongside `descendPaths`
+(`TypeEngineBuilder::build(declaredPaths:)`) — and publishes one `inference.descend-scope-narrowed` info
+per callee and call site. That yardstick, and not "is this the application's own file", is what makes
+every firing actionable: the wider question also holds the roots descent declines BY DESIGN, so an
+`autoload-dev` callee would fire it on a build nobody configured and ask the reader to undo a decision
+they never made. Removing the setting really does reach every file this names. Sized on the fixture
 corpus with descent pinned back to `app/`: **7 firings, 7 where the reader can act, 0 where they cannot** —
 and 0 firings at the derived default, which is the number that matters, because a notice an ordinary build
 prints is a channel nobody reads. Of the 7, widening recovers 3 throw reads and 2 published responses; the

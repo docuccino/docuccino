@@ -114,6 +114,10 @@ final readonly class TypeEngineFactory
             vendorPath: $this->basePath.'/vendor',
             primePaths: $scopes->prime($descendPaths),
             descendPaths: $descendPaths,
+            // What descent would cover with nothing configured. The engine walks by `descendPaths`
+            // alone; this is only how it tells a hop THIS application closed from one the engine closes
+            // for everybody, and so which of them is worth a notice.
+            declaredPaths: $scopes->declared(),
             configFile: EngineConfigFile::path($config, $this->basePath),
         );
     }

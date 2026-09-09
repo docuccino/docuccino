@@ -21,8 +21,9 @@ use Docuccino\Core\Inference\SourceLocation;
  * lost. A notice that says "an error is missing" where the callee turns out to raise none is the kind
  * that teaches people to skip the channel.
  *
- * Every record is actionable by construction: nothing is recorded unless the callee's file is one the
- * application's own autoload map declares, and how far descent goes is a setting the same author owns.
+ * Every record kept is actionable by construction: {@see SkippedDescents::record()} keeps only a file
+ * the DECLARED scope would have opened, so removing the setting that narrowed descent really does
+ * reach it, and that setting is the same author's.
  *
  * @internal
  */

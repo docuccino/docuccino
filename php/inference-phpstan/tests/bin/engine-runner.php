@@ -59,6 +59,7 @@ use Docuccino\Inference\PhpStan\Runtime\RuntimeConfig;
 use Docuccino\Inference\PhpStan\Tests\Support\ClosureReturnProbe;
 use Docuccino\Inference\PhpStan\Tests\Support\CountingRuntimeAdapter;
 use Docuccino\Inference\PhpStan\Tests\Support\QueryBuilderProbe;
+use Docuccino\Laravel\Engine\AnalysisScopes;
 use Docuccino\Laravel\Extensions\FileResponseCall;
 use Docuccino\Laravel\Extensions\FileResponseVisitor;
 use Docuccino\Laravel\Integrations\ApiResources\CreatedResourceVisitor;
@@ -72,7 +73,6 @@ use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderTraceVisitor;
 use Docuccino\Laravel\Integrations\QueryBuilder\ScopeParameterResolver;
 use Docuccino\Laravel\Integrations\SpatieData\DataResponseStatus;
 use Docuccino\Laravel\Integrations\Support\PaginationTerminalVisitor;
-use Docuccino\Laravel\Support\Psr4Namespaces;
 
 $repoRoot = dirname(__DIR__, 4);
 $app = $repoRoot.'/tests/fixture-app/app';
@@ -166,12 +166,12 @@ if (in_array($mode, $boundedModes, true)) {
 // hand-built EngineConfig (the bounds above), which the builder deliberately doesn't expose, so they
 // go through the factory directly.
 //
-// Both scopes come off the fixture app's own `composer.json`, through the one reader the adapter uses
-// (`Psr4Namespaces`): prime scope (bodies preserved) is every root it maps, descend scope the roots it
-// SHIPS. So the runner descends exactly as far as an installed default does, `modules/` included, and a
-// throw a modular callee raises is read here for the same reason it is read in a real application.
-// vendorPath still lets a QB trace follow a QueryBuilder-return-type hop into a primed class outside
-// either scope, never into vendor.
+// Both scopes come off the fixture app's own `composer.json` through `AnalysisScopes` — the adapter's
+// own class, not a restatement of it, so the runner cannot drift from what an installed default does
+// and a throw a modular callee raises is read here for the reason it is read in a real application.
+// (`fixtureDescends()` in tests/Pest.php IS a deliberate restatement: a guard that asked this code for
+// its own rule would agree with whatever the code did.) vendorPath still lets a QB trace follow a
+// QueryBuilder-return-type hop into a primed class outside either scope, never into vendor.
 //
 // `analyze-many-narrow` is the one mode that pins descent back to `app/`: the population of an install
 // that wrote `project_paths` itself, which is the only thing that still produces a narrowed-scope
@@ -196,24 +196,12 @@ $adapterFactory = new class($countedAdapters) extends RuntimeAdapterFactory
     }
 };
 
-/** @return list<string> */
-$absolute = static function (array $map) use ($app): array {
-    $paths = [];
-    foreach ($map as $dirs) {
-        foreach ($dirs as $dir) {
-            if ($dir !== '') {
-                $paths[] = $app.'/'.rtrim(ltrim((string) $dir, './'), '/');
-            }
-        }
-    }
-
-    return array_values(array_unique(array_filter($paths, is_dir(...))));
-};
-
-$primePaths = $absolute(Psr4Namespaces::roots($app));
+$scopes = new AnalysisScopes($app);
+$declaredPaths = $scopes->declared();
 $descendPaths = $mode === 'analyze-many-narrow'
-    ? [$app.'/app']
-    : $absolute(Psr4Namespaces::shipped($app));
+    ? $scopes->descend(['project_paths' => ['app']])
+    : $declaredPaths;
+$primePaths = $scopes->prime($descendPaths);
 
 $engine = in_array($mode, $boundedModes, true)
     ? (new PhpStanEngineFactory)->create(
@@ -228,6 +216,7 @@ $engine = in_array($mode, $boundedModes, true)
             vendorPath: $app.'/vendor',
             primePaths: $primePaths,
             descendPaths: $descendPaths,
+            declaredPaths: $declaredPaths,
             configFile: $mode === 'analyze-with-config' ? ($argv[5] ?? null) : null,
         );
 

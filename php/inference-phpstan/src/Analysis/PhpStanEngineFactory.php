@@ -53,6 +53,10 @@ final class PhpStanEngineFactory
             $runtimeConfig->projectPaths !== [] ? $runtimeConfig->projectPaths : $engineConfig->projectPaths,
             $normalize,
         );
+        // Declared scope: what descent would have covered had the host narrowed nothing. It answers one
+        // question only — is a declined hop the HOST's narrowing, which the reader can undo, or this
+        // engine's own containment, which they cannot — and an empty list answers "no" to all of them.
+        $declaredFilter = new ProjectFilter($engineConfig->declaredPaths, $normalize);
 
         return new PhpStanTypeEngine(
             adapter: $adapter,
@@ -62,6 +66,7 @@ final class PhpStanEngineFactory
             projectFilter: $projectFilter,
             classMetadataFactory: new ClassMetadataFactory,
             appFilter: $appFilter,
+            declaredFilter: $declaredFilter,
             walks: $walks,
         );
     }

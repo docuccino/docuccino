@@ -7,6 +7,7 @@ namespace Docuccino\Inference\PhpStan\Throwing;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Provenance\MessagePaths;
+use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 
 /**
  * What one analysis stopped short of because the descend scope excluded a file the application
@@ -19,11 +20,17 @@ use Docuccino\Core\Provenance\MessagePaths;
  * build says where. Bounding descent is a correct outcome rather than a defect, which is what keeps
  * this off the rung a severity gate fails on.
  *
- * There is no actionability filter here, and that is a property of the recording rather than an
- * omission — {@see SkippedDescent} is only ever built for a file the application's own autoload map
- * declares, so the remedy is always the reader's to make. A narrowing that costs nothing records
- * nothing: the population is calls whose bodies really were skipped, not scopes that happen to be
- * narrow.
+ * The actionability filter is HERE, and it is the DECLARED scope — the descend scope the host would
+ * have run with had nothing narrowed it. Only a hop that scope would have opened is kept, which makes
+ * the remedy this publishes true: removing the setting really does reach the file named. The wider
+ * "is this the application's own file" would not, because it also holds the roots descent declines by
+ * design — a `autoload-dev` root is the application's own and is deliberately never walked into, so a
+ * notice about one would fire on an unconfigured build and ask the reader to undo a decision they
+ * never made. An empty declared scope keeps nothing: a host that names no yardstick gets no notices
+ * rather than every notice.
+ *
+ * A narrowing that costs nothing still records nothing: the population is calls whose bodies really
+ * were skipped, not scopes that happen to be narrow.
  *
  * @internal
  */
@@ -32,8 +39,15 @@ final class SkippedDescents
     /** @var array<string, SkippedDescent> by {@see SkippedDescent::key()} */
     private array $records = [];
 
+    public function __construct(private readonly ProjectFilter $declared) {}
+
+    /** Kept only where the declared scope would have opened this body — see the class note. */
     public function record(SkippedDescent $skipped): void
     {
+        if (! $this->declared->isProjectFile($skipped->calleeFile)) {
+            return;
+        }
+
         $this->records[$skipped->key()] = $skipped;
     }
 
@@ -54,7 +68,7 @@ final class SkippedDescents
                 severity: Severity::Info,
                 code: 'inference.descend-scope-narrowed',
                 message: $labels->relative($this->records[$key]->sentence()),
-                help: 'engine.project_paths in docuccino.yaml bounds how far inference walks. Remove the key to descend into every PSR-4 root your composer.json declares under `autoload`, or add this directory to the list.',
+                help: 'engine.project_paths in docuccino.yaml bounds how far inference walks, and this directory is outside it. Remove the key to descend into every PSR-4 root your composer.json declares under `autoload`, which is the default, or add this directory to the list you keep.',
             );
         }
 

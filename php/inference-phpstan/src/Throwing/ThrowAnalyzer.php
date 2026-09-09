@@ -75,6 +75,9 @@ final class ThrowAnalyzer
         // a modular PSR-4 root is the application's and is never descended into. It is the only question
         // an actionability or dependency-recording read here asks; nothing walks by it.
         private readonly ProjectFilter $appFilter,
+        // Declared scope: the descend scope before the host narrowed it. Nothing walks by it — it is
+        // {@see SkippedDescents}' yardstick for which declined hops the reader can undo.
+        private readonly ProjectFilter $declaredFilter,
         private readonly FileAnalyzer $fileAnalyzer,
         private readonly KnownThrowers $knownThrowers,
         private readonly CalleeResolver $calleeResolver,
@@ -89,7 +92,7 @@ final class ThrowAnalyzer
         private readonly int $maxDepth,
     ) {
         $this->unreadStatuses = new UnreadStatuses;
-        $this->skippedDescents = new SkippedDescents;
+        $this->skippedDescents = new SkippedDescents($this->declaredFilter);
     }
 
     /**
@@ -99,7 +102,7 @@ final class ThrowAnalyzer
     {
         $this->visitedFiles = [];
         $this->unreadStatuses = new UnreadStatuses;
-        $this->skippedDescents = new SkippedDescents;
+        $this->skippedDescents = new SkippedDescents($this->declaredFilter);
 
         $raw = $this->analyzeMethod($node, $selfLabel, 0, [], []);
 
@@ -355,17 +358,15 @@ final class ThrowAnalyzer
         // The file gate, not depth, does the real containment: vendor is a terminal, never descended.
         if (! $this->projectFilter->isProjectFile($callee->file)) {
             // The point this declined is a bare `Throwable` PHPStan flagged and nothing else read, so
-            // the drop is a response the document will not carry. Where the callee is the application's
-            // own the reader can have it back by widening the scope, which is worth saying; where it is
-            // vendor's there is nothing to widen to and the drop is the containment working.
-            if ($this->appFilter->isProjectFile($callee->file)) {
-                $this->skippedDescents->record(new SkippedDescent(
-                    $callee->class,
-                    $callee->method,
-                    $callee->file,
-                    $frame->location,
-                ));
-            }
+            // the drop is a response the document will not carry. Whether that is worth saying is
+            // {@see SkippedDescents::record()}'s question: it keeps only the hops the HOST's own
+            // narrowing closed, which are the ones the reader can open again.
+            $this->skippedDescents->record(new SkippedDescent(
+                $callee->class,
+                $callee->method,
+                $callee->file,
+                $frame->location,
+            ));
 
             return null;
         }

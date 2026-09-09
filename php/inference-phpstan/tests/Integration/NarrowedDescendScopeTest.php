@@ -15,6 +15,9 @@ use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
  * template stopped writing the key is in it, and commenting a template out does not edit anybody's file,
  * so the build has to say so. The default descends into every shipped root, which is why the first
  * assertion here is a silence: a notice that fired on an ordinary build would be a channel nobody reads.
+ * That silence is held by the recorder's own gate rather than by this corpus — `SkippedDescents` keeps
+ * only a hop the DECLARED scope would have opened, which `SkippedDescentsTest` proves directly, since a
+ * corpus with no `autoload-dev` callee cannot tell a real gate from a lucky one.
  *
  * Both scopes are the same corpus through the same engine — the difference is `descendPaths` and nothing
  * else ({@see FixtureRunner::analyzeManyNarrow()}) — so the delta between them is the measurement the

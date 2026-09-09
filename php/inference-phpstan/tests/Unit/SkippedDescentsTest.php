@@ -9,6 +9,7 @@ use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
+use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Throwing\SkippedDescent;
 use Docuccino\Inference\PhpStan\Throwing\SkippedDescents;
 
@@ -17,16 +18,24 @@ use Docuccino\Inference\PhpStan\Throwing\SkippedDescents;
  * into, and the two properties a document embedding them depends on — a path off the build machine, and
  * an order that is a function of the records rather than of the walk.
  *
- * Whether a record is made at all is a question about a PHPStan scope and is proved on the real engine
- * ({@see NarrowedDescendScopeTest}); nothing here can answer it.
+ * Which records are KEPT is answered here, because it is a question about directories rather than about
+ * a PHPStan scope: only a hop the declared scope would have opened, so the remedy the notice publishes
+ * really reaches the file it names. Whether the analyser reaches this recorder at all is the real
+ * engine's question ({@see NarrowedDescendScopeTest}).
  */
+/** A recorder whose declared scope is `$roots`, with the identity normaliser the engine's own uses. */
+function skippedDescentsUnder(string ...$roots): SkippedDescents
+{
+    return new SkippedDescents(new ProjectFilter(array_values($roots), static fn (string $path): string => $path));
+}
+
 function skippedDescentOf(string $class, string $method, string $calleeFile, string $file, int $line): SkippedDescent
 {
     return new SkippedDescent($class, $method, $calleeFile, new SourceLocation($file, $line));
 }
 
 it('publishes one notice naming the callee, the call site and the file it stopped at', function (): void {
-    $records = new SkippedDescents;
+    $records = skippedDescentsUnder('/checkout/app', '/checkout/modules', '/checkout/domain');
     $records->record(skippedDescentOf(
         'Modules\\Billing\\LedgerReviewQuery',
         'results',
@@ -58,7 +67,7 @@ it('publishes one notice naming the callee, the call site and the file it stoppe
  * built it — and this notice names two, which is a second place the crossing can be forgotten.
  */
 it('names both the call site and the skipped file as paths off the build machine', function (): void {
-    $records = new SkippedDescents;
+    $records = skippedDescentsUnder('/home/ci/checkout/domain');
     $records->record(skippedDescentOf(
         'Domain\\Orders\\Lookup',
         'find',
@@ -83,12 +92,12 @@ it('orders the notices by the records rather than by the order they arrived', fu
 
     $labels = new MessagePaths(new RootRelativeSourcePathResolver('/checkout'));
 
-    $forwards = new SkippedDescents;
+    $forwards = skippedDescentsUnder('/checkout/app', '/checkout/modules', '/checkout/domain');
     foreach ($sites as $site) {
         $forwards->record($site);
     }
 
-    $backwards = new SkippedDescents;
+    $backwards = skippedDescentsUnder('/checkout/app', '/checkout/modules', '/checkout/domain');
     foreach (array_reverse($sites) as $site) {
         $backwards->record($site);
     }
@@ -105,7 +114,7 @@ it('orders the notices by the records rather than by the order they arrived', fu
 it('keeps one record per callee and call site however many paths reach it', function (): void {
     // A helper called from two branches of one action is one thing to go and fix, and descent meets the
     // same call once per analysed path.
-    $records = new SkippedDescents;
+    $records = skippedDescentsUnder('/checkout/app', '/checkout/modules', '/checkout/domain');
     foreach (range(1, 4) as $ignored) {
         $records->record(skippedDescentOf(
             'Modules\\Billing\\LedgerReviewQuery',
@@ -129,5 +138,59 @@ it('keeps one record per callee and call site however many paths reach it', func
 });
 
 it('has nothing to say about an analysis descent never stopped short in', function (): void {
-    expect((new SkippedDescents)->diagnostics(new MessagePaths(new RootRelativeSourcePathResolver('/checkout'))))->toBe([]);
+    expect(skippedDescentsUnder('/checkout/app')->diagnostics(new MessagePaths(new RootRelativeSourcePathResolver('/checkout'))))->toBe([]);
+});
+
+it('keeps only a call the declared scope would have opened', function (): void {
+    // The two sub-populations of "descent declined a file the application declares". A shipped root
+    // outside the configured scope is the reader's own narrowing and they can undo it; a root the
+    // DEFAULT excludes — a test root, which is never API surface — is this engine's containment, and a
+    // notice about it would fire on a build nobody configured and ask for an edit nobody should make.
+    $records = skippedDescentsUnder('/checkout/app', '/checkout/modules');
+
+    $records->record(skippedDescentOf(
+        'Modules\\Billing\\LedgerReviewQuery',
+        'results',
+        '/checkout/modules/Billing/LedgerReviewQuery.php',
+        '/checkout/app/Http/Controllers/LedgerController.php',
+        41,
+    ));
+    $records->record(skippedDescentOf(
+        'Tests\\Support\\SeedHelper',
+        'seed',
+        '/checkout/tests/Support/SeedHelper.php',
+        '/checkout/app/Http/Controllers/LedgerController.php',
+        58,
+    ));
+    // Nor vendor, which reaches the recorder the same way now the analyzer stopped pre-filtering.
+    $records->record(skippedDescentOf(
+        'Vendor\\Package\\Client',
+        'send',
+        '/checkout/vendor/acme/package/src/Client.php',
+        '/checkout/app/Http/Controllers/LedgerController.php',
+        62,
+    ));
+
+    $messages = array_map(
+        static fn (Diagnostic $diagnostic): string => $diagnostic->message,
+        $records->diagnostics(new MessagePaths(new RootRelativeSourcePathResolver('/checkout'))),
+    );
+
+    expect($messages)->toHaveCount(1)
+        ->and($messages[0])->toContain('modules/Billing/LedgerReviewQuery.php');
+});
+
+it('publishes nothing at all when no declared scope was named', function (): void {
+    // A host that offers no yardstick cannot tell its own narrowing from the engine's containment, so
+    // it gets no notices rather than one per declined hop.
+    $records = skippedDescentsUnder();
+    $records->record(skippedDescentOf(
+        'Modules\\Billing\\LedgerReviewQuery',
+        'results',
+        '/checkout/modules/Billing/LedgerReviewQuery.php',
+        '/checkout/app/Http/Controllers/LedgerController.php',
+        41,
+    ));
+
+    expect($records->diagnostics(new MessagePaths(new RootRelativeSourcePathResolver('/checkout'))))->toBe([]);
 });
