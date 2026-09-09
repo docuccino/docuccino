@@ -106,9 +106,9 @@ it('warns, and names what was built instead, for an error_responses value that i
     'a misspelling' => ['defualt', "'defualt'"],
     'an array where a strategy name belongs' => [['preset' => 'problem-details'], 'array'],
     'a boolean' => [false, 'bool'],
-    // The key an author wrote with an `env()` behind it that came back empty. It is a PRESENT key, so it
-    // reads as `default` like every other unrecognised value — only deleting the key gets you `none`.
-    'an unset env()' => [null, 'null'],
+    // The key written with nothing after the colon. It is a PRESENT key, so it reads as `default` like
+    // every other unrecognised value — only deleting the key gets you `none`.
+    'a key with nothing after the colon' => [null, 'null'],
 ]);
 
 it('says nothing about the two error_responses values there are, or about a document that sets neither', function (): void {

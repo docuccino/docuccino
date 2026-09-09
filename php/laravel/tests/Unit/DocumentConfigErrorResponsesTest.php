@@ -58,10 +58,10 @@ it('resolves a present error_responses key, and says so wherever it is not one o
     // The two the key accepts. Neither is reported, and each resolves to itself.
     'the shipped strategy' => ['default', 'default', false],
     'the opt-out' => ['none', 'none', false],
-    // An unset `env()` under a key the author wrote. The whole reason absence and null are read apart:
-    // `none` here would take every error response out of a document nobody asked to have them removed
-    // from, and the isset-based fallback that used to do it could not report itself either.
-    'an unset env()' => [null, 'default', true],
+    // A key written with nothing after the colon, which YAML reads as null. The whole reason absence
+    // and null are read apart: `none` here would take every error response out of a document nobody
+    // asked to have them removed from, and an isset-based fallback could not report itself either.
+    'a key with nothing after the colon' => [null, 'default', true],
     // Everything else a present key can hold degrades the same way, so no shape is a special case.
     'a misspelling' => ['defualt', 'default', true],
     'a strategy name nothing recognises' => ['problem-details', 'default', true],
