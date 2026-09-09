@@ -42,7 +42,39 @@ it('moves the digest for every leakage bag that changes what redaction answers',
     'an added heuristic' => [['patterns' => ['sortcode' => 'a bank sort code']], (object) ['sortcode' => '112233']],
 ]);
 
+it('keys a comma-joined safelist apart from the two-entry list it is the mis-spelling of', function (): void {
+    // `allow: ['/a,/b']` is how a list gets written by somebody who read the option as comma-separated,
+    // and it safelists nothing: the entry is compared whole. So the two bags answer differently, and a
+    // digest joining entries on a comma read them as one — the fixed spelling then served the withheld
+    // example from the warm entry the broken one filed.
+    $probe = (object) ['api_key' => 'sk_live_abcdefghijklmnop', 'reset_token' => 'tok_abcdefghijklmnop'];
+    $joined = ['allow' => ['/api_key,/reset_token']];
+    $listed = ['allow' => ['/api_key', '/reset_token']];
+
+    expect(leakageFindings($joined, $probe))->not->toBe(leakageFindings($listed, $probe))
+        ->and(leakageDigest($joined))->not->toBe(leakageDigest($listed));
+});
+
+it('keys two spellings of one pointer apart, which costs a rebuild and can publish no wrong answer', function (): void {
+    // The one exception to the row below, stated rather than left in the gap. `/x` and `#/x` are one
+    // entry to LintSafelist, so this pair changes no answer and moves the digest anyway.
+    //
+    // Left as it is on purpose. The cost is one cold build for an author who rewrote their safelist from
+    // one spelling into the other and changed nothing else, which no application has been observed to
+    // do; and it is the SAFE direction — over-keying only rebuilds, while a digest normalising further
+    // than the matcher does would hand two different answers one warm entry. If normalisation is ever
+    // added, this row is the one that has to be deleted deliberately.
+    $probe = (object) ['api_key' => 'sk_live_abcdefghijklmnop'];
+    $bare = ['allow' => ['/api_key']];
+    $fragment = ['allow' => ['#/api_key']];
+
+    expect(leakageFindings($bare, $probe))->toBe(leakageFindings($fragment, $probe))
+        ->and(leakageDigest($bare))->not->toBe(leakageDigest($fragment));
+});
+
 it('leaves the digest alone for a leakage bag that changes no answer', function (array $one, array $two): void {
+    // For the pairs listed. One pair is deliberately not among them — the row above names it and says
+    // why it is allowed to cost a rebuild.
     $probe = (object) ['api_key' => 'sk_live_abcdefghijklmnop', 'reset_token' => 'tok_abcdefghijklmnop'];
 
     expect(leakageFindings($one, $probe))->toBe(leakageFindings($two, $probe))

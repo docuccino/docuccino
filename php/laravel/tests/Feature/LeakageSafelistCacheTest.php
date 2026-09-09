@@ -68,6 +68,42 @@ it('rebuilds the operations a changed safelist decides, rather than serving the 
         ->toBe([(new UirEmitter)->emit($truth->document), diagnosticRecords($truth->diagnostics)]);
 });
 
+it('rebuilds when a comma-joined safelist is rewritten as the list it was meant to be', function (): void {
+    $dir = $this->recordings;
+    bindStubEngine();
+
+    setBuild('cache.enabled', false);
+    $id = generateDocumentWithRecordings($dir)->document->toArray()['paths']['/api/forms']['get']['x-docuccino']['id'];
+
+    (new RecordingStore($dir))->put(ExampleRecording::of(
+        (string) $id,
+        'GET /api/forms',
+        [RecordedExample::of('200', 'application/json', (object) ['api_key' => 'sk_live_abcdefghijklmnop'])],
+    ));
+
+    $example = static fn (array $document): mixed => $document['paths']['/api/forms']['get']['responses']['200']['content']['application/json']['example'] ?? null;
+
+    // How a list gets written by somebody who read the option as comma-separated. It safelists nothing —
+    // the entry is compared whole — so the example stays withheld.
+    fragmentCacheDir('leakage');
+    setBuild('lint.leakage.allow', ['/api_key,/reset_token']);
+    $cold = generateDocumentWithRecordings($dir);
+    expect($example($cold->document->toArray()))->toBeNull();
+
+    // And the fix: the same two pointers as two entries, which does safelist them. A digest joining
+    // entries on a comma read the two bags as one and served the withheld example back.
+    setBuild('lint.leakage.allow', ['/api_key', '/reset_token']);
+    $warm = generateDocumentWithRecordings($dir);
+
+    // What a build with nothing cached says — the truth the warm one owes, diagnostics included.
+    fragmentCacheDir('leakage');
+    $truth = generateDocumentWithRecordings($dir);
+
+    expect($example($warm->document->toArray()))->not->toBeNull()
+        ->and([(new UirEmitter)->emit($warm->document), diagnosticRecords($warm->diagnostics)])
+        ->toBe([(new UirEmitter)->emit($truth->document), diagnosticRecords($truth->diagnostics)]);
+});
+
 it('keys the heuristics table as well as the safelist', function (): void {
     $dir = fragmentCacheDir('leakage');
     $engine = new CountingTypeEngine(WorkbenchEngine::make());

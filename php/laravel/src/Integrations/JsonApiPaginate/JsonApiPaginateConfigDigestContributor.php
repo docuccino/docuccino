@@ -18,7 +18,8 @@ final class JsonApiPaginateConfigDigestContributor implements EnvironmentDigestC
 
     public function digest(): string
     {
-        return 'json-api-paginate:'.implode(',', [
+        return implode("\0", [
+            'json-api-paginate',
             $this->config->pageParameter,
             $this->config->numberParameter,
             $this->config->sizeParameter,

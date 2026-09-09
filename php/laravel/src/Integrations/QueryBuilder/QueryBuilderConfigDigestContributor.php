@@ -24,7 +24,8 @@ final class QueryBuilderConfigDigestContributor implements EnvironmentDigestCont
 
     public function digest(): string
     {
-        return 'query-builder:'.implode(',', [
+        return implode("\0", [
+            'query-builder',
             $this->config->filter,
             $this->config->sort,
             $this->config->include,

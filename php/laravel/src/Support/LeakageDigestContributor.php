@@ -39,14 +39,19 @@ final class LeakageDigestContributor implements EnvironmentDigestContributor
         // re-ordering the config bag should not cost anybody a rebuild. The heuristics table is the
         // opposite: a name matches when it CONTAINS a token and the first hit wins, so its order is part
         // of what it answers and goes in as written.
+        //
+        // A pointer and a token are both free text, so the separator is the contract's `"\0"`: a comma
+        // digested `allow: ['/a,/b']` — the mis-spelling of a two-entry list — exactly as the two-entry
+        // list it safelists nothing like.
         $allow = $this->options->allow;
         sort($allow);
 
-        $patterns = [];
+        $parts = ['leakage-allow', ...$allow, 'leakage-patterns'];
         foreach ($this->options->patterns as $token => $label) {
-            $patterns[] = $token.'=>'.$label;
+            $parts[] = $token;
+            $parts[] = $label;
         }
 
-        return 'leakage-allow:'.implode(',', $allow).'|leakage-patterns:'.implode(',', $patterns);
+        return implode("\0", $parts);
     }
 }
