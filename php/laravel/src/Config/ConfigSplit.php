@@ -9,6 +9,7 @@ use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Core\Support\NameList;
+use Docuccino\Core\Support\PlainText;
 use Docuccino\Laravel\Commands\RefusesUnreadConfig;
 use Docuccino\Laravel\Http\DocsController;
 
@@ -83,9 +84,104 @@ final class ConfigSplit
      */
     public static function staleKeys(): array
     {
+        $keys = array_map(
+            static fn (array $setting): string => implode('.', $setting['path']),
+            self::strayed(),
+        );
+
+        sort($keys, SORT_STRING);
+
+        return $keys;
+    }
+
+    /**
+     * The same settings as {@see staleKeys()}, nested the way `docuccino.yaml` nests them — what
+     * `docuccino:migrate-config` writes out.
+     *
+     * Two derivations of one rule, so which keys are build keys is decided in {@see strayed()} and
+     * nowhere else. A migration that read the split for itself would be a second opinion about it, and
+     * the two would disagree the first time a key moved between the files.
+     *
+     * One thing is added that {@see staleKeys()} has no reason to carry: a document that declares
+     * nothing but a viewer contributes no stray key at all, and dropping its KEY would delete the
+     * document — leaving its viewer registered against a document the build no longer defines. So the
+     * document set is preserved whole, and a document with no build settings of its own arrives as an
+     * empty bag, which is exactly what it is.
+     *
+     * @return array<string, mixed>
+     */
+    public static function buildSettings(): array
+    {
+        $strayed = self::strayed();
+
+        // Nothing strayed, nothing to write — and that has to be an EMPTY answer rather than a bare
+        // document set. An application whose framework config holds only what the framework keeps is
+        // migrated already, and handing back its document keys would read as settings to carry and put
+        // a file on disk for an application that needs none.
+        if ($strayed === []) {
+            return [];
+        }
+
+        $documents = [];
+        foreach (array_keys(Hydrate::map(config('docuccino.documents'))) as $document) {
+            $documents[$document] = [];
+        }
+
+        $settings = $documents === [] ? [] : ['documents' => $documents];
+
+        foreach ($strayed as $setting) {
+            $settings = self::nested($settings, $setting['path'], $setting['value']);
+        }
+
+        return $settings;
+    }
+
+    /**
+     * `$settings` with `$value` written at `$path`, creating the bags on the way and replacing whatever
+     * a segment held that was not one.
+     *
+     * @param  array<string, mixed>  $settings
+     * @param  list<string>  $path
+     * @return array<string, mixed>
+     */
+    private static function nested(array $settings, array $path, mixed $value): array
+    {
+        $segment = array_shift($path);
+
+        if ($segment === null) {
+            return $settings;
+        }
+
+        if ($path === []) {
+            $settings[$segment] = $value;
+
+            return $settings;
+        }
+
+        $settings[$segment] = self::nested(Hydrate::map($settings[$segment] ?? null), $path, $value);
+
+        return $settings;
+    }
+
+    /**
+     * Every setting in `config/docuccino.php` that is not the framework's to keep, as the path it sits
+     * at against the value written there.
+     *
+     * THE definition of the split, read by both derivations above. The path is a list of segments and
+     * never a dotted string, because a document key is an application's word and may hold a dot of its
+     * own — joining here would make `documents.my.api.info` a path nothing could nest again.
+     *
+     * The depth each branch stops at is {@see FRAMEWORK_KEYS}: `enabled` is the framework's outright,
+     * `cache` and a document bag are shared and so are read one level in, and everything else is a
+     * build setting whole.
+     *
+     * @return list<array{path: list<string>, value: mixed}>
+     */
+    private static function strayed(): array
+    {
         /** @var array<string, mixed> $config */
         $config = (array) config('docuccino', []);
-        $keys = [];
+        $strayed = [];
 
         foreach ($config as $key => $value) {
             $name = (string) $key;
@@ -95,9 +191,9 @@ final class ConfigSplit
             }
 
             if ($name === 'cache') {
-                foreach (array_keys(Hydrate::map($value)) as $inner) {
+                foreach (Hydrate::map($value) as $inner => $member) {
                     if ($inner !== 'store') {
-                        $keys[] = 'cache.'.$inner;
+                        $strayed[] = ['path' => ['cache', $inner], 'value' => $member];
                     }
                 }
 
@@ -106,9 +202,9 @@ final class ConfigSplit
 
             if ($name === 'documents') {
                 foreach (Hydrate::map($value) as $document => $bag) {
-                    foreach (array_keys(Hydrate::map($bag)) as $inner) {
+                    foreach (Hydrate::map($bag) as $inner => $member) {
                         if ($inner !== 'viewer') {
-                            $keys[] = 'documents.'.$document.'.'.$inner;
+                            $strayed[] = ['path' => ['documents', $document, $inner], 'value' => $member];
                         }
                     }
                 }
@@ -116,12 +212,10 @@ final class ConfigSplit
                 continue;
             }
 
-            $keys[] = $name;
+            $strayed[] = ['path' => [$name], 'value' => $value];
         }
 
-        sort($keys, SORT_STRING);
-
-        return $keys;
+        return $strayed;
     }
 
     /**
@@ -186,7 +280,7 @@ final class ConfigSplit
                 $names,
             ),
             help: sprintf(
-                'Delete them from config/docuccino.php, which keeps only %s. Nothing there is merged over %s.',
+                'Delete them from config/docuccino.php, which keeps only %s. Nothing there is merged over %s — so if these never made it in, `php artisan docuccino:migrate-config --force` writes them there first.',
                 implode(', ', self::FRAMEWORK_KEYS),
                 ConfigFile::NAME,
             ),
@@ -212,7 +306,7 @@ final class ConfigSplit
                 NameList::of($stale) ?? '',
             ),
             help: sprintf(
-                'Run `php artisan docuccino:install` to write %s, move those settings into it, and delete them from config/docuccino.php — which keeps only %s.',
+                'Run `php artisan docuccino:migrate-config` to write %s from the settings already there, then delete them from config/docuccino.php — which keeps only %s.',
                 ConfigFile::NAME,
                 implode(', ', self::FRAMEWORK_KEYS),
             ),
@@ -273,7 +367,7 @@ final class ConfigSplit
                 message: sprintf(
                     '%d documents configure the viewer route %s, and the framework keeps only the last one registered: %s.',
                     count($keys),
-                    $route,
+                    PlainText::of($route),
                     NameList::of($keys) ?? '',
                 ),
                 help: 'Give each document its own viewer.route in config/docuccino.php.',

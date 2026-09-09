@@ -46,7 +46,9 @@ it('refuses to build an application whose settings are all still in the framewor
         ->and($errors[0]->message)->toContain('2 settings the build no longer reads')
         ->and($errors[0]->message)->toContain('documents.default.routes')
         ->and($errors[0]->message)->toContain('on_route_error')
-        ->and($errors[0]->help)->toContain('docuccino:install');
+        // The remedy names the command that carries the settings over, and not the one that publishes
+        // defaults: `docuccino:install` would write a file with none of these in it.
+        ->and($errors[0]->help)->toContain('docuccino:migrate-config');
 });
 
 it('names the two files one report each, not one per key, and counts what it does not name', function (): void {
@@ -162,6 +164,27 @@ it('warns about a viewer configured for a document the build does not define', f
         // Boot cannot know, so it registers the routes and the request is what fails. This is the only
         // place that can say so before somebody clicks the link.
         ->and($warnings[0]->message)->toContain('every request to them fails');
+});
+
+it('escapes the route it says two documents collide on', function (): void {
+    // The route is the application's own text, and a diagnostic message is not only printed: a build
+    // diagnostic reaches `x-docuccino.diagnostics` in the emitted document, where a `jq -r` re-arms an
+    // escape sequence that survived as bytes. The two document names in the same sentence go through
+    // `NameList`, which escapes them — this one sat raw between them.
+    config()->set('docuccino.documents', [
+        'default' => ['viewer' => ['route' => "docs\x1b[31m/api"]],
+        'admin' => ['viewer' => ['route' => "docs\x1b[31m/api"]],
+    ]);
+    BuildSettings::set('documents.admin', ['info' => ['title' => 'Admin', 'version' => '1.0.0']]);
+
+    $warnings = configSplitDiagnostics('config.viewer-route-collision');
+
+    expect($warnings)->toHaveCount(1)
+        ->and($warnings[0]->message)->not->toContain("\x1b")
+        ->and($warnings[0]->message)->toContain('\x1B')
+        // And a route with nothing to escape still reads as the author wrote it, or the report names a
+        // setting nobody can find.
+        ->and($warnings[0]->message)->toContain('/api');
 });
 
 it('says nothing about a document that configures no viewer, which is an ordinary shape', function (): void {
