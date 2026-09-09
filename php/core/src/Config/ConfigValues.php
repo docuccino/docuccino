@@ -199,6 +199,37 @@ final class ConfigValues
     }
 
     /**
+     * A list, refused when the value is not one. The ENTRIES are the caller's to read: a `servers` entry
+     * is an OAS Server Object and an `exclude` entry is a glob, and there is no one reading of both.
+     *
+     * Listness alone, and deliberately not {@see strings()}, because the fallback has to be one the
+     * caller actually takes. Every reader of a configured list answers its own built-in default for a
+     * value that is no list, which is what this refusal claims — while a reader that keeps the members
+     * it could read does NOT discard the list over one bad entry, so refusing the whole of it here
+     * would name a fallback nobody returns.
+     *
+     * @return list<mixed>|null
+     */
+    public function entries(string $path): ?array
+    {
+        $value = $this->find($path)[1];
+
+        if ($value === null) {
+            return null;
+        }
+
+        // An empty map arrives as an empty LIST, so it comes through as one rather than as a refusal —
+        // see section() for why that ambiguity is never resolved by guessing.
+        if (is_array($value) && array_is_list($value)) {
+            return $value;
+        }
+
+        $this->refuse($path, self::described($value), 'a list', self::fallback(null), 'Write it as a YAML list, one `- entry` per line.');
+
+        return null;
+    }
+
+    /**
      * A nested section, as a reader of its own so the section's keys get the same refusals under their
      * full names.
      *

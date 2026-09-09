@@ -4,7 +4,12 @@ declare(strict_types=1);
 
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Laravel\Config\BuildConfig;
+use Docuccino\Laravel\Config\ConfiguredFlags;
+use Docuccino\Laravel\Config\ConfiguredKeywords;
+use Docuccino\Laravel\Config\ConfiguredShapes;
 use Docuccino\Laravel\Config\DeclaredSettings;
+use Docuccino\Laravel\Config\UnknownSettings;
+use Docuccino\Laravel\Config\UnusableRouteFilterException;
 use Docuccino\Laravel\Engine\TypeEngineMode;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Tests\Support\BuildSettings;
@@ -60,51 +65,118 @@ it('reports what the configuration reader refused, in the build that read it', f
         ->and($result->document->toArray()['info']['version'] ?? null)->toBe('1.0.0');
 });
 
-// --- A section that holds no section ---------------------------------------------------------------
+// --- A key that holds something other than what the file declares ------------------------------
 
 /**
- * The sections the shipped file declares that nothing asks the typed reader about, and why each owes
- * no refusal. Every other declared section owes one, which is what the dataset below is over.
+ * Every key the shipped file declares, as one row each: the whole domain, so nothing can fall between
+ * a key this pass asks about and one it deliberately says nothing about.
  *
- * Both reasons are about what the section HOLDS rather than about who reads it. Judging either would
- * report a defect in a correct file: `info` is an OAS Info Object published as written, so its
- * `description` is legitimately a line of markdown OR a `{ file: … }` map, and a scheme name holds
- * whatever OAS says a Security Scheme Object is. The list entries are not keys at all — an author
- * writes `- { format: …, path: … }`, and an entry that is no map is the entry reader's business.
- *
- * @return array<string, string>
+ * @return array<string, array{string}>
  */
-function unaskedSections(): array
+function declaredKeys(): array
 {
-    return [
-        'documents.*.info.description' => 'below documents.*.info, an OAS object published as written',
-        'documents.*.security.schemes.apiKey' => 'below documents.*.security.schemes, whose members are your scheme names',
-        'documents.*.security.schemes.bearer' => 'below documents.*.security.schemes, whose members are your scheme names',
-        'documents.*.export.targets.*' => 'an entry of a list, not a key',
-        'documents.*.security.default.*' => 'an entry of a list, not a key',
-        'documents.*.security.document.*' => 'an entry of a list, not a key',
-        'documents.*.tags.definitions.*' => 'an entry of a list, not a key',
-    ];
+    return array_combine(
+        DeclaredSettings::shipped(),
+        array_map(static fn (string $path): array => [$path], DeclaredSettings::shipped()),
+    );
 }
 
-it('refuses a section that holds no section, over every section the shipped file declares', function (string $path): void {
+/** A value of the wrong shape for `$path`, so writing it there is always a defect. */
+function wrongShapeFor(string $path): mixed
+{
+    // Text for anything that takes a collection or a number, a boolean for anything that takes text,
+    // and the trap spelling for a switch: YAML reads `yes` as the STRING "yes", not as true.
+    return match (DeclaredSettings::valueTypes()[$path] ?? null) {
+        DeclaredSettings::TEXT => true,
+        DeclaredSettings::SWITCH_TYPE => 'yes',
+        default => 'nope',
+    };
+}
+
+/** Whether `$path` addresses an entry of a list rather than a key an author writes. */
+function isListEntry(string $path): bool
+{
+    $segments = explode('.', $path);
+
+    foreach ($segments as $index => $segment) {
+        if ($segment === '*' && ($index === 0 || ! in_array($segments[$index - 1], DeclaredSettings::KEYED_MAPS, true))) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/** Whether `$path` sits below a subtree whose member names are the author's. */
+function isBelowAuthorKeyed(string $path): bool
+{
+    foreach (ConfiguredShapes::AUTHOR_KEYED as $open) {
+        if (str_starts_with($path, $open.'.')) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+it('refuses a declared key holding the wrong shape, over every key the shipped file declares', function (string $path): void {
     // The same ground ConfigFile refuses a whole FILE that is not a map on: the build would otherwise
     // run on every default and produce a plausible document, so the author's file looks applied and is
-    // not. It does not weaken one level down, and `routes` is where it bites hardest — a glob written
-    // there leaves the include list empty, an empty include list is read as no filter at all, and the
-    // author who wrote a filter gets every route in the application.
+    // not. It does not weaken further down the tree, and `routes` is where it bites hardest — a glob
+    // written at the section OR at `include` leaves no route filter at all, and the author who wrote a
+    // filter gets every route in the application.
     //
-    // Over the declared set rather than a sample of it, because a section added to the shipped file
-    // and not to whatever asks about it would go straight back to degrading in silence.
-    BuildSettings::only($path, 'nope');
+    // Over the declared set rather than a sample of it, because a key added to the shipped file and not
+    // to whatever asks about it would go straight back to degrading in silence. Each row states its own
+    // expectation, so a key that owes no refusal says so here rather than falling in a gap.
+    BuildSettings::only($path, wrongShapeFor($path));
     bindStubEngine();
 
-    $refusals = diagnosticsCoded(
-        app(DocumentBuilder::class)->build('default', WorkbenchEngine::make())->diagnostics,
-        'config.value-type',
-    );
+    try {
+        $diagnostics = app(DocumentBuilder::class)->build('default', WorkbenchEngine::make())->diagnostics;
+    } catch (UnusableRouteFilterException $refused) {
+        // Some configuration stops the run outright rather than warning: the route set you would get
+        // by skipping a filter you explicitly wrote is a superset of the one you narrowed to. That is
+        // a report too, and a louder one, so it settles the row.
+        expect($refused->diagnostic->code)->toBe('config.route-filter-unusable');
 
-    if (array_key_exists($path, unaskedSections())) {
+        return;
+    }
+
+    $refusals = diagnosticsCoded($diagnostics, 'config.value-type');
+    $named = str_replace('*', 'default', $path);
+    $type = DeclaredSettings::valueTypes()[$path] ?? null;
+
+    // A list ENTRY is not a key, nothing below an author-keyed subtree is ours to judge, and the keys
+    // in UNSHAPED each carry their reason there. None of the three owes a type refusal.
+    if (isListEntry($path) || isBelowAuthorKeyed($path) || array_key_exists($path, ConfiguredShapes::UNSHAPED)) {
+        expect($refusals)->toBe([]);
+
+        return;
+    }
+
+    // A closed-set keyword is the same: one reading, one report, and the report names the set the
+    // value missed rather than the type it was — which is the more useful of the two, so the shape
+    // pass stands aside for it.
+    if (array_key_exists($path, ConfiguredKeywords::catalogue())) {
+        expect($refusals)->toBe([])
+            ->and(diagnosticsCoded($diagnostics, ConfiguredKeywords::CODE))->toHaveCount(1);
+
+        return;
+    }
+
+    // A switch has one reading and one report wherever it sits, so a second one would be a second line
+    // to fix for one mistake.
+    if ($type === DeclaredSettings::SWITCH_TYPE) {
+        expect($refusals)->toBe([])
+            ->and(diagnosticsCoded($diagnostics, ConfiguredFlags::CODE))->toHaveCount(1);
+
+        return;
+    }
+
+    // A bag's keys are the author's, and a key the file ships as `null` states no type — there is
+    // nothing to hold either to. NUMBER is here for completeness and stands empty: see below.
+    if (in_array($type, [DeclaredSettings::BAG, DeclaredSettings::NONE, DeclaredSettings::NUMBER], true)) {
         expect($refusals)->toBe([]);
 
         return;
@@ -112,50 +184,99 @@ it('refuses a section that holds no section, over every section the shipped file
 
     expect($refusals)->toHaveCount(1)
         ->and($refusals[0]->severity)->toBe(Severity::Warning)
-        ->and($refusals[0]->message)->toBe(sprintf(
-            '%s is the text "nope", where the setting takes a map of settings — an empty section is used instead.',
-            str_replace('*', 'default', $path),
-        ))
-        ->and($refusals[0]->help)->toContain('Write the section as `key: value` pairs');
-})->with(fn (): array => array_combine(
-    DeclaredSettings::sections(),
-    array_map(static fn (string $path): array => [$path], DeclaredSettings::sections()),
-));
+        ->and($refusals[0]->message)->toStartWith($named.' is ')
+        ->and($refusals[0]->message)->toContain(match (true) {
+            in_array($path, DeclaredSettings::sections(), true) => 'the setting takes a map of settings',
+            $type === DeclaredSettings::TEXT => 'the setting takes text',
+            default => 'the setting takes a list',
+        });
+})->with(declaredKeys());
 
-it('reads its sections off the shipped file by shape, and tells the two collections apart', function (): void {
+it('reads what it asks about off the shipped file, by shape', function (): void {
     // The dataset above is only worth what this answers, so a plausible minimum stands beside it: a
-    // reader that stopped recognising sections would leave every row vacuous and green.
+    // reader that stopped recognising shapes would leave every row of it vacuous and green.
     //
-    // The rule is written out rather than read back off the file: a section is a map with keys under
-    // it. A LIST holds entries and contributes the same `*` segment a keyed map does, so a set derived
-    // from the dotted paths alone would demand a map where the shipped file itself shows a list — and a
-    // leaf is no section at all.
+    // The rules are written out rather than read back off the file. A SECTION is a map with keys under
+    // it; a list holds entries and contributes the same `*` segment a keyed map does, so a set derived
+    // from the dotted paths alone would demand a map where the shipped file itself shows a list. A
+    // VALUE takes the shape the file writes there, and the two empty collections are the pair that
+    // cannot be told apart once parsed — `exclude: []` is a list and `map: {}` is a bag.
     expect(count(DeclaredSettings::sections()))->toBeGreaterThan(40)
+        ->and(count(DeclaredSettings::values()))->toBeGreaterThan(80)
         ->and(DeclaredSettings::sections())
         ->toContain('documents.*.routes')
         ->toContain('documents.*.security')
         ->toContain('lint.leakage')
         ->toContain('documents.*.integrations.query_builder')
-        // Lists: entries, not keys.
         ->not->toContain('documents.*.export.targets')
         ->not->toContain('documents.*.tags.definitions')
-        // Leaves: nothing sits under them.
         ->not->toContain('documents.*.routes.include')
         ->not->toContain('on_route_error');
+
+    $types = DeclaredSettings::valueTypes();
+
+    expect($types['documents.*.routes.include'] ?? null)->toBe(DeclaredSettings::LIST)
+        ->and($types['documents.*.routes.exclude'] ?? null)->toBe(DeclaredSettings::LIST)
+        ->and($types['documents.*.export.targets'] ?? null)->toBe(DeclaredSettings::LIST)
+        ->and($types['documents.*.tags.map'] ?? null)->toBe(DeclaredSettings::BAG)
+        ->and($types['engine.mode'] ?? null)->toBe(DeclaredSettings::TEXT)
+        ->and($types['lint.leakage.enabled'] ?? null)->toBe(DeclaredSettings::SWITCH_TYPE)
+        ->and($types['cache.path'] ?? null)->toBe(DeclaredSettings::NONE);
+
+    // Nothing asks for a whole number, because the file's only one sits inside a list ENTRY and no key
+    // addresses it. Stated here rather than assumed: a reachable one appearing would fail this and the
+    // dataset above together, instead of going quietly unasked behind an arm nobody wrote.
+    expect(array_keys(array_filter($types, static fn (string $type): bool => $type === DeclaredSettings::NUMBER)))
+        ->toBe(['documents.*.tags.definitions.*.weight']);
 });
 
-it('names only declared sections among the ones it deliberately says nothing about', function (): void {
-    // An exemption that stopped naming a real section would silently excuse nothing, and the row it
-    // came from would go on looking like a considered decision.
-    expect(array_keys(unaskedSections()))->each->toBeIn(DeclaredSettings::sections());
+it('splits the declared surface in two with nothing over and nothing in between', function (): void {
+    // Two guards side by side cover their two subsets and nothing between them, so the union is what
+    // is asserted: every key the file declares is either a section or a value, and none is both.
+    $sections = DeclaredSettings::sections();
+    $values = DeclaredSettings::values();
+
+    expect(array_intersect($sections, $values))->toBe([])
+        ->and(count($sections) + count($values))->toBe(count(DeclaredSettings::shipped()))
+        // And every value carries a type, so no key is silent for want of an answer.
+        ->and(array_keys(DeclaredSettings::valueTypes()))->toEqualCanonicalizing($values);
 });
 
-it('reports a section once, however many keys under it were read', function (): void {
-    // `documents.default` is asked about by the section pass, and every setting the build reads under
-    // it walks through the same key. One defect is one line to go and fix.
-    BuildSettings::yaml("documents:
-  default: 'nope'
-");
+it('says nothing about only the keys it names, and names only real ones', function (): void {
+    // A table entry that stopped naming a real key would excuse nothing while still reading as a
+    // considered decision, and an author-keyed subtree has to be one this pass would otherwise walk
+    // into — every one of them is a section of ours holding names of theirs.
+    expect(array_keys(ConfiguredShapes::UNSHAPED))->each->toBeIn(DeclaredSettings::shipped())
+        ->and(ConfiguredShapes::AUTHOR_KEYED)->each->toBeIn(UnknownSettings::OPEN);
+
+    foreach (ConfiguredShapes::AUTHOR_KEYED as $open) {
+        expect($open)->toBeIn(DeclaredSettings::sections());
+    }
+});
+
+it('leaves a closed-set keyword to the reader that names the set, and asks the rest', function (): void {
+    // The shape pass skips the keyword catalogue rather than listing those keys, so the skip is held to
+    // still matching something: a catalogue that stopped naming declared paths would put every keyword
+    // setting back under a second reader, and one line to fix would be reported twice under two codes.
+    $keywords = array_keys(ConfiguredKeywords::catalogue());
+    $declared = array_intersect($keywords, DeclaredSettings::shipped());
+
+    expect(count($declared))->toBeGreaterThanOrEqual(8)
+        // And no key is claimed by two tables at once, which would make which one wins an accident.
+        ->and(array_intersect($keywords, array_keys(ConfiguredShapes::UNSHAPED)))->toBe([]);
+
+    // Every one of them is a key the pass would otherwise have asked, so the skip is load-bearing
+    // rather than decorative.
+    $types = DeclaredSettings::valueTypes();
+    foreach ($declared as $path) {
+        expect($types[$path] ?? null)->toBeIn([DeclaredSettings::TEXT, DeclaredSettings::LIST]);
+    }
+});
+
+it('reports a key once, however many readers walk through it', function (): void {
+    // `documents.default` is asked about by the shape pass, and every setting the build reads under it
+    // walks through the same key. One defect is one line to go and fix.
+    BuildSettings::yaml("documents:\n  default: 'nope'\n");
     bindStubEngine();
 
     $result = app(DocumentBuilder::class)->build('default', WorkbenchEngine::make());
@@ -163,6 +284,17 @@ it('reports a section once, however many keys under it were read', function (): 
     expect(diagnosticsCoded($result->diagnostics, 'config.value-type'))->toHaveCount(1)
         // And the document says the defaults, which is what the refusal claims was used instead.
         ->and($result->document->toArray()['info']['title'] ?? null)->toBe('API Documentation');
+});
+
+it('names the route filter it dropped, at the key that names it', function (): void {
+    // The one row of the table above whose remedy is louder than a warning: a filter that cannot be
+    // applied stops the run, because the route set you would get by skipping it is a superset you
+    // explicitly narrowed. So the shape pass says nothing and this is what a reader sees instead.
+    BuildSettings::only('documents.default.routes.filter', true);
+    bindStubEngine();
+
+    expect(fn (): mixed => app(DocumentBuilder::class)->build('default', WorkbenchEngine::make()))
+        ->toThrow(UnusableRouteFilterException::class);
 });
 
 it('reports a setting refused while the build ran, not only the ones read before it', function (): void {
