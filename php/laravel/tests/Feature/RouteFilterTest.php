@@ -7,6 +7,7 @@ use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Extensions\Contracts\RouteFilter;
+use Docuccino\Laravel\Config\ConfiguredRouteFilter;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Config\UnusableRouteFilterException;
 use Docuccino\Laravel\Registry\ConfigDiagnostics;
@@ -209,6 +210,30 @@ it('keeps the cause of a construction failure attached to the refusal', function
 
     $this->fail('a constructor that throws has to stop the run');
 });
+
+it('escapes the document key in the refusal, the way it already escapes the class', function (mixed $filter): void {
+    // The class name and the container's own failure already go through `PlainText` here, and the
+    // document key beside them did not. It is not covered by the console renderer's escape either: the
+    // refusal is an EXCEPTION, and `getMessage()` is what a caller that lets it through prints.
+    try {
+        app(ConfiguredRouteFilter::class)->resolve("ev\x1b[31mil", ['filter' => $filter]);
+    } catch (UnusableRouteFilterException $refusal) {
+        expect($refusal->getMessage())->not->toContain("\x1b")
+            ->and($refusal->getMessage())->toContain('\x1B')
+            ->and($refusal->diagnostic->help)->not->toContain("\x1b")
+            ->and($refusal->diagnostic->help)->toContain('\x1B');
+
+        return;
+    }
+
+    $this->fail('a filter that cannot be applied has to stop the run');
+})->with([
+    // Every refusal, so the key is not hardened one arm at a time.
+    'not a class-string' => [['App\Docs\PublicRoutes']],
+    'not autoloadable' => ['App\Docs\NoSuchFilter'],
+    'the container could not build it' => [UnbuildableFilter::class],
+    'not a route filter' => [NotAFilter::class],
+]);
 
 it('reports an unusable filter as a config error and writes nothing', function (): void {
     $out = sys_get_temp_dir().'/docuccino-route-filter-'.uniqid().'.json';

@@ -166,6 +166,27 @@ it('warns about a viewer configured for a document the build does not define', f
         ->and($warnings[0]->message)->toContain('every request to them fails');
 });
 
+it('escapes the route it says two documents collide on', function (): void {
+    // The route is the application's own text, and a diagnostic message is not only printed: a build
+    // diagnostic reaches `x-docuccino.diagnostics` in the emitted document, where a `jq -r` re-arms an
+    // escape sequence that survived as bytes. The two document names in the same sentence go through
+    // `NameList`, which escapes them — this one sat raw between them.
+    config()->set('docuccino.documents', [
+        'default' => ['viewer' => ['route' => "docs\x1b[31m/api"]],
+        'admin' => ['viewer' => ['route' => "docs\x1b[31m/api"]],
+    ]);
+    BuildSettings::set('documents.admin', ['info' => ['title' => 'Admin', 'version' => '1.0.0']]);
+
+    $warnings = configSplitDiagnostics('config.viewer-route-collision');
+
+    expect($warnings)->toHaveCount(1)
+        ->and($warnings[0]->message)->not->toContain("\x1b")
+        ->and($warnings[0]->message)->toContain('\x1B')
+        // And a route with nothing to escape still reads as the author wrote it, or the report names a
+        // setting nobody can find.
+        ->and($warnings[0]->message)->toContain('/api');
+});
+
 it('says nothing about a document that configures no viewer, which is an ordinary shape', function (): void {
     BuildSettings::set('documents.exports-only', ['info' => ['title' => 'Exports', 'version' => '1.0.0']]);
 

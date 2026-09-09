@@ -9,6 +9,7 @@ use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Core\Support\NameList;
+use Docuccino\Core\Support\PlainText;
 use Docuccino\Laravel\Commands\RefusesUnreadConfig;
 use Docuccino\Laravel\Http\DocsController;
 
@@ -366,7 +367,7 @@ final class ConfigSplit
                 message: sprintf(
                     '%d documents configure the viewer route %s, and the framework keeps only the last one registered: %s.',
                     count($keys),
-                    $route,
+                    PlainText::of($route),
                     NameList::of($keys) ?? '',
                 ),
                 help: 'Give each document its own viewer.route in config/docuccino.php.',
