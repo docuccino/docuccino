@@ -201,6 +201,17 @@ swapped budgets — 8 of 8 on Laravel 12, 6 of 8 on Laravel 13, on a table whose
 budget arithmetic had not moved. It had never once run on the plain leg: the frontier was written after the
 last verification anyone did there.
 
+The third was not an assertion at all but a DECLARATION, and so it failed harder. The row proving that
+whatever the Gate's policy-resolution step raises is answered with silence provoked the raise by
+subclassing the framework's `Gate` and overriding `getPolicyFromAttribute()` to throw. That method is
+protected — not a promise the framework made to anyone, and a framework changes protected members in
+patch releases — and a patch gave it a second, optional parameter. The one-parameter child then fails
+PHP's own compatibility check when the class is DECLARED, which is a fatal rather than a failed
+expectation: the paratest worker dies, the leg reports a crashed worker naming a file, and there is no
+assertion to read. Every locked leg stayed green because the lockfile pinned the older framework, so the
+two legs that re-resolve the tree went red on pull requests that had touched none of it — and the next
+`composer update` here would have done the same.
+
 *The tell.* A fixture whose assertion depends on what a VENDOR method's signature says, rather than on
 what the fixture's own code says — a return type, a generic, a `@throws`, a by-reference parameter. Ask of
 every real-engine row: which half of this answer is the fixture's, and which half is the installed
@@ -209,6 +220,10 @@ many files a walk had room for, or which of two hops it took first, is answering
 tree contributes to that number. The sharp version, which would have caught the second instance where the
 signature question does not: any tie in an ordering the product introduced to be deterministic — a sort
 whose key two candidates can share hands the decision straight back to the library that produced them.
+The declaration form has a tell of its own, and it is visible without running anything: a double that
+RE-declares a member of a vendor type is asserting that member's signature, and a NON-PUBLIC one is an
+assertion no vendor ever agreed to. Ask what the double is standing in for — a resolution step that can
+raise is far more often provoked by data the step chokes on than by an override of it.
 
 *The fix that worked.* Move the fact being counted out from behind the vendor's decision — for the first,
 write the counted throw before the closure it is measured against, so no vendor return type governs
@@ -220,6 +235,29 @@ then restates its frontier from what the bounds MEAN, with a row beside it asser
 the counted path is one this repo writes and none of them sits under `vendor/` — the tell, executed. The
 matrix leg is the executor; nothing in a single-version run can catch either, and a single-version run is
 what a new table gets by default.
+
+The third was fixed by deleting the double. A model annotated twice with a non-repeatable attribute is a
+shape PHP accepts in the source and refuses only when something instantiates the attribute — which is
+exactly what resolving a policy does — so the raise now comes out of the framework's own method on every
+supported version, and the fixture declares nothing of the vendor's. Beside it, a model whose attribute
+CAN be read resolves to the policy that attribute names, so the row cannot go quiet by ceasing to reach
+the step at all, and the conventional policy the resolution falls through to is there and named, so the
+silence cannot be a model nothing answers for.
+
+*The guard that was not built, and why.* An arch test can find this shape statically: parse the test tree,
+resolve each declaration's vendor parent, and ask reflection whether a redeclared method is one the parent
+declares concretely. Run over the 1276 files of the test tree it finds 76 redeclarations — 63 public, of
+which 32 are constructors, which PHP exempts from the compatibility check entirely, and the rest documented
+extension points; and 13 non-public: this defect, plus 12 that cannot be written any other way, because the
+product's own recovery reads the very method the fixture overrides (`Data::calculateResponseStatus`,
+`Model::casts`, `Model::serializeDate`) or because it is the harness's own documented API (testbench's
+`defineRoutes`, `defineEnvironment`, `getPackageProviders`). A guard whose allow-list is twelve times its
+catch fires mostly where the reader can do nothing but excuse it, and the twelve carry the same exposure the
+guard claims to remove: if one of those vendors moves a signature the product moves with it, and the fixture
+failing loudly is the correct outcome rather than the one to suppress. Detection was never the gap either —
+PHP checks every declaration against the installed parent on every leg, so the re-resolving legs ARE the
+detector. What was missing is legibility, and that is paratest reporting a crashed worker rather than
+anything a test of ours can state.
 ## A member reached through inheritance, read as though it were the class's own
 
 PHP hands an inherited or trait-imported member back looking like the class's, and a reader that asks
