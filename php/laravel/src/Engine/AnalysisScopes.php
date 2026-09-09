@@ -22,8 +22,11 @@ use Docuccino\Laravel\Support\Psr4Namespaces;
  * The default is derived rather than fixed because `app/` is one application shape's answer. A modular
  * application maps its own `Modules\…`/`Domain\…` roots, and a throw written a hop below a controller
  * there reaches the document only if descent may open the callee's file — so a fixed `['app']`
- * published no error response at all for an error the application really raises. A stock Laravel app
- * maps `App\ → app/`, so the derived set IS `['app']` and the common case is unchanged.
+ * published no error response at all for an error the application really raises. A stock Laravel
+ * skeleton maps `App\ → app/` AND the two `Database\…` roots, so the derived set there is three
+ * directories rather than one; the two extra cost the fixture corpus no file walk, no memory and no
+ * changed answer, because nothing an action calls is written in a factory or a seeder. So the common
+ * case is unchanged in what it publishes, which is the claim — not in what the set literally is.
  *
  * Both go through {@see Psr4Namespaces}, which the scaffold command reads for the namespace a generated
  * class carries: one reader of `composer.json`, so nothing here can disagree with it about what the
@@ -64,7 +67,10 @@ final readonly class AnalysisScopes
     }
 
     /**
-     * Every source root the app's `composer.json` declares under `autoload` — the descend default.
+     * Every source root the app's `composer.json` declares under `autoload` — the descend default, and
+     * so also the yardstick the engine is handed alongside the configured scope: a hop declined outside
+     * THIS set is the engine's own containment, and one declined inside it is a narrowing the reader
+     * wrote and can undo, which is the only one worth a notice ({@see TypeEngineFactory::make()}).
      *
      * A `composer.json` that will not read maps nothing, and the fallback is the historical `app/`
      * rather than an empty scope: descending nowhere would drop every interprocedural fact at once,
@@ -97,7 +103,22 @@ final readonly class AnalysisScopes
 
     /**
      * A PSR-4 map's roots as absolute directories that exist, deduped. `./app/` and `app` are one
-     * directory to composer, so they are one here too.
+     * directory to composer, so they are one here too ({@see Psr4Namespaces::relativeRoot()} folds
+     * them, segment by segment, because a prefix has to be a prefix).
+     *
+     * Three roots answer to nothing here, and each is dropped rather than guessed at:
+     *
+     * - The BASE ITSELF (`.`, `./`, `''`) — a legal map, and the one root neither scope may take.
+     *   `vendor/` sits under the base, so a scope rooted there puts every dependency's file inside
+     *   both: descent stops treating vendor as a terminal and starts promoting a dependency's
+     *   `@throws` into a published response, and priming hands PHPStan the whole tree to keep intact.
+     * - One that CLIMBS OUT of the base (`../shared/src`) — a file outside the base has no
+     *   root-relative name, so a diagnostic naming it would print a path off the build machine and
+     *   the document would stop being reproducible.
+     * - One that IS NOT THERE — handing PHPStan a path it cannot walk buys nothing.
+     *
+     * Dropping is local: the other roots still answer, and a map where none survives leaves
+     * {@see descend()} on its `app/` fallback and {@see prime()} on the descend paths alone.
      *
      * @param  array<string, list<string>>  $map
      * @return list<string>
@@ -108,8 +129,10 @@ final readonly class AnalysisScopes
 
         foreach ($map as $dirs) {
             foreach ($dirs as $dir) {
-                if ($dir !== '') {
-                    $paths[] = $this->basePath.'/'.rtrim(ltrim($dir, './'), '/');
+                $root = Psr4Namespaces::relativeRoot($dir);
+
+                if ($root !== null && $root !== '') {
+                    $paths[] = $this->basePath.'/'.$root;
                 }
             }
         }

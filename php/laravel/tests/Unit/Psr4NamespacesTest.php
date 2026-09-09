@@ -156,3 +156,43 @@ it('ships a prefix a dev section also maps, without folding the dev root in', fu
     expect(Psr4Namespaces::shipped($base))->toBe(['App\\' => ['app/']])
         ->and(Psr4Namespaces::roots($base))->toBe(['App\\' => ['app/', 'stubs/']]);
 });
+
+it('folds a root segment by segment rather than trimming characters off it', function (string $written, ?string $expected): void {
+    // `ltrim($dir, './')` strips a CHARACTER SET, not a `./` prefix — so `.build/src` arrived as
+    // `build/src` and `../shared/src` as `shared/src`, each naming a directory the application never
+    // mapped and the second one silently relocated inside the base path.
+    expect(Psr4Namespaces::relativeRoot($written))->toBe($expected);
+})->with([
+    'a plain root' => ['app', 'app'],
+    'a trailing slash' => ['app/', 'app'],
+    'a leading ./' => ['./app/', 'app'],
+    'a nested root' => ['modules/Billing/src/', 'modules/Billing/src'],
+    'a leading /' => ['/app', 'app'],
+    'a dot-prefixed directory' => ['.build/src', '.build/src'],
+    'a dot-suffixed directory' => ['src.old/', 'src.old'],
+    'an interior . segment' => ['app/./Http', 'app/Http'],
+    'an interior .. segment' => ['modules/Billing/../Shared', 'modules/Shared'],
+    'the base itself' => ['.', ''],
+    'the base as ./' => ['./', ''],
+    'the base as an empty string' => ['', ''],
+    'the base as a bare slash' => ['/', ''],
+    'a parent hop' => ['../shared/src', null],
+    'a hop out through a real directory' => ['app/../../escape', null],
+]);
+
+it('resolves a namespace under a root written at the package itself', function (): void {
+    // A legal map, and PSR-4 really does root `App\app\Http` at `./app/Http` — the caller decides what
+    // the base means, which is why the normaliser answers `''` here rather than refusing.
+    $base = psr4Tree(['autoload' => ['psr-4' => ['App\\' => './']]]);
+
+    expect(Psr4Namespaces::for($base, $base.'/app/Http'))->toBe('App\\app\\Http');
+});
+
+it('does not answer for a directory a dot-prefixed root only looks like it covers', function (): void {
+    // `.build/src` and `build/src` are two directories; the trim made them one, and a class scaffolded
+    // into the second came out under a namespace nothing loads it from.
+    $base = psr4Tree(['autoload' => ['psr-4' => ['Build\\' => '.build/src']]]);
+
+    expect(Psr4Namespaces::for($base, $base.'/.build/src/Api'))->toBe('Build\\Api')
+        ->and(Psr4Namespaces::for($base, $base.'/build/src/Api'))->toBeNull();
+});

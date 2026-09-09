@@ -121,3 +121,52 @@ it('primes a configured descend path even where the map does not name it', funct
     expect($descend)->toBe([$base.'/extra'])
         ->and($scopes->prime($descend))->toBe([$base.'/extra', $base.'/app']);
 });
+
+it('refuses a root written at the base itself, which would put vendor inside both scopes', function (string $mapped): void {
+    // `{"autoload":{"psr-4":{"App\\":"./"}}}` is a legal map and the one root neither scope may take:
+    // `vendor/` sits under the base, so descent would stop treating a dependency as a terminal and
+    // start promoting its `@throws` into a published response, and priming would hand PHPStan the
+    // whole tree to keep intact. The other roots still answer.
+    $base = scopeTree(
+        ['autoload' => ['psr-4' => ['App\\' => $mapped, 'Modules\\' => 'modules/']]],
+        ['app', 'modules', 'vendor'],
+    );
+
+    $scopes = new AnalysisScopes($base);
+
+    expect($scopes->descend([]))->toBe([$base.'/modules'])
+        ->and($scopes->prime($scopes->descend([])))->toBe([$base.'/modules']);
+})->with([
+    'a bare dot' => ['.'],
+    'dot slash' => ['./'],
+    'an empty string' => [''],
+    'a bare slash' => ['/'],
+]);
+
+it('falls back to app/ when the base itself is the only root the map names', function (): void {
+    // Nothing survives, so this is the same answer as an unreadable composer.json — and emphatically
+    // not the base path, which is what a character-set trim collapsed it to.
+    $base = scopeTree(['autoload' => ['psr-4' => ['App\\' => './']]], ['app', 'vendor']);
+
+    expect((new AnalysisScopes($base))->descend([]))->toBe([$base.'/app']);
+});
+
+it('refuses a root that climbs out of the base', function (string $mapped): void {
+    // A file outside the base has no root-relative name, so a diagnostic naming one would print a path
+    // off the build machine. `../shared/src` used to arrive as `shared/src` — a directory INSIDE the
+    // base that the map never named, which is why the relocated directory is on disk here.
+    $base = scopeTree(['autoload' => ['psr-4' => ['App\\' => 'app/', 'Shared\\' => $mapped]]], ['app', 'shared/src']);
+
+    expect((new AnalysisScopes($base))->descend([]))->toBe([$base.'/app']);
+})->with([
+    'a parent hop' => ['../shared/src'],
+    'a hop out and back through a real directory' => ['app/../../escape'],
+]);
+
+it('keeps a root whose own directory name starts with a dot', function (): void {
+    // Two directories, and the trim made them one: the generated tree was scanned and the declared one
+    // never was.
+    $base = scopeTree(['autoload' => ['psr-4' => ['Build\\' => '.build/src']]], ['.build/src', 'build/src']);
+
+    expect((new AnalysisScopes($base))->descend([]))->toBe([$base.'/.build/src']);
+});
