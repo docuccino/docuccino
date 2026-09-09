@@ -582,11 +582,20 @@ it('digests every gate registration that can change a verdict', function (): voi
     $gate = app(GateContract::class);
     $digest = static fn (): string => (new GatePoliciesDigestContributor(static fn (): GateContract => $gate))->digest();
 
+    // A segment is "\0"-joined label/value pairs ({@see EnvironmentDigestContributor}), so a fact is
+    // read back as the entry after its label.
+    $reads = static function (string $digest, string $label): ?string {
+        $parts = explode("\0", $digest);
+        $at = array_search($label, $parts, true);
+
+        return $at === false ? null : ($parts[$at + 1] ?? null);
+    };
+
     $base = $digest();
-    expect($base)->toContain('gate-policies:')
-        ->and($base)->toContain('before:0')
-        ->and($base)->toContain('after:0')
-        ->and($base)->toContain('guesser:n');
+    expect(explode("\0", $base))->toContain('gate-policies')
+        ->and($reads($base, 'before'))->toBe('0')
+        ->and($reads($base, 'after'))->toBe('0')
+        ->and($reads($base, 'guesser'))->toBe('n');
 
     // A registration beforeEach has not already made, so the difference is this call's.
     Gate::policy(Placard::class, PlacardPolicy::class);
@@ -601,7 +610,7 @@ it('digests every gate registration that can change a verdict', function (): voi
     expect($withPolicy)->not->toBe($base)
         ->and($withHook)->not->toBe($withPolicy)
         ->and($withGuesser)->not->toBe($withHook)
-        ->and($withGuesser)->toContain('guesser:y');
+        ->and($reads($withGuesser, 'guesser'))->toBe('y');
 });
 
 /**

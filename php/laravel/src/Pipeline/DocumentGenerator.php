@@ -113,6 +113,20 @@ final class DocumentGenerator
             $bag->add(self::unhashableTagMapper($unhashableMapper));
         }
 
+        // An extension whose body no file holds keys nothing, and unlike a tag mapper there is no
+        // per-route bag to refuse with: the signature it belongs to keys every fragment of the document,
+        // so the refusal is the document's too ({@see ResolvedExtensions::unhashableExtensions()}).
+        // Every route then rebuilds and reports exactly what a cold build reports, which is the only
+        // reading here that cannot serve an old body's answer back.
+        $cache = $this->cache;
+        if ($cache->enabled()) {
+            $unhashable = $resolved->unhashableExtensions();
+            if ($unhashable !== []) {
+                $bag->add(self::unhashableExtensions($unhashable));
+                $cache = FragmentCache::disabled();
+            }
+        }
+
         // The narrative content tree is a document-level input, rebuilt every run and kept OUT of the
         // fragment cache key: fragments never read content, so a prose typo mustn't re-run PHPStan
         // across the whole route set. It reaches output via assembly and the document contentHash.
@@ -142,7 +156,7 @@ final class DocumentGenerator
 
             // A route registered for several verbs documents one operation per method.
             foreach ($descriptor->documentableMethods() as $method) {
-                $fragment = $this->processRoute($descriptor, $method, $document, $documentId, $engine, $resolved, $components, $bag, $configHash, $extensionClasses);
+                $fragment = $this->processRoute($descriptor, $method, $document, $documentId, $engine, $resolved, $components, $bag, $configHash, $extensionClasses, $cache);
                 if ($fragment !== null) {
                     $fragments[] = $fragment;
                     $bag->addAll($fragment->diagnostics);
@@ -157,7 +171,7 @@ final class DocumentGenerator
         $bag->addAll($webhookDiagnostics);
 
         foreach ($declarations as $declaration) {
-            $fragment = $this->processWebhook($declaration, $document, $documentId, $engine, $resolved, $components, $bag, $configHash, $extensionClasses);
+            $fragment = $this->processWebhook($declaration, $document, $documentId, $engine, $resolved, $components, $bag, $configHash, $extensionClasses, $cache);
             if ($fragment !== null) {
                 $fragments[] = $fragment;
                 $bag->addAll($fragment->diagnostics);
@@ -214,6 +228,32 @@ final class DocumentGenerator
                 $mapper,
             ),
             help: 'Declare the mapper in a file of its own — an ordinary class the autoloader can find. A class defined by eval() has no file to key a cached answer against.',
+        );
+    }
+
+    /**
+     * The one line a document owes its author when a resolved extension is declared in no file this
+     * build can hash: the extension signature keys EVERY fragment, so a body nothing keys leaves the
+     * whole document uncacheable, and the cache is turned off for it rather than answering from a key
+     * that cannot notice the edit.
+     *
+     * Raised once, naming every such class, because there is one thing to do about it — and gated on the
+     * cache being on, since with it off there is no rebuild to warn about.
+     *
+     * @param  non-empty-list<class-string>  $classes
+     */
+    private static function unhashableExtensions(array $classes): Diagnostic
+    {
+        return new Diagnostic(
+            severity: Severity::Info,
+            code: 'extension.unhashable',
+            message: sprintf(
+                '%s %s declared in no file this build can hash, so the fragment cache cannot tell whether %s changed and is off for this document — every operation is rebuilt every run.',
+                implode(', ', $classes),
+                count($classes) === 1 ? 'is' : 'are',
+                count($classes) === 1 ? 'it has' : 'they have',
+            ),
+            help: 'Declare the extension in a file of its own — an ordinary class the autoloader can find. A class defined by eval() has no file to key a cached answer against.',
         );
     }
 
@@ -319,6 +359,8 @@ final class DocumentGenerator
 
     /**
      * @param  list<string>  $extensionClasses
+     * @param  FragmentCache  $cache  this document's cache, which is the disabled one when an extension
+     *                                the whole signature is keyed on could not be hashed
      */
     private function processRoute(
         RouteDescriptor $descriptor,
@@ -331,6 +373,7 @@ final class DocumentGenerator
         DiagnosticCollector $bag,
         string $configHash,
         array $extensionClasses,
+        FragmentCache $cache,
     ): ?OperationFragment {
         $path = OasPath::of($descriptor->uri);
         // Naming the specific method keeps multi-method routes' diagnostics distinct.
@@ -341,8 +384,8 @@ final class DocumentGenerator
 
         // The method is part of the cache key: GET query vs POST body are different fragments with
         // different operation identities.
-        $cacheKey = $this->cache->key($descriptor->cacheSignature().'|'.$method, $documentId, $configHash, $extensionClasses);
-        $cached = $this->cache->get($cacheKey);
+        $cacheKey = $cache->key($descriptor->cacheSignature().'|'.$method, $documentId, $configHash, $extensionClasses);
+        $cached = $cache->get($cacheKey);
         if ($cached !== null) {
             // Warm hit: restore components without waking the type engine (design §10).
             return $this->restoreComponents($cached, $components);
@@ -388,7 +431,7 @@ final class DocumentGenerator
             // hash can express refuses the store outright, and this route rebuilds every build
             // ({@see RouteDependencies::refuseCaching()}).
             if (! self::degraded($engine) && ! $context->dependencies()->cachingRefused()) {
-                $this->cache->put($cacheKey, $fragment, $context->dependencyFiles());
+                $cache->put($cacheKey, $fragment, $context->dependencyFiles());
             }
 
             return $fragment;
@@ -408,6 +451,7 @@ final class DocumentGenerator
      * the build reports rides the fragment, so a warm hit says what a cold one said.
      *
      * @param  list<string>  $extensionClasses
+     * @param  FragmentCache  $cache  as for {@see processRoute()}
      */
     private function processWebhook(
         WebhookDeclaration $webhook,
@@ -419,9 +463,10 @@ final class DocumentGenerator
         DiagnosticCollector $bag,
         string $configHash,
         array $extensionClasses,
+        FragmentCache $cache,
     ): ?OperationFragment {
-        $cacheKey = $this->cache->key($webhook->cacheSignature(), $documentId, $configHash, $extensionClasses);
-        $cached = $this->cache->get($cacheKey);
+        $cacheKey = $cache->key($webhook->cacheSignature(), $documentId, $configHash, $extensionClasses);
+        $cached = $cache->get($cacheKey);
         if ($cached !== null) {
             return $this->restoreComponents($cached, $components);
         }
@@ -474,7 +519,7 @@ final class DocumentGenerator
             if (! self::degraded($engine) && ! $dependencies->cachingRefused()) {
                 $files = array_values(array_unique($dependencies->files()));
                 sort($files);
-                $this->cache->put($cacheKey, $fragment, $files);
+                $cache->put($cacheKey, $fragment, $files);
             }
 
             return $fragment;

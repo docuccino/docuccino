@@ -589,12 +589,26 @@ bytes and this is the second build disagreeing with them.
 *Instances.* `documents.*.tags.mapper` names a class the container resolves, and `mapTag()` runs inside an
 `OperationExtension`, so the mapped tags live in the operation fragment; the config bag hashed into the key
 held the class-STRING, which an edit to that class never moves — a warm build published the tags the old
-body produced. The sibling is `ResolvedExtensions::cacheSignature()`, which pairs each resolved extension
-with its composer package's version as a proxy for its behaviour: sound for a package, and inert for a
-class in the application's own tree, whose "package" is the root and whose version does not move when the
-file is saved. Neither is the same defect as an input that reaches NO key input at all — `lint.leakage`
-decides whether a recorded example is published at all, and it is neither in a document's config bag nor
-in any digest contributor.
+body produced. `ResolvedExtensions::cacheSignature()` paired each resolved extension with its composer
+package's version as a proxy for its behaviour: sound for a package, and inert for a class in the
+application's own tree, whose "package" is the root and whose version does not move when the file is
+saved — so an author edited their own extension, rebuilt, and was served the previous output, on the
+primary extension point. The version and the source digest turn out to be complementary rather than
+alternatives, and telling "a version that can move" from one that cannot needs no heuristic at all: a
+digest over CONTENT is inert exactly where the version is informative, since a release nobody edited
+reinstalls byte-identically, and informative exactly where the version is inert.
+
+The other half of the class is an input that reaches NO key input at all, which is a different fix rather
+than a milder version of the same one. `lint.leakage`'s safelist and heuristics decide whether a recorded
+example is PUBLISHED — the recorder withholds a body redaction still finds a credential in — and it is a
+VALUE, not a file: `lint.*` is deliberately top-level, so no document's config bag holds it, and the
+extension carries the options inside a collaborator object, which the configuration digest reads as
+nothing but a class name. A dependency manifest can only name files, so the instrument there is a digest
+contributor (`LeakageDigestContributor`) and not a recorded path. Two more found by sweeping the same
+question across every fragment-level extension: `QueryBuilderConfig::$recovered` and
+`JsonApiPaginateConfig::$recovered` each gate a per-route diagnostic, and `vendor:publish` writes the
+package's own DEFAULTS — so publishing the config moves not one value the contributor digested, and an
+author who followed that diagnostic's own advice rebuilt and was told it again.
 
 *The tell.* Name the thing whose output a fragment holds, then ask what in the key changes when its code
 changes — not when its NAME or its VERSION changes. A collaborator resolved by string, a class-string in
@@ -626,3 +640,21 @@ written in and a closure names its line span, which is a cache key on one machin
 `DocumentCollaboratorKeyingTest` reads the collaborator set off `DocumentConfig`'s own constructor and
 makes each member state what keys it, so a third one arrives as a failure rather than as a member nobody
 asked.
+
+An extension's answer is written the same way and keyed the same way, one level up: the source digest goes
+into the signature rather than into a manifest, because an operation extension is run over every operation
+and nothing records which of them its answer reached — an extension that wrote nothing still ran, and
+withholding a value is an answer too. So the locality the mapper fix has is unobtainable here, and saying
+so is the fix: an edit retires the whole document, which is the blast radius the paired package version
+always had rather than a new one. The refusal follows the key's scope for the same reason — an extension
+declared in no file leaves the DOCUMENT uncacheable, with one `extension.unhashable` diagnostic — and the
+refusal reads the same instance set the signature does, or a fragment keyed on an entry nothing checked is
+keyed on nothing again.
+
+*The guard the instrument dictates.* Manifest freshness answers nothing about a key input: the entry filed
+under the old key stays on disk and reads FRESH forever, it is simply never addressed again. So a row for
+a key input counts what the second build had to WRITE (`array_diff(fragmentKeys(), $before)`), and a row
+for a manifest input asks the cache's own freshness. Getting these the wrong way round is a guard that
+passes on the unfixed code. The cost direction needs executing too, and can be: the same bytes written
+again with a newer timestamp must leave every fragment warm, which is what makes `composer install` free,
+and a re-ordered safelist must leave them warm, which is what the sort is for.

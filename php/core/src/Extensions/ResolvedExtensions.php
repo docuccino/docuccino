@@ -21,6 +21,7 @@ use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Extensions\Ordering\ExtensionSorter;
 use Docuccino\Core\Extensions\Schema\ConfigurationDigest;
+use Docuccino\Core\Extensions\Schema\DeclarationFiles;
 use ReflectionClass;
 use Throwable;
 
@@ -42,6 +43,9 @@ final readonly class ResolvedExtensions
      * nor a hex digest can hold it, so an entry carrying one is unambiguous.
      */
     private const POSITION = '*';
+
+    /** What separates a {@see cacheSignature()} entry from its source digest, on the same reasoning. */
+    private const SOURCE = '~';
 
     /**
      * Grouped by phase once, up front, so a build iterating phases per route doesn't re-filter the
@@ -100,10 +104,21 @@ final readonly class ResolvedExtensions
 
     /**
      * The fragment-cache's view of the extension set: one entry per resolved INSTANCE, each naming its
-     * class, its composer package's installed version and a digest of its own configuration. The
-     * version pairing means upgrading a package that changes an extension's behaviour invalidates every
-     * fragment even though the class list didn't move; the lookup is tolerant, and an unresolvable
-     * package contributes an empty version rather than failing the build.
+     * class, its composer package's installed version, a digest of its own configuration and a digest of
+     * the bytes it is WRITTEN in. The version pairing means upgrading a package that changes an
+     * extension's behaviour invalidates every fragment even though the class list didn't move; the
+     * lookup is tolerant, and an unresolvable package contributes an empty version rather than failing
+     * the build.
+     *
+     * The version cannot stand in for the body, which is why {@see sourceDigest()} is paired with it: a
+     * package's version moves when its author releases, and an extension in the APPLICATION's own tree
+     * has no such author — its "package" is the root, whose version does not move when a file is saved.
+     * So an author edited their own extension, rebuilt, and was served the output the old body produced.
+     * The two components are complementary rather than redundant, and neither is a heuristic about where
+     * a class lives: the source digest is inert exactly where the version is informative, since a release
+     * nobody edited reinstalls byte-identically, and informative exactly where the version is inert. A
+     * `composer update` that leaves an extension's own bytes alone therefore moves no digest, and one
+     * that changes another file of its package is what the version is still there for.
      *
      * Per INSTANCE rather than per class because an extension is registered as an object as often as a
      * class-string (`Docuccino::extend(new MyExtension(mode: 'a'))`), and two instances of one class
@@ -122,6 +137,10 @@ final readonly class ResolvedExtensions
      * The position sees no more than the digest does — two instances differing only inside a collaborator
      * object key alike, and so key alike in either order.
      *
+     * Every entry is document-wide, this one included: an extension shapes whatever operations it is run
+     * over, and nothing here can say which of them its answer reached. So an edited extension retires
+     * every fragment — the same blast radius the package version has always had, rather than a new one.
+     *
      * @return list<string>
      */
     public function cacheSignature(): array
@@ -139,7 +158,8 @@ final readonly class ResolvedExtensions
         $signature = [];
         foreach ($instances as $extension) {
             $class = $extension::class;
-            $entry = $class.'@'.self::packageVersion($class).'#'.ConfigurationDigest::of($extension);
+            $entry = $class.'@'.self::packageVersion($class).'#'.ConfigurationDigest::of($extension)
+                .self::SOURCE.(self::sourceDigest($extension) ?? '');
 
             if ($occurrences[$class] > 1) {
                 $reached[$class] = ($reached[$class] ?? -1) + 1;
@@ -155,6 +175,66 @@ final readonly class ResolvedExtensions
         sort($signature);
 
         return $signature;
+    }
+
+    /**
+     * The classes of the resolved extensions whose declaration no file can be hashed back from, sorted.
+     * A caller holding the fragment cache owes them a refusal: an entry keyed on an empty source digest
+     * is keyed on nothing, and there is nothing else in the signature that moves when such a class's
+     * body does.
+     *
+     * The whole resolved set is read, which is the set {@see cacheSignature()} publishes — the refusal
+     * and the key have to answer over the same instances, or a fragment keyed on an entry the refusal
+     * did not look at is keyed on nothing again.
+     *
+     * @return list<class-string>
+     */
+    public function unhashableExtensions(): array
+    {
+        $classes = [];
+        foreach ($this->instances() as $extension) {
+            if (self::sourceDigest($extension) === null) {
+                $classes[$extension::class] = true;
+            }
+        }
+
+        $classes = array_keys($classes);
+        sort($classes);
+
+        return $classes;
+    }
+
+    /**
+     * A digest of the bytes one extension instance is written in — its own file, its parents' and its
+     * traits' ({@see DeclarationFiles}) — or null when its declaration is nothing that can be hashed.
+     *
+     * The hierarchy is read whole because a parent or a trait writes as much of an extension's answer as
+     * the leaf does, and in hierarchy order because two classes swapping which of them declares a method
+     * is a different extension. Only CONTENT goes in, never the paths: what the extension answers is a
+     * function of its bytes, and a file moved with its bytes intact answers the same.
+     *
+     * Null is the eval()'d case and the internal-class case. A file that is there and cannot be read is
+     * null too: it is a body this build cannot see, which is the same position as one it cannot find.
+     */
+    private static function sourceDigest(object $extension): ?string
+    {
+        $files = DeclarationFiles::keyableFor($extension);
+
+        if ($files === null) {
+            return null;
+        }
+
+        $digests = [];
+        foreach ($files as $file) {
+            $digest = @hash_file('sha256', $file);
+            if ($digest === false) {
+                return null;
+            }
+
+            $digests[] = $digest;
+        }
+
+        return substr(hash('sha256', implode("\0", $digests)), 0, 16);
     }
 
     /**

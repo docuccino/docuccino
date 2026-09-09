@@ -18,6 +18,7 @@ use Docuccino\Core\Lint\LintRuleOptions;
 use Docuccino\Core\Lint\MissingDescriptionLint;
 use Docuccino\Core\Lint\OperationIdStyleLint;
 use Docuccino\Core\Lint\SensitiveFieldLint;
+use Docuccino\Core\Lint\SensitiveFieldLintOptions;
 use Docuccino\Core\Lint\UndocumentedTagLint;
 use Docuccino\Core\Lint\UnpinnedRedirectLint;
 use Docuccino\Core\Lint\VacuousUnionLint;
@@ -78,6 +79,7 @@ use Docuccino\Laravel\Routing\VendorRoutePolicy;
 use Docuccino\Laravel\Runtime\DocumentCache;
 use Docuccino\Laravel\Support\GateDenial;
 use Docuccino\Laravel\Support\GatePoliciesDigestContributor;
+use Docuccino\Laravel\Support\LeakageDigestContributor;
 use Docuccino\Laravel\Versioning\Scaffold\ChangeStub;
 use Docuccino\Laravel\Versioning\VersionChangeCollector;
 use Docuccino\Laravel\Watch\ArtisanBuildRunner;
@@ -331,9 +333,11 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
 
         // Recorded examples read the same heuristics table, minus its off switch: turning a report off
         // is not a request to publish credentials.
-        $this->app->bind(ExampleRedaction::class, static fn (): ExampleRedaction => new ExampleRedaction(
-            LeakageOptions::fromConfig(self::leakageConfig(), honourSwitch: false),
-        ));
+        $this->app->bind(ExampleRedaction::class, static fn (): ExampleRedaction => new ExampleRedaction(self::redactionOptions()));
+
+        // …and the contributor that keys the fragment cache on them reads the SAME options, so what is
+        // digested is what the redaction decides on.
+        $this->app->bind(LeakageDigestContributor::class, static fn (): LeakageDigestContributor => new LeakageDigestContributor(self::redactionOptions()));
 
         $this->app->when([RecordedExampleAudit::class, RecordedExamplesExtension::class])
             ->needs('$basePath')
@@ -519,6 +523,17 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         $value = config($key);
 
         return is_string($value) && $value !== '' ? $value : null;
+    }
+
+    /**
+     * The leakage options every reader that must not honour the off switch shares — the redaction that
+     * decides whether a recorded example publishes, and {@see LeakageDigestContributor}, which keys the
+     * fragment cache on that decision. One expression, because two of them could disagree about the
+     * switch and only the cache would notice.
+     */
+    private static function redactionOptions(): SensitiveFieldLintOptions
+    {
+        return LeakageOptions::fromConfig(self::leakageConfig(), honourSwitch: false);
     }
 
     /**
