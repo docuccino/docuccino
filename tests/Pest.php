@@ -1297,6 +1297,37 @@ function throwCorpusControllers(): array
 }
 
 /**
+ * Which column one swept action lands in. A function rather than an inline `match` so the classification
+ * can be executed on rows the corpus does not currently contain — a column nothing lands in is a column
+ * nothing has checked.
+ *
+ * @param  array{unplaced: array<string, list<string>>, demotedThrows: int, surfaced: int}  $sides
+ */
+function unplacedColumn(array $sides): string
+{
+    return match (true) {
+        $sides['surfaced'] === 0 => 'unsurfaced',
+        $sides['unplaced'] !== [] => 'unplaced',
+        $sides['demotedThrows'] === $sides['surfaced'] => 'demoted',
+        // Some throws demoted and some not. No ledger row describes that, so it gets a column of its
+        // own and has to stay empty: absorbed into `placed` it would be an action publishing fewer
+        // responses than it raises with nothing written down about the difference.
+        $sides['demotedThrows'] > 0 => 'mixed',
+        default => 'placed',
+    };
+}
+
+/**
+ * The four columns the reconciliation guards divide the sweep into. Anything else is a gap.
+ *
+ * @return list<string>
+ */
+function unplacedColumnNames(): array
+{
+    return ['placed', 'unplaced', 'demoted', 'unsurfaced'];
+}
+
+/**
  * Every action one controller declares, read off the file rather than listed here: a new action whose
  * unplaced status goes unreported has to fail the guards that read this, and it cannot if they only know
  * the actions somebody remembered to add.
@@ -1305,18 +1336,33 @@ function throwCorpusControllers(): array
  */
 function throwActionMethods(string $relPath): array
 {
-    $source = (string) file_get_contents(FixtureRunner::path($relPath));
-
-    preg_match_all('/^    public function (\w+)\(/m', $source, $matches);
-
-    /** @var list<string> $methods */
-    $methods = $matches[1];
+    $methods = controllerActionNames((string) file_get_contents(FixtureRunner::path($relPath)));
 
     // A scan that matched nothing must fail rather than pass forever — both files are real and hold
     // actions, so a pattern that stopped seeing them is the defect, not an empty corpus.
     expect($methods)->not->toBeEmpty();
 
     return $methods;
+}
+
+/**
+ * The action names one controller SOURCE declares, taking the text rather than a path so a reader of the
+ * provisioned app and a reader of the tracked overlay cannot disagree about what an action is.
+ *
+ * One grammar, and a forgiving one: `final public function` and `public static function` are actions too,
+ * and a pattern that saw only the plainest spelling made them invisible to every guard that counts the
+ * corpus. Nothing here matches a non-public method, which is not an action.
+ *
+ * @return list<string>
+ */
+function controllerActionNames(string $source): array
+{
+    preg_match_all('/^    (?:final\s+|abstract\s+)?public(?:\s+static)?\s+function\s+(\w+)\s*\(/m', $source, $matches);
+
+    /** @var list<string> $names */
+    $names = $matches[1];
+
+    return $names;
 }
 
 /**
@@ -1330,13 +1376,31 @@ function fixtureDescends(string $relPath): bool
     /** @var array{autoload?: array{psr-4?: array<string, string|list<string>>}} $composer */
     $composer = json_decode((string) file_get_contents(FixtureRunner::path('composer.json')), true, flags: JSON_THROW_ON_ERROR);
 
+    return pathUnderShippedRoot($relPath, $composer['autoload']['psr-4'] ?? []);
+}
+
+/**
+ * The predicate behind {@see fixtureDescends()}, split out so both of its answers can be executed: a
+ * guard whose only exercised direction is "true" passes just as happily written `return true`, and the
+ * fact both callers lean on is the FALSE one — a root the application does not ship is not descended
+ * into. `FixtureCorpusTest` holds it to both.
+ *
+ * Deliberately an independent restatement of `AnalysisScopes`, not a call into it: a guard that asks the
+ * code for its own rule agrees with whatever the code does.
+ *
+ * @param  array<string, string|list<string>>  $psr4  a `psr-4` map's prefixes against their roots
+ */
+function pathUnderShippedRoot(string $relPath, array $psr4): bool
+{
     $roots = [];
-    foreach ($composer['autoload']['psr-4'] ?? [] as $directories) {
+    foreach ($psr4 as $directories) {
         foreach ((array) $directories as $directory) {
-            $roots[] = trim($directory, './');
+            $root = trim((string) $directory, '/');
+            $roots[] = str_starts_with($root, './') ? substr($root, 2) : $root;
         }
     }
 
+    // A scan that matched no root at all would call every file undescendable and excuse any silence.
     expect($roots)->not->toBeEmpty();
 
     foreach ($roots as $root) {
@@ -1346,6 +1410,12 @@ function fixtureDescends(string $relPath): bool
     }
 
     return false;
+}
+
+/** A path inside the tracked fixture OVERLAY (`tests/fixture-app/src`), which needs no provisioned app. */
+function fixtureSourcePath(string $relative = ''): string
+{
+    return dirname(__DIR__).'/tests/fixture-app/src'.($relative === '' ? '' : '/'.ltrim($relative, '/'));
 }
 
 /**
