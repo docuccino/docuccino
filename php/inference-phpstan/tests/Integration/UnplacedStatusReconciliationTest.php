@@ -190,16 +190,7 @@ function throwCorpusControllers(): array
  */
 function throwActions(string $relPath): array
 {
-    $source = (string) file_get_contents(FixtureRunner::path($relPath));
-
-    preg_match_all('/^    (?:final\s+|abstract\s+)?public(?:\s+static)?\s+function\s+(\w+)\s*\(/m', $source, $matches, PREG_OFFSET_CAPTURE);
-
-    $actions = [];
-    foreach ($matches[1] as $index => $name) {
-        $start = (int) $matches[0][$index][1];
-        $end = isset($matches[0][$index + 1]) ? (int) $matches[0][$index + 1][1] : strlen($source);
-        $actions[(string) $name[0]] = substr($source, $start, $end - $start);
-    }
+    $actions = controllerActions((string) file_get_contents(FixtureRunner::path($relPath)));
 
     // A scan that matched nothing must fail rather than pass forever — both files are real and hold
     // actions, so a pattern that stopped seeing them is the defect, not an empty corpus.

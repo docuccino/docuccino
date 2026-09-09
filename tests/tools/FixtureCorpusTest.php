@@ -111,3 +111,45 @@ it('answers both directions for a root the application does not ship', function 
         // A prefix is a prefix: a sibling directory whose name merely starts the same way is outside.
         ->and(pathUnderShippedRoot('application/Other.php', $shipped))->toBeFalse();
 });
+
+it('reads every spelling of an action a controller can declare', function (): void {
+    // The corpus cannot prove this: no tracked controller happens to use the wider spellings today, so a
+    // grammar narrowed back to the plainest one still passes every sweep. The spellings are therefore
+    // stated here against source written for the purpose, and the plain one is included so a pattern that
+    // matched nothing at all would fail rather than agree.
+    $source = <<<'PHP_SOURCE'
+    <?php
+
+    class Probe
+    {
+        public function plain() {}
+        final public function sealed() {}
+        public static function shared() {}
+        final public static function both() {}
+        protected function hidden() {}
+        private function alsoHidden() {}
+    }
+    PHP_SOURCE;
+
+    expect(controllerActionNames($source))->toBe(['plain', 'sealed', 'shared', 'both']);
+});
+
+it('slices each action body at the next declaration it recognises', function (): void {
+    // The names and the bodies come from one reader for this reason: a slicer blind to a spelling the
+    // sweep sees hands a row somebody else's body, and the row judges its excuse against the wrong text.
+    $source = <<<'PHP_SOURCE'
+    <?php
+
+    class Probe
+    {
+        public function first() { return 'ONE'; }
+        final public function second() { return 'TWO'; }
+    }
+    PHP_SOURCE;
+
+    $actions = controllerActions($source);
+
+    expect(array_keys($actions))->toBe(['first', 'second'])
+        ->and($actions['first'])->toContain('ONE')->not->toContain('TWO')
+        ->and($actions['second'])->toContain('TWO')->not->toContain('ONE');
+});

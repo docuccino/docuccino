@@ -1357,12 +1357,33 @@ function throwActionMethods(string $relPath): array
  */
 function controllerActionNames(string $source): array
 {
-    preg_match_all('/^    (?:final\s+|abstract\s+)?public(?:\s+static)?\s+function\s+(\w+)\s*\(/m', $source, $matches);
+    return array_keys(controllerActions($source));
+}
 
-    /** @var list<string> $names */
-    $names = $matches[1];
+/**
+ * The same actions, name => the source text of each, sliced at the next declaration the one grammar
+ * above recognises. A sweep that saw a declaration the slicer did not would hand a row an empty body to
+ * judge its own excuse against, and the row would pass on nothing — so both answers come from here.
+ *
+ * @return array<string, string>
+ */
+function controllerActions(string $source): array
+{
+    preg_match_all(
+        '/^    (?:final\s+|abstract\s+)?public(?:\s+static)?\s+function\s+(\w+)\s*\(/m',
+        $source,
+        $matches,
+        PREG_OFFSET_CAPTURE,
+    );
 
-    return $names;
+    $actions = [];
+    foreach ($matches[1] as $index => $name) {
+        $start = (int) $matches[0][$index][1];
+        $end = isset($matches[0][$index + 1]) ? (int) $matches[0][$index + 1][1] : strlen($source);
+        $actions[(string) $name[0]] = substr($source, $start, $end - $start);
+    }
+
+    return $actions;
 }
 
 /**
