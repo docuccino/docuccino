@@ -373,8 +373,6 @@ function unsurfacedThrowActions(): array
 {
     return [
         'App\\Http\\Controllers\\ThrowsController::arrowThrownStatus' => 'the `throw` is written in an ARROW function, which PHPStan models with no statement result, so the analysis is handed no throw point to read',
-        'App\\Http\\Controllers\\ThrowsController::modularThrowSiteStatus' => 'the `throw` is written in a callee the descend scope excludes, so descent stops at the call and never reaches it — `project_paths` is the knob, and widening it is the fix',
-        'Modules\\Billing\\LedgerThrowsController::modularExceptionOneCallAway' => 'the same descend boundary, one modular root calling another: the callee is the application\'s and outside the descend scope, so nothing is read of its body',
     ];
 }
 
@@ -485,12 +483,12 @@ it('reports nothing about a throw the document does not publish', function (): v
  * the whole file stayed green: its status was never read, no notice was owed for it, and both directions
  * agreed about a corpus that did not contain it.
  *
- * So the corpus is held against the axis the defect lived on: the descend scope. One controller inside it
- * and at least one outside it but inside a root the build primes, both really analysed, both really
- * holding actions. The paths are checked to be what they claim — a row naming a file that has moved would
- * otherwise reduce the sweep to whatever is left.
+ * So the corpus is held against the axis the defect lived on: which PSR-4 root an action is written in.
+ * One controller in `app/` and at least one in a root the application maps separately, both really
+ * analysed, both really holding actions. The paths are checked to be what they claim — a row naming a file
+ * that has moved would otherwise reduce the sweep to whatever is left.
  */
-it('sweeps a controller on both sides of the descend scope', function (): void {
+it('sweeps a controller in a modular root as well as in app/', function (): void {
     $controllers = throwCorpusControllers();
     $sweep = unplacedSweep();
 
@@ -505,8 +503,8 @@ it('sweeps a controller on both sides of the descend scope', function (): void {
             expect($sweep)->toHaveKey($class.'::'.$method);
         }
 
-        // The fixture runs with `app/` as its only descend path (tests/bin/engine-runner.php), which is
-        // what makes "outside the descend scope" mean "outside app/" here.
+        // `app/` on one side, every other declared root on the other — both descendable now, and the
+        // split is what keeps the sweep from being one directory's story.
         str_starts_with($relPath, 'app/')
             ? $inside[$relPath] = count($actions)
             : $outside[$relPath] = count($actions);
@@ -562,6 +560,12 @@ it('lands every swept action in exactly one column', function (): void {
  * one of those in the action's own source; an action written entirely inside the descend scope with no
  * arrow function in it has no excuse available, and a silent one there is a defect rather than a bound.
  *
+ * The descend scope is the roots the application SHIPS, so "outside it" now means a root declared only in
+ * `autoload-dev` — a modular `Modules\…` root is inside it, and the two rows this ledger used to carry for
+ * one are gone because the throws they hid are published. That is why the boundary is read off the
+ * autoload map rather than spelled as `app/`: written as a directory name, the predicate would go on
+ * excusing a silence the build stopped having.
+ *
  * The predicate is necessary, not sufficient — an action can name a modular class and still publish, and
  * one does — so it is held against an action with neither boundary, which must fail it.
  */
@@ -587,7 +591,7 @@ it('excuses an unsurfaced throw only where a declared boundary is crossed', func
         // whose body descent is not entitled to read.
         foreach (fixtureNamesIn($relPath, $source) as $named) {
             $declaredIn = fixtureDeclarationFile($named);
-            if ($declaredIn !== null && ! str_starts_with($declaredIn, 'app/')) {
+            if ($declaredIn !== null && ! fixtureDescends($declaredIn)) {
                 return true;
             }
         }

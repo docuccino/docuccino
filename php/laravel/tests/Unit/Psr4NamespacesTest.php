@@ -119,3 +119,40 @@ it('reports the roots exactly as composer.json writes them', function (): void {
 
     expect(Psr4Namespaces::roots($base))->toBe(['App\\' => ['./app/', 'stubs/']]);
 });
+
+it('reports the shipped roots without the dev ones, and both sections through roots()', function (): void {
+    // The two questions one reader answers. Descent may only enter what the application ships, so a
+    // `Tests\` root has to be absent from `shipped()` and present in `roots()` — the same file read
+    // twice, because two readers of it is two opinions about which directories the analyser walks.
+    $base = psr4Tree([
+        'autoload' => ['psr-4' => ['App\\' => 'app/', 'Modules\\' => 'modules/']],
+        'autoload-dev' => ['psr-4' => ['Tests\\' => 'tests/']],
+    ]);
+
+    expect(Psr4Namespaces::shipped($base))->toBe(['App\\' => ['app/'], 'Modules\\' => ['modules/']])
+        ->and(Psr4Namespaces::roots($base))->toBe([
+            'App\\' => ['app/'],
+            'Modules\\' => ['modules/'],
+            'Tests\\' => ['tests/'],
+        ]);
+});
+
+it('ships nothing when a composer.json cannot be read', function (): void {
+    // The fallback the descend default rests on: no map means no derived scope, and the caller keeps
+    // the historical `app/` rather than descending nowhere.
+    $absent = rtrim(sys_get_temp_dir(), '/').'/docuccino-psr4-absent-'.getmypid();
+
+    expect(Psr4Namespaces::shipped($absent))->toBe([]);
+});
+
+it('ships a prefix a dev section also maps, without folding the dev root in', function (): void {
+    // One prefix in both sections is the shape that would silently widen descent if the two maps were
+    // merged before the split — the dev root arrives under a key `shipped()` already has.
+    $base = psr4Tree([
+        'autoload' => ['psr-4' => ['App\\' => 'app/']],
+        'autoload-dev' => ['psr-4' => ['App\\' => 'stubs/']],
+    ]);
+
+    expect(Psr4Namespaces::shipped($base))->toBe(['App\\' => ['app/']])
+        ->and(Psr4Namespaces::roots($base))->toBe(['App\\' => ['app/', 'stubs/']]);
+});

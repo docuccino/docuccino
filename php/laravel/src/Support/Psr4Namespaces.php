@@ -17,8 +17,10 @@ use JsonException;
  * refusal rather than a guess: writing an unloadable class would look exactly like a change nobody
  * declared.
  *
- * `autoload-dev` counts too. A modular application maps its modules wherever it maps them, and which
- * of the two sections a prefix sits in is not this class's business.
+ * `autoload-dev` counts too for a namespace and for keeping bodies intact: a modular application maps
+ * its modules wherever it maps them, and a helper a test root declares still has to reflect. It does
+ * NOT count for what the analyser walks into, which is why {@see shipped()} exists — one reader, two
+ * questions, and the decision about which section answers which lives here rather than at the callers.
  *
  * @internal
  */
@@ -89,6 +91,28 @@ final class Psr4Namespaces
      */
     public static function roots(string $basePath): array
     {
+        return self::psr4($basePath, ['autoload', 'autoload-dev']);
+    }
+
+    /**
+     * The `psr-4` map of the `autoload` section alone: the roots the application SHIPS, which is what
+     * the analyser is entitled to walk into. A test root is code the API does not serve, so descending
+     * into it costs analysis time and can document nothing — while it still has to be readable, which
+     * is {@see roots()}'s answer and not this one.
+     *
+     * @return array<string, list<string>>
+     */
+    public static function shipped(string $basePath): array
+    {
+        return self::psr4($basePath, ['autoload']);
+    }
+
+    /**
+     * @param  list<string>  $sections
+     * @return array<string, list<string>>
+     */
+    private static function psr4(string $basePath, array $sections): array
+    {
         $contents = @file_get_contents(rtrim($basePath, '/').'/composer.json');
 
         if ($contents === false) {
@@ -105,7 +129,7 @@ final class Psr4Namespaces
         $manifest = Hydrate::map(is_array($decoded) ? $decoded : null);
         $map = [];
 
-        foreach (['autoload', 'autoload-dev'] as $section) {
+        foreach ($sections as $section) {
             $psr4 = Hydrate::map(Hydrate::map($manifest[$section] ?? null)['psr-4'] ?? null);
 
             foreach ($psr4 as $prefix => $roots) {

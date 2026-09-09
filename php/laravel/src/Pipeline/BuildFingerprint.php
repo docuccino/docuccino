@@ -9,14 +9,20 @@ use Docuccino\Core\Support\Json;
 use Docuccino\Laravel\Engine\EngineConfigFile;
 use Docuccino\Laravel\Engine\EnginePackage;
 use Docuccino\Laravel\Engine\LazyTypeEngine;
+use Docuccino\Laravel\Support\Psr4Namespaces;
 
 /**
  * The build-environment half of the fragment-cache key (design §10): which engine actually resolved,
- * whether the engine package is installed at all, how it is configured, and the app's locked
- * dependency set. None of that sits in a document's config bag or in any route's dependency files,
- * yet all of it decides what inference recovers — installing the engine, widening
- * `engine.project_paths` or upgrading the analyser changes emitted bytes without touching one
+ * whether the engine package is installed at all, how it is configured, the source roots the app
+ * declares, and the app's locked dependency set. None of that sits in a document's config bag or in
+ * any route's dependency files, yet all of it decides what inference recovers — installing the engine,
+ * widening `engine.project_paths` or upgrading the analyser changes emitted bytes without touching one
  * analysed file.
+ *
+ * The PSR-4 map is in for the same reason and is the one input composer.lock cannot stand in for:
+ * composer's own content hash does not cover `autoload`, so mapping a new `Modules\…` root and running
+ * `dump-autoload` moves no locked byte — while it moves both scopes the engine runs with, since prime
+ * scope IS that map and descent defaults to the shipped half of it ({@see TypeEngineFactory}).
  *
  * `engine.memory_limit` is the one key deliberately left out: it is a process ceiling that cannot
  * change a documented byte, and `--memory-limit` would otherwise cost a full rebuild each way.
@@ -54,8 +60,19 @@ final readonly class BuildFingerprint
             $this->engine->installed() ? 'installed' : 'absent',
             Json::stable($config),
             EngineConfigFile::digest($this->engineConfig, $this->basePath),
+            $this->psr4Digest(),
             $this->lockDigest(),
         ]));
+    }
+
+    /**
+     * The PSR-4 map the engine's two scopes are derived from, stably encoded. An empty base path — the
+     * default this class carries for a build that names none — reads nothing rather than reaching for
+     * the filesystem root.
+     */
+    private function psr4Digest(): string
+    {
+        return $this->basePath === '' ? '' : Json::stable(Psr4Namespaces::roots($this->basePath));
     }
 
     /**

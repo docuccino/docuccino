@@ -854,7 +854,7 @@ billing` never reports an entry the document it skipped fires on.
 engine:
   mode: 'in-process' # DOCUCCINO_ENGINE overrides this
   # memory_limit: '2G'
-  project_paths: ['app']
+  # project_paths: ['app']
   # config: 'phpstan.neon'
 ```
 
@@ -862,7 +862,7 @@ engine:
 | --- | --- | --- |
 | `mode` | `in-process` | `in-process` runs PHPStan; `null` skips inference entirely (docblocks and attributes still work). Those are the two modes. Set it per environment with `DOCUCCINO_ENGINE`. A boot failure degrades to no inference rather than failing the build. |
 | `memory_limit` | unset | PHP memory limit for inference, applied on **console builds only**. Only ever **raises** — an already-higher or unlimited process is left alone, and `-1` isn't accepted here — so the knob can't introduce the exhaustion it exists to prevent. `--memory-limit` on the build commands overrides it. |
-| `project_paths` | `['app']` | The **descend** scope: directories the engine follows for general interprocedural analysis (throw classification, inline `Validator::make()` rules). Bounds descent into callee bodies. |
+| `project_paths` | every `autoload` PSR-4 root | The **descend** scope: directories the engine follows for general interprocedural analysis (throw classification, inline `Validator::make()` rules). Bounds descent into callee bodies. Unset, it is every PSR-4 source root your `composer.json` declares under `autoload` — `app/` for a stock application, plus your `Modules\…`/`Domain\…` roots if you map any. Set it only to **narrow** descent. |
 | `config` | unset | Your own PHPStan config file, included by the one the engine writes for itself. Relative to the application base path. A file that isn't there warns (`config.engine-config-missing`) and inference runs without it. |
 
 PHP cannot catch memory exhaustion, so it's the one failure that kills a build instead of degrading —
@@ -876,18 +876,21 @@ install command — `null` is the explicit opt-out and stays silent.
 Any other value warns (`engine.mode-unknown`) and runs in-process — a typo in `DOCUCCINO_ENGINE`
 costs you a diagnostic, never a failed build.
 
-:::note[`project_paths` is the descend scope, not everything the engine can reach]
-There are two scopes, and only this one is configured. `project_paths` bounds **descent**. The wider
-**prime** scope — every local PSR-4 source root in your `composer.json`, so a modular `Modules/` root
-too — is derived automatically, and anything the engine *reads* rather than walks into works across all
-of it: the Query Builder trace and the error-response refiner follow helpers into any primed root, the
-status an exception class pins on itself is read wherever the class is declared, and a `@throws` your
-own code writes documents an error wherever you wrote it. That's why a query object, a problem renderer
-or a domain exception in `Modules/…` is resolved even though it isn't listed here. Vendor code is never
-primed, read or followed.
+:::note[`project_paths` is the descend scope, and it defaults to what you declare]
+There are two scopes, and both are derived from your `composer.json`. The **prime** scope — every local
+PSR-4 source root you map, `autoload-dev` included — is what the engine can *read*: the Query Builder
+trace and the error-response refiner follow helpers into any primed root, the status an exception class
+pins on itself is read wherever the class is declared, and a `@throws` your own code writes documents an
+error wherever you wrote it. The **descend** scope is what it may *walk into* for throw classification
+and inline rules, and unset it is the roots you ship — the `autoload` half of the same map. A test root
+stays readable and is never descended into; vendor code is never primed, read or followed.
 
-So you rarely need to change this: add a path only to broaden throw/inline-rules descent — not to make
-modular helpers or modular exceptions resolvable, which priming already handles.
+So leave this alone unless you want *less* than that. Setting it narrows descent, and a throw written in
+a callee outside the narrowed scope is documented nowhere — the build says so, once per skipped call, as
+`inference.descend-scope-narrowed`.
+
+If you installed before this became the default, your own `docuccino.yaml` still has
+`project_paths: ['app']` written in it. Delete the line to pick the derived scope up.
 :::
 
 :::tip[Your PHPStan extensions are already Docuccino extensions]
@@ -897,7 +900,6 @@ something out on its own. Point it at the `phpstan.neon` you already maintain:
 ```yaml
 engine:
   mode: 'in-process'
-  project_paths: ['app']
   config: 'phpstan.neon'
 ```
 

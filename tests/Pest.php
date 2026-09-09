@@ -1277,6 +1277,78 @@ function stripDocuccinoRecursive(mixed $value): mixed
 }
 
 /**
+ * The controllers the throw corpus covers, by relative path => FQCN. Two, and which two is the point: one
+ * in `app/` and one in a `Modules\…` root the application maps separately, which is where a modular
+ * application writes most of its actions. A corpus of the first alone cannot see anything the second does
+ * differently, and every throw-path defect found here has had a modular spelling.
+ *
+ * Shared rather than file-local because two guards read it — what the document publishes for each action
+ * ({@see UnplacedStatusReconciliationTest}) and what a narrowed descend scope stops reading of it — and a
+ * corpus the two disagreed about would let a defect fall between them.
+ *
+ * @return array<string, string>
+ */
+function throwCorpusControllers(): array
+{
+    return [
+        'app/Http/Controllers/ThrowsController.php' => 'App\\Http\\Controllers\\ThrowsController',
+        'modules/Billing/LedgerThrowsController.php' => 'Modules\\Billing\\LedgerThrowsController',
+    ];
+}
+
+/**
+ * Every action one controller declares, read off the file rather than listed here: a new action whose
+ * unplaced status goes unreported has to fail the guards that read this, and it cannot if they only know
+ * the actions somebody remembered to add.
+ *
+ * @return list<string>
+ */
+function throwActionMethods(string $relPath): array
+{
+    $source = (string) file_get_contents(FixtureRunner::path($relPath));
+
+    preg_match_all('/^    public function (\w+)\(/m', $source, $matches);
+
+    /** @var list<string> $methods */
+    $methods = $matches[1];
+
+    // A scan that matched nothing must fail rather than pass forever — both files are real and hold
+    // actions, so a pattern that stopped seeing them is the defect, not an empty corpus.
+    expect($methods)->not->toBeEmpty();
+
+    return $methods;
+}
+
+/**
+ * Whether descent may enter a file, read off the application's own autoload map rather than spelled as a
+ * directory: the roots it declares under `autoload` are the descend default, and `autoload-dev` is not.
+ * A scan that matched no root at all would call every file undescendable and excuse any silence, so the
+ * roots are asserted non-empty first.
+ */
+function fixtureDescends(string $relPath): bool
+{
+    /** @var array{autoload?: array{psr-4?: array<string, string|list<string>>}} $composer */
+    $composer = json_decode((string) file_get_contents(FixtureRunner::path('composer.json')), true, flags: JSON_THROW_ON_ERROR);
+
+    $roots = [];
+    foreach ($composer['autoload']['psr-4'] ?? [] as $directories) {
+        foreach ((array) $directories as $directory) {
+            $roots[] = trim($directory, './');
+        }
+    }
+
+    expect($roots)->not->toBeEmpty();
+
+    foreach ($roots as $root) {
+        if ($root !== '' && str_starts_with($relPath, $root.'/')) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Gate for the fixture-app-dependent integration tests. Normally a missing
  * fixture app skips the test (contributors without it still get a green local
  * run). Under `DOCUCCINO_REQUIRE_FIXTURE=1` — the CI fixture job — a missing

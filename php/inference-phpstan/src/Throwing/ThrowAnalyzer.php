@@ -64,6 +64,9 @@ final class ThrowAnalyzer
     /** Throws whose status did not fold, and the notices they publish. */
     private UnreadStatuses $unreadStatuses;
 
+    /** Calls the descend scope kept this build out of, and the notices they publish. */
+    private SkippedDescents $skippedDescents;
+
     public function __construct(
         private readonly ReflectionProvider $reflectionProvider,
         // Descend scope: how far this build may WALK, which is what `project_paths` bounds.
@@ -86,6 +89,7 @@ final class ThrowAnalyzer
         private readonly int $maxDepth,
     ) {
         $this->unreadStatuses = new UnreadStatuses;
+        $this->skippedDescents = new SkippedDescents;
     }
 
     /**
@@ -95,6 +99,7 @@ final class ThrowAnalyzer
     {
         $this->visitedFiles = [];
         $this->unreadStatuses = new UnreadStatuses;
+        $this->skippedDescents = new SkippedDescents;
 
         $raw = $this->analyzeMethod($node, $selfLabel, 0, [], []);
 
@@ -110,14 +115,19 @@ final class ThrowAnalyzer
     }
 
     /**
-     * The notices this analysis has to give ({@see UnreadStatuses::diagnostics()}). They ride the
-     * analysis, so a warm build reports what a cold one did.
+     * The notices this analysis has to give — a status it could not read
+     * ({@see UnreadStatuses::diagnostics()}), and a body the descend scope kept it out of
+     * ({@see SkippedDescents::diagnostics()}). They ride the analysis, so a warm build reports what a
+     * cold one did.
      *
      * @return list<Diagnostic>
      */
     public function diagnostics(): array
     {
-        return $this->unreadStatuses->diagnostics($this->labels);
+        return [
+            ...$this->unreadStatuses->diagnostics($this->labels),
+            ...$this->skippedDescents->diagnostics($this->labels),
+        ];
     }
 
     /**
@@ -336,11 +346,27 @@ final class ThrowAnalyzer
         array $priorChain,
         Frame $frame,
     ): ?array {
-        // The vendor-file gate, not depth, does the containment: vendor is a terminal, never descended.
-        if ($callee === null
-            || ! $this->projectFilter->isProjectFile($callee->file)
-            || $depth >= $this->maxDepth
-        ) {
+        // Depth first, and that ORDER is the notice's actionability below: a hop the budget would have
+        // stopped at anyway is not one widening the scope recovers, so it must not be reported as one.
+        if ($callee === null || $depth >= $this->maxDepth) {
+            return null;
+        }
+
+        // The file gate, not depth, does the real containment: vendor is a terminal, never descended.
+        if (! $this->projectFilter->isProjectFile($callee->file)) {
+            // The point this declined is a bare `Throwable` PHPStan flagged and nothing else read, so
+            // the drop is a response the document will not carry. Where the callee is the application's
+            // own the reader can have it back by widening the scope, which is worth saying; where it is
+            // vendor's there is nothing to widen to and the drop is the containment working.
+            if ($this->appFilter->isProjectFile($callee->file)) {
+                $this->skippedDescents->record(new SkippedDescent(
+                    $callee->class,
+                    $callee->method,
+                    $callee->file,
+                    $frame->location,
+                ));
+            }
+
             return null;
         }
 

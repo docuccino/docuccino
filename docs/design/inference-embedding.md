@@ -132,9 +132,12 @@ Spike A perf reference: ~0.4s wall / ~92 MB for container + one controller; dete
   (`DocumentGenerator::degraded()` owns the rule).
 - **Two scopes, not one.** The bounds above (depth 4, file budget 40) are shared by every
   descending analysis, but the *scope* is not. Throw classification and the Query-Builder trace
-  descend only into `engine.project_paths`; the response-shape refiner and its enum folder run on
+  descend only into the DESCEND scope; the response-shape refiner and its enum folder run on
   the wider PRIME scope — every primed app PSR-4 root, a modular `Modules\…` root included (§4a
-  step 4). Vendor code is in neither, so it is never followed.
+  step 4). Vendor code is in neither, so it is never followed. Both are derived from the
+  application's `composer.json` by one reader (`AnalysisScopes` over `Psr4Namespaces`): prime is
+  every PSR-4 root it maps, descend the `autoload` half of the same map, which
+  `engine.project_paths` narrows where an application writes it (§6c).
 
 **Removed: the parent/worker pool.** A parent orchestrator plus K worker processes (Symfony
 Process, NDJSON of already-translated results, recycling on route count and RSS watermark,
@@ -750,6 +753,61 @@ are the pipeline's ExceptionToResponse job. Known limitation (accepted): an inco
 `@throws` docblock suppresses descent, hiding deeper exceptions — the docblock is trusted about WHICH
 classes a call raises. It is not trusted about their statuses, which is a separate claim it never makes:
 that read goes one hop past the declaration into the callee's own `throw` (`inDeclaringCallee()` above).
+
+### 6c. How far descent goes, and what it says when it stops
+
+The DESCEND scope defaults to every PSR-4 source root the application declares under `autoload`, not to
+a fixed `['app']`. `app/` is one application shape's answer: a modular application maps its own
+`Modules\…`/`Domain\…` roots, and a throw written a hop below a controller there reaches the document
+only if descent may open the callee's file — layer 3 is the bare-`Throwable` path, so declining the hop
+drops the throw point altogether and the document publishes NO response for an error the application
+really raises. `autoload-dev` is deliberately out: a test root is not the API surface, so walking into it
+can document nothing. It stays PRIMED, because a helper a test root declares still has to reflect
+(`AnalysisScopes`, one reader with `Psr4Namespaces`).
+
+**Measured before the default moved**, over one build of the fixture app's 115 actions across both throw
+controllers and every modular controller, at `['app']` against the derived set:
+
+| | `['app']` | stock derived (`app` + the two database roots) | full derived (+ `modules/`) |
+| --- | --- | --- | --- |
+| analysed files | 168 | 168 | 168 |
+| live file walks | 62 | 62 | 68 |
+| peak memory | 176.5 MB | 176.5 MB | 178.5 MB |
+| throw signals published | 60 | 60 | 62 |
+| actions with no throw at all | 25 | 25 | 22 |
+
+So the common case is not merely unchanged, it is IDENTICAL: a stock Laravel skeleton maps `App\` plus
+`Database\Factories\` and `Database\Seeders\`, and descending into the two database roots costs zero
+walks, zero bytes of memory and changes no answer, because nothing an action calls is written there. The
+whole cost of the change is the modular root: +6 live walks (+10%), +2 MB (+1.1%), no wall-time
+difference outside noise (2.1–2.5s either way, both scopes). The benefit is a NUMBER rather than a
+principle — 2 error responses that were missing from the document entirely, each with the 404 the
+exception class pins rather than a placeholder 500, plus one more throw read and correctly demoted. And a
+fully warm build pays none of it: `LazyTypeEngine` is never built when every fragment hits, which
+`LazyEngineBuildTest` asserts as `warmBuilds === 0`.
+
+The application's PSR-4 map is therefore a fragment-cache key input (`BuildFingerprint`), and it is the
+one input `composer.lock` cannot stand in for: composer's content hash does not cover `autoload`, so
+mapping a new root and running `dump-autoload` moves no locked byte while moving both scopes.
+
+**Where a narrowing costs something, the build says so.** `applyDescent` records a `SkippedDescent` when
+it declines a callee whose file the application declares — the app scope says yes, the descend scope says
+no — and `SkippedDescents` publishes one `inference.descend-scope-narrowed` info per callee and call site.
+Every firing is actionable by construction: the file is the application's own and the knob is the same
+author's, so there is no actionability filter here the way `UnreadStatuses` has one. Sized on the fixture
+corpus with descent pinned back to `app/`: **7 firings, 7 where the reader can act, 0 where they cannot** —
+and 0 firings at the derived default, which is the number that matters, because a notice an ordinary build
+prints is a channel nobody reads. Of the 7, widening recovers 3 throw reads and 2 published responses; the
+other 4 callees turn out to raise nothing publishable, which is why the sentence stays in the conditional
+("an error response behind that call would be missing") rather than claiming a loss it cannot prove. The
+depth bound is checked BEFORE the scope gate, so a hop descent would have stopped at anyway records
+nothing. The Tracer's own declines (QB trace, inline rules) are NOT reported: that population is every
+unresolvable call on any non-descend file, which would drown the channel.
+
+The population the notice exists for is an install that wrote `project_paths` itself. The shipped
+`docuccino.yaml` used to write `project_paths: ['app']` LIVE, so every application that ran
+`docuccino:install` has it pinned and a code-default change reaches none of them; the key now ships
+commented out, and commenting a template out does not edit anybody's file.
 
 ## 7. Bundled PHPStan extensions (BC-stable APIs)
 
