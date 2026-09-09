@@ -12,13 +12,14 @@ operations and schemas it describes — with a guarantee those links can't silen
 
 ## Point Docuccino at a folder
 
-Set `content.dir` to a folder of Markdown files, relative to your application root:
+Set `content.dir` in `docuccino.yaml` to a folder of Markdown files, relative to your application
+root:
 
-```php
-// config/docuccino.php — documents.default
-'content' => [
-    'dir' => 'resources/docs/api',
-],
+```yaml
+documents:
+  default:
+    content:
+      dir: 'resources/docs/api'
 ```
 
 Every `*.md` file under that folder becomes a page. The **folder structure becomes your navigation**:

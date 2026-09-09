@@ -28,8 +28,8 @@ use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParameters;
  *   `controller`.
  * - An `error_responses` value outside the two the key accepts, which reads as `default`. Every other
  *   value the build could be handed here would otherwise change what a document says about every error
- *   in it without a word — null included, which is what an unset `env()` puts under a key an author
- *   deliberately wrote. Only an ABSENT key is silent, and it resolves to `none` rather than to this.
+ *   in it without a word — null included, which is what a key written with nothing after the colon
+ *   holds. Only an ABSENT key is silent, and it resolves to `none` rather than to this.
  * - An `integrations.query_builder.filter_descriptions` key naming no filter kind. The sentence under it
  *   can never be reached, so the override looks like it did nothing.
  * - A `representation.examples.formats` sample that is not a string. `format` is a string keyword, so

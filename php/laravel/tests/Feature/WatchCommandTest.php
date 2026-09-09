@@ -94,36 +94,30 @@ it('says how much it is watching when the fragments name files', function (): vo
         ->assertExitCode(0);
 });
 
-it('warns that a controller edit will not rebuild when nothing was stored', function (): void {
-    // A store the build wrote nothing to — which is what a cached config, or a fragment cache the
-    // env override could not reach, looks like from here.
+it('warns that a controller edit will not rebuild when nothing was stored, and names the settings', function (): void {
+    // A store the build wrote nothing to — the fragment cache off, or its directory unwritable.
     array_map('unlink', glob($this->fixture->path('fragments/*.json')) ?: []);
     scriptWatch(1);
 
     $this->artisan('docuccino:watch')
         ->expectsOutputToContain('No operation fragments were stored')
+        // One substring, because the two settings and the file are one printed line and Mockery
+        // consumes one expectation per write.
+        ->expectsOutputToContain('cache.path is writable in docuccino.yaml, or set cache.enabled to true')
         ->assertExitCode(0);
 });
 
-it('says that a cached configuration pins the fragment cache off, and how to unpin it', function (): void {
-    // What `php artisan config:cache` leaves behind: the memo Application::configurationIsCached()
-    // answers from, with docuccino.cache.enabled baked to the env default of false.
+it('says nothing about a cached configuration, which cannot reach the fragment cache either way', function (): void {
+    // `config:cache` bakes what the config repository holds, and `cache.enabled` is not in it: the
+    // build reads the setting out of docuccino.yaml and the env override out of the environment the
+    // rebuild is handed. So a cached configuration is not a state this session has to warn about.
     app()->instance('config_loaded_from_cache', true);
-    scriptWatch(1);
-
-    $this->artisan('docuccino:watch')
-        ->expectsOutputToContain('Your configuration is cached')
-        ->expectsOutputToContain('php artisan config:clear')
-        ->assertExitCode(0);
-});
-
-it('says nothing about a cached configuration that baked the fragment cache on', function (): void {
-    app()->instance('config_loaded_from_cache', true);
-    setBuild('cache.enabled', true);
+    array_map('unlink', glob($this->fixture->path('fragments/*.json')) ?: []);
     scriptWatch(1);
 
     $this->artisan('docuccino:watch')
         ->doesntExpectOutputToContain('Your configuration is cached')
+        ->doesntExpectOutputToContain('config:clear')
         ->assertExitCode(0);
 });
 

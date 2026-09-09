@@ -28,6 +28,10 @@ serve it without re-analyzing, gate who can see it, and let CI catch breaking ch
    'source' => 'artifact', // re-emits the committed export.path; never re-analyzes
    ```
 
+   The viewer is the one half of Docuccino's configuration a **request** reads, so it stays in
+   `config/docuccino.php`. Everything that shapes the document is read once per build, from
+   `docuccino.yaml`.
+
 3. **Gate the viewer route** so only the right people reach it ([below](#gating-the-viewer)).
 
 4. **Diff on every change** to enforce your versioning policy in CI ([below](#catching-breaking-changes-in-ci)).
@@ -41,20 +45,21 @@ Redis, database or queue exception fires before analysis starts, point those dri
 in-memory equivalents — [the app won't boot during
 export](/laravel/guides/troubleshooting/#the-app-wont-boot-during-export) has the one-line fix.
 
-## `config/docuccino.php` survives `config:cache`
+## Neither configuration file gets in the way of `config:cache`
 
-Every key Docuccino reads there is plain data — strings, arrays and booleans. Nothing in the file is
-a closure, so `php artisan config:cache` serializes it like any other config file, and a production
-box booting from a cached config reads exactly what you committed.
+`docuccino.yaml` is never read at boot and never cached, so it costs a production box nothing at all.
+Only a command opens it, and a production box runs none.
 
-That is not a detail: `config:cache` serializes the whole config array with `var_export()`, and a
-closure has no serializable form, so **one closure anywhere under `docuccino` would fail the command
-for your entire application** — not just for Docuccino — with *"your configuration files could not be
+`config/docuccino.php` is loaded on every boot, and every key in it is plain data — strings, arrays
+and booleans. Nothing in the file is a closure, so `php artisan config:cache` serializes it like any
+other config file and a box booting from a cached config reads exactly what you committed. That is
+not a detail: `config:cache` serializes the whole config array with `var_export()`, and a closure has
+no serializable form, so **one closure anywhere under `docuccino` would fail the command for your
+entire application** — not just for Docuccino — with *"your configuration files could not be
 serialized"*.
 
-`docuccino.yaml` is never read at boot and never cached, so it costs a production box nothing. It
-also cannot hold a closure at all, which is why the two settings that would most obviously want one
-name a class instead: route filtering
+A YAML file cannot hold a closure at all, which is why the two build settings that would most
+obviously want one name a class instead: route filtering
 ([`routes.filter`](/laravel/reference/configuration/#routes)) and a custom tag mapper
 ([`tags.mapper`](/laravel/reference/configuration/#tags)). Both are resolved out of the container, so
 whatever a closure would have captured becomes a constructor dependency.
@@ -220,13 +225,13 @@ branch's cache, or nothing at all: the worst case is the full build you'd have r
 
 <Steps>
 
-1. **Let the environment turn it on**, so only CI (and whoever wants it locally) pays for a store:
+1. **Let the environment turn it on**, so only CI (and whoever wants it locally) pays for a store.
+   Leave `cache.enabled` off in `docuccino.yaml` and set the variable that overrides it — a value a
+   *run* has an opinion about is exactly what the environment is for, and there is no config edit to
+   review:
 
-   ```php
-   // config/docuccino.php
-   'cache' => [
-       'enabled' => env('DOCUCCINO_CACHE', false),
-   ],
+   ```dotenv
+   DOCUCCINO_FRAGMENT_CACHE=true
    ```
 
 2. **Cache `storage/docuccino`.** That one directory holds everything Docuccino writes for its own
@@ -236,7 +241,7 @@ branch's cache, or nothing at all: the worst case is the full build you'd have r
    ```yaml
    # .github/workflows/api-docs.yml → jobs.spec, alongside the steps above
    env:
-     DOCUCCINO_CACHE: true
+     DOCUCCINO_FRAGMENT_CACHE: true
 
    steps:
      # Restore before the artisan commands; the post-job step saves it again.
@@ -272,16 +277,16 @@ you'd rather source line numbers didn't churn in your PRs.
 
 ## Multitenant base URLs
 
-If your API is served per tenant on a subdomain, describe it once with a server variable rather than a
-server per tenant:
+If your API is served per tenant on a subdomain, describe it once in `docuccino.yaml` with a server
+variable rather than a server per tenant:
 
-```php
-// config/docuccino.php → documents.default.servers
-'servers' => [
-    ['url' => 'https://{tenant}.example.com', 'variables' => [
-        'tenant' => ['default' => 'acme', 'description' => 'Tenant slug'],
-    ]],
-],
+```yaml
+documents:
+  default:
+    servers:
+      - url: 'https://{tenant}.example.com'
+        variables:
+          tenant: { default: 'acme', description: 'Tenant slug' }
 ```
 
 The viewer renders the variable as an editable field, and the value flows into try-it-out requests.

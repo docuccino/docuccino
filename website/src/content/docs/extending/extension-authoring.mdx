@@ -107,11 +107,10 @@ mapper — the contract Docuccino uses to turn a PHP type into a JSON Schema.
    ```
    </TabItem>
    <TabItem label="From config">
-   ```php
-   // config/docuccino.php
-   'extensions' => [
-       \App\Docs\MoneyToSchema::class,
-   ],
+   ```yaml
+   # docuccino.yaml
+   extensions:
+     - 'App\Docs\MoneyToSchema'
    ```
    </TabItem>
    </Tabs>

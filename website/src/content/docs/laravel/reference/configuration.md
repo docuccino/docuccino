@@ -300,9 +300,9 @@ To drop some and keep others, leave this at `default` and name the ones you don'
 
 Deleting the key is how you ask for `none` — that is the fallback a document that doesn't name the key
 gets, and it is why a second document [inherits nothing](/laravel/guides/multiple-documents/) from the
-first. Keeping the key and giving it anything else — a misspelling, or an `env()` whose variable isn't
-set — is reported as `config.unknown-error-responses` and read as `default`, so a value that can't be
-read never quietly empties the document of its errors.
+first. Keeping the key and giving it anything else — a misspelling, or a key with nothing after
+the colon, which reads as null — is reported as `config.unknown-error-responses` and read as
+`default`, so a value that can't be read never quietly empties the document of its errors.
 
 ### `tags`
 

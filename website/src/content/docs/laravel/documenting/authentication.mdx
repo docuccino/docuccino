@@ -89,14 +89,15 @@ satisfies it. The middleware alone is enough; you write no security config:
 	</TabItem>
 </Tabs>
 
-Tune which schemes are exposed:
+Tune which schemes are exposed, in `docuccino.yaml`:
 
-```php
-// config/docuccino.php → documents.default.integrations
-'sanctum' => [
-    'modes'  => ['token', 'stateful'], // which schemes to expose (default: both)
-    'cookie' => 'myapp_session',        // stateful cookie name (default: your session.cookie)
-],
+```yaml
+documents:
+  default:
+    integrations:
+      sanctum:
+        modes: ['token', 'stateful'] # which schemes to expose (default: both)
+        cookie: 'myapp_session'      # stateful cookie name (default: your session.cookie)
 ```
 
 `modes` is intersected with what each route actually supports, so it narrows rather than invents —
@@ -147,34 +148,34 @@ applies to machine-to-machine routes: `client` / `CheckClientCredentials` (all-o
 `CheckClientCredentialsForAnyScope` (any-of) are documented against the client-credentials flow, and
 a bare `client` with no scope is still marked protected.
 
-```php
-// config/docuccino.php → documents.default.integrations
-'passport' => [
-    'url' => 'https://auth.example.com', // OAuth2 flow base URL (default: your app URL)
-],
+```yaml
+documents:
+  default:
+    integrations:
+      passport:
+        url: 'https://auth.example.com' # OAuth2 flow base URL (default: your app URL)
 ```
 
 ## Declaring security yourself
 
 Some apps don't use Sanctum or Passport — a hand-rolled JWT guard, an API key header, an external
-identity provider. Declare the schemes in config and Docuccino publishes them verbatim, in full OpenAPI
-breadth (`http` bearer/basic, `apiKey` in header/query/cookie, `oauth2` with any flows,
+identity provider. Declare the schemes in `docuccino.yaml` and Docuccino publishes them verbatim, in
+full OpenAPI breadth (`http` bearer/basic, `apiKey` in header/query/cookie, `oauth2` with any flows,
 `openIdConnect`):
 
-```php
-// config/docuccino.php → documents.default
-'security' => [
-    // Routes whose middleware matches this wildcard get the `default` requirement below.
-    'auth_middleware' => 'auth*',
+```yaml
+documents:
+  default:
+    security:
+      # Routes whose middleware matches this wildcard get the `default` requirement below.
+      auth_middleware: 'auth*'
 
-    'schemes' => [
-        'bearer' => ['type' => 'http', 'scheme' => 'bearer', 'bearerFormat' => 'JWT'],
-        'apiKey' => ['type' => 'apiKey', 'in' => 'header', 'name' => 'X-API-Key'],
-    ],
+      schemes:
+        bearer: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }
+        apiKey: { type: 'apiKey', in: 'header', name: 'X-API-Key' }
 
-    // The per-operation requirement applied to routes matched by auth_middleware.
-    'default' => [['bearer' => []]],
-],
+      # The per-operation requirement applied to routes matched by auth_middleware.
+      default: [{ bearer: [] }]
 ```
 
 Two things worth knowing:
@@ -289,10 +290,12 @@ cookie scheme with the wrong `name` makes clients send the wrong cookie, so with
 worse than a value that needs checking. Instead the build warns with a `config.machine-dependent-value`
 diagnostic naming the value, the config key it came from, and the option that pins it:
 
-```php
-// config/docuccino.php → documents.default.integrations
-'passport' => ['url' => 'https://auth.example.com'], // instead of your app.url
-'sanctum'  => ['cookie' => 'example_session'],       // instead of your session.cookie
+```yaml
+documents:
+  default:
+    integrations:
+      passport: { url: 'https://auth.example.com' } # instead of your app.url
+      sanctum: { cookie: 'example_session' }        # instead of your session.cookie
 ```
 
 Pin them and the warning goes away, because the document no longer depends on where it was built.

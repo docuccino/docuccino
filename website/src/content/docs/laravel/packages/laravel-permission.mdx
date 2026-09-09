@@ -14,11 +14,14 @@ require, surfaced in the spec.
 Unlike every other integration, this one is **off by default, even when the package is installed**.
 Role and permission names are your application's internal authorization taxonomy: `invoices.approve`,
 `finance-admin`, `can-export-payroll`. Publishing them puts a map of your internal structure into a
-document you may hand to customers, so Docuccino won't do it unless you say so — per document:
+document you may hand to customers, so Docuccino won't do it unless you say so — per document, in
+`docuccino.yaml`:
 
-```php
-// config/docuccino.php → documents.default.integrations
-'permission' => ['enabled' => true],
+```yaml
+documents:
+  default:
+    integrations:
+      permission: { enabled: true }
 ```
 
 Per document is the useful granularity. A partner-facing document can leave it off while your

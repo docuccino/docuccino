@@ -930,11 +930,12 @@ keep every copy inline.
 
 ## Configuration
 
-One key:
+One key, in `docuccino.yaml`:
 
-```php
-// config/docuccino.php → documents.default
-'error_responses' => 'default',
+```yaml
+documents:
+  default:
+    error_responses: 'default'
 ```
 
 | Key | Values | Default | Effect |

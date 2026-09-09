@@ -101,6 +101,21 @@ it('says why an accepted code failed the run anyway', function (): void {
     @unlink($out);
 });
 
+it('files a dead acceptance entry against the file that holds the list', function (): void {
+    onlyTheRecoveringRoute();
+    setBuild('diagnostics.accept', ['not-a.code']);
+    $out = acceptanceOut();
+
+    // `diagnostics.accept` is build configuration, so the reader has to open docuccino.yaml to
+    // delete the entry. A header naming the framework config would send them to a file that has
+    // not held the list since the two files split.
+    $this->artisan('docuccino:export', ['--out' => $out, '--fail-on' => 'none'])
+        ->expectsOutputToContain('Diagnostics for docuccino.yaml:')
+        ->assertSuccessful();
+
+    @unlink($out);
+});
+
 it('reports an entry nothing fired, whether the cause is fixed or the code is misspelled', function (string $code): void {
     onlyTheRecoveringRoute();
     setBuild('diagnostics.accept', [$code]);

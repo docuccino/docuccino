@@ -248,9 +248,10 @@ and the security family `#[Security]`, `#[OptionallyAuthenticated]` and `#[Abili
 
 Docuccino's config is organized around **documents** — each an independent output with its own
 routes, info, security, and viewer — so a few top-level Scramble settings move under
-`documents.default`.
+`documents.default`. It reads two files: `docuccino.yaml` at your project root for everything that
+shapes a document, and `config/docuccino.php` for the viewer, which Laravel registers on every boot.
 
-| Scramble (`config/scramble.php`) | Docuccino (`config/docuccino.php`) |
+| Scramble (`config/scramble.php`) | Docuccino (`docuccino.yaml`, unless noted) |
 | --- | --- |
 | `api_path: 'api'` | `documents.default.routes.include: ['api/*']` |
 | `api_domain` | `documents.default.routes.filter` (or an include glob) |
@@ -258,7 +259,7 @@ routes, info, security, and viewer — so a few top-level Scramble settings move
 | `info.version` / `info.description` | `documents.default.info.version` / `.description` |
 | `servers` | `documents.default.servers` |
 | `ui.title` | `documents.default.info.title` |
-| viewer / UI options | `documents.default.viewer` (`route`, `gate`, `middleware`, `source`, `driver`) |
+| viewer / UI options | `documents.default.viewer` (`route`, `gate`, `middleware`, `source`, `driver`) — in `config/docuccino.php` |
 | `enum_cases_description_strategy` | `#[CaseDescription]` (emitted automatically as `x-enumDescriptions`) |
 | `extensions` | `extensions`, or `Docuccino::extend()` |
 | security via config/callbacks | `documents.default.security` + the Sanctum/Passport integrations |

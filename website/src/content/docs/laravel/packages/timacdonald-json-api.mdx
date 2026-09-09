@@ -142,11 +142,14 @@ never get a flat `toArray()` shape for a JSON:API resource by accident.
 
 ## Configuration
 
-There's nothing to configure. The only switch is the shared `enabled` opt-out, per document:
+There's nothing to configure. The only switch is the shared `enabled` opt-out, per document, in
+`docuccino.yaml`:
 
-```php
-// config/docuccino.php → documents.default.integrations
-'timacdonald_json_api' => ['enabled' => false],
+```yaml
+documents:
+  default:
+    integrations:
+      timacdonald_json_api: { enabled: false }
 ```
 
 With it off, nothing JSON:API-aware runs for these classes: no document schema, no `include`/`fields`

@@ -15,8 +15,9 @@ use Docuccino\Core\Support\Json;
 
 /**
  * One document's resolved configuration (design §9). Framework-agnostic — the adapter builds it
- * from `config/docuccino.php`. Typed accessors cover what the pipeline and built-in extensions
- * read; the untouched `raw` bag carries everything else, so not every key needs modelling here.
+ * from one entry of the configuration file's `documents` map. Typed accessors cover what the
+ * pipeline and built-in extensions read; the untouched `raw` bag carries everything else, so not
+ * every key needs modelling here.
  */
 final readonly class DocumentConfig
 {

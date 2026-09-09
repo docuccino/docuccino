@@ -121,5 +121,9 @@ it('gives every shipped lint a config bag and a row in the reference table', fun
         // key without a lint switches nothing.
         ->and(count($keys))->toBe(count(shippedLints()))
         // Anti-vacuity: two readers that both stopped seeing their shapes would agree on nothing.
-        ->and(count($rows))->toBeGreaterThanOrEqual(7);
+        // A floor of ONE, not of today's seven — removing a lint is a legitimate change, and a floor
+        // at the count would fail here and point at the reference table, which is not what moved.
+        // Anything short of total is caught by the line above, since the count has to be the source
+        // of truth's, and the source of truth carries its own floor in the test above.
+        ->and(count($rows))->toBeGreaterThanOrEqual(1);
 });

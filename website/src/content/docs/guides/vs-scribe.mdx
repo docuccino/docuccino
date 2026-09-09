@@ -225,16 +225,18 @@ biggest win is deletion.
 
 ## Migrating your config
 
-Scribe's flat `config/scribe.php` maps onto Docuccino's per-document config:
+Scribe's flat `config/scribe.php` maps onto Docuccino's per-document config. Docuccino reads two
+files: `docuccino.yaml` at your project root for everything that shapes a document, and
+`config/docuccino.php` for the viewer, which Laravel registers on every boot.
 
-| Scribe (`config/scribe.php`) | Docuccino (`config/docuccino.php`) |
+| Scribe (`config/scribe.php`) | Docuccino (`docuccino.yaml`, unless noted) |
 | --- | --- |
 | `routes.match.prefixes: ['api/*']` | `documents.default.routes.include: ['api/*']` |
 | `routes.match.domains` / `routes.exclude` | `documents.default.routes.filter` / `routes.exclude` |
 | `title` / `description` / `intro_text` | `documents.default.info.title` / `.description` |
 | `base_url` | `documents.default.servers` |
 | `auth.*` | `documents.default.security` + Sanctum/Passport integrations (inferred) |
-| `type: laravel`, `laravel.docs_url`, `laravel.middleware` | `documents.default.viewer` (`route`, `gate`, `middleware`, `source`) |
+| `type: laravel`, `laravel.docs_url`, `laravel.middleware` | `documents.default.viewer` (`route`, `gate`, `middleware`, `source`) — in `config/docuccino.php` |
 | `groups.default` | `documents.default.tags.default_strategy` (`controller` \| `none`) |
 | `--config scribe_admin` (multi-docs) | A second named entry under `documents` |
 | `postman` / `openapi` output toggles | [`export.targets`](/laravel/reference/configuration/#export) — list both formats and one build writes both |

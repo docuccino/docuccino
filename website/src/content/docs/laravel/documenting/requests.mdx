@@ -603,14 +603,14 @@ That is also the whole story of when a property gets nothing:
 
 The per-format samples in the first rows are defaults you can replace. They are
 documentation-reserved values by design (RFC 2606 / 5737 / 3849), so nothing there names a real
-resource — but if your API reads better with your own, set them per format:
+resource — but if your API reads better with your own, set them per format in `docuccino.yaml`:
 
-```php
-'representation' => [
-    'examples' => [
-        'formats' => ['email' => 'jane@example.com', 'hostname' => 'api.example.net'],
-    ],
-],
+```yaml
+documents:
+  default:
+    representation:
+      examples:
+        formats: { email: 'jane@example.com', hostname: 'api.example.net' }
 ```
 
 It is a **merge**: the two formats above are replaced and every other format keeps its default. A

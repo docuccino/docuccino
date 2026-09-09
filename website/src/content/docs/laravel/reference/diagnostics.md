@@ -61,13 +61,13 @@ byte-identical either way.
 ## Accepting a code
 
 The other way to tighten a gate is to accept the codes you can't act on. List them under
-[`diagnostics.accept`](/laravel/reference/configuration/#diagnostics) and they keep printing — marked
-`accepted`, with a hit count at the end of the block — while `--fail-on` stops counting them:
+[`diagnostics.accept`](/laravel/reference/configuration/#diagnostics) in `docuccino.yaml` and they
+keep printing — marked `accepted`, with a hit count at the end of the block — while `--fail-on` stops
+counting them:
 
-```php
-'diagnostics' => [
-    'accept' => ['eloquent.no-columns', 'validation.rule-unrecoverable'],
-],
+```yaml
+diagnostics:
+  accept: ['eloquent.no-columns', 'validation.rule-unrecoverable']
 ```
 
 ```
@@ -205,7 +205,7 @@ key, or — for the four that are about the file itself — the file.
 | `config.engine-config-missing` | warning | `engine.config` names an analyzer config file that isn't there, so the analyzer ran without whatever it registers | Fix the path — it's read relative to your application root — or drop the key. See [Engine](/laravel/reference/configuration/#engine) |
 | `config.unknown-integration` | info | An `integrations.<key>` bag names no integration, so nothing reads it | Fix the key. The message suggests the one you probably meant, and [Integrations](/laravel/reference/configuration/#integrations) lists them all |
 | `config.enabled-ignored` | info | You set `enabled` on an integration that's always on and has no toggle | Delete the key |
-| `config.machine-dependent-value` | warning | A value your clients act on — an OAuth flow URL, a session cookie name — came from the build machine rather than from anything you pinned, and was published as-is | Pin it in `config/docuccino.php` — see [Pin the values your clients act on](/laravel/documenting/authentication/#pin-the-values-your-clients-act-on) |
+| `config.machine-dependent-value` | warning | A value your clients act on — an OAuth flow URL, a session cookie name — came from the build machine rather than from anything you pinned, and was published as-is | Pin it in `docuccino.yaml` — see [Pin the values your clients act on](/laravel/documenting/authentication/#pin-the-values-your-clients-act-on) |
 | `config.machine-dependent-path` | info | A configured path points outside your application, so it's folded into the document's hash verbatim and the output stops being portable between machines | Move the target inside the application; in-app paths are stored relative to the base path |
 | `config.path-rejected` | warning | A configured path holds a NUL byte, which no filesystem path can hold, so nothing read it — an overlay wasn't applied, a content tree wasn't compiled, the fragment cache stayed off | Write the path in single quotes, or escape the backslash. `"\0"` in a double-quoted PHP string is a NUL byte, not the two characters it looks like |
 | `config.not-a-switch` | warning | A key that is an on/off switch holds something that is neither `true` nor `false`, so the switch could not be honoured and its default was used instead | Write `true` or `false`. Any other value is refused rather than coerced — `'no'` and `'off'` are strings, and a coerced string is `true`, so coercing one would turn the switch on |

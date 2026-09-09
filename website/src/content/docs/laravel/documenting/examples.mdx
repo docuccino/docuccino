@@ -169,13 +169,13 @@ your tests.
 
 <Steps>
 
-1. **Say where recordings live**, and commit that directory:
+1. **Say where recordings live** in `docuccino.yaml`, and commit that directory:
 
-   ```php
-   // config/docuccino.php → documents.default
-   'examples' => [
-       'recordings' => 'docs/recordings',
-   ],
+   ```yaml
+   documents:
+     default:
+       examples:
+         recordings: 'docs/recordings'
    ```
 
 2. **Turn the recorder on** in the same bootstrap you registered the [contract-testing
