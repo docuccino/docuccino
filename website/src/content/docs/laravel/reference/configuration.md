@@ -174,20 +174,65 @@ For a worked multitenant subdomain example (`{tenant}.example.com`), see
 'routes' => [
     'include' => ['api/*'],
     'exclude' => [],
-    'closure' => null, // fn (RouteDescriptor $route): bool => ...
+    // 'filter' => App\Docs\PublicRoutes::class,
     'include_vendor' => false,
 ],
 ```
 
-Route selection. `include`/`exclude` are URI globs; `closure` is an optional predicate that runs
-after the globs for arbitrary logic. A route must pass includes, fail excludes, and satisfy the
-closure to be documented.
+Route selection. `include`/`exclude` are URI globs; `filter` names a class for the logic globs can't
+express. A route must pass includes, fail excludes, and be admitted by the filter to be documented.
+
+`filter` is the name of a class implementing `Docuccino\Core\Extensions\Contracts\RouteFilter`:
+
+```php
+namespace App\Docs;
+
+use App\Support\TenantRegistry;
+use Docuccino\Core\Extensions\Context\RouteDescriptor;
+use Docuccino\Core\Extensions\Contracts\RouteFilter;
+
+class PublicRoutes implements RouteFilter
+{
+    public function __construct(private TenantRegistry $tenants) {}
+
+    public function includes(RouteDescriptor $route): bool
+    {
+        return $route->domain === null || $this->tenants->isPublic($route->domain);
+    }
+}
+```
+
+It's built by the container, so it takes its dependencies in the constructor, and it's handed a
+[`RouteDescriptor`](/extending/extension-authoring/) — methods, URI, name, action, middleware and
+domain. Returning `false` omits the route entirely: no operation, and no diagnostic.
+
+**A filter that can't be built stops the run**, rather than documenting every route the globs
+admitted. A class that isn't autoloadable, doesn't implement the contract, or throws while the
+container builds it is reported as a
+[`config.route-filter-unusable`](/laravel/reference/diagnostics/) error and nothing is written — the
+route set you'd get by skipping the filter is a superset you explicitly narrowed, so publishing it
+would describe a surface you'd said wasn't yours.
+
+:::caution[`routes.closure` is gone — use `filter`]
+`closure` took the same predicate inline, and **an application that filled it in could not run `php
+artisan config:cache`**: the framework serializes the config array with `var_export()`, a closure has
+no serializable form, and the command fails with *"your configuration files could not be serialized
+because the value at documents.default.routes.closure is non-serializable"*. There was no version in
+which the key both held a closure and survived a cached config, so it is removed outright rather than
+deprecated.
+
+Move the predicate into a `filter` class — anything the closure closed over becomes a constructor
+dependency. A `closure` key still holding a value is reported as a
+[`config.route-closure-removed`](/laravel/reference/diagnostics/) error and the build refuses, for
+the same reason an unusable `filter` does: quietly ignoring it would publish exactly the routes it
+was written to keep out. A `closure` key left at `null` is read as unset and says nothing.
+:::
 
 Routes whose resolved controller class file lives under the application's `vendor/` directory are
 **excluded by default** — the same as `php artisan route:list --except-vendor` — so an installed
-package's own routes don't leak into your API reference. Closures and your own app controllers are
-never affected, and the `include`/`exclude`/`closure` filters are unchanged. Set `include_vendor` to
-`true` to document installed packages' routes.
+package's own routes don't leak into your API reference. Routes handled by a closure and your own app
+controllers are never affected, and the `include`/`exclude`/`filter` filters are unchanged. Set
+`include_vendor` to `true` to document installed packages' routes.
 
 ### `security`
 

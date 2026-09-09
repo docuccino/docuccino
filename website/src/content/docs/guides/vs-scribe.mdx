@@ -230,7 +230,7 @@ Scribe's flat `config/scribe.php` maps onto Docuccino's per-document config:
 | Scribe (`config/scribe.php`) | Docuccino (`config/docuccino.php`) |
 | --- | --- |
 | `routes.match.prefixes: ['api/*']` | `documents.default.routes.include: ['api/*']` |
-| `routes.match.domains` / `routes.exclude` | `documents.default.routes.closure` / `routes.exclude` |
+| `routes.match.domains` / `routes.exclude` | `documents.default.routes.filter` / `routes.exclude` |
 | `title` / `description` / `intro_text` | `documents.default.info.title` / `.description` |
 | `base_url` | `documents.default.servers` |
 | `auth.*` | `documents.default.security` + Sanctum/Passport integrations (inferred) |
@@ -238,6 +238,16 @@ Scribe's flat `config/scribe.php` maps onto Docuccino's per-document config:
 | `groups.default` | `documents.default.tags.default_strategy` (`controller` \| `none`) |
 | `--config scribe_admin` (multi-docs) | A second named entry under `documents` |
 | `postman` / `openapi` output toggles | [`export.targets`](/laravel/reference/configuration/#export) — list both formats and one build writes both |
+
+**`routes.match.domains` maps onto more than it asks for.** Scribe matches domains against patterns;
+[`routes.filter`](/laravel/reference/configuration/#routes) is a class implementing `RouteFilter`,
+handed each route's `domain` along with its URI, name, action and middleware — so a domain match is
+one `return` statement, and a rule that needs to consult something (a tenant registry, a feature
+flag) takes it as a constructor dependency, because the container builds the class. It is also why
+the key names a class rather than taking an inline predicate: a closure in a config file cannot be
+serialized, so `php artisan config:cache` would fail for the whole application. See
+[`config/docuccino.php` survives
+`config:cache`](/laravel/guides/production/#configdocuccinophp-survives-configcache).
 
 See the [configuration reference](/laravel/reference/configuration/) for every option.
 

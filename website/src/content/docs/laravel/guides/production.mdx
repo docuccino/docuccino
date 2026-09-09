@@ -41,6 +41,22 @@ Redis, database or queue exception fires before analysis starts, point those dri
 in-memory equivalents — [the app won't boot during
 export](/laravel/guides/troubleshooting/#the-app-wont-boot-during-export) has the one-line fix.
 
+## `config/docuccino.php` survives `config:cache`
+
+Every key Docuccino reads is plain data — strings, arrays, booleans, and class names written as
+strings or `::class`. Nothing in the file is a closure, so `php artisan config:cache` serializes it
+like any other config file, and a production box booting from a cached config reads exactly what you
+committed.
+
+That is not a detail: `config:cache` serializes the whole config array with `var_export()`, and a
+closure has no serializable form, so **one closure anywhere under `docuccino` would fail the command
+for your entire application** — not just for Docuccino — with *"your configuration files could not be
+serialized"*. It is why route filtering is a class named by string
+([`routes.filter`](/laravel/reference/configuration/#routes)) rather than an inline predicate, and
+why a custom tag mapper is too ([`tags.mapper`](/laravel/reference/configuration/#tags)). Both are
+resolved out of the container, so whatever a closure would have captured becomes a constructor
+dependency.
+
 ## Production needs no analysis toolchain
 
 Because the analysis lives in `docuccino/inference-phpstan` and you install it as a dev dependency,
@@ -321,7 +337,23 @@ OpenAPI addresses an operation by path and method — there is nowhere to put a 
 for a different host. If two of your routes collide that way, Docuccino documents the first host
 alphabetically and reports the other as a `route.operation-collision` error, naming both. The fix is to
 give each host a [document of its own](/laravel/reference/configuration/#documents) and filter its routes
-in with `routes.closure`.
+in with [`routes.filter`](/laravel/reference/configuration/#routes) — the route's `domain` is on the
+descriptor the filter is handed:
+
+```php
+namespace App\Docs;
+
+use Docuccino\Core\Extensions\Context\RouteDescriptor;
+use Docuccino\Core\Extensions\Contracts\RouteFilter;
+
+class AdminHostRoutes implements RouteFilter
+{
+    public function includes(RouteDescriptor $route): bool
+    {
+        return $route->domain === 'admin.example.com';
+    }
+}
+```
 </Aside>
 
 <Aside type="caution" title="Multi-tenant apps: check `viewer.middleware`">
