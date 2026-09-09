@@ -12,6 +12,7 @@ use Docuccino\Core\Support\Hydrate;
 use Docuccino\Core\Support\PlainText;
 use Docuccino\Laravel\Config\ConfigPaths;
 use Docuccino\Laravel\Config\ConfiguredFlags;
+use Docuccino\Laravel\Config\ConfiguredTagMapper;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfig;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParameters;
 
@@ -34,6 +35,9 @@ use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParameters;
  * - A `representation.examples.formats` sample that is not a string. `format` is a string keyword, so
  *   nothing could publish it; the same code covers a sample a field's own rules reject, which only the
  *   build can find out.
+ * - A `tags.mapper` that named a mapper and got none, which {@see ConfiguredTagMapper} dropped so the
+ *   tags stay as the code wrote them. Reported HERE and resolved THERE, off the one condition: a name
+ *   in the bag and no mapper beside it.
  * - A `tags.definitions` `parent` that {@see DocumentConfig::tagDefinitions()} dropped, because it
  *   names no defined tag or would close a cycle — OAS 3.2 allows neither.
  * - A path-like key pointing outside the app base path. {@see ConfigPaths} can't relativise it, so it
@@ -123,6 +127,11 @@ final class ConfigDiagnostics
                     $strategy,
                 ),
             );
+        }
+
+        $unusableMapper = ConfiguredTagMapper::diagnose($document->key, $document->tags, $document->tagMapper);
+        if ($unusableMapper !== null) {
+            $diagnostics[] = $unusableMapper;
         }
 
         foreach ($document->tagParentIssues() as $issue) {

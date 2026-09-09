@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Extensions\Contracts\TagMapper;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParameters;
 use Docuccino\Laravel\Registry\ConfigDiagnostics;
 use Docuccino\Laravel\Registry\IntegrationToggles;
+use Docuccino\Laravel\Tests\Fixtures\Tags\StatefulTagMapper;
 
 /**
  * The config-shape info diagnostics (design §9, B7): the silent no-ops the config surface used to
@@ -129,6 +131,43 @@ it('emits an info diagnostic for an unknown tags.default_strategy value', functi
 it('does not flag a known tags.default_strategy value', function (string $strategy): void {
     expect(ConfigDiagnostics::for(configDoc(tags: ['default_strategy' => $strategy])))->toBe([]);
 })->with(['controller', 'none']);
+
+/*
+ * `tags.mapper` names a collaborator, and a name is four things it can be: no name at all, a name
+ * nothing loads, a name that loads and is no mapper, and a mapper the container could not build. The
+ * document is truthful in all four — its tags are the ones the code wrote — so each is a WARNING saying
+ * the key did not take, and the message says which of the four it was.
+ */
+
+it('warns, and says which of the four states it is in, for a tags.mapper that produced no mapper', function (mixed $configured, string $expected): void {
+    // No mapper beside a name in the bag is the whole condition, which is what a resolved document with
+    // an unusable `tags.mapper` looks like ({@see ConfiguredTagMapper}).
+    $diagnostics = ConfigDiagnostics::for(configDoc(tags: ['mapper' => $configured]));
+
+    expect($diagnostics)->toHaveCount(1)
+        ->and($diagnostics[0]->severity)->toBe(Severity::Warning)
+        ->and($diagnostics[0]->code)->toBe('config.tag-mapper-unusable')
+        ->and($diagnostics[0]->message)->toContain($expected)
+        ->and($diagnostics[0]->message)->toContain('documents.default.tags.mapper');
+})->with([
+    'not a string at all' => [123, 'is int rather than the name of a class'],
+    'an empty string' => ['', "is '' rather than the name of a class"],
+    'whitespace' => ['   ', 'rather than the name of a class'],
+    'a name nothing loads' => ['Not\\A\\Real\\Mapper', 'is neither an autoloadable class nor a name the container has bound'],
+    'a class that is no mapper' => [stdClass::class, 'does not implement '.TagMapper::class],
+    'a mapper the container cannot build' => [StatefulTagMapper::class, 'the container could not build'],
+]);
+
+it('says nothing about a document that names no tags.mapper, or one whose mapper resolved', function (): void {
+    // The other half: a bag with no `mapper` key is silent, and so is one whose mapper is right there.
+    expect(ConfigDiagnostics::for(configDoc(tags: ['map' => ['a' => 'b']])))->toBe([])
+        ->and(ConfigDiagnostics::for(new DocumentConfig(
+            'default',
+            [],
+            tags: ['mapper' => StatefulTagMapper::class],
+            tagMapper: new StatefulTagMapper('V1'),
+        )))->toBe([]);
+});
 
 it('emits an info diagnostic for a tag parent that no definition declares', function (): void {
     $diagnostics = ConfigDiagnostics::for(configDoc(tags: ['definitions' => [
