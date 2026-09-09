@@ -22,6 +22,12 @@ use Docuccino\Core\Extensions\Contracts\OperationPhase;
  */
 final class RawTextDiagnosticExtension implements OperationExtension
 {
+    /**
+     * The route this producer is exercised on. Hostile too, and deliberately: `routeSignature` is the
+     * one field a diagnostic publishes unescaped, so a tame path would leave that exemption untested.
+     */
+    public const string HOSTILE_PATH = "api/zz-raw\x1B[31m\u{009B}31m\u{202E}\u{2028}text";
+
     /** The code as this producer states it — before anything neutralises it. */
     public const string RAW_CODE = "test.raw\u{202E}edoc";
 

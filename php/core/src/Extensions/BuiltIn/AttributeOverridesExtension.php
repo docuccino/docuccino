@@ -225,12 +225,11 @@ final class AttributeOverridesExtension implements OperationExtension
      */
     private function describedFile(RouteContext $context, string $path): ?string
     {
-        $quoted = $path;
         $resolved = ConfinedPath::resolve($this->basePath, $path);
         if ($resolved === null) {
             $this->report($context, Severity::Error, 'description-file.escapes-base-path', sprintf(
                 '#[Description] file "%s" does not name a path inside the application and was rejected.',
-                $quoted,
+                $path,
             ), ConfinedPath::FILE_ESCAPED_HELP);
 
             return null;
@@ -242,7 +241,7 @@ final class AttributeOverridesExtension implements OperationExtension
         if ($contents === false) {
             $this->report($context, Severity::Warning, 'description-file.missing', sprintf(
                 '#[Description] file "%s" could not be read; the description was not documented.',
-                $quoted,
+                $path,
             ), ConfinedPath::FILE_MISSING_HELP);
 
             return null;

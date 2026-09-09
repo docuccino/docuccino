@@ -6,6 +6,7 @@ use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Laravel\Facades\Docuccino;
+use Docuccino\Laravel\Routing\OperationMatch;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\RawTextDiagnosticExtension;
 use Illuminate\Routing\Router;
@@ -17,18 +18,26 @@ use Illuminate\Routing\Router;
  * and `Diagnostic` is what has to make that safe. So these rows say nothing about which producers
  * remembered; they say the answer does not depend on it.
  *
- * The absence rows read the EMITTED bytes rather than the message, because the document is where no
- * render boundary of ours can help: it is written with `JSON_UNESCAPED_UNICODE`, so `json_encode`
- * escapes the ASCII controls and passes a C1 introducer, a direction override and a line separator
- * through whole.
+ * The ROUTE is hostile too, and deliberately: `routeSignature` is the one field a diagnostic publishes
+ * unescaped, so a fixture on a tame path would leave the exemption untested and reading as an accident.
+ * A route whose own path carries every hazard is what makes the two halves visible — the sentence a
+ * producer wrote, which is neutralised, and the key, which stays byte-identical to what the document
+ * already publishes as its `paths` key and to what `docuccino:explain` matches against.
+ *
+ * The absence rows read the document DECODED rather than as bytes. The document is written with
+ * `JSON_UNESCAPED_UNICODE`, so a C1 introducer and a direction override reach an artifact whole — but
+ * `json_encode` escapes `\x1B` and U+2028 as transport whatever the flags, and hands them back whole on
+ * the way out. A bytes-only row therefore cannot fail for those two, and two of these four once passed
+ * with nothing escaping them at all. Decoding first is what a reader of the artifact does anyway.
  */
+
 afterEach(function (): void {
     removeFragmentCacheDirs('diagescape');
 });
 
 it('makes safe what a producer stated raw, wherever the producer put it', function (): void {
     Docuccino::extend(new RawTextDiagnosticExtension);
-    $result = localityBuild(static fn (Router $router) => $router->get('api/zz-raw-text', fn (): array => ['ok' => true]));
+    $result = localityBuild(static fn (Router $router) => $router->get(RawTextDiagnosticExtension::HOSTILE_PATH, fn (): array => ['ok' => true]));
 
     $reported = array_values(array_filter(
         $result->diagnostics,
@@ -43,27 +52,45 @@ it('makes safe what a producer stated raw, wherever the producer put it', functi
         ->and($reported[0]->help)->toBe("Correct it.\nIt is spelled \"Evil\\x1B[31m\\u{009B}31m\\u{202E}\\u{2028}Name\" today.");
 });
 
-it('keeps a help line break as layout, and the route signature as the route answers it', function (): void {
-    // A newline is the one control character `help` keeps: a console writer indents each of its lines
-    // past anything they could be mistaken for, and `json_encode` escapes a newline whatever else it
-    // leaves alone. The signature is left whole for a different reason — it is a KEY, matched against
-    // what a live route reports (`explain`) and sorted on, so escaping it would make the diagnostic
-    // name a route nothing can find.
+it('keeps a help line break as layout', function (): void {
+    // A newline is the one control character `help` keeps: a console writer indents and gutters each of
+    // its lines past anything they could be mistaken for, and `json_encode` escapes a newline whatever
+    // else it leaves alone.
     Docuccino::extend(new RawTextDiagnosticExtension);
-    $result = localityBuild(static fn (Router $router) => $router->get('api/zz-raw-text', fn (): array => ['ok' => true]));
+    $result = localityBuild(static fn (Router $router) => $router->get(RawTextDiagnosticExtension::HOSTILE_PATH, fn (): array => ['ok' => true]));
 
     $reported = array_values(array_filter(
         $result->diagnostics,
         static fn (Diagnostic $d): bool => str_starts_with($d->code, 'test.raw'),
     ));
 
-    expect(substr_count((string) $reported[0]->help, "\n"))->toBe(1)
-        ->and($reported[0]->routeSignature)->toBe('GET /api/zz-raw-text');
+    expect(substr_count((string) $reported[0]->help, "\n"))->toBe(1);
 });
 
-it('publishes no sequence that steers whatever renders the artifact', function (string $hazard): void {
+it('names the route with the same bytes the document publishes as its path', function (): void {
+    // The exemption, stated as the equality it exists for. `routeSignature` is a KEY: `docuccino:explain`
+    // filters this operation's diagnostics by comparing it against what the document says the operation
+    // is, and it is sorted on. Escaping the published side alone would break that match and remove
+    // nothing from the artifact — the same bytes stand in `paths`, and have to, because that key is the
+    // URL a client sends. So the row is an identity between the two sides rather than an absence.
     Docuccino::extend(new RawTextDiagnosticExtension);
-    $result = localityBuild(static fn (Router $router) => $router->get('api/zz-raw-text', fn (): array => ['ok' => true]));
+    $result = localityBuild(static fn (Router $router) => $router->get(RawTextDiagnosticExtension::HOSTILE_PATH, fn (): array => ['ok' => true]));
+
+    $reported = array_values(array_filter(
+        $result->diagnostics,
+        static fn (Diagnostic $d): bool => str_starts_with($d->code, 'test.raw'),
+    ));
+
+    $paths = array_keys(emittedArray($result)['paths']);
+
+    // Otherwise the identity below could hold on two values that had both lost the hazard.
+    expect($paths)->toBe(['/'.RawTextDiagnosticExtension::HOSTILE_PATH])
+        ->and($reported[0]->routeSignature)->toBe((new OperationMatch('default', $paths[0], 'get'))->signature());
+});
+
+it('publishes no sequence that steers whatever renders the artifact, outside the route key', function (string $hazard): void {
+    Docuccino::extend(new RawTextDiagnosticExtension);
+    $result = localityBuild(static fn (Router $router) => $router->get(RawTextDiagnosticExtension::HOSTILE_PATH, fn (): array => ['ok' => true]));
 
     $reported = array_values(array_filter(
         $result->diagnostics,
@@ -74,9 +101,22 @@ it('publishes no sequence that steers whatever renders the artifact', function (
     $document['x-docuccino']['diagnostics'] = array_map(static fn (Diagnostic $d): array => $d->toArray(), $reported);
     $emitted = (new UirEmitter)->emit(UirDocument::fromArray($document));
 
-    // The positive control the absence needs: the name did reach these bytes, escaped.
-    expect($emitted)->toContain('u{202E}')
-        ->and($emitted)->not->toContain($hazard);
+    /** @var array{'x-docuccino': array{diagnostics: list<array<string, string>>}} $decoded */
+    $decoded = json_decode($emitted, true, flags: JSON_THROW_ON_ERROR);
+    $published = $decoded['x-docuccino']['diagnostics'];
+
+    // Everything a producer WROTE, which is everything the constructor owns. The key it merely quotes
+    // has its own row above.
+    expect($published)->toHaveCount(1);
+    $authored = $published[0];
+    unset($authored['routeSignature']);
+
+    // The positive control the absence needs: the name did reach the artifact, escaped, in all three.
+    expect(array_keys($authored))->toBe(['severity', 'code', 'message', 'help'])
+        ->and($authored['code'])->toContain('u{202E}')
+        ->and($authored['message'])->toContain('u{202E}')
+        ->and($authored['help'])->toContain('u{202E}')
+        ->and(implode("\x00", $authored))->not->toContain($hazard);
 })->with([
     'ANSI escape' => "\x1B",
     'C1 control sequence introducer' => "\u{009B}",
@@ -89,7 +129,7 @@ it('says the same thing on a warm build as on a cold one, rather than escaping t
     // comes back off a warm fragment-cache hit, and it comes back through the constructor. A second
     // escaping layer per rebuild would be invisible to any single build and obvious here.
     Docuccino::extend(new RawTextDiagnosticExtension);
-    $routes = static fn (Router $router) => $router->get('api/zz-raw-text', fn (): array => ['ok' => true]);
+    $routes = static fn (Router $router) => $router->get(RawTextDiagnosticExtension::HOSTILE_PATH, fn (): array => ['ok' => true]);
 
     fragmentCacheDir('diagescape');
     $coldEngine = null;

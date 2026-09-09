@@ -12,29 +12,21 @@ use Docuccino\Core\Support\PlainText;
  * A single build diagnostic. The CLI is the primary channel; these are embedded in the
  * UIR document only under an explicit flag. Ordering is deterministic (never time-based).
  *
- * `code`, `message` and `help` are made safe to print HERE, once, and no producer owes it. All three
- * are stated around text somebody else chose — a route, a class, a config key, a message something
- * threw, and a code an extension names for itself — and a diagnostic has more than one destination.
- * The emitted document is the one that settles where the escaping lives: it is written with
- * `JSON_UNESCAPED_UNICODE`, so a direction override or a C1 control survives `json_encode` whole and
- * reaches whoever opens the artifact, with no render boundary of ours in between. Left to the producers
- * this is one invariant restated at every construction site, and a site that forgets it says nothing.
- * {@see PlainText} is idempotent, so a producer that escapes anyway is harmless, and
- * {@see fromArray()} — how a diagnostic comes back off a warm fragment-cache hit — arrives through this
- * constructor unchanged.
+ * `code`, `message` and `help` are stated around text an application chose, and a diagnostic is
+ * PUBLISHED as well as printed, so they are made safe here, once, and no producer owes the call.
+ * {@see PlainText} is idempotent, so a producer that makes it anyway is harmless, and
+ * {@see fromArray()} — how a diagnostic comes back off a warm fragment-cache hit — arrives through
+ * this constructor. `help` keeps its line breaks ({@see PlainText::lines()}), which a console writer
+ * turns into layout.
  *
- * `help` goes through {@see PlainText::lines()} rather than {@see PlainText::of()}: its line breaks are
- * layout a console writer indents, and a newline is the one control character every destination here
- * handles safely on its own.
+ * `routeSignature` is exempt, and stays exactly as it was given. It is a key rather than a sentence
+ * — sorted on, and compared against the signature a live route answers with — and its bytes are the
+ * bytes the document already publishes as the `paths` key it names. So escaping it would make a
+ * diagnostic name a route nothing can find while removing nothing from the artifact. `source` is a
+ * {@see Source}, shared with the provenance trail, and belongs to that class for the same reason.
  *
- * `routeSignature` is deliberately left as it was given. It is a key rather than a sentence — sorted
- * on, substituted, and compared against the signature a live route answers with — so escaping it here
- * would only make the two sides disagree; a signature is owed neutralising where it is minted, so that
- * both sides move together. `source` is a {@see Source}, shared with the provenance trail the whole
- * document carries, and belongs to that class for the same reason.
- *
- * A terminal has a second hazard on top of this one, its own markup, which nothing but the console
- * renderer knows about; that half stays at the render boundary.
+ * Why the escaping sits here rather than at each producer, and why the exemption is sound, is in
+ * `docs/design/defect-classes.md`.
  */
 final readonly class Diagnostic
 {

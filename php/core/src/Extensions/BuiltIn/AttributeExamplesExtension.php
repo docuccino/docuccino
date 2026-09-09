@@ -336,12 +336,10 @@ final class AttributeExamplesExtension implements OperationExtension
             return $read->value;
         }
 
-        $quoted = $path;
-
         if ($read->error === ExampleFile::ESCAPED) {
             $this->report($context, Severity::Error, 'example-file.escapes-base-path', sprintf(
                 '#[Example] file "%s" does not name a path inside the application and was rejected.',
-                $quoted,
+                $path,
             ), ConfinedPath::FILE_ESCAPED_HELP);
 
             return null;
@@ -350,7 +348,7 @@ final class AttributeExamplesExtension implements OperationExtension
         if ($read->error === ExampleFile::MISSING) {
             $this->report($context, Severity::Warning, 'example-file.missing', sprintf(
                 '#[Example] file "%s" could not be read; the example was not documented.',
-                $quoted,
+                $path,
             ), ConfinedPath::FILE_MISSING_HELP);
 
             return null;
@@ -358,7 +356,7 @@ final class AttributeExamplesExtension implements OperationExtension
 
         $this->report($context, Severity::Warning, 'example-file.invalid', sprintf(
             '#[Example] file "%s" did not read as an example (%s); the example was not documented.',
-            $quoted,
+            $path,
             $read->ok() ? 'it decodes to null' : $read->detail,
         ), 'Examples are read from .json, .yaml and .yml files; the file has to parse, and to hold something.');
 

@@ -870,10 +870,30 @@ because a reader cannot tell a load-bearing call from a habit. It rests on `Plai
 which is now a row rather than a claim — the sharp test being a WARM build, since `fromArray()` is how a
 diagnostic comes back off a fragment-cache hit and comes back through that constructor. `help` keeps its
 line breaks (`PlainText::lines()`): a console writer indents them, and a newline is the one control
-character every destination handles. `routeSignature` is left whole on purpose — it is a key compared
-against what a live route answers, and escaping one side only would make a diagnostic name a route
-nothing can find.
+character every destination handles.
 
-The guard is `DiagnosticEscapingTest`, which registers a producer written the careless way and holds the
-EMITTED bytes to carrying no sequence that steers anything. A guard listing the producers that remembered
-would be the defect again.
+*The one exemption, and why it is not a hole.* `routeSignature` is left whole. It is a key rather than a
+sentence — sorted on, and compared against the signature a live route answers with — so escaping only the
+published copy would make a diagnostic name a route nothing can find. It also removes nothing: the
+signature's bytes are the route's URI, which the document already publishes verbatim as the `paths` key,
+and it has to, because that key is the URL a client sends. Escaping there would publish an endpoint the
+server does not answer on, which is the confidently-wrong answer rather than the vague-but-true one. So
+the line the class draws is not "text we escape" against "text we don't": it is a SENTENCE we wrote about
+an application's text, which we own and neutralise, against a KEY that has to stay equal to the thing it
+names.
+
+*The other half of a render boundary: shape, not just characters.* Escaping stops a value steering a
+terminal; it does not stop a value being mistaken for a line the tool asserted. `help` keeps its line
+breaks by design, so a newline in it adds a line — and a help line printed in the same indent, colour and
+format as the reference link under it is a link a reader is invited to follow. The forged-diagnostic-line
+half of this was already closed by indenting help past a diagnostic line; the reference line was the same
+defect one row down. The general rule is that where a renderer prints OUR lines beside THEIRS, the marker
+has to sit on theirs: a marker on ours is one their content can reproduce, and a marker on theirs is one
+their content cannot remove. `RendersDiagnostics` therefore gutters every help line.
+
+The guard is `DiagnosticEscapingTest`, which registers a producer written the careless way, gives it a
+route whose own path carries every hazard, and holds the published diagnostic to carrying none of them
+outside that key. A guard listing the producers that remembered would be the defect again. It reads the
+DECODED document rather than the raw bytes: `json_encode` escapes `\x1B` and U+2028 as transport and hands
+them back whole on the way out, so a bytes-only row is vacuous for exactly those two — which is how two of
+its four rows once passed with nothing escaping them at all.
