@@ -20,8 +20,9 @@ require_once __DIR__.'/config-reference-sync.php';
 // Two questions, in order. **Is this block configuration at all?** A `php` fence on the docs site is
 // usually the reader's own code, and an array literal in it — a `rules()` return, a JSON Schema —
 // carries keys that are nobody's settings. So a block counts only when one of its keys NAMES a
-// setting, at one of the three levels a snippet is realistically quoted from: the file's top level, a
-// document, or a viewer. Every name comes off the shipped files.
+// setting. Every name comes off the shipped files, at every depth: a page quotes a snippet from
+// wherever it sits, and a bare `include_vendor` is as much a settings snippet as a whole `documents`
+// bag.
 //
 // **Then: is every key in it a boot key?** The boot surface is whatever `config/docuccino.php` ships,
 // read the same way. A snippet is quoted from wherever it sits, so `'source' => 'artifact'` arrives as
@@ -36,17 +37,33 @@ require_once __DIR__.'/config-reference-sync.php';
 //
 // Requiring this file has no side effects, so tests can point it at synthetic pages.
 
-/** Where the pages live, relative to the repository root. */
-const DOCS_CONFIG_SPLIT_ROOT = 'website/src/content/docs';
+/**
+ * Where the pages live, relative to the repository root. The design docs are in here too: they teach
+ * the file a setting is read from as much as the site does, and CLAUDE.md sends a reader to them
+ * first.
+ */
+const DOCS_CONFIG_SPLIT_ROOTS = ['docs', 'website/src/content/docs'];
 
 /**
- * The names a settings snippet can open with, off both shipped files.
+ * Names both shipped files declare that are ALSO keys of a `php` block on the site which is nobody's
+ * settings — `'title' => 'Invoice'` in a Data class, `'name' => …` in a JSON:API resource.
  *
- * Three levels, because those are the three a page quotes from: the file's own top level
- * (`extensions`, `lint`), one document (`routes`, `viewer`), and one viewer (`gate`, `source`).
- * Deeper leaves are deliberately left out — `path`, `mode`, `default` and `title` are words an
- * application's own arrays are full of, and a name that common would make this a scan of every
- * fenced block on the site.
+ * Every entry is a measured collision. Before adding one, count the blocks the name appears in as a
+ * declared key; before leaving one out, confirm the count is zero.
+ */
+const DOCS_CONFIG_AMBIGUOUS_NAMES = ['email', 'name', 'title', 'type'];
+
+/**
+ * The names a settings snippet can open with: every segment either shipped file declares, at any
+ * depth, less the ambiguous few above.
+ *
+ * Measured over the 45 pages and 271 `php` fences under the roots above. The two files declare 111
+ * names; four collide with a key in a block that is the reader's own code (`title` in 4 blocks,
+ * `name` and `type` in 2 each, `email` in 1, and reading all four costs 23 false reports) and the
+ * other 107 collide with nothing at all. Reading only the top three levels — the file's own, a
+ * document's, a viewer's — would leave 75 of those names unrecognized while matching no extra block,
+ * `include_vendor`, `exclude`, `filter`, `dir`, `leakage` and `mock_faker_key` among them, and a
+ * snippet quoted from one of those is exactly the one nobody notices.
  *
  * @param  list<string>  $paths  dotted key paths, as the two readers return them
  * @return list<string>
@@ -58,17 +75,10 @@ function docs_config_setting_names(array $paths): array
     $names = [];
 
     foreach ($paths as $path) {
-        $segments = explode('.', $path);
-
-        $name = match (true) {
-            count($segments) === 1 => $segments[0],
-            count($segments) === 3 && $segments[0] === 'documents' => $segments[2],
-            count($segments) === 4 && $segments[0] === 'documents' && $segments[2] === 'viewer' => $segments[3],
-            default => null,
-        };
-
-        if ($name !== null && $name !== '*') {
-            $names[$name] = true;
+        foreach (explode('.', $path) as $segment) {
+            if ($segment !== '*' && ! in_array($segment, DOCS_CONFIG_AMBIGUOUS_NAMES, true)) {
+                $names[$segment] = true;
+            }
         }
     }
 
@@ -206,22 +216,25 @@ function docs_config_split_reach(array $pages, string $php, string $yaml): array
 }
 
 /**
- * Every documentation page, as path relative to the repository root => contents.
+ * Every documentation page under the given roots, as path => contents.
  *
+ * @param  list<string>  $roots
  * @return array<string, string>
  *
  * @internal
  */
-function docs_config_split_pages(string $root): array
+function docs_config_split_pages(array $roots): array
 {
     $pages = [];
 
-    /** @var iterable<string, SplFileInfo> $files */
-    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+    foreach ($roots as $root) {
+        /** @var iterable<string, SplFileInfo> $files */
+        $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
 
-    foreach ($files as $file) {
-        if ($file->isFile() && in_array($file->getExtension(), ['md', 'mdx'], true)) {
-            $pages[$file->getPathname()] = (string) file_get_contents($file->getPathname());
+        foreach ($files as $file) {
+            if ($file->isFile() && in_array($file->getExtension(), ['md', 'mdx'], true)) {
+                $pages[$file->getPathname()] = (string) file_get_contents($file->getPathname());
+            }
         }
     }
 

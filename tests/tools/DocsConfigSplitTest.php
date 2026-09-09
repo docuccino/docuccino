@@ -29,7 +29,9 @@ function docs_config_problems_for(array $pages): array
     return docs_config_split_problems($pages, docs_config_shipped_php(), docs_config_shipped_yaml());
 }
 
-it('reads the names off the shipped files at the three levels a page quotes from', function (): void {
+it('reads every name the shipped files declare, at whatever depth it sits', function (): void {
+    // A page quotes a snippet from wherever it sits, so a leaf is as much a settings name as a bag:
+    // `export.path` and `routes.include_vendor` arrive bare and have to be recognized bare.
     $names = docs_config_setting_names([
         'enabled',
         'cache',
@@ -39,11 +41,35 @@ it('reads the names off the shipped files at the three levels a page quotes from
         'documents.*.error_responses',
         'documents.*.viewer',
         'documents.*.viewer.gate',
-        // Deeper than a page quotes from, and a word an application's own arrays are full of.
         'documents.*.export.path',
+        'documents.*.routes.include_vendor',
+        // Declared, and also a key in blocks on the site that are nobody's settings.
+        'documents.*.info.title',
     ]);
 
-    expect($names)->toBe(['cache', 'documents', 'enabled', 'error_responses', 'gate', 'viewer']);
+    expect($names)->toBe([
+        'cache',
+        'documents',
+        'enabled',
+        'error_responses',
+        'export',
+        'gate',
+        'include_vendor',
+        'info',
+        'path',
+        'routes',
+        'store',
+        'viewer',
+    ]);
+});
+
+it('leaves out the ambiguous names, and only those', function (): void {
+    // The exclusions are a measured list rather than a feeling about which words are common: each is
+    // a key in a `php` block on the site that is the reader's own code, and reading all four costs
+    // 23 false reports over the 271 fences under the scanned roots.
+    expect(DOCS_CONFIG_AMBIGUOUS_NAMES)->toBe(['email', 'name', 'title', 'type'])
+        ->and(docs_config_setting_names(['documents.*.info.title', 'lint.leakage.patterns.iban']))
+        ->toBe(['documents', 'iban', 'info', 'leakage', 'lint', 'patterns']);
 });
 
 it('matches a snippet quoted from any depth against the path it belongs to', function (string $key, bool $expected): void {
@@ -132,14 +158,20 @@ it('agrees with the product about what the framework config still owns', functio
     }
 });
 
-it('shows every configuration snippet on the site in the file that reads it', function (): void {
-    $pages = docs_config_split_pages(dirname(__DIR__, 2).'/'.DOCS_CONFIG_SPLIT_ROOT);
+it('shows every configuration snippet in the docs in the file that reads it', function (): void {
+    // Both roots: the design docs teach which file a setting is read from as much as the site does,
+    // and CLAUDE.md sends a reader to them first.
+    $pages = docs_config_split_pages(array_map(
+        static fn (string $root): string => dirname(__DIR__, 2).'/'.$root,
+        DOCS_CONFIG_SPLIT_ROOTS,
+    ));
     $reach = docs_config_split_reach($pages, docs_config_shipped_php(), docs_config_shipped_yaml());
 
     // A plausible minimum beside the real assertion: the viewer is configured in PHP and several
     // pages show it, so a reader that stopped recognizing a config block would report nothing wrong
     // while checking nothing at all.
-    expect($reach['blocks'])->toBeGreaterThanOrEqual(8)
+    expect(count($pages))->toBeGreaterThanOrEqual(30)
+        ->and($reach['blocks'])->toBeGreaterThanOrEqual(8)
         ->and($reach['pages'])->toBeGreaterThanOrEqual(4);
 
     expect(docs_config_split_problems($pages, docs_config_shipped_php(), docs_config_shipped_yaml()))->toBe([]);
