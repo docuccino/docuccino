@@ -7,6 +7,7 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Facades\Docuccino;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\EditableOperationExtension;
+use Docuccino\Laravel\Tests\Support\EvaldExtension;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 
 /*
@@ -122,23 +123,31 @@ it('refuses the whole document the cache for an extension declared in no file, a
     $dir = fragmentCacheDir('extsource');
     bindStubEngine();
 
-    // eval()'d code reports a file like `/path/Test.php(12) : eval()'d code`, which is a path no
-    // `is_file()` matches — and a manifest records a file that isn't there as ABSENT, which reads FRESH
-    // for as long as it stays absent. So there is nothing here to key a fragment on, and unlike a tag
-    // mapper there is no per-route bag to refuse with: the entry keys every fragment of the document.
-    if (! class_exists('Docuccino\Laravel\Tests\Temp\EvaldExtension', false)) {
-        eval('namespace Docuccino\Laravel\Tests\Temp; class EvaldExtension implements \Docuccino\Core\Extensions\Contracts\OperationExtension { public function phase(): \Docuccino\Core\Extensions\Contracts\OperationPhase { return \Docuccino\Core\Extensions\Contracts\OperationPhase::Finalize; } public function handle(\Docuccino\Core\Draft\OperationDraft $operation, \Docuccino\Core\Extensions\Context\RouteContext $context): void { $operation->set("x-scratch", "Evald", \Docuccino\Core\Patch\Contribution::attribute()); } }');
-    }
-
-    Docuccino::extend('Docuccino\Laravel\Tests\Temp\EvaldExtension');
+    // There is nothing here to key a fragment on ({@see EvaldExtension}), and unlike a tag mapper there
+    // is no per-route bag to refuse with: the entry keys every fragment of the document.
+    Docuccino::extend(EvaldExtension::ensure());
     $result = generateDocument();
 
     // The document is still right — only its cacheability is gone.
-    expect($result->document->toArray()['paths']['/api/forms']['get'][EditableOperationExtension::FIELD] ?? null)->toBe('Evald')
+    expect($result->document->toArray()['paths']['/api/forms']['get'][EditableOperationExtension::FIELD] ?? null)->toBe(EvaldExtension::VALUE)
         ->and(fragmentEntries($dir))->toBe([]);
 
     $reported = diagnosticsCoded($result->diagnostics, 'extension.unhashable');
 
     expect($reported)->toHaveCount(1)
         ->and($reported[0]->message)->toContain('EvaldExtension');
+});
+
+it('says nothing about an unhashable extension when the fragment cache is off', function (): void {
+    setBuild('cache.enabled', false);
+    bindStubEngine();
+
+    // The gate on the line that raises it: with nothing kept there is no rebuild to warn about, and a
+    // line about a cost nobody is paying is what teaches a reader to skip the channel. The document is
+    // unchanged either way — the diagnostic is the only thing the cache being off decides.
+    Docuccino::extend(EvaldExtension::ensure());
+    $result = generateDocument();
+
+    expect($result->document->toArray()['paths']['/api/forms']['get'][EditableOperationExtension::FIELD] ?? null)->toBe(EvaldExtension::VALUE)
+        ->and(diagnosticsCoded($result->diagnostics, 'extension.unhashable'))->toBe([]);
 });
