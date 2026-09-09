@@ -8,6 +8,7 @@ use Docuccino\Laravel\Engine\EnginePackage;
 use Docuccino\Laravel\Engine\LazyTypeEngine;
 use Docuccino\Laravel\Engine\TypeEngineFactory;
 use Docuccino\Laravel\Pipeline\BuildFingerprint;
+use Docuccino\Laravel\Support\Psr4Namespaces;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 
 /**
@@ -116,6 +117,43 @@ it('changes when the application maps a source root it did not map before', func
         ->and($withDev)->not->toBe($after)
         // Unchanged bytes, unchanged key — the other direction, or the assertions above pass on noise.
         ->and(buildFingerprint(['mode' => 'in-process'], basePath: $root)->digest($engine))->toBe($withDev);
+
+    unlink($root.'/composer.json');
+    rmdir($root);
+});
+
+/**
+ * The two scopes read different halves of one map, so the key has to be injective over the halves and
+ * not just over their merge. Moving a root from `autoload-dev` into `autoload` leaves the merge
+ * identical and widens what descent may walk into — a warm build under an unchanged digest would keep
+ * publishing the narrower scope's error responses, which is the exact invariant this input was added
+ * for.
+ */
+it('changes when a root moves between the autoload sections, leaving the merge identical', function (): void {
+    $engine = new NullTypeEngine;
+    $root = sys_get_temp_dir().'/docuccino-psr4-sections-'.uniqid('', true);
+    mkdir($root, 0o755, true);
+
+    $write = static function (array $manifest) use ($root): void {
+        file_put_contents($root.'/composer.json', (string) json_encode($manifest));
+    };
+
+    $write([
+        'autoload' => ['psr-4' => ['App\\' => 'app/']],
+        'autoload-dev' => ['psr-4' => ['Modules\\' => 'modules/']],
+    ]);
+    $asDev = buildFingerprint(['mode' => 'in-process'], basePath: $root)->digest($engine);
+
+    $write([
+        'autoload' => ['psr-4' => ['App\\' => 'app/', 'Modules\\' => 'modules/']],
+        'autoload-dev' => ['psr-4' => []],
+    ]);
+    $asShipped = buildFingerprint(['mode' => 'in-process'], basePath: $root)->digest($engine);
+
+    // Both maps merge to the same two roots, so prime scope really is unchanged — which is what makes
+    // this a test of the descend half rather than of the merge.
+    expect(Psr4Namespaces::roots($root))->toBe(['App\\' => ['app/'], 'Modules\\' => ['modules/']])
+        ->and($asShipped)->not->toBe($asDev);
 
     unlink($root.'/composer.json');
     rmdir($root);

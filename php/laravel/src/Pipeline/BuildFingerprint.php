@@ -22,7 +22,8 @@ use Docuccino\Laravel\Support\Psr4Namespaces;
  * The PSR-4 map is in for the same reason and is the one input composer.lock cannot stand in for:
  * composer's own content hash does not cover `autoload`, so mapping a new `Modules\…` root and running
  * `dump-autoload` moves no locked byte — while it moves both scopes the engine runs with, since prime
- * scope IS that map and descent defaults to the shipped half of it ({@see TypeEngineFactory}).
+ * scope IS that map and descent defaults to the shipped half of it ({@see TypeEngineFactory}). Both
+ * halves are digested separately, since which SECTION a root sits in is itself one of the two scopes.
  *
  * `engine.memory_limit` is the one key deliberately left out: it is a process ceiling that cannot
  * change a documented byte, and `--memory-limit` would otherwise cost a full rebuild each way.
@@ -66,13 +67,25 @@ final readonly class BuildFingerprint
     }
 
     /**
-     * The PSR-4 map the engine's two scopes are derived from, stably encoded. An empty base path — the
-     * default this class carries for a build that names none — reads nothing rather than reaching for
-     * the filesystem root.
+     * The PSR-4 map the engine's two scopes are derived from, stably encoded — the SHIPPED half beside
+     * the whole of it, because the two scopes read different halves and the merge alone is not
+     * injective over them. Moving one root from `autoload-dev` into `autoload` leaves `roots()`
+     * identical and widens the descend scope, so a key built on the merge would hand a warm build the
+     * narrower scope's error responses under a digest that says nothing changed.
+     *
+     * An empty base path — the default this class carries for a build that names none — reads nothing
+     * rather than reaching for the filesystem root.
      */
     private function psr4Digest(): string
     {
-        return $this->basePath === '' ? '' : Json::stable(Psr4Namespaces::roots($this->basePath));
+        if ($this->basePath === '') {
+            return '';
+        }
+
+        return Json::stable([
+            'shipped' => Psr4Namespaces::shipped($this->basePath),
+            'all' => Psr4Namespaces::roots($this->basePath),
+        ]);
     }
 
     /**
