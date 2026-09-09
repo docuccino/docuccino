@@ -61,8 +61,13 @@ final class PrioritisedTransformer implements DocumentTransformer
 
 /**
  * Declare a two-file extension hierarchy in a directory the test owns and return `[parent file, child
- * FQCN]`. One process may declare a class once, so the marker is only ever what the FIRST call writes;
- * later calls rewrite the FILES, which is the whole of what the key reads.
+ * FQCN]`. One process may declare a class once, so only the FIRST call's marker reaches the loaded
+ * body; later calls rewrite the FILES, which is the whole of what the key reads.
+ *
+ * The files are written on EVERY call, so the marker on disk is always the one asked for. Nothing
+ * deletes the directory and its name is stable per process, so a call that wrote only when the file was
+ * absent would inherit whatever a run in a reused pid had left there — and a row mutating the marker in
+ * place would then find its own `str_replace` matching nothing.
  *
  * @return array{0: string, 1: class-string}
  */
@@ -73,10 +78,8 @@ function sourceKeyedExtension(string $marker): array
     $parent = $dir.'/SourceKeyedParent.php';
     $child = $dir.'/SourceKeyedChild.php';
 
-    if (! is_file($parent)) {
-        file_put_contents($parent, sprintf(sourceKeyedParentTemplate(), $marker));
-        file_put_contents($child, "<?php\nnamespace Docuccino\\Core\\Tests\\Temp;\nfinal class SourceKeyedChild extends SourceKeyedParent {}\n");
-    }
+    file_put_contents($parent, sprintf(sourceKeyedParentTemplate(), $marker));
+    file_put_contents($child, "<?php\nnamespace Docuccino\\Core\\Tests\\Temp;\nfinal class SourceKeyedChild extends SourceKeyedParent {}\n");
 
     if (! class_exists('Docuccino\Core\Tests\Temp\SourceKeyedChild', false)) {
         require $parent;
@@ -316,6 +319,20 @@ it('leaves an entry no other instance of its class contests exactly as it was', 
  * extension in the application's own tree has no such author: its "package" is the root, whose version
  * does not move when a file is saved. So the bytes it is WRITTEN in are keyed too.
  */
+
+it('hands back files carrying the marker it was asked for, whatever the last call left on disk', function (): void {
+    // The rows below edit the parent's file in place, so the helper has to be a writer rather than a
+    // first-one-wins initialiser: its directory is named for the process and nothing deletes it, so a
+    // run in a pid the OS reused starts with the previous run's edits already applied. A row asking for
+    // 'P1' and being handed 'P2' then replaces nothing and reports the digest as stuck.
+    [$parent] = sourceKeyedExtension('P1');
+    file_put_contents($parent, str_replace("'P1'", "'P2'", (string) file_get_contents($parent)));
+
+    [$again] = sourceKeyedExtension('P1');
+
+    expect((string) file_get_contents($again))->toContain("'P1'")
+        ->and((string) file_get_contents($again))->not->toContain("'P2'");
+});
 
 it('keys an extension on its whole hierarchy, so a parent it inherits from is part of the key', function (): void {
     // A parent writes as much of an extension's answer as the leaf does, and the leaf's own file says
