@@ -24,6 +24,13 @@ use Docuccino\Laravel\Config\DeclaredSettings;
 // headed `Key`: the page's other tables list integration bags, tag-object fields and credential
 // shapes, none of which are config keys.
 //
+// Which sections exist is not read off the page's content, though. SECTIONS names every heading —
+// mapped to the path it documents, or to null where it documents nothing — so a heading listed
+// nowhere is reported whatever it carries. Asking instead whether a section LOOKS like it documents
+// keys leaves a one-word table header as the whole escape: the page already heads first columns
+// `Field`, `Bag`, `Rule` and `Where`, and `| Setting | Default | Effect |` is a settings table that
+// no reader of the literal `Key` would see.
+//
 // A `yaml` block on the page therefore has to parse, and an unparseable one raises out of here rather
 // than reading as no keys at all: a block quietly contributing nothing comes back as every key under
 // it being undocumented, which names the symptom and not the cause.
@@ -41,9 +48,9 @@ const CONFIG_REFERENCE_SETTINGS = 'docuccino.yaml';
 const CONFIG_REFERENCE_FRAMEWORK = 'config/docuccino.php';
 
 /**
- * Heading line => the config path that section documents. Exhaustive for the sections carrying a
- * `php`/`yaml` example or a `Key` table; the guard fails on one that carries either and isn't here,
- * so a new section cannot be documented into a hole.
+ * Heading line => the config path that section documents, or null where it documents no keys at all.
+ * Exhaustive over the page's headings: the guard fails on one that is neither, so a new section
+ * cannot be documented into a hole whatever it carries.
  *
  * Two headings map to the root, one per file: the page is in two parts, and each part opens by
  * showing its own file's top level.
@@ -51,6 +58,7 @@ const CONFIG_REFERENCE_FRAMEWORK = 'config/docuccino.php';
 const CONFIG_REFERENCE_SECTIONS = [
     // The build half: docuccino.yaml.
     '## Build configuration' => '',
+    '## Documents' => null,
     '### `api_version`' => 'documents.*.api_version',
     '### `info`' => 'documents.*.info',
     '### `servers`' => 'documents.*.servers',
@@ -223,7 +231,7 @@ function config_reference_yaml_keys(string $yaml, string $base = ''): array
 /**
  * The key paths the configuration reference documents, dotted and sorted.
  *
- * @param  array<string, string>|null  $sections  heading => prefix, defaulting to the page's own map
+ * @param  array<string, string|null>|null  $sections  heading => prefix, defaulting to the page's own map
  * @return list<string>
  *
  * @internal
@@ -239,6 +247,10 @@ function config_reference_documented_keys(string $markdown, ?array $sections = n
         }
 
         $prefix = $sections[$heading];
+
+        if ($prefix === null) {
+            continue;
+        }
 
         $paths = array_merge($paths, config_reference_section_block_keys($body, $prefix));
 
@@ -257,7 +269,7 @@ function config_reference_documented_keys(string $markdown, ?array $sections = n
  * `undocumented` names the file the key ships in, because that is where the reader has to go to see
  * it; `invented` names neither, because the whole point of that line is that no file holds the key.
  *
- * @param  array<string, string>|null  $sections  heading => prefix, defaulting to the page's own map
+ * @param  array<string, string|null>|null  $sections  heading => prefix, defaulting to the page's own map
  * @return list<string>
  *
  * @internal
@@ -282,17 +294,19 @@ function config_reference_problems(string $php, string $yaml, string $markdown, 
     $present = config_reference_sections($markdown);
 
     foreach ($present as $heading => $body) {
-        if (array_key_exists($heading, $sections)) {
+        if (! array_key_exists($heading, $sections)) {
+            $problems[] = 'unmapped:      '.$heading.'  (map it in tools/config-reference-sync.php, to its path or to null)';
+
             continue;
         }
 
-        if (config_reference_section_block_keys($body, '') !== [] || config_reference_table_keys($body) !== []) {
-            $problems[] = 'unmapped:      '.$heading.'  (documents keys; map it in tools/config-reference-sync.php)';
+        if ($sections[$heading] === null && config_reference_documents_keys($body)) {
+            $problems[] = 'prose mapping: '.$heading.'  (mapped as documenting no keys, and it documents some)';
         }
     }
 
     foreach ($sections as $heading => $prefix) {
-        $key = rtrim(preg_replace('/(\.\*)+$/', '', $prefix) ?? '', '.');
+        $key = $prefix === null ? '' : rtrim(preg_replace('/(\.\*)+$/', '', $prefix) ?? '', '.');
 
         if (! array_key_exists($heading, $present)) {
             $problems[] = 'missing:       '.$heading.'  (mapped, but the reference has no such section)';
@@ -612,6 +626,39 @@ function config_reference_table_keys(string $body): array
     }
 
     return $keys;
+}
+
+/**
+ * Whether a section documents settings at all — a fenced block declaring keys, or a table row whose
+ * first cell is a lone key-shaped code span whatever that table is headed.
+ *
+ * Deliberately looser than {@see config_reference_table_keys()}, which reads the keys themselves and
+ * so has to know that a `Bag` or `Field` column holds something else. This only asks whether a
+ * section mapped as prose has grown settings, and a header is a word somebody chose.
+ *
+ * @internal
+ */
+function config_reference_documents_keys(string $body): bool
+{
+    if (config_reference_section_block_keys($body, '') !== []) {
+        return true;
+    }
+
+    foreach (explode("\n", $body) as $line) {
+        $trimmed = trim($line);
+
+        if (! str_starts_with($trimmed, '|')) {
+            continue;
+        }
+
+        $cell = trim(explode('|', $trimmed)[1] ?? '');
+
+        if (preg_match('/^`[A-Za-z_][A-Za-z0-9_.-]*`$/', $cell) === 1) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**

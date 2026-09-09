@@ -275,25 +275,49 @@ it('names a key the page documents and neither config has', function (): void {
         ->toBe(['invented:      cache.driver  (documented, but in neither shipped configuration file)']);
 });
 
-it('names a section that documents keys under no mapping at all', function (): void {
-    // How a whole new section is caught, rather than quietly going unchecked.
+it('names a section under no mapping at all, whatever that section carries', function (string $section): void {
+    // How a whole new section is caught. The mapping is exhaustive over the page's headings rather
+    // than a test of what a section looks like, because every look is a shape somebody can choose:
+    // a table headed anything but `Key` documents settings and reads as prose, and the page itself
+    // already heads first columns `Field`, `Bag`, `Rule` and `Where`.
     $config = "<?php\n\nreturn ['cache' => ['store' => null]];";
-    $markdown = "## Cache\n\n```php\n'cache' => ['store' => null],\n```\n\n".
-        "## Telemetry\n\n| Key | Effect |\n| --- | --- |\n| `endpoint` | Where reports go. |";
+    $markdown = "## Cache\n\n```php\n'cache' => ['store' => null],\n```\n\n## Telemetry\n\n".$section;
 
     expect(config_reference_problems($config, '', $markdown, ['## Cache' => 'cache']))
-        ->toBe(['unmapped:      ## Telemetry  (documents keys; map it in tools/config-reference-sync.php)']);
-});
+        ->toBe(['unmapped:      ## Telemetry  (map it in tools/config-reference-sync.php, to its path or to null)']);
+})->with([
+    'a table headed Key' => ["| Key | Effect |\n| --- | --- |\n| `endpoint` | Where reports go. |"],
+    'a table headed anything else' => ["| Setting | Default | Effect |\n| --- | --- | --- |\n| `telemetry.endpoint` | `null` | Where reports go. |"],
+    'a table headed Rule' => ["| Rule | Default | Effect |\n| --- | --- | --- |\n| `endpoint` | `null` | Where reports go. |"],
+    'a table headed Field' => ["| Field | Effect |\n| --- | --- |\n| `endpoint` | Where reports go. |"],
+    'a yaml block' => ["```yaml\ntelemetry:\n  endpoint: 'https://example.com'\n```"],
+    'a php block' => ["```php\n'telemetry' => ['endpoint' => null],\n```"],
+    'nothing but prose' => ['Set the telemetry endpoint to a URL and reports are posted there.'],
+]);
 
-it('names a section whose only keys are in a yaml block as documenting keys', function (): void {
-    // The unmapped check reads blocks in both spellings too — a new section written in YAML would
-    // otherwise be the one shape that could be documented into a hole.
+it('names a section mapped as documenting nothing that documents keys after all', function (string $section): void {
+    // The other half of an exhaustive mapping: a narrative section is listed as documenting no keys,
+    // so it has to keep documenting none. Same looseness as above — the header is not the signal.
     $config = "<?php\n\nreturn ['cache' => ['store' => null]];";
-    $markdown = "## Cache\n\n```php\n'cache' => ['store' => null],\n```\n\n".
-        "## Telemetry\n\n```yaml\ntelemetry:\n  endpoint: 'https://example.com'\n```";
+    $markdown = "## Cache\n\n```php\n'cache' => ['store' => null],\n```\n\n## Documents\n\n".$section;
 
-    expect(config_reference_problems($config, '', $markdown, ['## Cache' => 'cache']))
-        ->toBe(['unmapped:      ## Telemetry  (documents keys; map it in tools/config-reference-sync.php)']);
+    expect(config_reference_problems($config, '', $markdown, ['## Cache' => 'cache', '## Documents' => null]))
+        ->toBe(['prose mapping: ## Documents  (mapped as documenting no keys, and it documents some)']);
+})->with([
+    'a table headed anything' => ["| Setting | Default |\n| --- | --- |\n| `telemetry.endpoint` | `null` |"],
+    'a yaml block' => ["```yaml\ntelemetry:\n  endpoint: 'https://example.com'\n```"],
+    'a php block' => ["```php\n'telemetry' => ['endpoint' => null],\n```"],
+]);
+
+it('says nothing about a narrative section that stays narrative', function (): void {
+    // What the page's own prose section looks like: key names in sentences, no table and no fence.
+    $config = "<?php\n\nreturn ['cache' => ['store' => null]];";
+    $markdown = "## Cache\n\n```php\n'cache' => ['store' => null],\n```\n\n## Documents\n\n".
+        "`documents` is a map of independent pipeline runs. Each entry has its own `routes` filters.\n\n".
+        "| Recognized shape | Matches |\n| --- | --- |\n| A PEM private key | `-----BEGIN PRIVATE KEY-----` |";
+
+    expect(config_reference_problems($config, '', $markdown, ['## Cache' => 'cache', '## Documents' => null]))
+        ->toBe([]);
 });
 
 it('names a mapping whose section is gone, and one whose key is gone', function (): void {
