@@ -123,9 +123,11 @@ it('publishes the four codes this file names, under those names', function (): v
 });
 
 it('leaves the whole suite standing on the split ConfigSplit describes', function (): void {
-    // The harness trims `config/docuccino.php` in TestCase::defineEnvironment. If that list and this
-    // one ever part company, every test in the suite starts reporting a warning it is not about — so
-    // the list is stated literally here, and the trim is checked against the reader on the real thing.
+    // The suite boots on the shipped `config/docuccino.php` untouched, so this asks the real reader
+    // about the real file: a build key back in it would make every test in the suite report a warning
+    // none of them is about. Stated literally, because a guard that asked ConfigSplit what it owns
+    // would agree with a bug that widened it. This is also the one assertion that a DEFAULT INSTALL is
+    // silent — the shipped framework config trips neither of the two migration diagnostics.
     expect(ConfigSplit::FRAMEWORK_KEYS)->toBe(['enabled', 'cache.store', 'documents.*.viewer'])
         ->and(ConfigSplit::staleKeys())->toBe([]);
 });

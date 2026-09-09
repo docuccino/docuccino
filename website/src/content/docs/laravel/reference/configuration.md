@@ -4,51 +4,52 @@ description: Every configuration key Docuccino reads and what it does.
 ---
 
 
-:::note[Docuccino reads two files]
-Everything that shapes a **document** lives in `docuccino.yaml`, at the root of your project —
-`documents`, `extensions`, `lint`, `diagnostics`, `engine`, `on_route_error` and `cache.enabled`.
-`config/docuccino.php` keeps only what Laravel reads while it **boots** or on a **viewer request**:
-`enabled`, each document's `viewer` block, and `cache.store`. `php artisan docuccino:install` writes
-both.
+Docuccino reads two files, and they do not overlap.
 
-Nothing left in `config/docuccino.php` is merged over `docuccino.yaml` — a build setting still sitting
-there is reported (`config.stale-php-keys`) and ignored, and an application with no `docuccino.yaml` at
-all is refused rather than built from defaults (`config.not-migrated`).
+**`docuccino.yaml`**, at the root of your project, holds everything that shapes a **document**:
+`documents`, `extensions`, `lint`, `diagnostics`, `engine`, `on_route_error` and `cache.enabled`. A
+command reads it once per build, so nothing your application serves ever parses it.
 
-The key names and nesting are identical in both spellings, so this page's PHP blocks still name every
-key; the YAML examples land with the rest of this page's rewrite.
-:::
+**`config/docuccino.php`** holds only what Laravel reads while it **boots** or on a **viewer
+request**: `enabled`, each document's `viewer` block, and `cache.store`. The viewer's routes are
+registered on every boot, and a boot that had to parse a project file to decide whether a route exists
+would fail on a file somebody is halfway through editing.
+
+`php artisan docuccino:install` writes both. Nothing left in `config/docuccino.php` is merged over
+`docuccino.yaml` — a build setting still sitting there is reported (`config.stale-php-keys`) and
+ignored, and an application whose build settings are all still there, with no `docuccino.yaml` at all,
+is refused rather than built from defaults (`config.not-migrated`).
 
 Every key is listed in the shipped files themselves — required keys active, optional ones commented
 out — so you can discover the whole surface by scrolling through them. This page is the long-form
 version: what each key does, what it defaults to, and where its behavior is explained in full.
-`config/docuccino.php` is plain data — no imports, no class references — so it stays safe to load even
-where Docuccino itself isn't installed.
 
 The **Default** column is the value the published file ships with. For most keys that is also the
 built-in fallback you get by deleting the key, but not for all of them: `error_responses` ships as
 `'default'` and falls back to `'none'` when a document omits it, which is why a second document
 [inherits nothing](/laravel/guides/multiple-documents/) from the first.
 
-## Top level
+## Build configuration
 
-```php
-return [
-    'enabled' => env('DOCUCCINO_ENABLED', true),
-    'documents' => [ /* … */ ],
-    'extensions' => [],
-    'lint' => [ /* … */ ],
-    'diagnostics' => [ /* … */ ],
-    'engine' => [ /* … */ ],
-    'on_route_error' => 'skeleton',
-    'cache' => [ /* … */ ],
-];
+`docuccino.yaml`, at the root of your project. Every key in it shapes the emitted document, and a
+command is the only thing that reads it.
+
+```yaml
+documents: {} # one entry per document; the rest of this half of the page is what goes in one
+extensions: []
+lint: {}
+diagnostics: {}
+engine: {}
+on_route_error: 'skeleton'
+cache: {}
 ```
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `enabled` | `env('DOCUCCINO_ENABLED', true)` | Master switch. When `false`, every command except `docuccino:clear` aborts with a notice and exits non-zero, **and** the runtime viewer endpoints (`/docs/*`) are not registered at all. Lets you disable generation and serving in an environment without removing config. |
 | `on_route_error` | `'skeleton'` | Per-route failure behavior. `skeleton` emits a stub operation plus an error diagnostic (never a dead build); `omit` drops the route entirely. |
+
+A key written here, even as an empty value, is part of the configuration a document is fingerprinted
+from — so an option you are not using stays commented out rather than sitting there as `null`.
 
 ## Documents
 
@@ -71,11 +72,10 @@ say so, once per key, with a `config.machine-dependent-path` info diagnostic.
 
 ### `api_version`
 
-```php
-// 'api_version' => [
-//     'changes' => ['app/Api/Versions'],
-//     'header' => 'X-Api-Version',
-// ],
+```yaml
+# api_version:
+#   changes: ['app/Api/Versions']
+#   header: 'X-Api-Version'
 ```
 
 | Key | Values / default | Effect |
@@ -133,12 +133,11 @@ the [API versioning guide](/laravel/guides/api-versioning/).
 
 ### `info`
 
-```php
-'info' => [
-    'title' => 'API Documentation',
-    'version' => '1.0.0',
-    // 'description' => ['file' => 'resources/docs/api/description.md'],
-],
+```yaml
+info:
+  title: 'API Documentation'
+  version: '1.0.0'
+  # description: { file: 'resources/docs/api/description.md' }
 ```
 
 Maps to OAS `info`, and any other OAS `info` field you add (`contact`, `license`,
@@ -148,18 +147,17 @@ Maps to OAS `info`, and any other OAS `info` field you add (`contact`, `license`
 
 ### `servers`
 
-```php
-'servers' => [
-    ['url' => 'https://api.example.com'],
-    // Server variables with defaults/descriptions:
-    // ['url' => 'https://{tenant}.example.com', 'variables' => [
-    //     'tenant' => ['default' => 'acme', 'description' => 'Tenant slug'],
-    // ]],
-    // A variable whose legal values are a closed set:
-    // ['url' => 'https://api.example.com/{version}', 'variables' => [
-    //     'version' => ['default' => 'v2', 'enum' => ['v1', 'v2']],
-    // ]],
-],
+```yaml
+servers:
+  - { url: 'https://api.example.com' }
+  # Server variables with defaults and descriptions:
+  # - url: 'https://{tenant}.example.com'
+  #   variables:
+  #     tenant: { default: 'acme', description: 'Tenant slug' }
+  # A variable whose legal values are a closed set:
+  # - url: 'https://api.example.com/{version}'
+  #   variables:
+  #     version: { default: 'v2', enum: ['v1', 'v2'] }
 ```
 
 Emitted as OAS `servers`, including server variables.
@@ -185,13 +183,12 @@ For a worked multitenant subdomain example (`{tenant}.example.com`), see
 
 ### `routes`
 
-```php
-'routes' => [
-    'include' => ['api/*'],
-    'exclude' => [],
-    // 'filter' => App\Docs\PublicRoutes::class,
-    'include_vendor' => false,
-],
+```yaml
+routes:
+  include: ['api/*']
+  exclude: []
+  # filter: App\Docs\PublicRoutes
+  include_vendor: false
 ```
 
 Route selection. `include`/`exclude` are URI globs; `filter` names a class for the logic globs can't
@@ -244,24 +241,22 @@ it does nothing on its own; build settings still sitting in `config/docuccino.ph
 
 Routes whose resolved controller class file lives under the application's `vendor/` directory are
 **excluded by default** — the same as `php artisan route:list --except-vendor` — so an installed
-package's own routes don't leak into your API reference. Routes handled by a closure and your own app
-controllers are never affected, and the `include`/`exclude`/`filter` filters are unchanged. Set
-`include_vendor` to `true` to document installed packages' routes.
+package's own routes don't leak into your API reference. Closures and your own app controllers are
+never affected, and the `include`/`exclude`/`filter` filters are unchanged. Set `include_vendor` to
+`true` to document installed packages' routes.
 
 ### `security`
 
-```php
-'security' => [
-    'auto_detect_middleware' => 'auth*',
-    // 'schemes' => [
-    //     'bearer' => ['type' => 'http', 'scheme' => 'bearer', 'bearerFormat' => 'JWT'],
-    //     'apiKey' => ['type' => 'apiKey', 'in' => 'header', 'name' => 'X-API-Key'],
-    //     'oauth2' => ['type' => 'oauth2', 'flows' => [...]],
-    //     'oidc'   => ['type' => 'openIdConnect', 'openIdConnectUrl' => 'https://…'],
-    // ],
-    // 'default'  => [['bearer' => []]], // per-op requirement for auth-detected routes
-    // 'document' => [['bearer' => []]], // document-wide security requirement
-],
+```yaml
+security:
+  auto_detect_middleware: 'auth*'
+  # schemes:
+  #   bearer: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }
+  #   apiKey: { type: 'apiKey', in: 'header', name: 'X-API-Key' }
+  #   oauth2: { type: 'oauth2', flows: {} }
+  #   oidc: { type: 'openIdConnect', openIdConnectUrl: 'https://id.example.com' }
+  # default: [{ bearer: [] }]  # per-op requirement for auth-detected routes
+  # document: [{ bearer: [] }] # document-wide security requirement
 ```
 
 | Key | Default | Effect |
@@ -276,8 +271,8 @@ Declaring any `schemes` here **defers** the auto-config security integrations (S
 
 ### `error_responses`
 
-```php
-'error_responses' => 'default', // 'default' | 'none'
+```yaml
+error_responses: 'default' # 'default' | 'none'
 ```
 
 Selects what is published for the exceptions your application does *not* render itself. `default`
@@ -297,16 +292,14 @@ read never quietly empties the document of its errors.
 
 ### `tags`
 
-```php
-'tags' => [
-    'default_strategy' => 'controller', // 'controller' | 'none'
-    'map' => [],
-    // 'mapper' => Custom::class,   // container-resolved TagMapper; default PrefixTagMapper over `map`.
-    // 'definitions' => [           // OAS top-level `tags`, sorted by weight then name:
-    //     ['name' => 'Billing', 'summary' => 'Billing', 'kind' => 'nav', 'weight' => 0],
-    //     ['name' => 'Forms', 'description' => '…', 'parent' => 'Billing'],
-    // ],
-],
+```yaml
+tags:
+  default_strategy: 'controller' # 'controller' | 'none'
+  map: {}
+  # mapper: 'App\Docs\InvoiceTagMapper' # container-resolved TagMapper, replacing the prefix mapper
+  # definitions: # OAS top-level `tags`, sorted by weight then name
+  #   - { name: 'Billing', summary: 'Billing', kind: 'nav', weight: 0 }
+  #   - { name: 'Forms', description: 'Form endpoints.', parent: 'Billing' }
 ```
 
 `default_strategy` tags an operation that has no `#[Group]`: `controller` (the default — the
@@ -344,8 +337,8 @@ flattened and nesting the names ("Billing / Invoices") is the way back.
 
 ### `webhooks`
 
-```php
-// 'webhooks' => ['dir' => 'app/Webhooks'],
+```yaml
+# webhooks: { dir: 'app/Webhooks' }
 ```
 
 Points at a directory of classes carrying [`#[Webhook]`](/laravel/reference/attributes/#webhook).
@@ -355,10 +348,9 @@ promises to CALL, rather than one it answers. Absent, the document has none. See
 
 ### `content`
 
-```php
-'content' => [
-    'dir' => null, // e.g. 'resources/docs/api'
-],
+```yaml
+content:
+  dir: null # e.g. 'resources/docs/api'
 ```
 
 Points at a markdown tree compiled into `x-docuccino.content` (pages + a compiled nav tree).
@@ -370,10 +362,8 @@ resolved against the document; broken refs become diagnostics. `null` compiles n
 
 ### `examples`
 
-```php
-'examples' => [
-    'recordings' => 'docs/recordings', // absent by default
-],
+```yaml
+# examples: { recordings: 'docs/recordings' } # absent by default
 ```
 
 Points at a directory of response recordings your test suite wrote, one committed file per operation,
@@ -396,10 +386,8 @@ and reviewed.
 
 ### `coverage`
 
-```php
-'coverage' => [
-    'log' => 'storage/docuccino/coverage', // the default when absent
-],
+```yaml
+# coverage: { log: 'storage/docuccino/coverage' } # the default when absent
 ```
 
 Where the contract-coverage recorder writes what your test suite exercised, and where
@@ -415,10 +403,8 @@ testing](/laravel/guides/contract-testing/#report-the-responses-your-suite-never
 
 ### `overlays`
 
-```php
-'overlays' => [
-    // 'resources/docs/overlays/*.yaml',
-],
+```yaml
+overlays: [] # e.g. ['resources/docs/overlays/*.yaml']
 ```
 
 Globs of [OpenAPI Overlay 1.0](https://spec.openapis.org/overlay/v1.0.0.html) documents applied at
@@ -428,26 +414,21 @@ examples.
 
 ### `representation`
 
-```php
-'representation' => [
-    'filters' => 'bracketed',       // bracketed | deepObject (Query Builder filter/field style)
-    'nullable' => 'type-array',     // type-array (type: [x, null]) | anyof ({type: null} branch)
-    'operation_id' => 'route-name', // route-name | controller-method ({ShortController}@{method})
-    // 'enums' => [
-    //     'naming' => 'names',     // names (both hint spellings) | none | x-enumNames | x-enum-varnames
-    //     'components' => true,    // true (hoist each enum to a $ref'd component) | false (inline everywhere)
-    // ],
-    // 'errors' => [
-    //     'components' => true,    // true (hoist a repeated error body to shared components) | false (inline)
-    // ],
-    // 'pagination' => [
-    //     'components' => true,    // true (hoist a paginated envelope to one component per item type
-    //                              // and paginator kind) | false (inline on every operation)
-    // ],
-    // 'examples' => [
-    //     'formats' => ['email' => 'jane@example.com'], // format => the sample examples illustrate with
-    // ],
-],
+```yaml
+representation:
+  filters: 'bracketed'       # bracketed | deepObject (Query Builder filter/field style)
+  nullable: 'type-array'     # type-array (type: [x, null]) | anyof ({type: null} branch)
+  operation_id: 'route-name' # route-name | controller-method ({ShortController}@{method})
+  # enums:
+  #   naming: 'names'  # names (both hint spellings) | none | x-enumNames | x-enum-varnames
+  #   components: true # true hoists each enum to a $ref'd component | false inlines it everywhere
+  # errors:
+  #   components: true # true hoists a repeated error body to shared components | false inlines it
+  # pagination:
+  #   components: true # true hoists a paginated envelope to one component per item type and
+  #                    # paginator kind | false inlines it on every operation
+  # examples:
+  #   formats: { email: 'jane@example.com' } # format => the sample examples illustrate it with
 ```
 
 Separates *what was inferred* from *how it is expressed in the spec*. The semantic facts stay
@@ -475,17 +456,15 @@ rules: [repeated bodies become shared components](/laravel/documenting/errors/#r
 One bag per integration, keyed by the integration's config name; **each integration reads only its
 own bag**, and all are optional.
 
-```php
-'integrations' => [
-    'api_resources' => ['wrap' => true],                          // top-level resource `data` wrapping
-    'sanctum'       => ['modes' => ['token', 'stateful'], 'cookie' => 'myapp_session'],
-    'passport'      => ['url' => 'https://auth.example.com'],      // oauth2 flow base URL
-    'query_builder' => [
-        'pagination_terminals' => ['paginateList'],                // extra paginating method names
-        'filter_descriptions'  => ['exact' => 'Matches `%field%` exactly.'], // per-kind prose
-    ],
-    'permission'    => ['enabled' => true],                       // opt in — off by default
-],
+```yaml
+integrations:
+  api_resources: { wrap: true } # top-level resource `data` wrapping
+  sanctum: { modes: ['token', 'stateful'], cookie: 'myapp_session' }
+  passport: { url: 'https://auth.example.com' } # oauth2 flow base URL
+  query_builder:
+    pagination_terminals: ['paginateList'] # extra paginating method names
+    filter_descriptions: { exact: 'Matches `%field%` exactly.' } # per-kind prose
+  permission: { enabled: true } # opt in — off by default
 ```
 
 Every bag also accepts **`enabled`** (`bool`). It is resolved per document: an integration
@@ -527,10 +506,9 @@ The table below lists the additional options each bag accepts beyond `enabled`.
 
 ### `export`
 
-```php
-'export' => [
-    'path' => 'docs/openapi.json',
-],
+```yaml
+export:
+  path: 'docs/openapi.json'
 ```
 
 `path` is the default output location for `docuccino:export` and the file
@@ -538,15 +516,13 @@ The table below lists the additional options each bag accepts beyond `enabled`.
 
 To emit several artifacts from **one** build, list targets instead:
 
-```php
-'export' => [
-    'targets' => [
-        ['format' => 'openapi-3.2', 'path' => 'docs/openapi.json'],
-        ['format' => 'openapi-3.1', 'path' => 'docs/openapi-3.1.yaml'],
-        ['format' => 'uir',         'path' => 'docs/api.uir.json'],
-        ['format' => 'postman',     'path' => 'docs/collection.json'],
-    ],
-],
+```yaml
+export:
+  targets:
+    - { format: 'openapi-3.2', path: 'docs/openapi.json' }
+    - { format: 'openapi-3.1', path: 'docs/openapi-3.1.yaml' }
+    - { format: 'uir', path: 'docs/api.uir.json' }
+    - { format: 'postman', path: 'docs/collection.json' }
 ```
 
 Analysis is the expensive half of a build, so three targets cost one analysis and three emits — not
@@ -575,11 +551,10 @@ you never pay for an analysis to find out a filename was wrong.
 
 One more key sits beside them, shaping what the emitters write rather than where:
 
-```php
-'export' => [
-    'path' => 'docs/openapi.json',
-    'mock_faker_key' => 'x-faker',
-],
+```yaml
+export:
+  path: 'docs/openapi.json'
+  mock_faker_key: 'x-faker'
 ```
 
 `mock_faker_key` is the member every [`#[Mock]`](/laravel/reference/attributes/#mock) faker
@@ -588,50 +563,10 @@ bare export is pure OpenAPI. The `uir` format carries the hints whichever way th
 turning it on rewrites no byte of the UIR: it shapes the projection, never the document, so
 `configHash` and the fragment cache are untouched.
 
-### `viewer`
-
-```php
-'viewer' => [
-    'route' => '/docs/api', // null disables the runtime endpoints for this document
-    'gate' => null,         // Gate ability name; null = local environment only
-    'middleware' => ['web', 'throttle:60,1'],
-    'source' => 'generate', // generate | artifact | cache
-    // 'driver' => 'scalar', // scalar | redoc, or a driver you registered
-    // 'cdn' => false,       // true loads the driver's script from a CDN instead of the bundled asset
-    // 'configuration' => [], // passed verbatim to Scalar's data-configuration (theme, layout, …)
-],
-```
-
-| Key | Default | Effect |
-| --- | --- | --- |
-| `route` | `'/docs/api'` | Base path for the viewer routes: the HTML page, the `.json` spec, the active driver's asset, and the `/reload` channel a [`docuccino:watch`](/laravel/reference/commands/#docuccinowatch) session refreshes the page through. `null` disables them for this document. |
-| `gate` | `null` | Gate ability guarding all four routes — the HTML page, the `.json` spec, the asset and the reload channel. `null` = available only in the `local` environment. Every driver goes through it. |
-| `middleware` | `['web', 'throttle:60,1']` | Middleware for the viewer routes. Keep `throttle` when exposing the (potentially expensive) spec endpoint publicly. See the warning below if your app is multi-tenant or domain-gated. |
-| `source` | `'generate'` | `generate` rebuilds on every request (fine for local/gated); `artifact` re-emits the committed `export.path`; `cache` serves the `docuccino:cache`-warmed payload (cold cache falls back to generate). |
-| `driver` | `'scalar'` | Which renderer serves the HTML page: `scalar` (with a try-it-out console) or `redoc` (reference only), or the name of a [driver you registered](/laravel/guides/viewer/#writing-your-own-driver). An unregistered name falls back to `scalar` and logs a warning. |
-| `cdn` | `false` | `true` loads the active driver's script from jsDelivr instead of the bundle shipped with the package. |
-| `configuration` | `[]` | Passed verbatim to [Scalar's `data-configuration`](https://github.com/scalar/scalar/blob/main/documentation/configuration.md) — theme, layout, `hideModels`, and the rest of Scalar's own options. Ignored by drivers that take no page configuration. |
-
-Nothing under `viewer` shapes the document: it is boot-time wiring, read only by the runtime endpoints
-and the console. So it stays out of the document's `configHash` exactly as [`export`](#export) does —
-moving a route, naming a gate or switching drivers rewrites no emitted byte and retires no warm
-fragment.
-
-:::caution[Multi-tenant or domain-gated apps: override `middleware`]
-The default includes `web`, which is right for a single-domain app (and a `gate`-protected viewer needs
-it for session state). But if your `web` group resolves a **domain or tenant**, the viewer's
-domain-less routes cannot satisfy that middleware and the viewer **404s**. Override `middleware` for
-those apps — drop `web`, or register your domain — for example:
-
-```php
-'middleware' => ['throttle:60,1'],
-```
-:::
-
 ### `versioning`
 
-```php
-'versioning' => 'none', // 'semver' | 'date' | 'none'
+```yaml
+versioning: 'none' # 'semver' | 'date' | 'none'
 ```
 
 The policy `docuccino:diff --enforce` applies to this document. `semver` requires a major version
@@ -646,8 +581,8 @@ the order off the versions themselves, which is the safer default of the two.
 
 ## Extensions
 
-```php
-'extensions' => [],
+```yaml
+extensions: [] # e.g. ['App\Docs\InvoiceTotalsExtension']
 ```
 
 Class-strings resolved from the container and merged with programmatic `Docuccino::extend()`
@@ -655,38 +590,30 @@ registrations **at build time, never at boot**. See [extension authoring](/exten
 
 ## Lint
 
-```php
-'lint' => [
-    'leakage' => [
-        'enabled' => true,
-        'allow' => [],   // e.g. ['reset_token', '/components/schemas/Invoice/properties/status']
-        // 'patterns' => ['sortcode' => 'a bank sort code', 'iban' => 'an IBAN'],
-    ],
-    'descriptions' => [
-        'enabled' => false,
-        'allow' => [],   // e.g. ['GET /api/ping']
-    ],
-    'operation_ids' => [
-        'enabled' => true,
-        'allow' => [],   // e.g. ['GET /api/ping', 'list users']
-    ],
-    'tags' => [
-        'enabled' => false,
-        'allow' => [],   // e.g. ['Internal']
-    ],
-    // 'vacuous_union' => [
-    //     'enabled' => true,
-    //     'allow' => [],   // e.g. ['GET /api/ping']
-    // ],
-    // 'examples' => [
-    //     'enabled' => true,
-    //     'allow' => [],   // e.g. ['/components/schemas/Invoice/properties/status/example']
-    // ],
-    // 'unpinned_redirect' => [
-    //     'enabled' => true,
-    //     'allow' => [],   // e.g. ['GET /auth/callback']
-    // ],
-],
+```yaml
+lint:
+  leakage:
+    enabled: true
+    allow: [] # e.g. ['reset_token', '/components/schemas/Invoice/properties/status']
+    # patterns: { sortcode: 'a bank sort code', iban: 'an IBAN' }
+  descriptions:
+    enabled: false
+    allow: [] # e.g. ['GET /api/ping']
+  operation_ids:
+    enabled: true
+    allow: [] # e.g. ['GET /api/ping', 'list users']
+  tags:
+    enabled: false
+    allow: [] # e.g. ['Internal']
+  # vacuous_union:
+  #   enabled: true
+  #   allow: [] # e.g. ['GET /api/ping']
+  # examples:
+  #   enabled: true
+  #   allow: [] # e.g. ['/components/schemas/Invoice/properties/status/example']
+  # unpinned_redirect:
+  #   enabled: true
+  #   allow: [] # e.g. ['GET /auth/callback']
 ```
 
 Every lint is diagnostics-only — none of them can change a byte of the emitted document — and every
@@ -841,12 +768,9 @@ shaped like a union is read as the value it is.
 
 ## Diagnostics
 
-```php
-'diagnostics' => [
-    'accept' => [
-        // 'eloquent.no-columns',
-    ],
-],
+```yaml
+diagnostics:
+  accept: [] # e.g. ['eloquent.no-columns']
 ```
 
 `accept` is the list of [diagnostic codes](/laravel/reference/diagnostics/) you've read and decided
@@ -856,13 +780,11 @@ what makes a stricter gate adoptable: you can turn `--fail-on=info` on today, ac
 can't act on — a vendor model with no readable columns, a validation rule that's genuinely a closure
 — and still have the gate catch everything new.
 
-```php
-'diagnostics' => [
-    'accept' => [
-        'eloquent.no-columns',
-        'validation.rule-unrecoverable',
-    ],
-],
+```yaml
+diagnostics:
+  accept:
+    - 'eloquent.no-columns'
+    - 'validation.rule-unrecoverable'
 ```
 
 The unit is a whole code, not a code at one route: a code names a cause, which is the thing you
@@ -892,13 +814,12 @@ billing` never reports an entry the document it skipped fires on.
 
 ## Engine
 
-```php
-'engine' => [
-    'mode' => env('DOCUCCINO_ENGINE', 'in-process'),
-    // 'memory_limit' => '2G',
-    'project_paths' => ['app'],
-    // 'config' => 'phpstan.neon',
-],
+```yaml
+engine:
+  mode: 'in-process' # DOCUCCINO_ENGINE overrides this
+  # memory_limit: '2G'
+  project_paths: ['app']
+  # config: 'phpstan.neon'
 ```
 
 | Key | Default | Effect |
@@ -934,12 +855,11 @@ modular helpers resolvable, which priming already handles.
 The engine really is PHPStan, so `config` is the one escape hatch you need when the analyzer can't work
 something out on its own. Point it at the `phpstan.neon` you already maintain:
 
-```php
-'engine' => [
-    'mode' => env('DOCUCCINO_ENGINE', 'in-process'),
-    'project_paths' => ['app'],
-    'config' => 'phpstan.neon',
-],
+```yaml
+engine:
+  mode: 'in-process'
+  project_paths: ['app']
+  config: 'phpstan.neon'
 ```
 
 Every dynamic return-type extension, stub file and service that file registers is in play while your
@@ -955,16 +875,89 @@ so a sharpened extension shows up in the next build rather than the one after it
 
 ## Cache
 
-```php
-'cache' => [
-    'enabled' => env('DOCUCCINO_FRAGMENT_CACHE', false), // fragment cache: incremental builds, off by default
-    'store' => null,    // Laravel cache store for the runtime document cache (docuccino:cache)
-    // 'path' => null,  // fragment cache directory (defaults to storage_path('docuccino/fragments'))
-],
+```yaml
+cache:
+  enabled: false # the fragment cache: incremental builds, off by default
+  # path: null   # fragment cache directory (defaults to storage_path('docuccino/fragments'))
 ```
 
 | Key | Effect |
 | --- | --- |
 | `enabled` | Turns on the fragment cache for incremental builds. `DOCUCCINO_FRAGMENT_CACHE` overrides it, which is how [`docuccino:watch`](/laravel/reference/commands/#docuccinowatch) turns it on for the builds it drives without changing your config. The key hashes the tool/spec/identity-algo versions, the document it is being built for, doc config, resolved extension list, route signature, the build environment, and every dependency file the engine reported — so invalidation is sound even for a Query class three calls deep. Assembly/canonicalize/validate always run fresh. A build whose routes are all warm never boots the analyzer at all; [Speeding up builds](/laravel/guides/speeding-up-builds/) covers when to turn this on. |
-| `store` | Laravel cache store name for the runtime document cache warmed by `docuccino:cache`. |
 | `path` | Fragment cache directory (defaults to `storage_path('docuccino/fragments')`). Docuccino drops a `.gitignore` into the directory it creates — the same `*` / `!.gitignore` pair Laravel ships inside `storage/` — so cached fragments stay out of your repository. An existing `.gitignore` is never overwritten. |
+
+The third member of the `cache` family, [`cache.store`](#boot-configuration), is not here: it names a
+Laravel cache store that a **viewer request** reads, so it lives in the file a request can reach.
+
+## Boot configuration
+
+`config/docuccino.php`, published into your application's `config/` directory. Laravel loads every
+file in there on every boot, so this half is deliberately small: the master switch, each document's
+viewer, and the cache store a viewer request reads.
+
+```php
+return [
+    'enabled' => env('DOCUCCINO_ENABLED', true),
+    'documents' => [
+        'default' => [
+            'viewer' => [ /* … */ ],
+        ],
+    ],
+    'cache' => ['store' => null],
+];
+```
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `enabled` | `env('DOCUCCINO_ENABLED', true)` | Master switch. When `false`, every command except `docuccino:clear` aborts with a notice and exits non-zero, **and** the runtime viewer endpoints (`/docs/*`) are not registered at all. Lets you disable generation and serving in an environment without removing config. |
+| `cache.store` | `null` | Laravel cache store name for the runtime document cache warmed by `docuccino:cache` and served to a viewer whose `source` is `cache`. `null` uses the application's default store. |
+
+The `documents` map here is keyed the way `docuccino.yaml` keys it, and holds nothing but each
+document's `viewer`. A document declared there and absent here has no page to serve, which is what an
+export-only document is; a viewer keyed by a document the build does not define registers routes that
+fail every request, and the build says so with `config.viewer-orphan`.
+
+The file is plain data — no imports, no class references, `env()` the only call it makes — so it stays
+safe to load where Docuccino itself isn't installed. A `--no-dev` production boot loads every file in
+`config/` after pruning dev packages, and a class reference here would fatal it.
+
+### `viewer`
+
+```php
+'viewer' => [
+    'route' => '/docs/api', // null disables the runtime endpoints for this document
+    'gate' => null,         // Gate ability name; null = local environment only
+    'middleware' => ['web', 'throttle:60,1'],
+    'source' => 'generate', // generate | artifact | cache
+    // 'driver' => 'scalar', // scalar | redoc, or a driver you registered
+    // 'cdn' => false,       // true loads the driver's script from a CDN instead of the bundled asset
+    // 'configuration' => [], // passed verbatim to Scalar's data-configuration (theme, layout, …)
+],
+```
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `route` | `'/docs/api'` | Base path for the viewer routes: the HTML page, the `.json` spec, the active driver's asset, and the `/reload` channel a [`docuccino:watch`](/laravel/reference/commands/#docuccinowatch) session refreshes the page through. `null` disables them for this document. |
+| `gate` | `null` | Gate ability guarding all four routes — the HTML page, the `.json` spec, the asset and the reload channel. `null` = available only in the `local` environment. Every driver goes through it. |
+| `middleware` | `['web', 'throttle:60,1']` | Middleware for the viewer routes. Keep `throttle` when exposing the (potentially expensive) spec endpoint publicly. See the warning below if your app is multi-tenant or domain-gated. |
+| `source` | `'generate'` | `generate` rebuilds on every request (fine for local/gated); `artifact` re-emits the committed `export.path`; `cache` serves the `docuccino:cache`-warmed payload (cold cache falls back to generate). |
+| `driver` | `'scalar'` | Which renderer serves the HTML page: `scalar` (with a try-it-out console) or `redoc` (reference only), or the name of a [driver you registered](/laravel/guides/viewer/#writing-your-own-driver). An unregistered name falls back to `scalar` and logs a warning. |
+| `cdn` | `false` | `true` loads the active driver's script from jsDelivr instead of the bundle shipped with the package. |
+| `configuration` | `[]` | Passed verbatim to [Scalar's `data-configuration`](https://github.com/scalar/scalar/blob/main/documentation/configuration.md) — theme, layout, `hideModels`, and the rest of Scalar's own options. Ignored by drivers that take no page configuration. |
+
+Nothing under `viewer` shapes the document: it is boot-time wiring, read only by the runtime endpoints
+and the console. So it stays out of the document's `configHash` exactly as [`export`](#export) does —
+moving a route, naming a gate or switching drivers rewrites no emitted byte and retires no warm
+fragment.
+
+:::caution[Multi-tenant or domain-gated apps: override `middleware`]
+The default includes `web`, which is right for a single-domain app (and a `gate`-protected viewer needs
+it for session state). But if your `web` group resolves a **domain or tenant**, the viewer's
+domain-less routes cannot satisfy that middleware and the viewer **404s**. Override `middleware` for
+those apps — drop `web`, or register your domain — for example:
+
+```php
+'middleware' => ['throttle:60,1'],
+```
+:::
+

@@ -52,20 +52,11 @@ abstract class TestCase extends Orchestra
     {
         $app['config']->set('app.key', 'base64:AckfSECXIvnK5r28GVIWUAxmbBSjTsmF0FYqwoDL18E=');
 
-        // The framework config, trimmed to the keys the framework itself reads. Testbench loads the
-        // shipped `config/docuccino.php` whole, and it still carries the build settings that moved into
-        // `docuccino.yaml` — left in place every build here would report a `config.stale-php-keys`
-        // warning it is not the subject of. So the suite runs against the split as it will be, and
-        // ConfigSplitTest holds this list to the one
-        // ConfigSplit says the framework owns.
-        $app['config']->set('docuccino', [
-            'enabled' => $app['config']->get('docuccino.enabled'),
-            'documents' => array_map(
-                static fn (mixed $bag): array => ['viewer' => is_array($bag) ? ($bag['viewer'] ?? []) : []],
-                (array) $app['config']->get('docuccino.documents', []),
-            ),
-            'cache' => ['store' => $app['config']->get('docuccino.cache.store')],
-        ]);
+        // The framework config is left exactly as testbench loaded it — the shipped
+        // `config/docuccino.php`, whole. That is the point rather than an omission: the file carries
+        // only what boot and a viewer request read, so every test in the suite runs on the real split
+        // instead of on a trimmed copy of it, and a `config.stale-php-keys` warning firing anywhere is
+        // a defect in the shipped file rather than an artefact of this harness.
 
         // The morph map the /api/attachments discriminator resolves its aliases from.
         Relation::morphMap(['widget' => Widget::class, 'gadget' => Gadget::class], false);

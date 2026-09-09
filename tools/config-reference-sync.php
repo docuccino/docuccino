@@ -5,17 +5,28 @@ use Symfony\Component\Yaml\Yaml;
 
 // Configuration-reference sync guard.
 //
-// `php/laravel/config/docuccino.php` is the shipped surface — every option present, the optional
-// ones commented out — and the website's configuration reference is supposed to document all of it.
-// That rule lived in CONTRIBUTING.md and nowhere else, so it drifted: keys landed in the config file
-// while the page said nothing about them, and the page described shapes the file never mentioned.
-// This reads both sides and reports the difference.
+// Two files are the shipped surface — `docuccino.yaml` for everything that shapes a document, and
+// `php/laravel/config/docuccino.php` for what Laravel reads while it boots — each with every option
+// present and the optional ones commented out. The website's configuration reference is supposed to
+// document all of it. That rule lived in CONTRIBUTING.md and nowhere else, so it drifted: keys landed
+// in a config file while the page said nothing about them, and the page described shapes neither file
+// mentioned. This reads all three sides and reports the difference.
 //
-// Both sides are read the same way. A commented-out key is still a key, so the config reader
-// un-comments the lines that are config rather than prose — and the page's `php` blocks, the mirror
-// most likely to fall behind, go through that same reader. Tables contribute the key in each row's
-// first column, but only where that column is headed `Key`: the page's other tables list integration
-// bags, tag-object fields and credential shapes, none of which are config keys.
+// The two files are ONE surface here, unioned rather than compared against each other: they share a
+// key namespace and they partition it, so `cache.enabled` and `cache.store` are two keys of one
+// `cache` family and the page documents each wherever it explains it. Which file a key came from is
+// carried only so the report can name it.
+//
+// Every side is read the same way. A commented-out key is still a key, so each config reader
+// un-comments the lines that are config rather than prose — and the page's `php` and `yaml` blocks,
+// the mirror most likely to fall behind, go through those same two readers, picked by the fence's
+// language. Tables contribute the key in each row's first column, but only where that column is
+// headed `Key`: the page's other tables list integration bags, tag-object fields and credential
+// shapes, none of which are config keys.
+//
+// A `yaml` block on the page therefore has to parse, and an unparseable one raises out of here rather
+// than reading as no keys at all: a block quietly contributing nothing comes back as every key under
+// it being undocumented, which names the symptom and not the cause.
 //
 // Nothing is added to the page to make this work. Which part of the config a section covers is
 // stated here instead, in SECTIONS, because the page's own headings can't say it — several of the
@@ -23,13 +34,23 @@ use Symfony\Component\Yaml\Yaml;
 //
 // Requiring this file has no side effects, so tests can point it at synthetic sources.
 
+/** The build configuration, at the project root — the file this repository ships as its own default. */
+const CONFIG_REFERENCE_SETTINGS = 'docuccino.yaml';
+
+/** The framework configuration, published into `config/` — what boot and a viewer request read. */
+const CONFIG_REFERENCE_FRAMEWORK = 'config/docuccino.php';
+
 /**
  * Heading line => the config path that section documents. Exhaustive for the sections carrying a
- * `php` example or a `Key` table; the guard fails on one that carries either and isn't here, so a
- * new section cannot be documented into a hole.
+ * `php`/`yaml` example or a `Key` table; the guard fails on one that carries either and isn't here,
+ * so a new section cannot be documented into a hole.
+ *
+ * Two headings map to the root, one per file: the page is in two parts, and each part opens by
+ * showing its own file's top level.
  */
 const CONFIG_REFERENCE_SECTIONS = [
-    '## Top level' => '',
+    // The build half: docuccino.yaml.
+    '## Build configuration' => '',
     '### `api_version`' => 'documents.*.api_version',
     '### `info`' => 'documents.*.info',
     '### `servers`' => 'documents.*.servers',
@@ -45,7 +66,6 @@ const CONFIG_REFERENCE_SECTIONS = [
     '### `representation`' => 'documents.*.representation',
     '### `integrations`' => 'documents.*.integrations',
     '### `export`' => 'documents.*.export',
-    '### `viewer`' => 'documents.*.viewer',
     '### `versioning`' => 'documents.*.versioning',
     '## Extensions' => 'extensions',
     '## Lint' => 'lint',
@@ -57,6 +77,9 @@ const CONFIG_REFERENCE_SECTIONS = [
     '## Diagnostics' => 'diagnostics',
     '## Engine' => 'engine',
     '## Cache' => 'cache',
+    // The boot half: config/docuccino.php.
+    '## Boot configuration' => '',
+    '### `viewer`' => 'documents.*.viewer',
 ];
 
 /**
@@ -181,7 +204,10 @@ function config_reference_declared_keys(string $php, string $base = ''): array
 /**
  * The key paths the tool's own `docuccino.yaml` declares, live and commented-out alike, dotted and
  * sorted — the same answer {@see config_reference_declared_keys()} gives for the framework's PHP
- * config, so the two shipped files can be compared key for key.
+ * config, so the page can be held to both files with one comparison.
+ *
+ * Accepts a whole configuration file or a fragment of one (a `yaml` block from the docs), which is
+ * what `$base` is for: a fragment quoted in a section is read from that section's path.
  *
  * A commented-out key is still a key here for the same reason it is there: the shipped file shows
  * every option, with the optional ones commented, and an option nobody documented is the drift this
@@ -198,7 +224,7 @@ function config_reference_declared_keys(string $php, string $base = ''): array
  *
  * @internal
  */
-function config_reference_yaml_keys(string $yaml): array
+function config_reference_yaml_keys(string $yaml, string $base = ''): array
 {
     $kept = [];
 
@@ -225,10 +251,9 @@ function config_reference_yaml_keys(string $yaml): array
         }
     }
 
-    /** @var array<string, mixed>|null $parsed */
     $parsed = Yaml::parse(implode("\n", config_reference_yaml_reopened($kept)));
 
-    return config_reference_normalize(config_reference_yaml_paths($parsed ?? [], ''));
+    return config_reference_normalize(config_reference_yaml_paths(is_array($parsed) ? $parsed : [], $base));
 }
 
 /**
@@ -320,9 +345,7 @@ function config_reference_documented_keys(string $markdown, ?array $sections = n
 
         $prefix = $sections[$heading];
 
-        foreach (config_reference_php_blocks($body) as $block) {
-            $paths = array_merge($paths, config_reference_block_keys($block, $prefix));
-        }
+        $paths = array_merge($paths, config_reference_section_block_keys($body, $prefix));
 
         foreach (config_reference_table_keys($body) as $key) {
             $paths[] = config_reference_join($prefix, $key);
@@ -333,28 +356,32 @@ function config_reference_documented_keys(string $markdown, ?array $sections = n
 }
 
 /**
- * Every disagreement between the shipped config and the reference page, as lines a developer can act
- * on. Empty means the two are in sync.
+ * Every disagreement between the two shipped config files and the reference page, as lines a
+ * developer can act on. Empty means the three are in sync.
+ *
+ * `undocumented` names the file the key ships in, because that is where the reader has to go to see
+ * it; `invented` names neither, because the whole point of that line is that no file holds the key.
  *
  * @param  array<string, string>|null  $sections  heading => prefix, defaulting to the page's own map
  * @return list<string>
  *
  * @internal
  */
-function config_reference_problems(string $php, string $markdown, ?array $sections = null): array
+function config_reference_problems(string $php, string $yaml, string $markdown, ?array $sections = null): array
 {
     $sections ??= CONFIG_REFERENCE_SECTIONS;
-    $declared = config_reference_checkable(config_reference_declared_keys($php));
+    $shipped = config_reference_shipped($php, $yaml);
+    $declared = array_keys($shipped);
     $documented = config_reference_checkable(config_reference_documented_keys($markdown, $sections));
 
     $problems = [];
 
     foreach (array_diff($declared, $documented) as $key) {
-        $problems[] = 'undocumented:  '.$key.'  (in config/docuccino.php, missing from the reference)';
+        $problems[] = 'undocumented:  '.$key.'  (in '.$shipped[$key].', missing from the reference)';
     }
 
     foreach (array_diff($documented, $declared) as $key) {
-        $problems[] = 'invented:      '.$key.'  (documented, but no such key in config/docuccino.php)';
+        $problems[] = 'invented:      '.$key.'  (documented, but in neither shipped configuration file)';
     }
 
     $present = config_reference_sections($markdown);
@@ -364,7 +391,7 @@ function config_reference_problems(string $php, string $markdown, ?array $sectio
             continue;
         }
 
-        if (config_reference_php_blocks($body) !== [] || config_reference_table_keys($body) !== []) {
+        if (config_reference_section_block_keys($body, '') !== [] || config_reference_table_keys($body) !== []) {
             $problems[] = 'unmapped:      '.$heading.'  (documents keys; map it in tools/config-reference-sync.php)';
         }
     }
@@ -377,13 +404,41 @@ function config_reference_problems(string $php, string $markdown, ?array $sectio
         }
 
         if ($key !== '' && ! in_array($key, $declared, true)) {
-            $problems[] = 'stale mapping: '.$heading.' => '.$prefix.'  (no such key in config/docuccino.php)';
+            $problems[] = 'stale mapping: '.$heading.' => '.$prefix.'  (no such key in either shipped configuration file)';
         }
     }
 
     sort($problems);
 
     return $problems;
+}
+
+/**
+ * The whole shipped surface as key => the file it is declared in, checkable paths only.
+ *
+ * A key both files declare — `documents` and `cache` are the two bags that straddle the split — is
+ * attributed to the build file, which is the one an author edits. Nothing rests on the attribution
+ * beyond the wording of a report.
+ *
+ * @return array<string, string>
+ *
+ * @internal
+ */
+function config_reference_shipped(string $php, string $yaml): array
+{
+    $shipped = [];
+
+    foreach (config_reference_checkable(config_reference_declared_keys($php)) as $key) {
+        $shipped[$key] = CONFIG_REFERENCE_FRAMEWORK;
+    }
+
+    foreach (config_reference_checkable(config_reference_yaml_keys($yaml)) as $key) {
+        $shipped[$key] = CONFIG_REFERENCE_SETTINGS;
+    }
+
+    ksort($shipped, SORT_STRING);
+
+    return $shipped;
 }
 
 /**
@@ -520,12 +575,38 @@ function config_reference_sections(string $markdown): array
  */
 function config_reference_php_blocks(string $body): array
 {
+    return config_reference_fenced($body, 'php');
+}
+
+/**
+ * The `yaml` fenced blocks in a stretch of markdown.
+ *
+ * @return list<string>
+ *
+ * @internal
+ */
+function config_reference_yaml_blocks(string $body): array
+{
+    return config_reference_fenced($body, 'yaml');
+}
+
+/**
+ * The fenced blocks in one language. The language has to be exact, so a ```` ```yaml title="…" ````
+ * fence is not read at all — which fails loudly rather than quietly: every key that block was the only
+ * home for comes back `undocumented`, naming the keys and pointing at the section they live in.
+ *
+ * @return list<string>
+ *
+ * @internal
+ */
+function config_reference_fenced(string $body, string $language): array
+{
     $blocks = [];
     $current = null;
 
     foreach (explode("\n", $body) as $line) {
         if ($current === null) {
-            if (trim($line) === '```php') {
+            if (trim($line) === '```'.$language) {
                 $current = [];
             }
 
@@ -546,20 +627,46 @@ function config_reference_php_blocks(string $body): array
 }
 
 /**
- * A block quotes its keys in context — `'viewer' => [...]` in the viewer section — so a block that
- * opens with the section's own key is read from the section's parent, and one that doesn't
- * (`'middleware' => [...]` in an aside) is read from the section itself.
+ * Every key a section's fenced blocks document, in either spelling, read from that section's path.
  *
  * @return list<string>
  *
  * @internal
  */
-function config_reference_block_keys(string $block, string $prefix): array
+function config_reference_section_block_keys(string $body, string $prefix): array
 {
-    $keys = config_reference_declared_keys($block);
+    $paths = [];
+
+    foreach (config_reference_php_blocks($body) as $block) {
+        $paths = array_merge($paths, config_reference_block_keys($block, $prefix, config_reference_declared_keys(...)));
+    }
+
+    foreach (config_reference_yaml_blocks($body) as $block) {
+        $paths = array_merge($paths, config_reference_block_keys($block, $prefix, config_reference_yaml_keys(...)));
+    }
+
+    return $paths;
+}
+
+/**
+ * A block quotes its keys in context — `viewer:` with its members under it in the viewer section — so
+ * a block that opens with the section's own key is read from the section's parent, and one that
+ * doesn't (a bare `middleware:` in an aside) is read from the section itself.
+ *
+ * The reader is passed in rather than chosen here, because which one applies is a property of the
+ * fence and this rule is a property of the page.
+ *
+ * @param  Closure(string, string): list<string>  $reader
+ * @return list<string>
+ *
+ * @internal
+ */
+function config_reference_block_keys(string $block, string $prefix, Closure $reader): array
+{
+    $keys = $reader($block, '');
 
     if ($keys === [] || $prefix === '') {
-        return config_reference_declared_keys($block, $prefix);
+        return $reader($block, $prefix);
     }
 
     $segments = explode('.', $prefix);
@@ -570,7 +677,7 @@ function config_reference_block_keys(string $block, string $prefix): array
         $quoted = $quoted && ($key === $own || str_starts_with($key, $own.'.'));
     }
 
-    return config_reference_declared_keys($block, $quoted ? implode('.', $segments) : $prefix);
+    return $reader($block, $quoted ? implode('.', $segments) : $prefix);
 }
 
 /**

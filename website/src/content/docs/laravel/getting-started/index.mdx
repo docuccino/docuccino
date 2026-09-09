@@ -104,7 +104,8 @@ accurate document — with no annotations to start.
 The installer never replaces a `config/docuccino.php` you already have (pass `--force` if that's what
 you want), so it is safe to run again. In a provisioning script, `--no-interaction` takes the
 prompt's default and exports, and `--no-export` finishes the setup without one. Prefer to publish the
-config on its own? `php artisan vendor:publish --tag=docuccino-config` writes exactly the same file.
+config on its own? `php artisan vendor:publish --tag=docuccino-config` writes exactly the same two
+files.
 [The commands reference](/laravel/reference/commands/#docuccinoinstall) has every flag.
 
 That's it. Open `docs/openapi.json`, or visit `/docs/api` in your browser — the bundled viewer is

@@ -21,7 +21,7 @@ A version is a **named document**, and most of that already exists.
 
 | Piece | Where |
 | --- | --- |
-| Multiple named documents, each with its own `info.version`, routes, servers, overlays | `config/docuccino.php` → `documents` |
+| Multiple named documents, each with its own `info.version`, routes, servers, overlays | `docuccino.yaml` → `documents` |
 | Contract assertions against a named document | `ApiContract::forDocument()` |
 | Stable identities and lookup by node id | `x-docuccino.id`, `ContractIndex` |
 | Date version policy, and a differ that classifies breaking vs non-breaking | `DateVersionPolicy`, `DocumentDiffer` |

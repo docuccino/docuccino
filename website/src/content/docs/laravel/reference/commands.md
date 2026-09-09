@@ -47,16 +47,18 @@ docuccino:install
 
 | Flag | Values / default | Effect |
 | --- | --- | --- |
-| `--force` | flag / off | Replaces an existing `config/docuccino.php` with the shipped defaults. Without it an existing file is never touched — the command says it left it alone and names this flag. |
+| `--force` | flag / off | Replaces an existing `docuccino.yaml` or `config/docuccino.php` with the shipped defaults. Without it an existing file is never touched — the command says which it left alone and names this flag. |
 | `--no-export` | flag / off | Finishes the setup without generating a document. Otherwise the command offers one, and `--no-interaction` takes the prompt's default, which is yes. |
 | `--memory-limit` | php.ini value, e.g. `2G` / unset | Raises the process memory limit before the first export runs — see the shared-behavior note above. |
 
 The one command you run once rather than on every change, and the only one that writes anything
 outside an export path. Four steps, in order:
 
-1. **Config.** Publishes `config/docuccino.php` — the same file, byte for byte, that
-   `vendor:publish --tag=docuccino-config` writes. An existing file is left exactly as it is unless
-   you pass `--force`, so a second run changes nothing.
+1. **Config.** Publishes both configuration files — `docuccino.yaml` at your project root, then
+   `config/docuccino.php` — byte for byte the same two that
+   `vendor:publish --tag=docuccino-config` writes. Each is timid on its own account: an existing file
+   is left exactly as it is unless you pass `--force`, so an application that already keeps one gets
+   the other and a second run changes nothing.
 2. **Routes.** Reads your router and reports how many routes each configured document really matches.
    The count comes from the same resolver a build uses — attribute exclusions, closure filters and
    vendor package routes already subtracted — so it is the number your next export will document.

@@ -50,9 +50,10 @@ Either way analysis is a build-time job: the inference engine (PHPStan + Larasta
 generate the document, never on a production host.
 
 Then open the bundled **Scalar** viewer at `/docs/api` (available in `local` by default; gate it to
-expose it elsewhere). `docuccino:install` publishes `config/docuccino.php`, tells you how many of your
-routes the default `api/*` pattern matches, and writes the first document — the defaults are live with
-or without the published file, and it never replaces one you already have. Full walkthrough:
+expose it elsewhere). `docuccino:install` publishes `docuccino.yaml` and
+`config/docuccino.php`, tells you how many of your routes the default `api/*` pattern matches, and
+writes the first document — the defaults are live with or without the published files, and it never
+replaces one you already have. Full walkthrough:
 **[Getting started](https://docs.docuccino.app/laravel/getting-started/)**.
 
 ## Why Docuccino

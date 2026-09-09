@@ -269,10 +269,8 @@ routes, info, security, and viewer — so a few top-level Scramble settings move
 handed each route's `domain` along with its URI, name, action and middleware — so "this document is
 the admin host" is a `return $route->domain === 'admin.example.com';`, and anything more involved
 than a literal (a tenant registry, a hosts table) is a constructor dependency, because the container
-builds the class. It is also the reason the key is a class name and not an inline predicate: a
-closure in a config file cannot be serialized, so `php artisan config:cache` would fail for the whole
-application. See [`config/docuccino.php` survives
-`config:cache`](/laravel/guides/production/#configdocuccinophp-survives-configcache).
+builds the class. It is also the reason the key is a class name and not an inline predicate: the
+setting lives in `docuccino.yaml`, and a configuration file has no form for a closure.
 
 See the [configuration reference](/laravel/reference/configuration/) for every option.
 
