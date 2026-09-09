@@ -185,3 +185,23 @@ it('leaves the process ceiling alone when it may not tune it', function (): void
     expect($factory->mayTuneProcess())->toBeFalse()
         ->and(ini_get('memory_limit'))->toBe($before);
 });
+
+it('is quoted verbatim by the troubleshooting page that reproduces it', function (): void {
+    // The page shows this notice inside a fence, so the two drift silently — and did: it went on
+    // naming the config path the settings left while the YAML example below it named the new file.
+    // Only the two lever lines are pinned, because they are the half that names a setting.
+    $page = file_get_contents(
+        dirname(__DIR__, 4).'/website/src/content/docs/laravel/guides/troubleshooting.mdx',
+    );
+
+    $levers = array_values(array_filter(
+        explode("\n", OutOfMemoryNotice::text('128M')),
+        static fn (string $line): bool => str_starts_with(ltrim($line), '* '),
+    ));
+
+    expect($levers)->toHaveCount(2);
+
+    foreach ($levers as $lever) {
+        expect($page)->toContain(trim($lever));
+    }
+});

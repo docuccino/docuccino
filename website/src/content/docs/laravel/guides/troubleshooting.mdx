@@ -47,10 +47,11 @@ PHP Fatal error: Allowed memory size of 134217728 bytes exhausted
 
 Docuccino ran out of memory while analyzing your code.
 …
-  * Raise the ceiling — set docuccino.engine.memory_limit (e.g. '2G'), or pass
+  * Raise the ceiling — set engine.memory_limit in docuccino.yaml (e.g. '2G'), or pass
     --memory-limit=2G to this command.
-  * Narrow the analysis — docuccino.engine.project_paths decides how far interprocedural
-    descent goes, and a wide value costs memory. Vendor code is never analyzed.
+  * Narrow the analysis — engine.project_paths, in the same file, decides how far
+    interprocedural descent goes, and a wide value costs memory. Vendor code is never
+    analyzed.
 ```
 
 PHP can't catch memory exhaustion, so this is the one failure Docuccino explains on the way out instead
