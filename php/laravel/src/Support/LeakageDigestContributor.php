@@ -15,7 +15,7 @@ use Docuccino\Laravel\Extensions\RecordedExamplesExtension;
  * body {@see ExampleRedaction} still finds a credential in, so safelisting a pointer adds an example to
  * an operation and dropping one takes it away — fragment bytes either way.
  *
- * Nothing else keyed them. `docuccino.lint.*` is deliberately TOP-LEVEL rather than per-document, so no
+ * Nothing else keyed them. The `lint` bag is deliberately TOP-LEVEL rather than per-document, so no
  * document's raw config bag holds it and `DocumentConfig::hash()` cannot see it; and the extension
  * carries the options inside a collaborator object, which the resolved-extension signature reads as
  * nothing but its class name. A value that reaches no key input is not the same defect as one keyed by
