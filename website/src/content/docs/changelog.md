@@ -13,6 +13,59 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.15.0
+
+### Breaking changes
+
+- **laravel**: read a document keyword as the set it declares, not as any string ([#425](https://github.com/docuccino/docuccino/pull/425))
+  - `config.unknown-error-responses` and `config.unknown-tag-strategy` are retired into a single `config.unknown-value` (warning), so a `diagnostics.accept` list naming either of the old codes will report them as accepted-but-never-emitted; replace both with `config.unknown-value`. An unrecognised value for `documents.*.error_responses`, `tags.default_strategy`, `versioning`, `on_route_error`, `representation.filters`, `representation.nullable`, `representation.operation_id`, `representation.enums.naming` or a document's `viewer.source` is now refused and reported rather than passed through, so a document that was silently carrying a bogus keyword now builds from the documented default and says so.
+- **laravel**: name the setting that says which requests are authenticated, not the mechanism ([#420](https://github.com/docuccino/docuccino/pull/420))
+  - `documents.*.security.auto_detect_middleware` is renamed to `documents.*.security.auth_middleware`. The old spelling is not read and is not reported — it lives in `config/docuccino.php`, whose build keys this release already stops reading and reports wholesale as `config.not-migrated` or `config.stale-php-keys`. Use the new name in `docuccino.yaml`; behaviour, default (`auth*`) and position under `security` are unchanged, and `document.configHash` moves once for any document that sets it.
+- **laravel**: read a build's configuration from the tool's own file ([#417](https://github.com/docuccino/docuccino/pull/417))
+  - build configuration moves out of `config/docuccino.php` into a `docuccino.yaml` at the project root, and the keys left behind are **no longer read**. Everything a build reads moves — each document's `info`, `servers`, `routes`, `security`, `error_responses`, `tags`, `api_version`, `webhooks`, `content`, `examples`, `coverage`, `overlays`, `representation`, `versioning`, `integrations` and `export`, plus top-level `extensions`, `lint`, `diagnostics`, `engine`, `on_route_error`, `cache.enabled` and `cache.path`. `enabled`, each document's `viewer` bag and `cache.store` stay in `config/docuccino.php`, because the service provider reads them when the application boots and when the viewer serves a request. Run `php artisan docuccino:install` to write the new file. An application that has not migrated is reported rather than silently ignored: `config.not-migrated` where no `docuccino.yaml` exists, and `config.stale-php-keys` where one does and leftovers remain. There is no merge and no precedence between the two files — a build key in `config/docuccino.php` has no effect at all.
+- **laravel**: name a route filter by class, and drop the key that could never be cached ([#415](https://github.com/docuccino/docuccino/pull/415))
+  - `documents.*.routes.closure` is removed. Move the predicate into a class implementing `Docuccino\Core\Extensions\Contracts\RouteFilter` and name that class under `documents.*.routes.filter`; it is resolved from the container, so whatever the closure closed over becomes a constructor dependency. Then delete the `closure` line — no configuration file has a form for a callable, so there is nothing the key can hold that a build will honour. `DocumentConfig::$routeFilter` is now `?RouteFilter` rather than a `mixed` callable slot, so an extension that read it and called it as a callable calls `includes()` instead.
+- **core**: drop the representation keyword no reader has ever read ([#413](https://github.com/docuccino/docuccino/pull/413))
+  - `documents.*.representation.lists` is no longer read. It never affected the emitted document — both of its values produced the identical parameter — so removing it changes no consumer-visible byte, but it does change `x-docuccino.document.configHash` for any document that set it, and an application that leaves the key in its own config file will simply have it ignored.
+- **core**: leave the viewer wiring out of the hash that keys a document ([#410](https://github.com/docuccino/docuccino/pull/410))
+  - `x-docuccino.document.configHash` no longer folds in a document's `viewer` wiring, so it stops changing when only the viewer's route, middleware, gate, source, driver, CDN flag or driver configuration changes — and its value changes once, for every document that configures a viewer. Anything comparing the hash across this version boundary will see one difference; anything keying on it continues to work, and now shares a fragment cache entry across viewer-only edits.
+
+### Features
+
+- **laravel**: write the configuration file from the one it replaces ([#424](https://github.com/docuccino/docuccino/pull/424))
+- **core**: read a project's YAML configuration as a shape that refuses rather than casts ([#411](https://github.com/docuccino/docuccino/pull/411))
+- **laravel**: report a ->can() gate that publishes a 403 no request can provoke ([#393](https://github.com/docuccino/docuccino/pull/393))
+- **core**: read a parameter name as the leakage lint already reads a property name ([#388](https://github.com/docuccino/docuccino/pull/388))
+- **laravel**: rename a request field and a parameter across an API version ([#385](https://github.com/docuccino/docuccino/pull/385))
+
+### Bug fixes
+
+- bump svgo ([#432](https://github.com/docuccino/docuccino/pull/432))
+- **core**: fingerprint a float the same on every host ([#427](https://github.com/docuccino/docuccino/pull/427))
+- **laravel**: read every branch a policy resolves through, not the four one major had ([#422](https://github.com/docuccino/docuccino/pull/422))
+- **repo**: regenerate a golden with the version it already records ([#416](https://github.com/docuccino/docuccino/pull/416))
+- **core**: refuse a configuration file that expands past what a configuration can hold ([#428](https://github.com/docuccino/docuccino/pull/428))
+- **laravel**: refuse a configuration value the build cannot read, instead of defaulting in silence ([#429](https://github.com/docuccino/docuccino/pull/429))
+- **laravel**: key a fragment on the code and configuration that shaped it ([#426](https://github.com/docuccino/docuccino/pull/426))
+- **laravel**: key a fragment on the mapper that shaped it, not the name it was resolved by ([#423](https://github.com/docuccino/docuccino/pull/423))
+- **laravel**: refuse a build whose configuration could not be read, rather than exiting clean ([#419](https://github.com/docuccino/docuccino/pull/419))
+- **laravel**: keep in the framework config only what boot and a request need ([#418](https://github.com/docuccino/docuccino/pull/418))
+- **laravel**: read every configured switch one way, and refuse a value that names none ([#412](https://github.com/docuccino/docuccino/pull/412))
+- **core**: mint a component id by the rule that decides whether two components are one ([#409](https://github.com/docuccino/docuccino/pull/409))
+- **laravel**: read the middleware a route inherits, which a console build never saw ([#408](https://github.com/docuccino/docuccino/pull/408))
+- **core**: key a signature and a minted name on the order their readers actually resolve in ([#407](https://github.com/docuccino/docuccino/pull/407))
+- **laravel**: read the authentication middleware by every name a route can give it ([#402](https://github.com/docuccino/docuccino/pull/402))
+- **laravel**: key a digest on the order its reader resolves in, not only on the pairs it holds ([#401](https://github.com/docuccino/docuccino/pull/401))
+- **laravel**: report a ->can() gate only where the policy body is one its reader owns ([#397](https://github.com/docuccino/docuccino/pull/397))
+- **inference-phpstan**: read a throw as the file the fold gave up in, not the file its class was declared in ([#396](https://github.com/docuccino/docuccino/pull/396))
+- **laravel**: publish the status an exception pins in its own constructor, not a 500 ([#395](https://github.com/docuccino/docuccino/pull/395))
+- **inference-phpstan**: report every status it could not read, and name the throw it came from ([#392](https://github.com/docuccino/docuccino/pull/392))
+- **laravel**: refuse a path-parameter rename, and name the operation that refused one ([#387](https://github.com/docuccino/docuccino/pull/387))
+
+### Performance
+
+- **inference-phpstan**: analyse an action once per build, not once per version document ([#383](https://github.com/docuccino/docuccino/pull/383))
+
 ## v0.14.1
 
 ### Bug fixes
