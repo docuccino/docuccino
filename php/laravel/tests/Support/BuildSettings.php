@@ -6,6 +6,7 @@ namespace Docuccino\Laravel\Tests\Support;
 
 use Docuccino\Core\Config\ConfigFile;
 use Docuccino\Laravel\Config\BuildConfig;
+use Docuccino\Laravel\Config\DeclaredSettings;
 use Docuccino\Laravel\Tests\TestCase;
 use Symfony\Component\Yaml\Yaml;
 
@@ -92,6 +93,35 @@ final class BuildSettings
     }
 
     /**
+     * Replace every setting with a tree whose only content is `$path`, holding `$value`.
+     *
+     * For a test about one KEY rather than one document: `$value` lands where the path says, with
+     * nothing else written at all, so whatever the build then reports is about that key. A `*` segment
+     * becomes `default` under a keyed map ({@see DeclaredSettings::KEYED_MAPS}) and a one-entry list
+     * anywhere else, which is what the two kinds of `*` mean.
+     */
+    public static function only(string $path, mixed $value): void
+    {
+        $segments = explode('.', $path);
+        $node = $value;
+
+        for ($index = count($segments) - 1; $index >= 0; $index--) {
+            if ($segments[$index] !== '*') {
+                $node = [$segments[$index] => $node];
+
+                continue;
+            }
+
+            $node = $index > 0 && in_array($segments[$index - 1], DeclaredSettings::KEYED_MAPS, true)
+                ? ['default' => $node]
+                : [$node];
+        }
+
+        /** @var array<string, mixed> $node */
+        self::replace($node);
+    }
+
+    /**
      * Replace every setting there is, for a test whose subject is the FILE rather than one value.
      *
      * @param  array<string, mixed>  $settings
@@ -141,6 +171,23 @@ final class BuildSettings
     {
         /** @var array<string, mixed> $bag */
         $bag = self::settings()['documents'][$key] ?? [];
+
+        return $bag;
+    }
+
+    /**
+     * One document as the SHIPPED file declares it, whatever this test has bound — read straight out of
+     * the bytes rather than through the product, so a test can hold the product to them.
+     *
+     * @return array<string, mixed>
+     */
+    public static function shippedDocument(string $key = 'default'): array
+    {
+        /** @var array<string, mixed> $parsed */
+        $parsed = Yaml::parse(self::shipped(), ConfigFile::FLAGS) ?? [];
+
+        /** @var array<string, mixed> $bag */
+        $bag = $parsed['documents'][$key] ?? [];
 
         return $bag;
     }

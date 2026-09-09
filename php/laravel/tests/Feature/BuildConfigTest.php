@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Laravel\Config\BuildConfig;
+use Docuccino\Laravel\Config\DeclaredSettings;
 use Docuccino\Laravel\Engine\TypeEngineMode;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Tests\Support\BuildSettings;
+use Docuccino\Laravel\Tests\Support\SettingReadingTransformer;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Docuccino\Laravel\Watch\ArtisanBuildRunner;
 
@@ -56,6 +58,128 @@ it('reports what the configuration reader refused, in the build that read it', f
         ->and($refusals[0]->help)->toContain('Quote it')
         // And the document says the default rather than the number the parser made up.
         ->and($result->document->toArray()['info']['version'] ?? null)->toBe('1.0.0');
+});
+
+// --- A section that holds no section ---------------------------------------------------------------
+
+/**
+ * The sections the shipped file declares that nothing asks the typed reader about, and why each owes
+ * no refusal. Every other declared section owes one, which is what the dataset below is over.
+ *
+ * Both reasons are about what the section HOLDS rather than about who reads it. Judging either would
+ * report a defect in a correct file: `info` is an OAS Info Object published as written, so its
+ * `description` is legitimately a line of markdown OR a `{ file: … }` map, and a scheme name holds
+ * whatever OAS says a Security Scheme Object is. The list entries are not keys at all — an author
+ * writes `- { format: …, path: … }`, and an entry that is no map is the entry reader's business.
+ *
+ * @return array<string, string>
+ */
+function unaskedSections(): array
+{
+    return [
+        'documents.*.info.description' => 'below documents.*.info, an OAS object published as written',
+        'documents.*.security.schemes.apiKey' => 'below documents.*.security.schemes, whose members are your scheme names',
+        'documents.*.security.schemes.bearer' => 'below documents.*.security.schemes, whose members are your scheme names',
+        'documents.*.export.targets.*' => 'an entry of a list, not a key',
+        'documents.*.security.default.*' => 'an entry of a list, not a key',
+        'documents.*.security.document.*' => 'an entry of a list, not a key',
+        'documents.*.tags.definitions.*' => 'an entry of a list, not a key',
+    ];
+}
+
+it('refuses a section that holds no section, over every section the shipped file declares', function (string $path): void {
+    // The same ground ConfigFile refuses a whole FILE that is not a map on: the build would otherwise
+    // run on every default and produce a plausible document, so the author's file looks applied and is
+    // not. It does not weaken one level down, and `routes` is where it bites hardest — a glob written
+    // there leaves the include list empty, an empty include list is read as no filter at all, and the
+    // author who wrote a filter gets every route in the application.
+    //
+    // Over the declared set rather than a sample of it, because a section added to the shipped file
+    // and not to whatever asks about it would go straight back to degrading in silence.
+    BuildSettings::only($path, 'nope');
+    bindStubEngine();
+
+    $refusals = diagnosticsCoded(
+        app(DocumentBuilder::class)->build('default', WorkbenchEngine::make())->diagnostics,
+        'config.value-type',
+    );
+
+    if (array_key_exists($path, unaskedSections())) {
+        expect($refusals)->toBe([]);
+
+        return;
+    }
+
+    expect($refusals)->toHaveCount(1)
+        ->and($refusals[0]->severity)->toBe(Severity::Warning)
+        ->and($refusals[0]->message)->toBe(sprintf(
+            '%s is the text "nope", where the setting takes a map of settings — an empty section is used instead.',
+            str_replace('*', 'default', $path),
+        ))
+        ->and($refusals[0]->help)->toContain('Write the section as `key: value` pairs');
+})->with(fn (): array => array_combine(
+    DeclaredSettings::sections(),
+    array_map(static fn (string $path): array => [$path], DeclaredSettings::sections()),
+));
+
+it('reads its sections off the shipped file by shape, and tells the two collections apart', function (): void {
+    // The dataset above is only worth what this answers, so a plausible minimum stands beside it: a
+    // reader that stopped recognising sections would leave every row vacuous and green.
+    //
+    // The rule is written out rather than read back off the file: a section is a map with keys under
+    // it. A LIST holds entries and contributes the same `*` segment a keyed map does, so a set derived
+    // from the dotted paths alone would demand a map where the shipped file itself shows a list — and a
+    // leaf is no section at all.
+    expect(count(DeclaredSettings::sections()))->toBeGreaterThan(40)
+        ->and(DeclaredSettings::sections())
+        ->toContain('documents.*.routes')
+        ->toContain('documents.*.security')
+        ->toContain('lint.leakage')
+        ->toContain('documents.*.integrations.query_builder')
+        // Lists: entries, not keys.
+        ->not->toContain('documents.*.export.targets')
+        ->not->toContain('documents.*.tags.definitions')
+        // Leaves: nothing sits under them.
+        ->not->toContain('documents.*.routes.include')
+        ->not->toContain('on_route_error');
+});
+
+it('names only declared sections among the ones it deliberately says nothing about', function (): void {
+    // An exemption that stopped naming a real section would silently excuse nothing, and the row it
+    // came from would go on looking like a considered decision.
+    expect(array_keys(unaskedSections()))->each->toBeIn(DeclaredSettings::sections());
+});
+
+it('reports a section once, however many keys under it were read', function (): void {
+    // `documents.default` is asked about by the section pass, and every setting the build reads under
+    // it walks through the same key. One defect is one line to go and fix.
+    BuildSettings::yaml("documents:
+  default: 'nope'
+");
+    bindStubEngine();
+
+    $result = app(DocumentBuilder::class)->build('default', WorkbenchEngine::make());
+
+    expect(diagnosticsCoded($result->diagnostics, 'config.value-type'))->toHaveCount(1)
+        // And the document says the defaults, which is what the refusal claims was used instead.
+        ->and($result->document->toArray()['info']['title'] ?? null)->toBe('API Documentation');
+});
+
+it('reports a setting refused while the build ran, not only the ones read before it', function (): void {
+    // A setting is refused where it is READ, and an extension's hooks run inside the build. Collected
+    // before generating, the report was missing exactly the refusals the build itself provoked — the
+    // same shape as a diagnostic raised while building and lost on a warm cache hit, one layer out.
+    BuildSettings::set('extensions', [SettingReadingTransformer::class]);
+    BuildSettings::set(SettingReadingTransformer::SETTING, true);
+    bindStubEngine();
+
+    $refusals = diagnosticsCoded(
+        app(DocumentBuilder::class)->build('default', WorkbenchEngine::make())->diagnostics,
+        'config.value-type',
+    );
+
+    expect($refusals)->toHaveCount(1)
+        ->and($refusals[0]->message)->toStartWith(SettingReadingTransformer::SETTING.' is the boolean true, ');
 });
 
 it('reports a configuration file that is not a map at all', function (): void {

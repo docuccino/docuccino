@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Config;
 
 use Docuccino\Core\Config\ConfigFile;
-use Docuccino\Core\Support\Arr;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -42,6 +41,20 @@ final class DeclaredSettings
      */
     private static ?array $shipped = null;
 
+    /**
+     * The shipped file's sections, likewise.
+     *
+     * @var list<string>|null
+     */
+    private static ?array $sections = null;
+
+    /**
+     * The shipped file's tree, with every commented option live — what both of the above are read off.
+     *
+     * @var array<array-key, mixed>|null
+     */
+    private static ?array $tree = null;
+
     /** Where the file this package ships lives, which is also what `docuccino:install` copies. */
     public static function path(): string
     {
@@ -55,7 +68,36 @@ final class DeclaredSettings
      */
     public static function shipped(): array
     {
-        return self::$shipped ??= self::of((string) @file_get_contents(self::path()));
+        return self::$shipped ??= self::normalized(self::paths(self::tree(), ''));
+    }
+
+    /**
+     * Every key path the shipped file declares a SECTION at: a map with keys under it, which is the
+     * shape a reader addresses by key.
+     *
+     * Read off the shipped file's SHAPES rather than its paths, because a dotted path cannot tell the
+     * two collections apart. `export.targets` and `tags.definitions` hold entries and are read as
+     * lists, and both contribute a `*` segment exactly as an author-keyed map does — so a set derived
+     * from the paths alone would demand a map where the file shows a list.
+     *
+     * @return list<string>
+     */
+    public static function sections(): array
+    {
+        return self::$sections ??= self::normalized(self::sectionPaths(self::tree(), ''));
+    }
+
+    /**
+     * The shipped file's settings as a TREE — every option it declares, commented ones uncommented,
+     * holding the value written beside it. The file shows every setting with its default, so this is
+     * where a guard reads what a setting's documented default actually is rather than trusting a
+     * constant to agree with the bytes an install writes.
+     *
+     * @return array<array-key, mixed>
+     */
+    public static function shippedTree(): array
+    {
+        return self::tree();
     }
 
     /**
@@ -68,28 +110,16 @@ final class DeclaredSettings
      */
     public static function of(string $yaml, string $base = ''): array
     {
-        return self::normalized(self::paths(self::tree($yaml), $base));
+        return self::normalized(self::paths(self::uncommented($yaml), $base));
     }
 
     /**
-     * The shipped file's settings as a TREE — every option it declares, commented ones uncommented,
-     * holding the value written beside it. The file shows every setting with its default, so this is
-     * where a guard reads what a setting's documented default actually is rather than trusting a
-     * constant to agree with the bytes an install writes.
+     * A settings file parsed with its commented-out options live, which is the declaration this class
+     * reads both its paths and its shapes off.
      *
-     * @return array<string, mixed>
+     * @return array<array-key, mixed>
      */
-    public static function shippedTree(): array
-    {
-        return self::tree((string) @file_get_contents(self::path()));
-    }
-
-    /**
-     * A settings file's declarations as a parsed tree, live and commented-out alike.
-     *
-     * @return array<string, mixed>
-     */
-    public static function tree(string $yaml): array
+    private static function uncommented(string $yaml): array
     {
         $kept = [];
 
@@ -119,7 +149,17 @@ final class DeclaredSettings
         /** @var mixed $parsed */
         $parsed = Yaml::parse(implode("\n", self::reopened($kept)));
 
-        return is_array($parsed) ? Arr::stringKeyed($parsed) : [];
+        return is_array($parsed) ? $parsed : [];
+    }
+
+    /**
+     * The shipped file's own tree, read once per process — the file cannot change under a build.
+     *
+     * @return array<array-key, mixed>
+     */
+    private static function tree(): array
+    {
+        return self::$tree ??= self::uncommented((string) @file_get_contents(self::path()));
     }
 
     /**
@@ -222,6 +262,36 @@ final class DeclaredSettings
         }
 
         return $paths;
+    }
+
+    /**
+     * Every dotted path in a parsed tree that holds a map with keys under it. A list and a leaf are
+     * neither, and an EMPTY collection is neither either: `{}` and `[]` parse to the same PHP array,
+     * so there is nothing left in the parsed value to tell one from the other.
+     *
+     * @param  array<array-key, mixed>  $bag
+     * @return list<string>
+     */
+    private static function sectionPaths(array $bag, string $prefix): array
+    {
+        $sections = [];
+        $list = array_is_list($bag);
+
+        foreach ($bag as $key => $value) {
+            if (! is_array($value) || $value === []) {
+                continue;
+            }
+
+            $path = self::join($prefix, $list ? '*' : (string) $key);
+
+            if (! array_is_list($value)) {
+                $sections[] = $path;
+            }
+
+            $sections = array_merge($sections, self::sectionPaths($value, $path));
+        }
+
+        return $sections;
     }
 
     private static function join(string $prefix, string $path): string
