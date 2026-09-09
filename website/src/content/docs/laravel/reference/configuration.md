@@ -879,12 +879,15 @@ costs you a diagnostic, never a failed build.
 :::note[`project_paths` is the descend scope, not everything the engine can reach]
 There are two scopes, and only this one is configured. `project_paths` bounds **descent**. The wider
 **prime** scope — every local PSR-4 source root in your `composer.json`, so a modular `Modules/` root
-too — is derived automatically, and the Query Builder trace and the error-response refiner follow
-helpers into *any* primed root. That's why a query object or problem renderer in `Modules/…` is
-resolved even though it isn't listed here. Vendor code is never primed or followed.
+too — is derived automatically, and anything the engine *reads* rather than walks into works across all
+of it: the Query Builder trace and the error-response refiner follow helpers into any primed root, the
+status an exception class pins on itself is read wherever the class is declared, and a `@throws` your
+own code writes documents an error wherever you wrote it. That's why a query object, a problem renderer
+or a domain exception in `Modules/…` is resolved even though it isn't listed here. Vendor code is never
+primed, read or followed.
 
 So you rarely need to change this: add a path only to broaden throw/inline-rules descent — not to make
-modular helpers resolvable, which priming already handles.
+modular helpers or modular exceptions resolvable, which priming already handles.
 :::
 
 :::tip[Your PHPStan extensions are already Docuccino extensions]

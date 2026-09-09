@@ -14,6 +14,12 @@ namespace Docuccino\Inference\PhpStan\Throwing;
  * argument folded in a package-shipped action is the same reason in code nobody here can edit — so it is
  * {@see UnreadStatus::isActionable()} that decides, off the file the fold actually read.
  *
+ * "Outside the application" means a package, and nothing narrower. An application that writes half its
+ * code in a modular PSR-4 root owns every line of it, so {@see ForeignClass} — the one reason nobody can
+ * act on — is never the answer for a class the application's own autoload map declares. Asking instead how
+ * far interprocedural DESCENT may walk would say the opposite for such a class, and the two questions are
+ * separate: the build reads a primed declaration wherever it lives, and walks only where it is bounded.
+ *
  * @internal
  */
 enum UnreadStatusReason: string
@@ -27,7 +33,7 @@ enum UnreadStatusReason: string
     /** The throw named no construction, and the class states no single status of its own. */
     case UnstatedByClass = 'unstated-by-class';
 
-    /** The declarations that would state it are outside the project, so this build never read them. */
+    /** The declarations that would state it belong to a package, so this build never read them. */
     case ForeignClass = 'foreign-class';
 
     /** Completes "the status could not be read: …". */
@@ -37,7 +43,7 @@ enum UnreadStatusReason: string
             self::DynamicArgument => 'the status handed to the call is not a constant this build can fold',
             self::DynamicConstruction => 'the construction the throw names does not fold to one status',
             self::UnstatedByClass => 'the throw names no construction, and the class states no single status of its own',
-            self::ForeignClass => 'the class is declared outside the project, so the status it sets was never read',
+            self::ForeignClass => 'the class is declared in a package, so the status it sets was never read',
         };
     }
 

@@ -724,3 +724,36 @@ The tell is a config PATH, not the token `docuccino.`. The emitted document's ow
 (`x-docuccino.id`, `x-docuccino.provenance`, `x-docuccino.diagnostics`) share the prefix and are a
 different namespace, and a live `config('docuccino.enabled')` names a key that really is still there —
 so a find-and-replace on the prefix corrupts three readers to fix one comment.
+
+## One flag answering two questions: how far to walk, and whose code this is
+
+A build has two different reasons to ask about a file. **How far may I walk into it** is a containment
+bound with a cost behind it, and it is configured (`engine.project_paths`). **Whose declaration is this**
+is an identity question with no cost behind it at all — the file is already primed, its bodies intact —
+and it is not configured, because every local PSR-4 root in the application's `composer.json` is the
+answer. One `ProjectFilter` answered both, so a class in a modular root was treated as a package's.
+
+*Instances.* The response-shape refiner declined to fold a render helper written in a `Modules\…` root,
+which the prime-scoped filter in `PhpStanEngineFactory` fixed for the refiner and the enum folder alone.
+Three more sites went on asking the descend scope: `HttpExceptionStatus`/`FactoryStatus` refused to read
+the status a modular exception class pins on itself, so the document published a placeholder 500 for an
+exception whose 409 was two lines into a file the build was holding open; `UnreadStatus`'s actionability
+called that class foreign, so `ForeignClass` — the one reason with no remedy — dropped the notice and the
+reader got the placeholder with no explanation; and `ThrowSignal` read a modular guard's `@throws` as
+vendor plumbing and demoted the error to `internal`, so the document carried no response for it at all.
+
+*The tell.* A read gated on the descend filter whose comment says "project" or "vendor" rather than "how
+far to descend". If the sentence that justifies the gate is about PRIMING — bodies stripped, the analysed
+set growing, a recorded walk discarded — then it reaches vendor and stops there, and applying it to a
+primed root buys nothing. A second tell is a fix landing on one consumer of the wider filter while the
+others keep the narrow one: the filter was introduced for the refiner and left three sites unswept.
+
+*The fix that worked.* Two filters with names that say which question they answer — `projectFilter` for
+the descend scope, `appFilter` for the application's own source — handed to the reads by role rather than
+by habit, and the claim behind the cost argument MEASURED rather than repeated: the analysed-file count
+over one build of the fixture's throw corpus is identical either way (163), so the wider read discards no
+recording and costs one extra file walk. The guard is `UnplacedStatusReconciliationTest`, whose corpus is
+now asserted to hold a controller on BOTH sides of the descend scope — the defect had survived a green
+suite because the sweep's denominator was one directory — and whose four columns are asserted to partition
+every swept action, so a throw the document carries nothing for, or demotes, can no longer sit in the gap
+between two scans.

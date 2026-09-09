@@ -62,7 +62,12 @@ final class ThrowAnalyzer
 
     public function __construct(
         private readonly ReflectionProvider $reflectionProvider,
+        // Descend scope: how far this build may WALK, which is what `project_paths` bounds.
         private readonly ProjectFilter $projectFilter,
+        // Application scope: whether a file is the application's OWN, which is a different question —
+        // a modular PSR-4 root is the application's and is never descended into. It is the only question
+        // an actionability or dependency-recording read here asks; nothing walks by it.
+        private readonly ProjectFilter $appFilter,
         private readonly FileAnalyzer $fileAnalyzer,
         private readonly KnownThrowers $knownThrowers,
         private readonly CalleeResolver $calleeResolver,
@@ -212,7 +217,7 @@ final class ThrowAnalyzer
             $thrower->exceptionFqcn,
             UnreadStatusReason::DynamicArgument,
             $frame->location,
-            $this->projectFilter->isProjectFile($scope->getFile()),
+            $this->appFilter->isProjectFile($scope->getFile()),
         );
 
         // Certain when PHPStan corroborated the same concrete type; likely when we rescued a bare-Throwable.
@@ -285,14 +290,18 @@ final class ThrowAnalyzer
         // php-parser v5 models `throw` only as an expression.
         $isLiteral = $node instanceof Node\Expr\Throw_;
 
-        // A declared exception documents intent only from project code; a vendor `@throws` is plumbing.
-        $calleeIsProject = ! $isLiteral && $callee !== null
-            && $this->projectFilter->isProjectFile($callee->file);
+        // A declared exception documents intent only from the APPLICATION's own code; a package's `@throws`
+        // is plumbing. The application's whole source, not the descend scope: a guard in a modular PSR-4
+        // root is the application saying what it raises as plainly as one in `app/`, and reading a
+        // `@throws` is not walking into a body — how far descent may go is a separate question with
+        // `project_paths` as its knob.
+        $calleeIsApplication = ! $isLiteral && $callee !== null
+            && $this->appFilter->isProjectFile($callee->file);
 
         // The `@throws` this point is reading is WRITTEN in the callee — a trait's guard clause, a service
         // method — so that file decides which exception the route publishes and joins the dependency set.
         // Descent records its callee for the same reason; an explicit point never reaches descent.
-        if ($calleeIsProject) {
+        if ($calleeIsApplication) {
             $this->dependOn([$callee->file, $callee->writtenIn()]);
         }
 
@@ -304,7 +313,7 @@ final class ThrowAnalyzer
                 $resolution['status'],
                 [...$priorChain, $frame],
                 $isLiteral ? ThrowConfidence::Certain : ThrowConfidence::Declared,
-                ThrowSignal::disposition($isLiteral, $calleeIsProject, $resolution['fellBack']),
+                ThrowSignal::disposition($isLiteral, $calleeIsApplication, $resolution['fellBack']),
             );
         }
 
@@ -592,7 +601,7 @@ final class ThrowAnalyzer
                 $fqcn,
                 UnreadStatusReason::DynamicConstruction,
                 $frame->location,
-                $this->projectFilter->isProjectFile($scope->getFile()),
+                $this->appFilter->isProjectFile($scope->getFile()),
             );
         }
 
@@ -606,10 +615,10 @@ final class ThrowAnalyzer
 
         // Nothing at this site could state a status — the class forwards no slot to fold into, names a
         // factory this build may not read, or the throw presented no construction at all — so the fold
-        // that gave up was reading the CLASS's own declarations. Where those are outside the project this
-        // build never opened them, so no edit the reader owns would have made a number readable; the
-        // record is kept all the same, because the document publishes the unplaced status either way.
-        $ownClass = $this->declaredInProject($fqcn);
+        // that gave up was reading the CLASS's own declarations. Where those belong to a package, no edit
+        // the reader owns would have made a number readable; the record is kept all the same, because the
+        // document publishes the unplaced status either way.
+        $ownClass = $this->declaredByApplication($fqcn);
 
         return $this->unread(
             $fqcn,
@@ -621,11 +630,16 @@ final class ThrowAnalyzer
         );
     }
 
-    /** Whether the exception class itself is the application's, which is whose declarations were read. */
-    private function declaredInProject(string $fqcn): bool
+    /**
+     * Whether the exception class itself is the application's, which is whose declarations were read —
+     * and so whether anyone reading a notice about it owns the edit that would state a status. The
+     * application's own scope, not the descend scope: a class in a modular PSR-4 root is one its author
+     * can go and annotate, and this build reads it.
+     */
+    private function declaredByApplication(string $fqcn): bool
     {
         return $this->reflectionProvider->hasClass($fqcn)
-            && $this->projectFilter->isProjectFile($this->reflectionProvider->getClass($fqcn)->getFileName());
+            && $this->appFilter->isProjectFile($this->reflectionProvider->getClass($fqcn)->getFileName());
     }
 
     /**
