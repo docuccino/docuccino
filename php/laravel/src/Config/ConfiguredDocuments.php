@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Config;
 
+use Docuccino\Core\Config\ConfigFile;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Core\Versioning\VersionOrder;
@@ -30,6 +31,14 @@ final class ConfiguredDocuments
     public const string DEFAULT_KEY = 'default';
 
     /**
+     * The shipped file's own `default` bag, read once per process — the file cannot change under a
+     * build.
+     *
+     * @var array<string, mixed>|null
+     */
+    private static ?array $shipped = null;
+
+    /**
      * The bag as configured, keyed by document key, with the fallback applied.
      *
      * @return array<string, mixed>
@@ -40,18 +49,26 @@ final class ConfiguredDocuments
     }
 
     /**
-     * `$build`'s documents, falling back to one `default` document when it names none.
+     * `$build`'s documents, falling back to the one `default` document the shipped `docuccino.yaml`
+     * describes when it names none.
      *
      * Stated here once and asked for by the readers that hold a {@see BuildConfig} already, because a
      * reader working off the raw bag would judge viewers, `#[InDocs]` keys and route filters against a
      * document set the build does not have.
      *
-     * A default rather than the shipped file folded in as defaults: the shipped `docuccino.yaml` shows
-     * every option with its default, so merging it under an author's file would put ~130 keys they
-     * never wrote into the bag `document.configHash` is taken over — changing emitted bytes for every
-     * application with a partial file — and would add a `default` document beside the ones a
-     * multi-document app declared. The readers already own their defaults, so an empty bag resolves to
-     * exactly the document the shipped file describes.
+     * The shipped bag and not an empty one, because the readers do not all default to what the shipped
+     * file says and three of them differ in ways that decide what gets published: `routes.include`
+     * reads an absent filter as "publish everything" where the file says `api/*`,
+     * `security.auth_middleware` reads it as "no route is authenticated" where the file says `auth*`,
+     * and `error_responses` reads it as `none` where the file says `default`. Each of those readings is
+     * right for a document somebody WROTE and left a key out of — a second document declaring only
+     * `routes.exclude` wants every route — and wrong for a document nobody wrote at all: running
+     * `docuccino:install`, which writes those defaults and nothing else, would otherwise take routes
+     * out of the document it had just described.
+     *
+     * Only where the bag is EMPTY, and only the shipped file's live keys. Merging it under an author's
+     * partial file would put ~130 keys they never wrote into the bag `document.configHash` is taken
+     * over, and would add a `default` document beside the ones a multi-document app declared.
      *
      * @return array<string, mixed>
      */
@@ -59,7 +76,24 @@ final class ConfiguredDocuments
     {
         $configured = $build->documents();
 
-        return $configured === [] ? [self::DEFAULT_KEY => []] : $configured;
+        return $configured === [] ? [self::DEFAULT_KEY => self::shipped()] : $configured;
+    }
+
+    /**
+     * The `default` document the shipped file describes, which is what `docuccino:install` writes.
+     *
+     * Read through {@see ConfigFile::parse()} and not as plain YAML, so the bag is the one an installed
+     * file resolves to and not merely the one it looks like: the same byte-order-mark strip, the same
+     * parse flags and the same numeric settling. Live keys only — a commented option is not part of a
+     * resolved configuration, and folding one in would put a key nobody wrote into the fingerprint.
+     *
+     * @return array<string, mixed>
+     */
+    private static function shipped(): array
+    {
+        return self::$shipped ??= Hydrate::map(Hydrate::map(
+            ConfigFile::parse((string) @file_get_contents(DeclaredSettings::path()))->values['documents'] ?? null,
+        )[self::DEFAULT_KEY] ?? null);
     }
 
     /**

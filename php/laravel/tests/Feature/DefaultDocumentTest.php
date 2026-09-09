@@ -81,11 +81,35 @@ it('resolves one default document out of a configuration that names none', funct
 
     expect((new ConfiguredDocuments)->keys())->toBe(['default'])
         ->and((new ConfiguredDocuments)->has('default'))->toBeTrue()
-        // Empty, not invented: the readers own their own defaults, so the bag stays the empty one the
-        // author wrote and `document.configHash` hashes that rather than the shipped file's ~130 keys.
-        ->and((new ConfiguredDocuments)->raw('default'))->toBe([])
+        // The shipped file's own `default` bag, because that is the document this fallback claims to
+        // be — see the invariant below, which is where the claim is held to.
+        ->and((new ConfiguredDocuments)->raw('default'))->toBe(BuildSettings::shippedDocument())
         ->and(app(DocumentBuilder::class)->documentKeys())->toBe(['default']);
 })->with(emptyDocumentBagStates());
+
+it('gives a configuration that names no document what installing the shipped file would give it', function (): void {
+    // The three values are written out rather than read back off the product, because the product is
+    // what is on trial: the reference page states them as the defaults of `routes.include`,
+    // `security.auth_middleware` and `error_responses`, and each of the three readers answers
+    // something else for a bag that is simply empty — no route filter at all, no request treated as
+    // authenticated, and no error responses. An empty fallback bag therefore published a document that
+    // running `docuccino:install` — which writes those defaults and nothing else — would then have
+    // CHANGED, taking routes out of the document the shipped file had just described.
+    //
+    // Publishing every route was the half with a consequence beyond surprise: an application with no
+    // configuration got its web routes, its login and its debug endpoints in an API reference.
+    BuildSettings::none();
+    $fallback = app(DocumentBuilder::class)->config('default');
+
+    expect($fallback->routeInclude)->toBe(['api/*'])
+        ->and($fallback->authMiddleware)->toBe('auth*')
+        ->and($fallback->errorResponses)->toBe('default');
+
+    // And the whole bag, so a fourth setting that comes to disagree fails here rather than shipping.
+    BuildSettings::boot();
+
+    expect($fallback->raw)->toBe(app(DocumentBuilder::class)->config('default')->raw);
+});
 
 it('builds and writes that document rather than exiting 0 with nothing to show', function (Closure $arrange): void {
     // The measured failure this closes: `forEachDocument` over an empty list never entered its
@@ -108,6 +132,22 @@ it('builds and writes that document rather than exiting 0 with nothing to show',
         @unlink($out);
     }
 })->with(array_diff_key(emptyDocumentBagStates(), array_flip(unreadableConfigStates())));
+
+it('publishes what the shipped route filter admits, and not the viewer routes beside them', function (): void {
+    // The published axis and not only the resolved config, because that is where the cost was: with no
+    // `routes.include` at all every route registered in the application was documented, and among them
+    // were the documentation viewer's own four endpoints and Laravel's storage symlink route — in a
+    // reference an API's consumers read.
+    BuildSettings::none();
+    bindStubEngine();
+
+    $paths = array_keys(
+        app(DocumentBuilder::class)->build('default', WorkbenchEngine::make())->document->toArray()['paths'] ?? [],
+    );
+
+    expect($paths)->not->toBeEmpty()
+        ->and($paths)->each->toStartWith('/api/');
+});
 
 it('names the file error a reader has to fix, which no build could reach before', function (): void {
     // This prints from inside the build, so a build that never ran reported it nowhere: an application
