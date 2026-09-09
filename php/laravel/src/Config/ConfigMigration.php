@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Config;
 
+use Docuccino\Core\Config\ConfigFile;
+use Docuccino\Core\Config\WritableSettings;
 use Docuccino\Core\Emit\YamlSerializer;
 use Docuccino\Core\Support\Hydrate;
+use Docuccino\Core\Support\PlainText;
 use Docuccino\Laravel\Commands\MigrateConfigCommand;
 
 /**
@@ -13,13 +16,19 @@ use Docuccino\Laravel\Commands\MigrateConfigCommand;
  * write, and everything the move could not carry with them.
  *
  * {@see ConfigSplit} decides which keys are build keys and this decides what becomes of each of them,
- * which is three different things. Most are copied under the name they already have. A few were
+ * which is four different things. Most are copied under the name they already have. A few were
  * RENAMED and are copied under the new one, because a migration that wrote the old spelling would
  * hand back a file the build reports as unknown — its author would have run the remedy and still be
- * holding a setting nothing reads. And a few were REMOVED, which is the only interesting case:
- * dropping a key in silence is the confidently-wrong answer the refusal this fixes exists to prevent,
- * so every drop is accounted for, and the ones that CHANGE the document are kept apart from the ones
- * that never did anything.
+ * holding a setting nothing reads. A few were REMOVED, and dropping a key in silence is the
+ * confidently-wrong answer the refusal this fixes exists to prevent, so every drop is accounted for and
+ * the ones that CHANGE the document are kept apart from the ones that never did anything.
+ *
+ * And a value can be one a configuration file has no form for at all — an enum case, a closure, a
+ * resource, a date — which {@see WritableSettings} decides by writing it and reading it back rather than
+ * by a list of types. Those are dropped and reported like a REMOVED key, because the file this writes
+ * has to be one the build then reads: {@see unreadable()} is the guarantee, and it is not a formality.
+ * The author's `config/docuccino.php` is their only other copy of these settings, and the last thing
+ * this command tells them is to delete it.
  *
  * Values arrive resolved, because `config()` is what read them: an `env()` call in the framework
  * config has already become whatever the variable said on this machine, and no indirection survives
@@ -44,37 +53,40 @@ final readonly class ConfigMigration
     ];
 
     /**
-     * Build settings `docuccino.yaml` has no key for, against whether dropping one changes the
-     * document it was written for.
+     * Build settings `docuccino.yaml` has no key for, against what dropping one costs — or NULL where
+     * dropping it costs nothing at all.
      *
-     * `shaped` is the whole distinction and it decides how loud a drop is. A key that shaped the
+     * That null is the whole distinction and it decides how loud a drop is. A key that shaped the
      * document leaves a file describing something other than it used to, which its author has to know
-     * before the next export. A key no reader ever read leaves a byte-identical document, and
-     * reporting that as a loss would put a line nobody can act on above the line they must.
+     * before the next export, and the sentence here is what they are told. A key no reader ever read
+     * leaves a byte-identical document, so there is nothing to tell them: reporting that as a loss
+     * would put a line nobody can act on above the line they must.
      *
-     * `cost` is read only where a drop really lost something, so it is written for that case and not
-     * as a general note about the key.
+     * The remedy belongs in the sentence rather than beside it, because a cost is printed AND written
+     * into the file as a comment, and advice that reached only the console is advice that scrolled away.
      *
-     * @var array<string, array{shaped: bool, cost: string}>
+     * @var array<string, ?string>
      */
     public const array REMOVED = [
         // A closure filtered routes and could not be fingerprinted, so a build could never tell
         // whether a cached fragment was still the answer. `routes.filter` names a class instead, and
         // nothing turns a closure into one automatically.
-        'documents.*.routes.closure' => [
-            'shaped' => true,
-            'cost' => 'a closure has no form in a configuration file, so the routes it held back are documented again',
-        ],
-        // Both of its values always emitted the comma form; nothing ever branched on it.
-        'documents.*.representation.lists' => [
-            'shaped' => false,
-            'cost' => 'no reader ever read it, and both of its values emitted the same document',
-        ],
+        'documents.*.routes.closure' => 'a closure has no form in a configuration file, so the routes it held back are documented again — a route filter names a class now, so implement RouteFilter and set routes.filter',
+        // Both of its values always emitted the comma form; nothing ever branched on it, so dropping
+        // it costs nothing and saying so would only bury the losses that do.
+        'documents.*.representation.lists' => null,
     ];
 
     /**
+     * What dropping a setting whose VALUE the file has no form for costs. One sentence for all of them,
+     * because {@see WritableSettings} decides the question by round trip and not by kind, so there is no
+     * kind here to name.
+     */
+    public const string UNWRITABLE = 'docuccino.yaml has no form for the value written there, and writing it anyway would change what the setting means — write it as a literal value, or leave it out and take the documented default';
+
+    /**
      * @param  array<string, mixed>  $settings  the build settings, as `docuccino.yaml` should hold them
-     * @param  list<string>  $lost  paths dropped whose value shaped the document — the file is incomplete
+     * @param  array<string, string>  $lost  path => what dropping it cost, for the drops that cost something
      * @param  list<string>  $dropped  paths dropped that shaped nothing, so the document is unchanged
      * @param  array<string, string>  $renamed  the path as it was written => the path written instead
      * @param  array<string, string>  $environment  path => the variable this machine's value came from
@@ -107,7 +119,7 @@ final readonly class ConfigMigration
         $dropped = [];
         $renamed = [];
 
-        foreach (self::REMOVED as $path => $removal) {
+        foreach (self::REMOVED as $path => $cost) {
             foreach (self::written($settings, $path) as $at) {
                 $value = self::pull($settings, $at);
                 $name = implode('.', $at);
@@ -115,14 +127,24 @@ final readonly class ConfigMigration
                 // A key present and null has expressed nothing, so dropping it takes nothing with it
                 // — and `closure` shipped AS null in the file every application published, which would
                 // otherwise fire the loudest line here on nearly every migration there is.
-                if ($removal['shaped'] && $value !== null) {
-                    $lost[] = $name;
+                if ($cost !== null && $value !== null) {
+                    $lost[$name] = $cost;
 
                     continue;
                 }
 
                 $dropped[] = $name;
             }
+        }
+
+        // After the removals, so a closure at `routes.closure` is reported as the key it is rather than
+        // as an unwritable value, and before the renames, so a value the file cannot carry is named
+        // where its author wrote it and never joins the report of what was renamed on the way over.
+        $writable = WritableSettings::of($settings);
+        $settings = $writable->settings;
+
+        foreach ($writable->unwritable as $path) {
+            $lost[$path] = self::UNWRITABLE;
         }
 
         foreach (self::RENAMED as $path => $to) {
@@ -134,7 +156,7 @@ final readonly class ConfigMigration
             }
         }
 
-        sort($lost, SORT_STRING);
+        ksort($lost, SORT_STRING);
         sort($dropped, SORT_STRING);
         ksort($renamed, SORT_STRING);
 
@@ -186,10 +208,14 @@ final readonly class ConfigMigration
             '# written here takes its documented default; the configuration reference lists them all.',
         ];
 
-        foreach ($this->lost as $path) {
+        // A path holds an application's own document key, so it is authored text on a COMMENT line: a
+        // newline in one ends the comment and everything after it becomes settings nobody wrote, and the
+        // file still parses, so nothing downstream would notice. {@see PlainText} is the escape that
+        // keeps a comment a comment.
+        foreach ($this->lost as $path => $cost) {
             $lines[] = '#';
-            $lines[] = '# NOT carried over: '.$path;
-            $lines[] = '#   '.self::cost($path).'.';
+            $lines[] = '# NOT carried over: '.PlainText::of($path);
+            $lines[] = '#   '.$cost.'.';
             $lines[] = '#   Until that is settled this document is not the one config/docuccino.php described.';
         }
 
@@ -202,12 +228,31 @@ final readonly class ConfigMigration
         return implode("\n", $lines)."\n\n".(new YamlSerializer)->serialize($this->settings);
     }
 
-    /** What dropping `$path` cost, read off {@see REMOVED} by the key the path matched. */
-    public static function cost(string $path): string
+    /**
+     * Why the file this would write is not one the build reads back as these settings, or null when it
+     * is.
+     *
+     * Asked rather than assumed. The writer and the reader are two halves of one fact
+     * ({@see WritableSettings}), and the value-by-value filter above cannot see every way they part
+     * company, because a KEY can part them too: a top-level key an application spelled numerically makes
+     * the whole file a list, which the reader refuses. That writes a plausible file and is not a value
+     * question. So the file is proved by reading it, and a migration that cannot express itself says so
+     * instead of putting the file on disk.
+     *
+     * The reader's own sentence where it has one. It has none for the third thing {@see
+     * WritableSettings::reads()} refuses — text it takes cleanly and gives back as other settings — so
+     * that case says what happened rather than borrowing a message about something else.
+     */
+    public function unreadable(): ?string
     {
-        $wildcarded = implode('.', DeclaredSettings::wildcarded(explode('.', $path)));
+        $contents = $this->file();
 
-        return self::REMOVED[$wildcarded]['cost'] ?? 'it is not a setting docuccino.yaml has a key for';
+        if (WritableSettings::reads($contents, $this->settings)) {
+            return null;
+        }
+
+        return ConfigFile::parse($contents)->diagnostics[0]->message
+            ?? sprintf('%s would hold settings other than the ones it was written from.', ConfigFile::NAME);
     }
 
     /**

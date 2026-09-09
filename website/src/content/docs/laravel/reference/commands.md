@@ -150,6 +150,14 @@ reported differently because they cost different things:
   held back are documented again until you write a `RouteFilter`. A `closure` left at its shipped
   `null` filtered nothing, so that one is only a drop.
 
+A **value** can be one the file has no form for too, whatever key it sits under: an enum case, a
+closure, a resource, a date, an object. `config/docuccino.php` is PHP and can hold any of them;
+`docuccino.yaml` holds numbers, strings, booleans and lists and maps of those. Such a setting is left
+out rather than written as something else — an absent key takes its documented default, where a value
+the file changed on the way in would build a document you never configured. It is reported and
+commented exactly like `routes.closure`, and the run exits `1`. Write the value as a literal in
+`docuccino.yaml` and the next run is clean.
+
 **`env()` calls.** `config('docuccino')` hands over *resolved* values, so an `env()` call in
 `config/docuccino.php` arrived as whatever the variable said where you ran this, and the indirection
 is not recoverable from the value. Where the framework config reads a setting through `DOCUCCINO_ENGINE`
@@ -157,9 +165,15 @@ or `DOCUCCINO_FRAGMENT_CACHE` **and** that variable is set, the command names th
 variable — both still override the file, so the lever keeps working. Where any other `env()` call is
 in the file, it says so once and tells you to check those keys, rather than guessing which they were.
 
-Exits `0` when everything came over, `1` on a disabled install, a file it could not write, or a
-setting it could not carry — the file is written in that last case, and the exit code is what a script
-reads. Running it twice writes the same bytes.
+Every file it writes is one the build reads: the command parses its own output back before putting it
+on disk and, where those settings do not survive the round trip, writes **nothing** and says why. Your
+`config/docuccino.php` is untouched in that case, so nothing is lost — and that matters, because the
+last thing a successful run tells you is to delete it.
+
+Exits `0` when everything came over, `1` on a disabled install, a file it could not write, a setting
+it could not carry, or settings it could not write at all — the file is written in the "could not
+carry" case and in no other, and the exit code is what a script reads. Running it twice writes the
+same bytes.
 
 ## `docuccino:export`
 

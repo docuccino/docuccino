@@ -7,6 +7,7 @@ use Docuccino\Core\Support\Json;
 use Docuccino\Laravel\Config\ConfigMigration;
 use Docuccino\Laravel\Config\ConfigSplit;
 use Docuccino\Laravel\Tests\Support\BuildSettings;
+use Docuccino\Laravel\Tests\Support\FrameworkConfig;
 use Illuminate\Support\Facades\Artisan;
 
 /**
@@ -25,72 +26,7 @@ use Illuminate\Support\Facades\Artisan;
  */
 
 /**
- * A populated `config/docuccino.php` of the shape the last release shipped — every build setting set
- * to something OTHER than its default, so a value that failed to travel shows up as a value and not
- * as a missing key.
- *
- * `documents.public` carries a viewer and nothing else, which is the shape that proves a document key
- * survives: everything in that bag belongs to the framework, so a migration reading only stray keys
- * would delete the document and leave its viewer routed at nothing.
- *
- * @return array<string, mixed>
- */
-function populatedFrameworkConfig(): array
-{
-    return [
-        'enabled' => true,
-        'documents' => [
-            'default' => [
-                'viewer' => ['route' => '/docs/api', 'gate' => 'view-docs', 'source' => 'artifact'],
-                'info' => ['title' => 'Billing API', 'version' => '3.1.4'],
-                'servers' => [['url' => 'https://api.example.com', 'description' => 'Production']],
-                'routes' => [
-                    'include' => ['api/v2/*', 'api/v3/*'],
-                    'exclude' => ['api/v2/internal/*'],
-                    'closure' => null,
-                    'include_vendor' => true,
-                ],
-                'security' => [
-                    'auto_detect_middleware' => 'auth:sanctum*',
-                    'schemes' => ['bearer' => ['type' => 'http', 'scheme' => 'bearer']],
-                    'default' => [['bearer' => []]],
-                ],
-                'error_responses' => 'none',
-                'tags' => ['default_strategy' => 'none', 'map' => ['Invoice' => 'Billing']],
-                'content' => ['dir' => 'resources/docs/api'],
-                'overlays' => ['resources/docs/overlays/*.yaml'],
-                'representation' => [
-                    'filters' => 'deepObject',
-                    'nullable' => 'anyof',
-                    'operation_id' => 'controller-method',
-                    'lists' => 'comma',
-                ],
-                'versioning' => 'semver',
-                'integrations' => ['permission' => ['enabled' => true], 'eloquent' => ['enabled' => false]],
-                'export' => ['path' => 'docs/billing.json'],
-            ],
-            'public' => [
-                'viewer' => ['route' => '/docs/public', 'gate' => null],
-            ],
-        ],
-        'extensions' => ['App\Docs\InvoiceTotalsExtension'],
-        'lint' => [
-            'leakage' => ['enabled' => true, 'allow' => ['reset_token']],
-            'descriptions' => ['enabled' => true, 'allow' => []],
-        ],
-        'diagnostics' => ['accept' => ['eloquent.no-columns']],
-        'engine' => [
-            'mode' => 'in-process',
-            'project_paths' => ['app', 'modules'],
-            'neon' => 'phpstan.neon',
-        ],
-        'on_route_error' => 'omit',
-        'cache' => ['enabled' => true, 'store' => 'redis', 'path' => 'storage/docs/fragments'],
-    ];
-}
-
-/**
- * The build half of {@see populatedFrameworkConfig()}, as `docuccino.yaml` has to hold it. Written out
+ * The build half of {@see FrameworkConfig::populated()}, as `docuccino.yaml` has to hold it. Written out
  * rather than derived: this is the independent statement of the property, and deriving it would make
  * the round-trip agree with the writer by construction.
  *
@@ -163,7 +99,7 @@ function migratedSettings(): array
 function arrangePopulatedFrameworkConfig(): void
 {
     BuildSettings::none();
-    config()->set('docuccino', populatedFrameworkConfig());
+    config()->set('docuccino', FrameworkConfig::populated());
 }
 
 /**
@@ -732,6 +668,181 @@ it('refuses to run while Docuccino is disabled', function (): void {
     } finally {
         forgetBasePath($directory);
     }
+});
+
+// --- A value the file has no form for -------------------------------------------------------------
+
+/**
+ * A backed enum on a build setting, which is how modern Laravel configuration is written.
+ */
+enum MigrateQaDriver: string
+{
+    case Scalar = 'scalar';
+}
+
+it('drops a value docuccino.yaml has no form for, names it, and writes a file the build reads', function (string $path, mixed $value): void {
+    // The defect this closes. `YamlSerializer` writes an enum as `!php/enum`, which `ConfigFile::FLAGS`
+    // is deliberately set to REFUSE, and a closure, a resource or a date as something else entirely —
+    // so the command reported success over a file the very next build either refuses or reads wrong.
+    // Dropped and named is the only honest answer: an absent key is a setting nobody expressed.
+    $directory = ownedBasePath();
+    arrangePopulatedFrameworkConfig();
+    config()->set('docuccino.'.$path, $value);
+
+    try {
+        [$code, $output] = runMigrateConfig();
+        $written = (string) file_get_contents($directory.'/'.ConfigFile::NAME);
+        $file = ConfigFile::parse($written);
+
+        expect($code)->toBe(1)
+            ->and($output)->toContain($path.' was NOT carried over')
+            ->and($output)->toContain('has no form for the value written there')
+            // And in the file, where it outlives the console this command is run once in.
+            ->and($written)->toContain('NOT carried over: '.$path)
+            // The file the build reads next: it parses, it says nothing, and the key is simply not there.
+            ->and($file->error)->toBeNull()
+            ->and($file->diagnostics)->toBe([])
+            ->and(ConfigMigration::of()->unreadable())->toBeNull();
+    } finally {
+        forgetBasePath($directory);
+    }
+})->with([
+    // Refused outright by the reader — the file lands and the next build reports config.file-invalid.
+    'an enum case' => ['documents.default.versioning', MigrateQaDriver::Scalar],
+    // Written as `null`, which the reader accepts as an empty value the author never wrote.
+    'a resource' => ['documents.default.export.path', STDOUT],
+    // Written as a timestamp, which the reader hands back as an integer.
+    'a date' => ['documents.default.info.version', new DateTimeImmutable('2020-01-01')],
+    // Read with a diagnostic and settled to null, so the file warns on every build from here on.
+    'a value that is not a number' => ['documents.default.representation.filters', NAN],
+]);
+
+it('drops a closure at a key that is not routes.closure', function (): void {
+    // The same defect with a closure, which no dataset can carry. `routes.closure` has its own report
+    // because the key is gone from the product; a closure anywhere else is a value with no form, and
+    // used to be written as `mapper: null` with the migration reporting nothing lost at all.
+    $directory = ownedBasePath();
+    arrangePopulatedFrameworkConfig();
+    config()->set('docuccino.documents.default.tags.mapper', static fn (string $tag): string => $tag);
+
+    try {
+        [$code, $output] = runMigrateConfig();
+        $written = (string) file_get_contents($directory.'/'.ConfigFile::NAME);
+
+        expect($code)->toBe(1)
+            ->and($output)->toContain('documents.default.tags.mapper was NOT carried over')
+            // Named in the comment header and written as a key nowhere: it used to arrive as
+            // `mapper: null`, with the migration reporting nothing lost at all.
+            ->and($written)->not->toContain('mapper: ')
+            ->and(ConfigFile::parse($written)->values['documents']['default']['tags'])
+            ->not->toHaveKey('mapper');
+    } finally {
+        forgetBasePath($directory);
+    }
+});
+
+it('writes a file the reader gives back unchanged, whatever an application configured', function (mixed $value): void {
+    // Stated over arbitrary input rather than over the one corpus above, because that corpus is the
+    // input the transform was written against. The property is the whole guarantee: the settings the
+    // reader hands back are the settings the migration says it wrote.
+    arrangePopulatedFrameworkConfig();
+    config()->set('docuccino.documents.default.info.title', $value);
+
+    $migration = ConfigMigration::of();
+    $file = ConfigFile::parse($migration->file());
+
+    expect($migration->unreadable())->toBeNull()
+        ->and($file->error)->toBeNull()
+        ->and($file->diagnostics)->toBe([])
+        ->and(Json::stable($file->values))->toBe(Json::stable($migration->settings));
+})->with([
+    'a string that looks like a number' => ['1.10'],
+    'a string that looks like a boolean' => ['no'],
+    'a string that looks like nothing' => ['null'],
+    'a string of YAML' => ["a: b\n#c"],
+    'a string with an escape sequence' => ["red\x1b[31m"],
+    'a multi-line string' => ["two\nlines\n"],
+    'a string of invalid UTF-8' => ["a\xC3("],
+    'an integral float' => [1.0],
+    'an enum case' => [MigrateQaDriver::Scalar],
+    'a date' => [new DateTimeImmutable('2020-01-01')],
+    'an infinity' => [INF],
+    'a list holding an object' => [['a', new DateTimeImmutable('2020-01-01')]],
+    'a map an author keyed themselves' => [['A: b' => 'c #d', "e\nf" => 'g']],
+]);
+
+it('keeps a document key with a newline inside the comment it belongs to', function (): void {
+    // A document key is an application's own word and it lands on a COMMENT line. A newline in one
+    // ends the comment, so everything after it became settings nobody wrote — and the file still
+    // parsed, so nothing downstream would have noticed.
+    BuildSettings::none();
+    config()->set('docuccino', ['documents' => [
+        "evil\nversioning: semver\n#" => ['routes' => ['closure' => static fn (): bool => true]],
+    ]]);
+
+    $migration = ConfigMigration::of();
+    $written = $migration->file();
+    $file = ConfigFile::parse($written);
+
+    // The report is still made, and the key is still named — escaped, on one line.
+    expect($migration->lost)->toHaveCount(1)
+        ->and($written)->toContain('NOT carried over: documents.evil\x0Aversioning: semver\x0A#.routes.closure')
+        // Every comment line is still a comment, and no setting appeared that nobody set.
+        ->and($file->error)->toBeNull()
+        ->and($file->values)->not->toHaveKey('versioning')
+        ->and(array_keys($file->values))->toBe(['documents'])
+        ->and($migration->unreadable())->toBeNull();
+});
+
+it('writes nothing at all when the settings do not survive being written', function (): void {
+    // The backstop, and it is not a formality: a top-level key an application spelled numerically makes
+    // the whole file a LIST, which the reader refuses — a plausible file, and not a value question, so
+    // nothing above catches it. The next thing this command prints is "delete config/docuccino.php",
+    // which after a bad migration is the author's only surviving copy of these settings.
+    $directory = ownedBasePath();
+    BuildSettings::none();
+    config()->set('docuccino', ['enabled' => true, 0 => 'stray']);
+
+    try {
+        [$code, $output] = runMigrateConfig();
+
+        expect($code)->toBe(1)
+            ->and($output)->toContain('Could not write docuccino.yaml')
+            ->and($output)->toContain('must hold a map of settings')
+            ->and($output)->toContain('config/docuccino.php was not touched')
+            // Not named, because there is nothing to delete yet.
+            ->and($output)->not->toContain('Delete the migrated settings')
+            ->and(is_file($directory.'/'.ConfigFile::NAME))->toBeFalse();
+    } finally {
+        forgetBasePath($directory);
+    }
+});
+
+it('shows the file it could not write, and still writes nothing', function (): void {
+    // A dry run is asked what WOULD happen, so it prints the file and then says why it would not land.
+    $directory = ownedBasePath();
+    BuildSettings::none();
+    config()->set('docuccino', ['enabled' => true, 0 => 'stray']);
+
+    try {
+        [$code, $output] = runMigrateConfig(['--dry-run' => true]);
+
+        expect($code)->toBe(1)
+            ->and($output)->toContain('as it would be written')
+            ->and($output)->toContain('Could not write docuccino.yaml')
+            ->and(is_file($directory.'/'.ConfigFile::NAME))->toBeFalse();
+    } finally {
+        forgetBasePath($directory);
+    }
+});
+
+it('names the reader\'s own complaint about a file it would not have written', function (): void {
+    // The same guarantee stated against a bag handed in rather than against an application, which is
+    // what makes it a property of the transform: the reader is asked, and its answer is what the
+    // command prints. Both directions, so a check that always answered null would fail here.
+    expect(ConfigMigration::from(['0' => 'stray'])->unreadable())
+        ->toContain('must hold a map of settings')
+        ->and(ConfigMigration::from(['on_route_error' => 'omit'])->unreadable())->toBeNull();
 });
 
 // --- The split's two derivations ------------------------------------------------------------------

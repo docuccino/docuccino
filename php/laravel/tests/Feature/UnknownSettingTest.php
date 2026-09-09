@@ -5,11 +5,13 @@ declare(strict_types=1);
 use Docuccino\Core\Config\ConfigFile;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Laravel\Config\BuildConfig;
+use Docuccino\Laravel\Config\ConfigMigration;
 use Docuccino\Laravel\Config\ConfigSplit;
 use Docuccino\Laravel\Config\DeclaredSettings;
 use Docuccino\Laravel\Config\UnknownSettings;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Tests\Support\BuildSettings;
+use Docuccino\Laravel\Tests\Support\FrameworkConfig;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 
 /**
@@ -19,7 +21,7 @@ use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
  * The report has two ways to be wrong and they are not symmetric. Missing a typo leaves the silence it
  * replaces; firing on CORRECT configuration is worse, because the reader is sent to fix a file that is
  * already right and the channel stops being worth reading. So the firing population is measured on
- * three real corpora below and has to be zero on all three, and every hit on a typo has to name
+ * four real corpora below and has to be zero on all four, and every hit on a typo has to name
  * something its reader can act on.
  */
 
@@ -176,6 +178,30 @@ it('fires nowhere on the configuration the suite itself runs', function (): void
         app(DocumentBuilder::class)->build('default', WorkbenchEngine::make())->diagnostics,
         'config.unknown-setting',
     ))->toBe([]);
+});
+
+it('fires nowhere on the file docuccino:migrate-config writes', function (): void {
+    // Population four: the output of the one command that AUTHORS this file. Its whole purpose is to
+    // clear `config.not-migrated`, so a migration whose output the build then reports as naming no
+    // setting hands its author the next error instead of none — and the renames are the way that
+    // happens, since a setting that moved and was copied under the old spelling names nothing now.
+    config()->set('docuccino', FrameworkConfig::populated());
+
+    $migration = ConfigMigration::of();
+
+    expect($migration->unreadable())->toBeNull()
+        ->and(unknownSettingKeys($migration->file()))->toBe([])
+        // Every difference from the framework config accounted for, so a RENAMED entry somebody forgets
+        // to add shows up here rather than in an application's build report.
+        ->and($migration->renamed)->toBe([
+            'documents.default.security.auto_detect_middleware' => 'documents.default.security.auth_middleware',
+            'engine.neon' => 'engine.config',
+        ])
+        ->and($migration->dropped)->toBe([
+            'documents.default.representation.lists',
+            'documents.default.routes.closure',
+        ])
+        ->and($migration->lost)->toBe([]);
 });
 
 it('fires nowhere on the configuration the website tells people to write', function (): void {

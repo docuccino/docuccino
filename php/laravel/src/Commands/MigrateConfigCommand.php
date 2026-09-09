@@ -113,6 +113,7 @@ final class MigrateConfigCommand extends Command
     {
         $path = $this->projectPath($target);
         $contents = $migration->file();
+        $unreadable = $migration->unreadable();
 
         if ($this->option('dry-run') === true) {
             $this->section(sprintf('%s, as it would be written', $path));
@@ -122,7 +123,13 @@ final class MigrateConfigCommand extends Command
                 $this->line(TerminalText::of($line));
             }
 
-            return null;
+            return $unreadable === null ? null : $this->reportUnreadable($path, $unreadable);
+        }
+
+        // Before the file goes anywhere, because the next thing this prints is "delete
+        // config/docuccino.php" and that file is the author's only other copy of these settings.
+        if ($unreadable !== null) {
+            return $this->reportUnreadable($path, $unreadable);
         }
 
         // The same timidity `docuccino:install` publishes under: an existing configuration file is a
@@ -146,6 +153,25 @@ final class MigrateConfigCommand extends Command
         $this->line(sprintf('Wrote %s from config/docuccino.php.', $path));
 
         return null;
+    }
+
+    /**
+     * The migration could not express itself as a file the build reads, so nothing is written.
+     *
+     * Not a partial file and not a warning over one: a `docuccino.yaml` the build refuses replaces the
+     * error this command was run to clear with another, and one holding something else entirely is worse
+     * — it builds a plausible document from settings nobody wrote. Leaving the framework config as the
+     * only copy is the recoverable answer.
+     */
+    private function reportUnreadable(string $path, string $reason): int
+    {
+        $this->error(sprintf('Could not write %s: these settings do not survive being written to it.', $path));
+        $this->line(sprintf('  <fg=gray>%s</>', TerminalText::of($reason)));
+        $this->newLine();
+        $this->line('<fg=gray>Nothing was written and config/docuccino.php was not touched, so nothing is lost.</>');
+        $this->line('<fg=gray>Report this: a build setting the framework config can hold and this file cannot is a bug.</>');
+
+        return self::FAILURE;
     }
 
     /** Everything that happened to a setting on the way over, loudest last. */
@@ -225,16 +251,15 @@ final class MigrateConfigCommand extends Command
         }
 
         $this->newLine();
-        foreach ($migration->lost as $path) {
+        foreach ($migration->lost as $path => $cost) {
             $this->error(sprintf('%s was NOT carried over.', TerminalText::of($path)));
-            $this->line(sprintf('  %s.', TerminalText::of(ConfigMigration::cost($path))));
+            $this->line(sprintf('  %s.', TerminalText::of($cost)));
         }
 
         $this->line(sprintf(
             '<fg=gray>Written into %s as a comment too, so it is still there when this scrolls away.</>',
             ConfigFile::NAME,
         ));
-        $this->line('<fg=gray>A route filter names a class now: implement RouteFilter and set routes.filter.</>');
     }
 
     /** A path as the project names it, so nothing prints a machine layout it did not have to. */
