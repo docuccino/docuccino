@@ -115,10 +115,9 @@ function bindStubEngine(): void
  * Set one build setting, addressed the way `docuccino.yaml` nests it — `documents.default.info.title`,
  * `lint.tags.enabled`, `cache.enabled`.
  *
- * The one way a test configures a build, so a future test cannot reach a build through a path the
- * product no longer reads: the framework's config now keeps only what boot and the viewer's request
- * path need. The setting becomes YAML text and goes through the reader the product uses —
- * {@see BuildSettings} states why that seam and not a parsed array.
+ * The one way a test configures a build. The setting becomes YAML text and goes through the reader
+ * the product uses — {@see BuildSettings} states why that seam and not a parsed array, and what
+ * scans the other way in.
  */
 function setBuild(string $path, mixed $value): void
 {
@@ -151,6 +150,11 @@ function documentSettings(string $key = 'default'): array
  * the Laravel feature tests use, so none of them re-rolls the config → generator wiring or reaches for
  * a peer test's file-level function. `$key` names the document; a suite declaring its own `documents`
  * bag — several versions of one API, an admin document beside the default — passes the one it wants.
+ *
+ * The bag comes off the bound `BuildConfig`, so it is the one a build hands the factory, refusals
+ * and all. `$mutateConfig` edits it after that read rather than instead of it — for a shape a test
+ * wants that no YAML has to carry — so a test whose subject is the SETTING sets it with
+ * {@see setBuild()} and gets the reader's answer.
  *
  * @param  callable(array<string, mixed>): array<string, mixed>|null  $mutateConfig
  */

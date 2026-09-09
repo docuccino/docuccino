@@ -32,7 +32,7 @@ use Docuccino\Laravel\Engine\LazyTypeEngine;
 final readonly class BuildFingerprint
 {
     /**
-     * @param  array<string, mixed>  $engineConfig  the `docuccino.engine` bag
+     * @param  array<string, mixed>  $engineConfig  the `engine` bag
      * @param  string  $basePath  the application root, holding the `composer.lock` this digests
      */
     public function __construct(

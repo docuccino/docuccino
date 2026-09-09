@@ -25,9 +25,11 @@ valid YAML, not a map of settings, or unreadable on disk. A document built from 
 those states would look plausible and have nothing to do with the file you edited, so nothing builds
 one.
 
-Neither file is required. With no configuration at all you get one document, called `default`, built
-from the defaults below: every route documented, titled "API Documentation" at version `1.0.0`, and
-exported to `docs/openapi.json`.
+Neither file is required. With no configuration at all you get one document, called `default`,
+configured exactly as the shipped `docuccino.yaml` describes it: the routes under `api/*`, titled
+"API Documentation" at version `1.0.0`, the framework's own error shapes documented, and exported to
+`docs/openapi.json`. So `docuccino:install` does not change the document you already had — it writes
+those settings somewhere you can edit them.
 
 Every key is listed in the shipped files themselves — required keys active, optional ones commented
 out — so you can discover the whole surface by scrolling through them. This page is the long-form
@@ -49,9 +51,11 @@ saying: `nullable: no` is the *text* `no`, `1.10` is the number 1.1, and a bare 
 so a value converted quietly would be a policy nobody chose.
 
 The **Default** column is the value the published file ships with. For most keys that is also the
-built-in fallback you get by deleting the key, but not for all of them: `error_responses` ships as
-`'default'` and falls back to `'none'` when a document omits it, which is why a second document
-[inherits nothing](/laravel/guides/multiple-documents/) from the first.
+built-in fallback you get by deleting the key, but not for all of them, and the three that differ all
+read an omitted key as "no opinion": `error_responses` falls back to `'none'`, `routes.include` to no
+route filter at all, and `security.auth_middleware` to treating no route as authenticated. That is why
+a second document [inherits nothing](/laravel/guides/multiple-documents/) from the first — and why a
+document nobody wrote at all gets the shipped values above rather than those fallbacks.
 
 ## Build configuration
 

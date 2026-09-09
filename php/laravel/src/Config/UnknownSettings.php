@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Config;
 
+use Docuccino\Core\Config\ConfigFile;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Support\PlainText;
@@ -131,7 +132,7 @@ final class UnknownSettings
     }
 
     /** Whether nothing below `$path` is Docuccino's to judge. */
-    public static function isOpen(string $path): bool
+    private static function isOpen(string $path): bool
     {
         return in_array($path, self::OPEN, true);
     }
@@ -186,7 +187,10 @@ final class UnknownSettings
             return sprintf('Did you mean %s?', self::spelled($written, $misspelled));
         }
 
-        return 'Delete it, or check it against the configuration reference. docuccino.yaml is Docuccino\'s own file, so a key it does not declare is not handed on to anything else.';
+        return sprintf(
+            'Delete it, or check it against the configuration reference. %s is Docuccino\'s own file, so a key it does not declare is not handed on to anything else.',
+            ConfigFile::NAME,
+        );
     }
 
     /**

@@ -326,7 +326,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             ->give(fn (): string => $this->app->basePath());
 
         // The data-leakage lint itself is framework-agnostic core; the adapter just maps
-        // docuccino.lint.leakage.* onto its options.
+        // the `lint.leakage` bag onto its options.
         $this->app->bind(SensitiveFieldLint::class, static fn (): SensitiveFieldLint => new SensitiveFieldLint(
             LeakageOptions::fromConfig(self::leakageConfig()),
         ));
@@ -344,7 +344,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             ->give(fn (): string => $this->app->basePath());
 
         // The completeness lints share one options shape, so they share one reader; each is core, and
-        // the adapter only maps its docuccino.lint.<key> bag onto it.
+        // the adapter only maps its `lint.<key>` bag onto it.
         $this->app->bind(MissingDescriptionLint::class, static fn (): MissingDescriptionLint => new MissingDescriptionLint(self::lintRule('descriptions')));
         $this->app->bind(OperationIdStyleLint::class, static fn (): OperationIdStyleLint => new OperationIdStyleLint(self::lintRule('operation_ids')));
         $this->app->bind(UndocumentedTagLint::class, static fn (): UndocumentedTagLint => new UndocumentedTagLint(self::lintRule('tags')));

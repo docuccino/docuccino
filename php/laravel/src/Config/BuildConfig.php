@@ -55,7 +55,7 @@ final class BuildConfig
 
     public function __construct(private readonly ConfigFile $file) {}
 
-    /** The read itself — its path, its error, and the diagnostics that say what went wrong. */
+    /** The read itself — its error, and the diagnostics that say what went wrong. */
     public function file(): ConfigFile
     {
         return $this->file;
@@ -121,10 +121,17 @@ final class BuildConfig
      * a report. Ordered file-first: an unparseable file is why every setting under it is missing, and
      * the unknown keys come before the refused types because a key nothing reads has no type to refuse.
      *
+     * The file's own keys are asked about here rather than waited for, because almost none of them is
+     * read through the typed reader at all — a section is read off a plain bag and a list or a path
+     * through a helper that coerces ({@see ConfiguredShapes}). Asking first is what puts their refusals
+     * in the list below.
+     *
      * @return list<Diagnostic>
      */
     public function diagnostics(): array
     {
+        ConfiguredShapes::read($this);
+
         return [
             ...$this->file->diagnostics,
             ...UnknownSettings::report($this),
