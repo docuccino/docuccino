@@ -839,10 +839,28 @@ final class DataClassReflector
     /**
      * Whether the property carries any `#[WithTransformer]`. Which transformer it is never matters —
      * one replaces serialisation outright, so the declared shape stops predicting the wire.
+     *
+     * A property the class does not declare carries no transformer, which is what this answers; it is
+     * NOT the same question as whether the property exists, and a caller that needs that asks
+     * {@see declaresProperty()}. Written as `?->…  !== []` the two collapsed, and the collapsed answer
+     * was `true`: an unreadable property reported a transformer nobody wrote.
      */
     public function isPropertyTransformed(string $fqcn, string $property): bool
     {
-        return $this->property($fqcn, $property)?->getAttributes(self::WITH_TRANSFORMER, ReflectionAttribute::IS_INSTANCEOF) !== [];
+        $reflection = $this->property($fqcn, $property);
+
+        return $reflection !== null
+            && $reflection->getAttributes(self::WITH_TRANSFORMER, ReflectionAttribute::IS_INSTANCEOF) !== [];
+    }
+
+    /**
+     * Whether the class declares this property at all — which is also whether spatie will serialise it,
+     * because `DataClassFactory` builds its property set from `ReflectionClass::getProperties()` and
+     * nothing else. A name this build learned from a class-level `@property` tag reaches no payload.
+     */
+    public function declaresProperty(string $fqcn, string $property): bool
+    {
+        return $this->property($fqcn, $property) !== null;
     }
 
     private function property(string $fqcn, string $property): ?ReflectionProperty
