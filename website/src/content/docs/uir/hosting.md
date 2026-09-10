@@ -24,7 +24,8 @@ required.
 
 Being self-contained is deliberate: you can vendor the file into an air-gapped build and validation
 behaves identically to fetching it. The same file ships inside the `docuccino/core` package, which is
-what [`docuccino:validate`](/laravel/reference/commands/#docuccinovalidate) uses.
+what [`docuccino:validate`](/laravel/reference/commands/#docuccinovalidate) holds the UIR half of a
+build to — the artifacts it exports are held to the published OpenAPI schema for their own version.
 
 ## Versioning
 

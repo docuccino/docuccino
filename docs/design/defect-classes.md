@@ -980,3 +980,52 @@ silent — so a green row is the gate staying quiet rather than the build being 
 last row is the other half: every floor, up to `hint`, stays green for the OpenAPI 3.2 target the
 shipped configuration writes, which is what keeps widening the gate from being a way to fail
 everybody's pipeline.
+
+## A check that runs where the side effect is, not where the question is
+
+A check gets written inside whatever produces the thing it checks. The emitted-artifact check went
+into the emitters, so it answered wherever something emitted — an export writing files, a viewer
+serving a page. Which entry points run it is then a function of which ones happen to have that side
+effect, and that is unrelated to which ones are being ASKED the question the check answers.
+
+*Instances.* `docuccino:validate` is the command whose entire job is to say whether a document is
+sound, and it never ran the artifact check, because it writes nothing. It held the UIR document to
+its schema — the model — and said nothing about the bytes a consumer receives. Measured before
+acting, on the workbench: with an overlay-written `$ref` that names nothing, `export` exits 1 with
+`document.openapi-invalid` and `validate` exits 0 printing "valid against UIR 1.0.0". With a 3.0
+target configured, `export` reports four `downlevel.*` codes and `validate` reports none. With an
+unreadable `export.targets`, `export` exits 1 and `validate` exits 0. `docuccino:cache` was the
+second instance and the more subtle one: it emits the payload the viewer is served, so the check DID
+run — and the finding went to the log, which is the right channel for a request and the wrong one for
+an operator watching a deploy step. A check that runs and reports where nobody is looking is the same
+defect as one that does not run.
+
+*The tell.* Ask what the check is a function of. If the answer is "whichever call site produces the
+artifact" rather than "whichever call site is being asked whether the artifact is sound", the
+population is an accident. The corroborating tell is an asymmetry that reads backwards when written
+down: the command with `validate` in its name catching strictly less than the one with `export` in
+its name. And the third is a report suggesting a flag — a `--format` mode that emits to a temporary
+target — which is the shape of the defect asking to be made configurable instead of fixed.
+
+*The fix that worked.* Make the check a function of the fact rather than of the side effect.
+`docuccino:validate` emits every target the document configures, in memory, purely to read the bytes
+back; nothing is written, so there is no temporary path to leak into output and no artifact left
+behind. Not a flag: an option here would be an admission that the default command could not answer
+its own question. What the command checks is what the application SHIPS — its configured export
+targets, not a format the command picks — so a pipeline writing 3.0 is told about the 3.0 file.
+`docuccino:cache` prints its emit report on the console and exits non-zero for an invalid payload,
+keeping the log for the request path. And a target with no published schema behind it — `uir`,
+`postman` — SAYS so per target rather than staying silent, because silence beside a checked target
+reads as the clean answer.
+
+The guard is `ArtifactSoundnessReachTest`, and it is a union table rather than a set of per-command
+tests: every entry point that can be asked whether a document is sound carries a row, including the
+ones that owe no answer, with the reason in the row. Two scans supply the denominator — the command
+set read out of Artisan, and every place in the adapter source that emits an artifact — each with a
+plausible minimum beside it so a scan that stops matching fails instead of passing over nothing. The
+rows are then EXECUTED against a document whose artifact really is out of spec, including the rows
+claiming to say nothing, which is where the gap lived. Two facts one owner apiece:
+`DocumentEmitOptions::canonical()` states the bytes a bare export writes, with an executed
+byte-comparison per carrier because a YAML target checked as JSON would report a clean run over the
+wrong bytes; and `Formats::checksEmittedArtifact()` states which formats have a published schema at
+all, guarded by probing the behaviour of every format rather than by asking the table about itself.
