@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Canonical\Canonicalizer;
 use Docuccino\Core\Contract\CheckResult;
 use Docuccino\Core\Contract\ContractChecker;
 use Docuccino\Core\Contract\ContractIndex;
@@ -91,6 +92,11 @@ use Illuminate\Routing\MiddlewareNameResolver;
 use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\Router;
 use Illuminate\Testing\TestResponse;
+use PhpParser\Node;
+use PhpParser\NodeTraverser;
+use PhpParser\NodeVisitor\FindingVisitor;
+use PhpParser\NodeVisitor\NameResolver;
+use PhpParser\ParserFactory;
 use Workbench\App\Http\Requests\SearchFormsRequest;
 use Workbench\App\Http\Requests\StoreVersionedFormRequest;
 
@@ -718,13 +724,15 @@ function loadFixture(string $name): array
  */
 function canonicalizerSchemaOrder(): array
 {
-    $source = (string) file_get_contents(dirname(__DIR__).'/php/core/src/Canonical/Canonicalizer.php');
-    $list = preg_split('/private const array SCHEMA_ORDER = \[/', $source)[1] ?? '';
-    $list = preg_split('/\n    \];/', $list)[0] ?? '';
+    // The constant itself, not a pattern over the lines that spell it: a member in the other quote
+    // style, or the last one written without a trailing comma, simply left the universe — and a sweep
+    // over a shorter universe reports no unanswered keyword just as loudly as a complete one.
+    $constant = (new ReflectionClass(Canonicalizer::class))->getReflectionConstant('SCHEMA_ORDER');
 
-    preg_match_all("/'([^']+)',/", $list, $matches);
+    /** @var list<string> $order */
+    $order = $constant === false ? [] : $constant->getValue();
 
-    return $matches[1];
+    return $order;
 }
 
 /**
@@ -1384,6 +1392,420 @@ function controllerActions(string $source): array
     }
 
     return $actions;
+}
+
+/**
+ * The one PHP grammar the source-reading guards read declarations and references through, and the
+ * reason there is one: a scan keyed on a single spelling — `final class`, `'Vendor\Class'`, `Table::` —
+ * is silent about every other spelling of the same construct, and its silence looks exactly like a pass.
+ * So the answer comes off a parsed AST with names resolved the way PHP would resolve them, and an
+ * unparseable source answers null rather than an empty set somebody could read as agreement.
+ *
+ * @return list<Node\Stmt>|null
+ */
+function phpParsedSource(string $source): ?array
+{
+    /** @var array<string, list<Node\Stmt>|null> $parsed */
+    static $parsed = [];
+
+    $key = md5($source);
+    if (array_key_exists($key, $parsed)) {
+        return $parsed[$key];
+    }
+
+    try {
+        $ast = (new ParserFactory)->createForNewestSupportedVersion()->parse($source);
+    } catch (Throwable) {
+        $ast = null;
+    }
+
+    return $parsed[$key] = $ast === null ? null : array_values((new NodeTraverser(new NameResolver))->traverse($ast));
+}
+
+/**
+ * Every named class one PHP source DECLARES, fully qualified. `new class {}` is not a declaration and
+ * neither is `Foo::class`; every modifier PHP lets sit in front of one — `final readonly`, `abstract` —
+ * is ordinary here, which is the half a pattern keeps forgetting.
+ *
+ * @return list<string>
+ */
+function phpDeclaredClasses(string $source): array
+{
+    $ast = phpParsedSource($source);
+    if ($ast === null) {
+        return [];
+    }
+
+    $finder = new FindingVisitor(
+        static fn (Node $node): bool => $node instanceof Node\Stmt\Class_ && $node->name !== null,
+    );
+    (new NodeTraverser($finder))->traverse($ast);
+
+    $names = [];
+    foreach ($finder->getFoundNodes() as $node) {
+        if ($node instanceof Node\Stmt\Class_) {
+            $names[] = $node->namespacedName?->toString() ?? (string) $node->name;
+        }
+    }
+
+    sort($names);
+
+    return array_values(array_unique($names));
+}
+
+/**
+ * Every class-like name one PHP source REFERENCES, resolved through the file's own imports: an alias, a
+ * qualified name, a fully-qualified one and a `Foo::class` all answer with the same FQCN. Function and
+ * constant names come back too — a caller that cares filters on `class_exists`.
+ *
+ * @return list<string>
+ */
+function phpReferencedClasses(string $source): array
+{
+    $ast = phpParsedSource($source);
+    if ($ast === null) {
+        return [];
+    }
+
+    $finder = new FindingVisitor(static fn (Node $node): bool => $node instanceof Node\Name);
+    (new NodeTraverser($finder))->traverse($ast);
+
+    $names = [];
+    foreach ($finder->getFoundNodes() as $node) {
+        if (! $node instanceof Node\Name) {
+            continue;
+        }
+
+        $resolved = $node->getAttribute('resolvedName');
+        $names[] = $resolved instanceof Node\Name ? $resolved->toString() : $node->toString();
+    }
+
+    sort($names);
+
+    return array_values(array_unique($names));
+}
+
+/**
+ * Every named type one PHP source DECLARES — class, interface, trait or enum — fully qualified.
+ *
+ * @return list<string>
+ */
+function phpDeclaredTypes(string $source): array
+{
+    $ast = phpParsedSource($source);
+    if ($ast === null) {
+        return [];
+    }
+
+    $finder = new FindingVisitor(static fn (Node $node): bool => $node instanceof Node\Stmt\ClassLike && $node->name !== null);
+    (new NodeTraverser($finder))->traverse($ast);
+
+    $names = [];
+    foreach ($finder->getFoundNodes() as $node) {
+        if ($node instanceof Node\Stmt\ClassLike) {
+            $names[] = $node->namespacedName?->toString() ?? (string) $node->name;
+        }
+    }
+
+    sort($names);
+
+    return array_values(array_unique($names));
+}
+
+/**
+ * Whether one PHP source raises a throw of any shape. `throw new X`, `throw $e`, `throw X::for(…)`,
+ * `throw static::make()` and the expression form are all one throw — a pattern that knew only the first
+ * two read straight past the rest, and reported the file as raising none.
+ */
+function phpRaisesThrow(string $source): bool
+{
+    $ast = phpParsedSource($source);
+    if ($ast === null) {
+        return false;
+    }
+
+    $finder = new FindingVisitor(
+        static fn (Node $node): bool => $node instanceof Node\Stmt\Throw_ || $node instanceof Node\Expr\Throw_,
+    );
+    (new NodeTraverser($finder))->traverse($ast);
+
+    return $finder->getFoundNodes() !== [];
+}
+
+/**
+ * How many times one PHP source CALLS the named method, whatever the receiver and whatever surrounds
+ * the call. A count matched as text answers for one spelling of the call site and silently omits the
+ * rest, which is a branch nobody is holding the mirror to.
+ */
+function phpMethodCallCount(string $source, string $method): int
+{
+    $ast = phpParsedSource($source);
+    if ($ast === null) {
+        return 0;
+    }
+
+    $finder = new FindingVisitor(static function (Node $node) use ($method): bool {
+        if (! $node instanceof Node\Expr\MethodCall
+            && ! $node instanceof Node\Expr\NullsafeMethodCall
+            && ! $node instanceof Node\Expr\StaticCall) {
+            return false;
+        }
+
+        return $node->name instanceof Node\Identifier && $node->name->toString() === $method;
+    });
+    (new NodeTraverser($finder))->traverse($ast);
+
+    return count($finder->getFoundNodes());
+}
+
+/**
+ * The FQCNs handed as a `Something::class` argument to the named method, resolved through the file's own
+ * imports — so `getAttributes(Hidden::class)`, `getAttributes(Concealed::class)` behind an alias and
+ * `getAttributes(name: \Vendor\Hidden::class)` all answer with the same class.
+ *
+ * @return list<string>
+ */
+function phpClassConstArguments(string $source, string $method): array
+{
+    $ast = phpParsedSource($source);
+    if ($ast === null) {
+        return [];
+    }
+
+    $finder = new FindingVisitor(static function (Node $node) use ($method): bool {
+        if (! $node instanceof Node\Expr\MethodCall
+            && ! $node instanceof Node\Expr\NullsafeMethodCall
+            && ! $node instanceof Node\Expr\StaticCall
+            && ! $node instanceof Node\Expr\FuncCall) {
+            return false;
+        }
+
+        $name = $node instanceof Node\Expr\FuncCall ? $node->name : $node->name;
+
+        return $name instanceof Node\Identifier
+            ? $name->toString() === $method
+            : $name instanceof Node\Name && $name->getLast() === $method;
+    });
+    (new NodeTraverser($finder))->traverse($ast);
+
+    $classes = [];
+    foreach ($finder->getFoundNodes() as $node) {
+        if (! $node instanceof Node\Expr\CallLike) {
+            continue;
+        }
+
+        foreach ($node->getArgs() as $argument) {
+            $value = $argument->value;
+            if (! $value instanceof Node\Expr\ClassConstFetch
+                || ! $value->name instanceof Node\Identifier
+                || strtolower($value->name->toString()) !== 'class'
+                || ! $value->class instanceof Node\Name) {
+                continue;
+            }
+
+            $resolved = $value->class->getAttribute('resolvedName');
+            $classes[] = $resolved instanceof Node\Name ? $resolved->toString() : $value->class->toString();
+        }
+    }
+
+    sort($classes);
+
+    return array_values(array_unique($classes));
+}
+
+/**
+ * The string-literal arms of every `match ($variable)` in one PHP source, the default arm excluded. A
+ * pattern anchored on one quote style and one indentation answers for the arms somebody happened to
+ * write that way, and a keyword added in the other style joins one table while the guard says both
+ * agree.
+ *
+ * @return list<string>
+ */
+function phpMatchArmLiterals(string $source, string $variable): array
+{
+    $ast = phpParsedSource($source);
+    if ($ast === null) {
+        return [];
+    }
+
+    $finder = new FindingVisitor(static function (Node $node) use ($variable): bool {
+        return $node instanceof Node\Expr\Match_
+            && $node->cond instanceof Node\Expr\Variable
+            && $node->cond->name === $variable;
+    });
+    (new NodeTraverser($finder))->traverse($ast);
+
+    $arms = [];
+    foreach ($finder->getFoundNodes() as $node) {
+        if (! $node instanceof Node\Expr\Match_) {
+            continue;
+        }
+
+        foreach ($node->arms as $arm) {
+            foreach ($arm->conds ?? [] as $condition) {
+                if ($condition instanceof Node\Scalar\String_) {
+                    $arms[] = $condition->value;
+                }
+            }
+        }
+    }
+
+    sort($arms, SORT_STRING);
+
+    return array_values(array_unique($arms));
+}
+
+/**
+ * Every `{{ … }}` placeholder a stub carries, in either spelling. The name is whatever PHP would accept
+ * as an identifier plus the dotted form: a pattern reading only lowercase letters was blind to
+ * `{{ className }}`, which then shipped unrendered into somebody's class with both sides of the guard
+ * agreeing they had seen six.
+ *
+ * @return list<string>
+ */
+function stubPlaceholderNames(string $text): array
+{
+    preg_match_all('/\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/', $text, $matches);
+
+    $names = array_values(array_unique($matches[1]));
+    sort($names, SORT_STRING);
+
+    return $names;
+}
+
+/** The same placeholders, read out of the stub at $path. @return list<string> */
+function stubPlaceholders(string $path): array
+{
+    return stubPlaceholderNames((string) file_get_contents($path));
+}
+
+/**
+ * Every string literal in one PHP source that begins with $prefix, read off the token stream and
+ * unescaped. Quoting is not part of the question: a pattern anchored on `'…'` is blind to the same
+ * literal written with double quotes, and a code that moved between the two would go uncatalogued with
+ * the whole suite green.
+ *
+ * @return list<string>
+ */
+function phpStringLiterals(string $source, string $prefix = ''): array
+{
+    $found = [];
+
+    foreach (PhpToken::tokenize($source) as $token) {
+        if (! $token->is(T_CONSTANT_ENCAPSED_STRING)) {
+            continue;
+        }
+
+        $value = stripcslashes(substr($token->text, 1, -1));
+
+        if ($prefix === '' || str_starts_with($value, $prefix)) {
+            // A list rather than a keyed set: PHP turns a numeric-string key into an int, and a literal
+            // like '404' would come back as one.
+            $found[] = $value;
+        }
+    }
+
+    $found = array_values(array_unique($found));
+    sort($found, SORT_STRING);
+
+    return $found;
+}
+
+/**
+ * Every class the Laravel adapter DECLARES, as FQCN => the source of the file declaring it. Read off a
+ * parsed AST rather than matched as text: two guards derive populations from this, and each spelling one
+ * of them could not recognise was a class silently outside it.
+ *
+ * @return array<class-string, string>
+ */
+function adapterDeclaredClasses(): array
+{
+    $root = dirname(__DIR__).'/php/laravel/src';
+    $found = [];
+
+    /** @var iterable<SplFileInfo> $entries */
+    $entries = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+    foreach ($entries as $entry) {
+        if (! $entry->isFile() || $entry->getExtension() !== 'php') {
+            continue;
+        }
+
+        $source = (string) file_get_contents($entry->getPathname());
+        foreach (phpDeclaredClasses($source) as $fqcn) {
+            /** @var class-string $fqcn */
+            $found[$fqcn] = $source;
+        }
+    }
+
+    ksort($found);
+
+    return $found;
+}
+
+/**
+ * Every static call one PHP source makes, as `FQCN::method` with the class resolved through the file's
+ * own imports — so `Table::reason()`, `Alias::reason()` and `\Vendor\Table::reason()` all answer alike.
+ * `self`, `static` and `parent` are left as written: they name no class a reader outside the file knows.
+ *
+ * @return list<string>
+ */
+function phpStaticCalls(string $source): array
+{
+    $ast = phpParsedSource($source);
+    if ($ast === null) {
+        return [];
+    }
+
+    $finder = new FindingVisitor(static fn (Node $node): bool => $node instanceof Node\Expr\StaticCall);
+    (new NodeTraverser($finder))->traverse($ast);
+
+    $calls = [];
+    foreach ($finder->getFoundNodes() as $node) {
+        if (! $node instanceof Node\Expr\StaticCall || ! $node->name instanceof Node\Identifier || ! $node->class instanceof Node\Name) {
+            continue;
+        }
+
+        $resolved = $node->class->getAttribute('resolvedName');
+        $class = $resolved instanceof Node\Name ? $resolved->toString() : $node->class->toString();
+        $calls[] = $class.'::'.$node->name->toString();
+    }
+
+    sort($calls);
+
+    return array_values(array_unique($calls));
+}
+
+/**
+ * Every method name one PHP source CALLS, whatever the receiver: `$a->m()`, `$a?->m()`, `A::m()` and
+ * `$this->reader->m()` all answer the same. A guard keyed on one receiver spelling cannot see the rest.
+ *
+ * @return list<string>
+ */
+function phpCalledMethods(string $source): array
+{
+    $ast = phpParsedSource($source);
+    if ($ast === null) {
+        return [];
+    }
+
+    $finder = new FindingVisitor(static fn (Node $node): bool => $node instanceof Node\Expr\MethodCall
+        || $node instanceof Node\Expr\NullsafeMethodCall
+        || $node instanceof Node\Expr\StaticCall);
+    (new NodeTraverser($finder))->traverse($ast);
+
+    $names = [];
+    foreach ($finder->getFoundNodes() as $node) {
+        if (($node instanceof Node\Expr\MethodCall
+            || $node instanceof Node\Expr\NullsafeMethodCall
+            || $node instanceof Node\Expr\StaticCall)
+            && $node->name instanceof Node\Identifier) {
+            $names[] = $node->name->toString();
+        }
+    }
+
+    sort($names);
+
+    return array_values(array_unique($names));
 }
 
 /**

@@ -14,14 +14,7 @@ declare(strict_types=1);
 /** @return list<string> */
 function packagedStubPlaceholders(): array
 {
-    $stub = (string) file_get_contents(dirname(__DIR__, 2).'/php/laravel/stubs/version-change.stub');
-
-    preg_match_all('/\{\{\s*([a-z]+)\s*\}\}/', $stub, $matches);
-
-    $names = array_values(array_unique($matches[1]));
-    sort($names, SORT_STRING);
-
-    return $names;
+    return stubPlaceholders(dirname(__DIR__, 2).'/php/laravel/stubs/version-change.stub');
 }
 
 /** The placeholders the commands reference tables, read out of its `{{ … }}` code spans. */
@@ -29,9 +22,17 @@ function documentedStubPlaceholders(): array
 {
     $page = (string) file_get_contents(dirname(__DIR__, 2).'/website/src/content/docs/laravel/reference/commands.md');
 
-    preg_match_all('/^\| `\{\{ ([a-z]+) \}\}` \|/m', $page, $matches);
+    // The same placeholder grammar the stub is read with, so a name the page spells in camelCase is not
+    // invisible on this side while the stub side sees it — two readers of one construct, two spellings,
+    // is how both halves agree about a placeholder neither can see.
+    preg_match_all('/^\| (`\{\{ [A-Za-z0-9_.]+ \}\}`) \|/m', $page, $matches);
 
-    $names = array_values(array_unique($matches[1]));
+    $names = [];
+    foreach ($matches[1] as $cell) {
+        $names = [...$names, ...stubPlaceholderNames($cell)];
+    }
+
+    $names = array_values(array_unique($names));
     sort($names, SORT_STRING);
 
     return $names;

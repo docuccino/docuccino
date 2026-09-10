@@ -16,40 +16,64 @@ use Docuccino\Laravel\Registry\IntegrationToggles;
  */
 
 /**
- * The vendor packages the adapter's source names, each mapped to one class that named it.
+ * The vendor packages the adapter's source names, as `package => [the class that named it, whether an
+ * integration is what names it]`.
  *
- * @return array<string, string>
+ * Both spellings, because an integration names a package it deliberately does not depend on either way:
+ * a class-name STRING, which is how a `class_exists` probe writes it, and a class NAME resolved through
+ * the file's own imports, which is how `Vendor\Thing::class` and an aliased import write it — a class
+ * constant loads nothing, so it is just as safe for an absent package and just as invisible to a reader
+ * that only knew about strings.
+ *
+ * Left out, and stated rather than assumed: a package that arrives with something the adapter already
+ * requires. The framework brings `laravel/framework` and the Symfony components; `docuccino/core` brings
+ * the parser and the YAML reader, and hands them back across its own public surface, so the adapter
+ * naming them is core's contract being used rather than a package being detected. Both lists are READ
+ * from the manifests, not typed here.
+ *
+ * @return array<string, array{namedBy: string, byIntegration: bool}>
  */
-function integrationVendorPackages(): array
+function adapterVendorPackages(): array
 {
-    // These arrive with the framework the adapter already requires (`illuminate/*` brings
-    // laravel/framework, which brings the Symfony HTTP components), so they need no line of their own.
-    $frameworkProvided = ['laravel/framework', 'symfony/'];
+    $root = dirname(__DIR__, 2);
 
-    $literals = [];
+    /** @var array{require: array<string, string>} $core */
+    $core = json_decode((string) file_get_contents($root.'/php/core/composer.json'), true, flags: JSON_THROW_ON_ERROR);
+    // Prefixes for the framework, whose components are a family; exact names for core's own requires,
+    // because a platform entry like `php` prefix-matches half of Packagist.
+    $frameworkPrefixes = ['laravel/framework', 'symfony/'];
+    $throughCore = array_values(array_filter(array_keys($core['require']), static fn (string $name): bool => str_contains($name, '/')));
+
+    $names = [];
     /** @var iterable<SplFileInfo> $files */
     $files = new RegexIterator(
-        new RecursiveIteratorIterator(new RecursiveDirectoryIterator(dirname(__DIR__, 2).'/php/laravel/src')),
+        new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root.'/php/laravel/src')),
         '/\.php$/',
     );
 
     foreach ($files as $file) {
-        foreach (PhpToken::tokenize((string) file_get_contents($file->getPathname())) as $token) {
-            if (! $token->is(T_CONSTANT_ENCAPSED_STRING)) {
-                continue;
-            }
+        $source = (string) file_get_contents($file->getPathname());
+        $integration = str_starts_with(
+            substr($file->getPathname(), strlen($root.'/php/laravel/src/')),
+            'Integrations/',
+        );
 
-            $literal = stripslashes(trim($token->text, "'\""));
-
+        $written = phpReferencedClasses($source);
+        foreach (phpStringLiterals($source) as $literal) {
             if (preg_match('/^[A-Z][A-Za-z0-9_]*(\\\\[A-Z][A-Za-z0-9_]*)+$/', $literal) === 1) {
-                $literals[$literal] = true;
+                $written[] = $literal;
             }
+        }
+
+        foreach ($written as $name) {
+            $names[$name] = ($names[$name] ?? false) || $integration;
         }
     }
 
+    ksort($names);
     $packages = [];
 
-    foreach (array_keys($literals) as $name) {
+    foreach ($names as $name => $byIntegration) {
         if (! class_exists($name) && ! interface_exists($name) && ! trait_exists($name) && ! enum_exists($name)) {
             continue;
         }
@@ -61,13 +85,18 @@ function integrationVendorPackages(): array
             continue;
         }
 
-        foreach ($frameworkProvided as $prefix) {
+        if (in_array($matches[1], $throughCore, true)) {
+            continue;
+        }
+
+        foreach ($frameworkPrefixes as $prefix) {
             if (str_starts_with($matches[1], $prefix)) {
                 continue 2;
             }
         }
 
-        $packages[$matches[1]] ??= $name;
+        $packages[$matches[1]] ??= ['namedBy' => $name, 'byIntegration' => false];
+        $packages[$matches[1]]['byIntegration'] = $packages[$matches[1]]['byIntegration'] || $byIntegration;
     }
 
     ksort($packages);
@@ -75,8 +104,8 @@ function integrationVendorPackages(): array
     return $packages;
 }
 
-it('declares every vendor package the adapter names, and versions it on the package page', function (): void {
-    $packages = integrationVendorPackages();
+it('declares every vendor package the adapter names, and versions the ones an integration targets', function (): void {
+    $packages = adapterVendorPackages();
 
     /** @var array{require: array<string, string>, suggest: array<string, string>} $manifest */
     $manifest = json_decode(
@@ -93,12 +122,16 @@ it('declares every vendor package the adapter names, and versions it on the pack
     $undeclared = [];
     $unversioned = [];
 
-    foreach ($packages as $package => $namedBy) {
+    foreach ($packages as $package => ['namedBy' => $namedBy, 'byIntegration' => $byIntegration]) {
         if (! array_key_exists($package, $declared)) {
             $undeclared[] = $package.' (named by '.$namedBy.')';
         }
 
-        if (! str_contains($page, '[`'.$package.'`]')) {
+        // The version table speaks for what an INTEGRATION activates on, and that is a property of where
+        // the package is named rather than of a list somebody keeps: a package the adapter reaches for
+        // outside `Integrations/` — the contract-testing helpers' assertion library — is not something a
+        // build detects and documents, and a row for it would tell a reader nothing about their app.
+        if ($byIntegration && ! str_contains($page, '[`'.$package.'`]')) {
             $unversioned[] = $package;
         }
     }
@@ -175,21 +208,65 @@ it('states no bag count the next integration would falsify', function (): void {
 });
 
 it('resolves a plausible number of packages, and only the ones an integration targets', function (): void {
-    // A scan that stopped resolving class names would pass the test above with nothing to check. The
+    // A scan that stopped resolving class names would pass the tests above with nothing to check. The
     // floor sits at the eight the built-in integrations target today; a ninth integration raises it.
-    $packages = integrationVendorPackages();
+    $packages = adapterVendorPackages();
+    $targets = array_keys(array_filter($packages, static fn (array $row): bool => $row['byIntegration']));
+    sort($targets);
 
-    expect(count($packages))->toBeGreaterThanOrEqual(8)
-        ->and($packages)->toHaveKeys([
-            'laravel/passport',
-            'laravel/sanctum',
-            'lorisleiva/laravel-actions',
-            'spatie/laravel-data',
-            'spatie/laravel-json-api-paginate',
-            'spatie/laravel-permission',
-            'spatie/laravel-query-builder',
-            'timacdonald/json-api',
-        ])
+    expect($targets)->toBe([
+        'laravel/passport',
+        'laravel/sanctum',
+        'lorisleiva/laravel-actions',
+        'spatie/laravel-data',
+        'spatie/laravel-json-api-paginate',
+        'spatie/laravel-permission',
+        'spatie/laravel-query-builder',
+        'timacdonald/json-api',
+    ])
         // Named all over the adapter, and shipped by the framework it already requires.
-        ->and($packages)->not->toHaveKey('laravel/framework');
+        ->and($packages)->not->toHaveKey('laravel/framework')
+        // …and reached through core, which hands its nodes back across its own public surface.
+        ->and($packages)->not->toHaveKey('nikic/php-parser')
+        // The union is wider than the integrations, and a member outside the eight carries a row here
+        // rather than falling in the gap: the contract-testing helpers name their assertion library and
+        // the provider names the package-tools base class. Both are declared, and neither is something a
+        // build detects in somebody's application, so neither owes a version row.
+        ->and(array_keys(array_diff_key($packages, array_flip($targets))))->toBe([
+            'phpunit/phpunit',
+            'spatie/laravel-package-tools',
+        ]);
+});
+
+it('sees a package named only as a class constant, which the string reader could not', function (): void {
+    // The blind spot this reader used to have, written out: `Vendor\Thing::class` loads nothing, so it is
+    // exactly as safe for an absent package as the string probe and exactly as much a declaration that
+    // the adapter understands that package — and it appears in no string literal at all.
+    $source = <<<'PHP'
+    <?php
+
+    namespace Probe;
+
+    use Spatie\QueryBuilder\QueryBuilder;
+    use Spatie\QueryBuilder\AllowedFilter as Filter;
+
+    final class Names
+    {
+        public function run(): array
+        {
+            return [QueryBuilder::class, Filter::class, \Spatie\QueryBuilder\AllowedSort::class];
+        }
+    }
+    PHP;
+
+    expect(phpStringLiterals($source))->not->toContain('Spatie\QueryBuilder\QueryBuilder')
+        ->and(phpReferencedClasses($source))
+        ->toContain('Spatie\QueryBuilder\QueryBuilder')
+        ->toContain('Spatie\QueryBuilder\AllowedFilter')
+        ->toContain('Spatie\QueryBuilder\AllowedSort');
+
+    // …and the string spelling the reader always understood still answers, so the row above is about the
+    // half that was added and not about a reader that replaced one blind spot with another.
+    expect(phpStringLiterals("<?php\n\$x = 'Spatie\\\\QueryBuilder\\\\QueryBuilder';\n"))
+        ->toBe(['Spatie\QueryBuilder\QueryBuilder']);
 });

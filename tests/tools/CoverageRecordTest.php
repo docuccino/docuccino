@@ -83,6 +83,46 @@ function recordedCoverageTable(): array
     return $table;
 }
 
+it('gates every package the coverage run measures, and names the one it does not', function (): void {
+    // The floors are a hand-maintained set, and nothing was reading the source of truth beside them: a
+    // package added under `php/` and put in the coverage `<source>` set with no floor is simply not
+    // gated, and a floor line the reader stopped matching drops out of the comparison below along with
+    // its documentation row, leaving both sides agreeing about a shorter list.
+    //
+    // So the domain is asserted as a UNION: every package on disk is either measured and gated, or
+    // carries a row here saying why it is neither.
+    $unmeasured = [
+        'attributes' => 'dep-free attribute classes with no branching logic, deliberately outside the coverage <source> set, so it contributes no statements to measure',
+    ];
+
+    $xml = simplexml_load_file(dirname(__DIR__, 2).'/phpunit.xml');
+    expect($xml)->not->toBeFalse();
+
+    $included = $xml === false ? [] : ($xml->xpath('//source/include/directory') ?? []);
+
+    $measured = [];
+    foreach ($included as $directory) {
+        if (preg_match('#^php/([\w-]+)/src$#', (string) $directory, $found) === 1) {
+            $measured[] = $found[1];
+        }
+    }
+    sort($measured);
+
+    $onDisk = array_values(array_map(
+        static fn (string $path): string => basename($path),
+        array_filter((array) glob(dirname(__DIR__, 2).'/php/*'), is_dir(...)),
+    ));
+    sort($onDisk);
+
+    $floors = array_keys(gateFloors());
+    sort($floors);
+
+    // A glob or an xpath that stopped matching would make every row below agree over an empty set.
+    expect(count($onDisk))->toBeGreaterThanOrEqual(4)
+        ->and($measured)->toBe($floors)
+        ->and(array_values(array_diff($onDisk, $measured)))->toBe(array_keys($unmeasured));
+});
+
 it('has the gate and the coverage table naming the same packages', function (): void {
     // The union against the domain: a floor with no row is a number nobody can audit, and a row with no
     // floor is a package the gate is not watching. Either way the two artifacts have stopped describing
