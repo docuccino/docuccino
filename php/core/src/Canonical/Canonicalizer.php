@@ -7,6 +7,7 @@ namespace Docuccino\Core\Canonical;
 use Docuccino\Core\Document\Parameter;
 use Docuccino\Core\Document\PathItem;
 use Docuccino\Core\Draft\SchemaKeywords;
+use Docuccino\Core\Support\Arr;
 use Docuccino\Core\Support\Json;
 use Docuccino\Core\Support\JsonValue;
 use stdClass;
@@ -792,22 +793,9 @@ final class Canonicalizer
             return [];
         }
 
-        $out = [];
-        $seen = [];
-
-        foreach ($node as $item) {
-            $key = json_encode($item);
-            $key = is_string($key) ? $key : '';
-
-            if (isset($seen[$key])) {
-                continue;
-            }
-
-            $seen[$key] = true;
-            $out[] = $this->canonicalizeGeneric($item);
-        }
-
-        return $out;
+        // The one reading of what makes two enum values the same value, shared with
+        // {@see EnumDecoration}, which has to hold the arrays parallel to `enum` in step with it.
+        return array_map($this->canonicalizeGeneric(...), Arr::distinctValues(array_values($node))['values']);
     }
 
     /**
