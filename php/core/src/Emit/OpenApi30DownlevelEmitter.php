@@ -198,11 +198,12 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
         $array = $this->downlevel($this->oas31->toOpenApiArray($document, $diagnostics, $options), $diagnostics);
         $canonical = $this->canonicalizer->canonicalize($array);
 
-        $json = $this->serializer->serialize($canonical);
+        // Checked in the carrier it is WRITTEN in, so the YAML writer answers for its own bytes.
+        $output = $options->yaml ? $this->yaml->serialize($canonical) : $this->serializer->serialize($canonical);
 
         return new EmitResult(
-            $options->yaml ? $this->yaml->serialize($canonical) : $json,
-            new EmitReport([...$diagnostics, ...EmittedSpecCheck::diagnostics($this->format(), $json)]),
+            $output,
+            new EmitReport([...$diagnostics, ...EmittedSpecCheck::diagnostics($this->format(), $output, $options->yaml)]),
         );
     }
 

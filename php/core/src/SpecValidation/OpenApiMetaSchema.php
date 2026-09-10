@@ -236,17 +236,36 @@ final class OpenApiMetaSchema
      * ({@see EmittedDocument::parseYaml()}). Hand it an associative array and every map in the document
      * reads as a JSON array, which is the blindness this oracle exists to remove.
      *
-     * The key gates {@see keyGateFindings()} recovers are folded in here, so every caller gets them, and
-     * so are the two rules JSON Schema cannot state about an instance at all
-     * ({@see operationIdFindings()}, {@see referenceFindings()}).
+     * The whole oracle: the schema itself, the key gates {@see keyGateFindings()} recovers, and the two
+     * rules JSON Schema cannot state about an instance at all ({@see referenceFindings()},
+     * {@see operationIdFindings()}). That is what a test over the corpus wants — a caller reporting to
+     * a PERSON wants the halves apart instead, because they address different people.
      *
      * @return list<string>
      */
     public static function findings(string $format, mixed $instance): array
     {
         return [
-            ...self::keyGateFindings($format, $instance),
+            ...self::emitterFindings($format, $instance),
             ...self::operationIdFindings($instance),
+        ];
+    }
+
+    /**
+     * The findings whose cause can only be ours. A key a gate refuses, a `$ref` that resolves to
+     * nothing, a shape the version does not accept: an application reaches none of them through its
+     * route table, so the reader of one of these is being told about a defect in the emitter.
+     *
+     * Kept apart from {@see operationIdFindings()} for exactly that reason — a duplicate `operationId`
+     * is usually the application's own, and bucketing the two makes one of them address the wrong
+     * person. {@see EmittedSpecCheck} is where that split becomes two diagnostic codes.
+     *
+     * @return list<string>
+     */
+    public static function emitterFindings(string $format, mixed $instance): array
+    {
+        return [
+            ...self::keyGateFindings($format, $instance),
             ...self::referenceFindings($instance),
             ...SchemaFindings::of(self::validator($format), $instance, 'https://docuccino.test/'.$format.'.json'),
         ];
@@ -257,6 +276,9 @@ final class OpenApiMetaSchema
      * API, and no meta-schema can say so — JSON Schema has no way to express uniqueness across positions —
      * so a duplicate validates clean at every version while a generated client loses a method to a name
      * collision. This is the assertion that sees it.
+     *
+     * The one finding here whose cause is usually the APPLICATION's, which is why it is asked for
+     * separately from {@see emitterFindings()} and reported under a code of its own.
      *
      * @return list<string>
      */

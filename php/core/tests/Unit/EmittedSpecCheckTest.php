@@ -56,19 +56,46 @@ function specCheckDocument(array $overrides = []): UirDocument
 }
 
 /**
- * Every `document.openapi-invalid` message one emission raises.
+ * Every `document.openapi-invalid` message one emission raises — the defects that are OURS, which is
+ * why the severity and the "report it" help are asserted here rather than at each call.
  *
  * @return list<string>
  */
-function specCheckFindings(string $format, UirDocument $document): array
+function specCheckFindings(string $format, UirDocument $document, EmitOptions $options = new EmitOptions): array
 {
-    $report = Formats::emit($format, $document, new EmitOptions)->report;
+    $report = Formats::emit($format, $document, $options)->report;
 
     $messages = [];
     foreach ($report->diagnostics as $diagnostic) {
         if ($diagnostic->code === 'document.openapi-invalid') {
             expect($diagnostic->severity)->toBe(Severity::Error)
                 ->and($diagnostic->help)->toContain('github.com/docuccino/docuccino/issues');
+
+            $messages[] = $diagnostic->message;
+        }
+    }
+
+    return $messages;
+}
+
+/**
+ * The other half: every `document.duplicate-operation-id` message, with the properties that make it
+ * addressed to the author rather than to us — a warning, and help that names what to change instead of
+ * where to file a bug.
+ *
+ * @return list<string>
+ */
+function specCheckDuplicates(string $format, UirDocument $document): array
+{
+    $messages = [];
+
+    foreach (Formats::emit($format, $document, new EmitOptions)->report->diagnostics as $diagnostic) {
+        if ($diagnostic->code === 'document.duplicate-operation-id') {
+            expect($diagnostic->severity)->toBe(Severity::Warning)
+                ->and($diagnostic->help)->toContain('#[OperationId]')
+                ->and($diagnostic->help)->toContain('representation.operation_id')
+                ->and($diagnostic->help)->not->toContain('github.com/docuccino/docuccino/issues')
+                ->and($diagnostic->message)->not->toContain('defect');
 
             $messages[] = $diagnostic->message;
         }
@@ -139,8 +166,13 @@ it('refuses a paths key that is not a path, at every version', function (string 
 /**
  * `operationId` uniqueness: a spec rule JSON Schema cannot express at all, so every meta-schema accepts
  * the document while a generated client silently loses one of the two methods to the collision.
+ *
+ * Reported under its own code, and that is the whole point of the code. Every other finding in this
+ * file needs an emitter defect to happen; this one needs two routes onto one controller action, which
+ * `representation.operation_id: controller-method` — shipped, documented — mints one id for. So it is
+ * the author's to fix, it is a warning, and it must not be able to fail an export.
  */
-it('refuses two operations that share an operationId, at every version', function (string $format): void {
+it('warns the author about two operations that share an operationId, at every version', function (string $format): void {
     $operation = static fn (): array => ['operationId' => 'things.index', 'responses' => ['200' => ['description' => 'OK']]];
 
     $document = specCheckDocument(['paths' => [
@@ -148,10 +180,12 @@ it('refuses two operations that share an operationId, at every version', functio
         '/others' => ['get' => $operation()],
     ]]);
 
-    $findings = specCheckFindings($format, $document);
+    $duplicates = specCheckDuplicates($format, $document);
 
-    expect($findings)->toHaveCount(1)
-        ->and($findings[0])->toContain('things.index');
+    expect($duplicates)->toHaveCount(1)
+        ->and($duplicates[0])->toContain('things.index')
+        // And not as OUR defect: nothing on the error channel, so nothing that fails an export.
+        ->and(specCheckFindings($format, $document))->toBe([]);
 })->with(specCheckFormats());
 
 /**
@@ -221,9 +255,10 @@ it('reads a $ref-shaped value in a data position as data', function (string $pos
 });
 
 /**
- * The emitters call this on every emission, JSON and YAML alike — so a document that fails is reported
- * whichever serialisation is asked for. The check reads the canonical JSON of what is being written, so
- * the two answers are the same by construction; this is what pins that they stay so.
+ * The emitters call this on every emission, JSON and YAML alike, and a document whose defect is in the
+ * DOCUMENT is reported whichever serialisation is asked for. No longer true by construction: each
+ * carrier is now read back on its own, so agreeing is a fact about the two writers rather than about
+ * one of them being validated twice.
  */
 it('reports the same findings for a YAML emission as for a JSON one', function (string $format): void {
     $document = specCheckDocument(['paths' => ['things' => ['get' => [
@@ -239,6 +274,50 @@ it('reports the same findings for a YAML emission as for a JSON one', function (
     expect($codes((new EmitOptions)->withYaml()))->toBe($codes(new EmitOptions))
         ->and($codes(new EmitOptions))->not->toBe([]);
 })->with(specCheckFormats());
+
+/**
+ * And the reason each carrier is read on its own: a YAML-writer defect lives in the YAML bytes and
+ * nowhere else, so validating the JSON serialisation of a YAML emission leaves the writer that has
+ * actually shipped one — `paths: []` for an empty `paths` MAP — answering to nothing.
+ *
+ * Stated at the bytes rather than through an emitter because the emitter gets it right. Same document
+ * in both carriers, one of them written the broken way: JSON clean, YAML refused.
+ */
+it('reads the YAML bytes, so a defect only the YAML carrier has is caught', function (string $format, string $version): void {
+    $json = sprintf('{"openapi":"%s","info":{"title":"T","version":"1.0.0"},"paths":{}}', $version);
+    $yaml = sprintf("openapi: '%s'\ninfo:\n  title: T\n  version: '1.0.0'\npaths: []\n", $version);
+
+    // The control: the same document written the RIGHT way in YAML says nothing, so the row below is
+    // about the empty map and not about the parse.
+    $sound = sprintf("openapi: '%s'\ninfo:\n  title: T\n  version: '1.0.0'\npaths: {  }\n", $version);
+
+    expect(EmittedSpecCheck::diagnostics($format, $json))->toBe([])
+        ->and(EmittedSpecCheck::diagnostics($format, $sound, yaml: true))->toBe([])
+        ->and(EmittedSpecCheck::diagnostics($format, $yaml, yaml: true))->toHaveCount(1)
+        ->and(EmittedSpecCheck::diagnostics($format, $yaml, yaml: true)[0]->message)->toContain('/paths');
+})->with([
+    'openapi-3.2' => ['openapi-3.2', '3.2.0'],
+    'openapi-3.1' => ['openapi-3.1', '3.1.0'],
+    'openapi-3.0' => ['openapi-3.0', '3.0.4'],
+]);
+
+/**
+ * The one place the two carriers are treated differently, stated as a row so the asymmetry is a
+ * decision rather than an oversight. `json_encode` is a total function into readable JSON, so
+ * unreadable JSON stands in for an exception somebody can act on and is left alone. A third-party YAML
+ * dumper whose round trip is the very thing under test is not, so bytes it wrote that will not read
+ * back are reported — the loudest form of the defect this exists to catch.
+ */
+it('reports YAML it cannot read back, where it says nothing about unreadable JSON', function (): void {
+    expect(EmittedSpecCheck::diagnostics('openapi-3.2', 'not json'))->toBe([]);
+
+    $refused = EmittedSpecCheck::diagnostics('openapi-3.2', "info:\n  title: [unclosed\n", yaml: true);
+
+    expect($refused)->toHaveCount(1)
+        ->and($refused[0]->code)->toBe('document.openapi-invalid')
+        ->and($refused[0]->severity)->toBe(Severity::Error)
+        ->and($refused[0]->message)->toContain('cannot be read back');
+});
 
 /**
  * Validating must not change what is written. The check decodes the canonical serialisation and hands
@@ -286,13 +365,4 @@ it('drops a keyword OpenAPI 3.0 does not define rather than emitting an invalid 
     expect(OpenApiMetaSchema::schemaMembers30())->not->toContain('somethingNew')
         ->toContain('nullable', 'type', 'properties')
         ->and(OpenApiMetaSchema::decode('openapi-3.0')->definitions->Schema->additionalProperties)->toBeFalse();
-});
-
-/**
- * Bytes no decoder can read are not this check's to report. The serialiser answers for its own output
- * and cannot produce any, so a diagnostic here would stand in for an exception somebody can act on —
- * stated as a row rather than left as an untried branch.
- */
-it('says nothing about bytes that are not JSON at all', function (): void {
-    expect(EmittedSpecCheck::diagnostics('openapi-3.2', 'not json'))->toBe([]);
 });
