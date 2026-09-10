@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Emit\OpenApi30DownlevelEmitter;
-use Docuccino\Core\Tests\Support\OpenApiMetaSchema;
+use Docuccino\Core\SpecValidation\OpenApiMetaSchema;
 
 /*
  * The guard behind "what a 3.0 export changes". The page's table is a completeness claim closing on

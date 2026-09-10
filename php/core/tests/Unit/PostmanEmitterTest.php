@@ -8,8 +8,8 @@ use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\EmitOptions;
 use Docuccino\Core\Emit\Postman\CollectionEmitter;
 use Docuccino\Core\Emit\Postman\Description;
+use Docuccino\Core\SpecValidation\SchemaFindings;
 use Docuccino\Core\Tests\Support\EmittedDocument;
-use Docuccino\Core\Tests\Support\SchemaFindings;
 use Opis\JsonSchema\Validator;
 
 /**

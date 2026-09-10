@@ -719,6 +719,74 @@ function loadFixture(string $name): array
 }
 
 /**
+ * Every UIR document in the packages' fixture trees, as absolute paths, sorted.
+ *
+ * This is the DOMAIN the two meta-schema oracles divide between them — core's file takes the half
+ * under `php/core`, the adapter's the half under `php/laravel` — and `MetaSchemaCoverageTest` holds
+ * the two halves to it. Discovered rather than listed, because a document added tomorrow has to reach
+ * an oracle without anyone remembering it exists: five recorded UIR goldens sat outside both globs
+ * with the whole suite green.
+ *
+ * A UIR document is one carrying `uir` and `info`. Recursive and per package, so a fixture directory
+ * that grows a subdirectory, or a package that grows a fixture tree, is inside the domain the moment
+ * it exists rather than the moment somebody widens a glob.
+ *
+ * @return list<string>
+ */
+function uirDocuments(): array
+{
+    $found = [];
+
+    foreach (['core', 'laravel', 'inference-phpstan'] as $package) {
+        $directory = dirname(__DIR__).'/php/'.$package.'/tests/Fixtures';
+
+        if (! is_dir($directory)) {
+            continue;
+        }
+
+        $entries = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(
+            $directory,
+            FilesystemIterator::SKIP_DOTS,
+        ));
+
+        foreach ($entries as $entry) {
+            if (! $entry instanceof SplFileInfo || ! $entry->isFile() || $entry->getExtension() !== 'json') {
+                continue;
+            }
+
+            $decoded = json_decode((string) file_get_contents($entry->getPathname()), true);
+
+            if (is_array($decoded) && isset($decoded['uir'], $decoded['info'])) {
+                $found[] = $entry->getPathname();
+            }
+        }
+    }
+
+    sort($found);
+
+    return $found;
+}
+
+/**
+ * The subset of {@see uirDocuments()} under $directory, named relative to it.
+ *
+ * @return list<string>
+ */
+function uirDocumentsUnder(string $directory): array
+{
+    $prefix = rtrim($directory, '/').'/';
+
+    $names = [];
+    foreach (uirDocuments() as $path) {
+        if (str_starts_with($path, $prefix)) {
+            $names[] = substr($path, strlen($prefix));
+        }
+    }
+
+    return $names;
+}
+
+/**
  * The Schema Object member order the canonicalizer publishes, read out of its source. That list is the
  * one thing about a keyword still stated by hand — order is a normative choice rather than a fact — so
  * three guards hold it against something else: the classification, the object-valued set, and what

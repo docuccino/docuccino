@@ -754,7 +754,10 @@ what fixes it — `#[OperationId]` doesn't reach a webhook. The message and the 
 `POST webhooks.invoice.paid`.
 
 Duplicate ids are a separate check with a better vantage point: `route.duplicate-operation-id` reports
-them where the pair is met, naming both routes.
+them where the pair is met, naming both routes. `document.duplicate-operation-id` says the same thing
+about the emitted artifact, which is where a collision an overlay wrote shows up. Neither fails an
+export — `controller-method` publishes one id per controller action, so several routes onto one action
+collide by design.
 
 | Key | Default | Effect |
 | --- | --- | --- |
