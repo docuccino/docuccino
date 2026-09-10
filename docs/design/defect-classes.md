@@ -308,9 +308,24 @@ file would have bought a shorter trace; `TraceFiles` separates charging from rec
 `ResponseShapeRefiner` still owes the same split (`DescentBudget::$files` is both ledgers, and a shape
 recovered from a trait-written body names only the using class's file).
 
+A whole sub-family of it reads the class's own FILE as the vendor test — "the method is declared
+somewhere other than here, so it must be the package's" — which is true only of an application that
+writes no base classes and no traits. It landed twice over one vendor. A Data class taking
+`calculateResponseStatus()` from an application base documented spatie's default, so a POST published
+201 where the server sends 202; and a FormRequest whose `authorize()` sits on a shared base published
+no 403 at all, on a framework that declares no `authorize()` anywhere and so had no default to mistake
+it for.
+Beside those, class ATTRIBUTES: spatie's attribute collection walks the parent chain from the concrete
+class, and the name-mapping read asked the class DECLARING the property instead — which is neither
+end of the hierarchy — so an inherited property under a mapped subclass published a key no request or
+response carries, in both directions and in both the request body and the response schema.
+
 *The tell.* A walk, a scan or a `getFileName()` that stops at the class the question was asked about,
 beside a claim in the docblock that it covers everything the class does. Reflection will not object: it
-answers about the class, and the class honestly reports the parent's member as its own.
+answers about the class, and the class honestly reports the parent's member as its own. For the
+vendor-test form the tell is sharper and reads off one line: a file comparison whose right-hand side is
+the SUBJECT's file rather than the vendor declaration's. Ask what the comparison would say for a class
+whose base wrote the method — every wrong site answers "the vendor's".
 
 *The fix that worked.* State ONE rule for what belongs to the class — for a construction, "written in its
 own declared code or in a class it inherits from, with `new static` binding late and `new self` binding to
@@ -319,7 +334,10 @@ ancestor whose file cannot be opened, or one using a trait, leaves a member unse
 answer the class may not have. Where the fact is a FILE, ask the member rather than the class
 (`ReflectionMethod::getFileName()`, `DeclarationFiles`), and record both. The probes are the guard: a
 subclass under a base that also builds it, a base building `self` rather than `static`, and a base carrying
-a trait — each of which flips when the walk is removed.
+a trait — each of which flips when the walk is removed. For the vendor test, name the vendor's own declaration and
+compare against THAT — `DataResponseStatus::concernFile()` — and where the framework declares nothing at
+all, having the method is the whole answer. The probe is a three-row set: the vendor supplies it, the
+class replaced it, a BASE replaced it; only the third moves.
 
 ## An illustration read against fewer keywords than its schema states
 
