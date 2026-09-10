@@ -58,7 +58,7 @@ produced it. Change any of the following and the affected operations are re-anal
 | --- | --- |
 | A route's method, URI, name, action or middleware | That route |
 | A file the analysis actually read — controller, form request, resource, model, DTO, custom rule | Every operation that read it |
-| Anything under `documents.<key>` in your config, except `export` | Every operation in that document |
+| Anything under `documents.<key>` in your config, except `export`, `viewer`, `info` and `api_version` | Every operation in that document |
 | Your app's boot-time registrations: `Relation::morphMap()`, `RateLimiter::for()`, exception `render` callbacks, `app.url` | Every operation |
 | Which engine resolved, whether it's installed, and its `engine` config | Every operation |
 | Your `composer.lock` — a package or analyzer upgrade | Every operation |
@@ -75,16 +75,29 @@ Two of those rows deserve the detail:
   shapes the document without living in any file the analysis opened, so those facts are folded into
   the key directly.
 
-Three things deliberately stay *out* of the key, because rebuilding for them would cost far more than
+Four things deliberately stay *out* of the key, because rebuilding for them would cost far more than
 they're worth:
 
 - **`engine.memory_limit`** (and `--memory-limit`). A process ceiling can't change a documented byte,
   so raising it doesn't throw away your cache.
-- **`documents.<key>.export`.** Export targets say *where* artifacts are written, never what's in
-  them. Adding a second target or renaming an output file writes new files from the cache you already
-  have, rather than re-analyzing the app.
+- **`documents.<key>.export` and `documents.<key>.viewer`.** Export targets say *where* artifacts are
+  written, never what's in them, and `viewer` is wiring for the docs page rather than anything the
+  document says. Adding a second target, renaming an output file or moving the viewer route writes
+  new files from the cache you already have, rather than re-analyzing the app.
+- **`documents.<key>.info` and `documents.<key>.api_version`.** Both shape the document, but they
+  shape it after every operation is built — the title and version land in the emitted `info` object,
+  and `api_version` drives the version changes and the `X-Api-Version` header. So two documents that
+  differ only in those two — which is exactly what [several live API
+  versions](/laravel/guides/api-versioning/) look like — build from the *same* stored fragments.
+  Twenty versions of a 400-route API analyze 400 operations between them, not 8,000.
 - **Your [narrative content](/laravel/guides/narrative-content/) pages.** Fragments never read them.
   A typo fix in a Markdown page re-assembles the document without re-analyzing a single route.
+
+Two documents share fragments only when everything else about them matches, and two things opt a
+document out of sharing: reading [recorded
+examples](/laravel/documenting/examples/#examples-your-tests-recorded), which are filed per document,
+and registering an extension of your own, which Docuccino can't vouch for. Either one costs a rebuild
+per document and nothing else.
 
 ## What the win actually looks like
 
