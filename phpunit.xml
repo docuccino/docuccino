@@ -11,6 +11,14 @@
              every worker's coverage at once: at 1G it died in `CoverageMerger::addCoverageFromFile`
              with the suite already green, so the cap read as "parallel coverage is unsupported". -->
         <ini name="memory_limit" value="8G"/>
+        <!-- Pinned because it reaches emitted BYTES: a document that declares no servers publishes
+             `app.url` when a consumer could reach it, and the framework builds every absolute URL from
+             it. Testbench reads it from the environment, so without this every golden in the suite
+             asserts what the machine running it happens to export, and a developer or a CI runner with
+             `APP_URL` set gets a screen of unexplained red. `force` because overwriting an exported one
+             is the whole point. The value is the framework's own default: the goldens then say what an
+             application that configured nothing gets. -->
+        <env name="APP_URL" value="http://localhost" force="true"/>
     </php>
     <testsuites>
         <testsuite name="core">
