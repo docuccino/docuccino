@@ -63,6 +63,38 @@ it('emits OpenAPI 3.0 JSON byte-identical to the committed golden', function ():
 });
 
 /**
+ * The fixture's `Status` carries `enumDescriptions` beside `x-enumDescriptions` — the vendor member
+ * written without its prefix, which is what an overlay or a hand-written schema fragment does. It is
+ * in the corpus because 3.0's Schema Object is CLOSED: publishing one member it does not enumerate
+ * makes the whole artifact invalid, so a 3.0 consumer loses the document rather than the member.
+ *
+ * The golden beside this pins the emitted bytes, and this names why they are those bytes. Neither the
+ * banned-keyword scan below nor any table in the emitter could have caught it: both answer for the
+ * keywords the PRODUCT knows, and this is one it does not.
+ */
+it('drops the fixture member 3.0 does not define, keeps its x- sibling, and says so', function (): void {
+    $result = (new OpenApi30DownlevelEmitter)->emitWithReport(UirDocument::fromArray(downlevelFixture()));
+
+    /** @var array<string, mixed> $decoded */
+    $decoded = json_decode($result->output, true, flags: JSON_THROW_ON_ERROR);
+    $status = $decoded['components']['schemas']['Status'];
+
+    expect($status)->not->toHaveKey('enumDescriptions')
+        ->and($status)->toHaveKey('x-enumDescriptions')
+        // The fixture really does carry both, or the assertion above is about nothing.
+        ->and(downlevelFixture()['components']['schemas']['Status'])->toHaveKeys(['enumDescriptions', 'x-enumDescriptions']);
+
+    $dropped = array_values(array_filter(
+        $result->report->diagnostics,
+        static fn (Diagnostic $d): bool => $d->code === 'downlevel.unsupported-keyword'
+            && str_contains($d->message, '`enumDescriptions`'),
+    ));
+
+    expect($dropped)->toHaveCount(1)
+        ->and($dropped[0]->message)->toContain('#/components/schemas/Status');
+});
+
+/**
  * The one assertion in this file that can see a MAP. Everything else here reads the emission with an
  * associative `json_decode`, which answers a PHP array for `{}` and for `[]` alike — so a downlevel that
  * turned a map into a sequence, or dropped an empty one, passed every test on this page. This emitter is
