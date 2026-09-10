@@ -57,6 +57,7 @@ use Docuccino\Core\Pipeline\FragmentCache;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Pipeline\OperationFragment;
 use Docuccino\Core\Support\ConfiguredFlag;
+use Docuccino\Core\Support\Hydrate;
 use Docuccino\Core\Support\JsonValue;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureEdit;
@@ -65,6 +66,7 @@ use Docuccino\Laravel\Commands\WatchCommand;
 use Docuccino\Laravel\Config\ConfigSplit;
 use Docuccino\Laravel\Config\DeclaredSettings;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
+use Docuccino\Laravel\Config\ViewerConfig;
 use Docuccino\Laravel\Extensions\AttributeParametersExtension;
 use Docuccino\Laravel\Integrations\QueryBuilder\ListValueDescriber;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
@@ -4051,9 +4053,16 @@ function docsAnchorSlug(string $heading): string
 
 /**
  * The `documents` bag for `$versions` documents over the whole workbench route set, differing in
- * every setting the shared fragment key drops: the document key, the whole `info` bag and the whole
- * `api_version` bag. What an application serving several live API versions looks like, and the
- * population one stored fragment now has to answer for.
+ * every fact the shared fragment key drops: the document key, and the four config keys
+ * `DocumentConfig::fragmentHash()` excludes — `info`, `api_version`, `export` and `viewer`. What an
+ * application serving several live API versions looks like, and the population one stored fragment
+ * now has to answer for.
+ *
+ * Every one of them, because a version set that varies only some of them is a fixture the tests
+ * reading it are SILENT outside: nothing else keys those documents apart, so a build that reads one
+ * of the untouched ones at route scope is handed the first version's answer for all of them with
+ * every assertion still green. {@see sharedVersionUnkeyedFacts()} is what holds this list to the
+ * exclusion set core states.
  *
  * @return array<string, array<string, mixed>>
  */
@@ -4063,14 +4072,45 @@ function sharedVersionDocuments(int $versions): array
     $documents = [];
 
     for ($v = 1; $v <= $versions; $v++) {
-        $documents['edition-'.str_repeat('x', $v)] = [
+        $key = 'edition-'.str_repeat('x', $v);
+
+        $documents[$key] = [
             ...$base,
             'info' => ['title' => 'Edition '.$v, 'version' => $v.'.0.0', 'description' => 'the '.$v.'th'],
             'api_version' => ['header' => 'X-Api-Version-'.$v],
+            'export' => ['path' => 'docs/edition-'.$v.'.json'],
         ];
+
+        // The fifth is set where it is READ from: a `viewer` bag lives in the framework's own config
+        // file and never in the build settings, so a bag written into the array above would not reach
+        // `DocumentConfig::$viewer` at all.
+        config()->set('docuccino.documents.'.$key.'.viewer', ['route' => '/docs/edition-'.$v]);
     }
 
     return $documents;
+}
+
+/**
+ * What each document of {@see sharedVersionDocuments()} says for every fact a fragment is not keyed
+ * on — document key included, since it is not a config key at all — so a test can assert the fixture
+ * really does tell its versions apart by all of them.
+ *
+ * @param  array<string, array<string, mixed>>  $documents
+ * @return array<string, array<string, mixed>> fact name → document key → what that document says
+ */
+function sharedVersionUnkeyedFacts(array $documents): array
+{
+    $facts = ['key' => [], 'info' => [], 'api_version' => [], 'export' => [], 'viewer' => []];
+
+    foreach ($documents as $key => $document) {
+        $facts['key'][$key] = ['key' => $key];
+        $facts['info'][$key] = Hydrate::map($document['info'] ?? null);
+        $facts['api_version'][$key] = Hydrate::map($document['api_version'] ?? null);
+        $facts['export'][$key] = Hydrate::map($document['export'] ?? null);
+        $facts['viewer'][$key] = ViewerConfig::for($key);
+    }
+
+    return $facts;
 }
 
 /**
