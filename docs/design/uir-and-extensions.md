@@ -426,7 +426,11 @@ been renamed, and the differ pairs it by the id it kept.
 
 Never file paths, line numbers, or array positions as identity inputs (those are
 provenance). `operationId` (human-readable OAS field) is separate: route name by default,
-configurable strategy. Identical tuples (two routes claiming `GET /x`) = error diagnostic.
+configurable strategy — and where the strategy has nothing to read (an unnamed route, a closure)
+it is minted from the operation's own method and path (`RouteOperationId`). The mint spells both out
+rather than reducing them — `.` between the parts, `@` in front of a parameter, `_` in front of an
+escape — so the path can be read back off the name, which is what makes one name mean one operation
+and leaves no contest between routes to settle. Identical tuples (two routes claiming `GET /x`) = error diagnostic.
 
 **An id travels in two forms, and every reader owes both.** UIR carries it nested, under the
 `x-docuccino` object that also carries provenance. An OpenAPI export has nowhere to put that object,
