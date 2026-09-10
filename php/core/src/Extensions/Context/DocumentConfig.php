@@ -19,6 +19,8 @@ use Docuccino\Core\Support\Json;
  * from one entry of the configuration file's `documents` map. Typed accessors cover what the
  * pipeline and built-in extensions read; the untouched `raw` bag carries everything else, so not
  * every key needs modelling here.
+ *
+ * @phpstan-type TagEntry array{name: string, summary?: string, description?: string, parent?: string, kind?: string}
  */
 final readonly class DocumentConfig
 {
@@ -224,16 +226,33 @@ final readonly class DocumentConfig
      * weight?}`), sorted by ascending weight then name for the OAS top-level `tags` array. Entries
      * with no string `name` are skipped.
      *
-     * A `parent` naming no defined tag, or one that would close a cycle, is dropped so the emitted
-     * hierarchy is always a forest — {@see tagParentIssues()} reports each drop. Sorting happens
-     * before that pass, so neither the tags nor the drops depend on the order the definitions
-     * happen to be written in.
+     * One entry per name: OAS says the `tags` array must not name a tag twice, and a document that
+     * does is invalid — a generator reading it mints the same client type twice, and a renderer
+     * draws the section twice. Definitions sharing a name are therefore merged, never both
+     * published; {@see tagDuplicates()} reports each merge.
      *
-     * @return list<array{name: string, summary?: string, description?: string, parent?: string, kind?: string}>
+     * A `parent` naming no defined tag, or one that would close a cycle, is dropped so the emitted
+     * hierarchy is always a forest — {@see tagParentIssues()} reports each drop. Merging and sorting
+     * both happen before that pass, so neither the tags nor the drops depend on the order the
+     * definitions happen to be written in.
+     *
+     * @return list<TagEntry>
      */
     public function tagDefinitions(): array
     {
         return $this->resolveTags()['tags'];
+    }
+
+    /**
+     * The names {@see tagDefinitions()} had to merge, with the members the definitions contradicted
+     * each other on and so published nothing for. Ordered by name. The adapter reports these as
+     * config diagnostics rather than failing the build.
+     *
+     * @return list<array{tag: string, count: int<2, max>, dropped: list<string>}>
+     */
+    public function tagDuplicates(): array
+    {
+        return $this->resolveTags()['duplicates'];
     }
 
     /**
@@ -299,42 +318,102 @@ final readonly class DocumentConfig
     }
 
     /**
-     * @return array{tags: list<array{name: string, summary?: string, description?: string, parent?: string, kind?: string}>, issues: list<array{tag: string, parent: string, cycle: bool}>}
+     * @return array{tags: list<TagEntry>, issues: list<array{tag: string, parent: string, cycle: bool}>, duplicates: list<array{tag: string, count: int<2, max>, dropped: list<string>}>}
      */
     private function resolveTags(): array
     {
-        $rows = [];
+        /** @var array<string, non-empty-list<array<string, mixed>>> $byName */
+        $byName = [];
         foreach (Hydrate::listOfMaps($this->tags['definitions'] ?? null) ?? [] as $definition) {
-            if (! is_string($definition['name'] ?? null)) {
+            $name = $definition['name'] ?? null;
+            if (! is_string($name)) {
                 continue;
             }
 
-            $entry = ['name' => $definition['name']];
-            foreach (self::TAG_MEMBERS as $member) {
-                $value = $definition[$member] ?? null;
-                if (is_string($value)) {
-                    $entry[$member] = $value;
-                }
-            }
+            $byName[$name][] = $definition;
+        }
 
-            $weight = $definition['weight'] ?? 0;
-            $rows[] = ['weight' => is_int($weight) ? $weight : 0, 'entry' => $entry];
+        $rows = [];
+        $duplicates = [];
+        foreach ($byName as $name => $definitions) {
+            $merged = self::mergeTagDefinitions((string) $name, $definitions);
+            $rows[] = ['weight' => $merged['weight'], 'entry' => $merged['entry']];
+
+            $count = count($definitions);
+            if ($count > 1) {
+                $duplicates[] = ['tag' => (string) $name, 'count' => $count, 'dropped' => $merged['dropped']];
+            }
         }
 
         usort($rows, static fn (array $a, array $b): int => [$a['weight'], $a['entry']['name']] <=> [$b['weight'], $b['entry']['name']]);
+        usort($duplicates, static fn (array $a, array $b): int => $a['tag'] <=> $b['tag']);
 
-        /** @var list<array{name: string, summary?: string, description?: string, parent?: string, kind?: string}> $tags */
+        /** @var list<TagEntry> $tags */
         $tags = array_map(static fn (array $row): array => $row['entry'], $rows);
 
-        return $this->linkTagParents($tags);
+        $linked = $this->linkTagParents($tags);
+
+        return ['tags' => $linked['tags'], 'issues' => $linked['issues'], 'duplicates' => $duplicates];
+    }
+
+    /**
+     * Collapses every definition of one name into the single entry the `tags` array allows.
+     *
+     * Silence is not a competing claim, so a member only one definition states is carried; a member
+     * two of them state DIFFERENTLY is published by neither, because picking one would publish a
+     * summary or a parent the other definition contradicts and the document would be confidently
+     * wrong rather than merely thin. Reading the first stated value is safe for the same reason —
+     * it is only used once every stated value is known to be equal. Position takes the lowest
+     * weight stated, so the answer is a function of the definitions and not of their order.
+     *
+     * @param  non-empty-list<array<string, mixed>>  $definitions
+     * @return array{entry: TagEntry, weight: int, dropped: list<string>}
+     */
+    private static function mergeTagDefinitions(string $name, array $definitions): array
+    {
+        $entry = ['name' => $name];
+        $dropped = [];
+
+        foreach (self::TAG_MEMBERS as $member) {
+            $stated = null;
+            $contradicted = false;
+
+            foreach ($definitions as $definition) {
+                $value = $definition[$member] ?? null;
+                if (! is_string($value)) {
+                    continue;
+                }
+
+                if ($stated === null) {
+                    $stated = $value;
+                } elseif ($stated !== $value) {
+                    $contradicted = true;
+                }
+            }
+
+            if ($contradicted) {
+                $dropped[] = $member;
+            } elseif ($stated !== null) {
+                $entry[$member] = $stated;
+            }
+        }
+
+        $weights = [];
+        foreach ($definitions as $definition) {
+            $stated = $definition['weight'] ?? 0;
+            $weights[] = is_int($stated) ? $stated : 0;
+        }
+
+        /** @var TagEntry $entry */
+        return ['entry' => $entry, 'weight' => min($weights), 'dropped' => $dropped];
     }
 
     /**
      * Keeps a `parent` only when it names a defined tag and does not close a cycle against the links
      * already kept — walking up the accepted chain, which is acyclic by construction, decides that.
      *
-     * @param  list<array{name: string, summary?: string, description?: string, parent?: string, kind?: string}>  $tags
-     * @return array{tags: list<array{name: string, summary?: string, description?: string, parent?: string, kind?: string}>, issues: list<array{tag: string, parent: string, cycle: bool}>}
+     * @param  list<TagEntry>  $tags
+     * @return array{tags: list<TagEntry>, issues: list<array{tag: string, parent: string, cycle: bool}>}
      */
     private function linkTagParents(array $tags): array
     {
