@@ -90,6 +90,10 @@ at a tag name (either one your operations carry, or one you defined in `tags.def
 that doesn't resolve raises `content.unresolved-nav-ref` and the entry is left out, rather than
 shipping a dead link.
 
+A group links to a destination once. Two pages in one group naming the same operation or tag keep the
+one the group's order puts first — `nav.order`, then title, then slug — and the other raises
+`content.duplicate-nav-ref`. Pointing at one endpoint from two *different* groups is fine, and stays.
+
 ## Linking to your API
 
 Inside a page, reference an operation or schema with a directive. Docuccino resolves it against the
@@ -141,6 +145,7 @@ too, alongside what to do about each one.
 | `content.unresolved-directive` | error | An `::operation`/`::schema` directive resolved to nothing, or is missing its selector attribute. |
 | `content.unknown-directive` | warning | A directive Docuccino doesn't handle; passed through untouched. |
 | `content.unresolved-nav-ref` | error | A `nav.type: operation`/`tag` entry pointed at something absent. |
+| `content.duplicate-nav-ref` | warning | Two pages in one nav group point at the same operation or tag; the second entry was left out. |
 | `content.duplicate-operation-id` | warning | Two operations share an `operationId`, so `::operation{id="…"}` is ambiguous. |
 
 ## Symbol-anchored prose

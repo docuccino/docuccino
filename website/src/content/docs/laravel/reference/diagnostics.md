@@ -349,6 +349,7 @@ Codes from the Markdown pages you fold into the document. See
 | `content.unresolved-directive` | error | An `::operation` or `::schema` directive is missing its attribute, or points at something the document doesn't have | Point it at a documented operation id, `METHOD /path`, or component schema name — see [Linking to your API](/laravel/guides/narrative-content/#linking-to-your-api) |
 | `content.unknown-directive` | warning | A directive Docuccino doesn't resolve was left in the page untouched | Nothing, if your renderer handles it. Docuccino resolves `::operation` and `::schema` |
 | `content.unresolved-nav-ref` | error | A page's nav frontmatter references something that resolves to nothing | Fix the reference — see the [frontmatter reference](/laravel/guides/narrative-content/#frontmatter-reference) |
+| `content.duplicate-nav-ref` | warning | Two pages in one nav section link to the same operation or tag, so the second link is left out | Point one of them somewhere else, or move it to another `nav.group` — a section links to a destination once |
 
 ## Overlays
 

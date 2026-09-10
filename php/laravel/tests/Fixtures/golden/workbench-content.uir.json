@@ -4638,7 +4638,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "5b3e04c541cd00ac0d845576d587b12439154a28681b367b482d7ca66a98b3f6",
-      "contentHash": "73745bb1d0df479889604586b0441b3dd3e43e4bd3018531d1f90b7aef902f38"
+      "contentHash": "6891a6a36434858d77081ac0406fac6cc8670b70404adb9d341b92a4533c48cc"
     },
     "generator": {
       "name": "docuccino/laravel",
@@ -4681,6 +4681,23 @@
               "layer": "config",
               "source": {
                 "file": "workbench/resources/docs/api/getting-started/introduction.md"
+              }
+            }
+          ]
+        },
+        {
+          "id": "page:v1:nioyf26b2avn4tw5",
+          "slug": "reference/forms-alias",
+          "title": "Listing forms",
+          "summary": "A second page surfacing the forms endpoint in the same section.",
+          "order": 2,
+          "content": "Two pages in this section both ask to be the link to `GET /api/forms`. The sidebar\nholds a destination once, so this page — second by `nav.order` — is the one whose\nlink is left out, with a `content.duplicate-nav-ref` warning naming it.",
+          "provenance": [
+            {
+              "producer": "config",
+              "layer": "config",
+              "source": {
+                "file": "workbench/resources/docs/api/reference/forms-alias.md"
               }
             }
           ]
