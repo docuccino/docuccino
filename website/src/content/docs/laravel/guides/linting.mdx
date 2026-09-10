@@ -1,0 +1,219 @@
+---
+title: Linting the document
+description: The checks Docuccino runs over the finished document — what each pass catches, when to silence one, and why a safelist and an off switch are not the same move.
+---
+
+import { Aside, Tabs, TabItem, Card, CardGrid } from '@astrojs/starlight/components';
+
+Everything else in a build reads your application. The **lints** read the finished document — after
+every extension has run and every overlay has been applied, on exactly the bytes about to be written.
+They are the last thing to look at your API before your consumers do.
+
+They never change it. A lint can raise a diagnostic and nothing else, so a build with findings emits
+the same document as a build without them. What they change is what you know, and — if you gate on
+them — whether the build passes.
+
+```bash
+php artisan docuccino:export --fail-on=warning
+```
+
+## What the passes look for
+
+Three questions, and each pass answers a piece of one.
+
+### Is anything in here supposed to be private?
+
+`lint.data-leakage` reads every property name, every `query` and `path` parameter name, and every
+value published under `example`, `const`, `enum` or `default`, and warns when one looks like a
+credential. It is on by default, and it is the pass most worth leaving on: a field that reaches the
+document reaches your published contract, and from there a generated client and anyone reading the
+viewer.
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	class UserResource extends JsonResource
+	{
+	    public function toArray(Request $request): array
+	    {
+	        return [
+	            'id' => $this->id,
+	            'email' => $this->email,
+	            'api_token' => $this->api_token,
+	        ];
+	    }
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"UserResource": {
+	  "type": "object",
+	  "properties": {
+	    "id": { "type": "integer" },
+	    "email": { "type": "string" },
+	    "api_token": { "type": "string" }
+	  },
+	  "required": ["id", "email", "api_token"]
+	}
+	```
+	</TabItem>
+</Tabs>
+
+The document is a faithful description of what that endpoint returns, which is the problem. The build
+says so:
+
+```
+[warning] lint.data-leakage: Property "api_token" (/components/schemas/UserResource/properties/api_token)
+          looks like a token and may leak sensitive data.
+  - Take the field out of the shape that publishes it — #[Hidden] removes a property from response
+    schemas, #[HiddenFromRequest] from a request body — or, if intentional, safelist it under
+    lint.leakage.allow.
+```
+
+The finding names the member and its pointer, never the matched text — echoing a secret would only
+move it into your build log. The recognized name tokens and credential shapes are listed under
+[Data leakage](/laravel/reference/configuration/#data-leakage), and `lint.leakage.patterns` adds your
+own vocabulary to the name heuristics.
+
+### Can a consumer actually use what you published?
+
+These four are about the document being *usable* downstream — by a code generator, a validator, a
+contract test — rather than about it being complete.
+
+- **`lint.operation-id-style`** catches an `operationId` a generated client can't turn into a method
+  name. Nothing Docuccino mints can trip it, so a finding is always a string somebody typed and can
+  type differently. On by default for that reason. Configured under `lint.operation_ids`.
+- **`lint.example-mismatch`** checks every published example against the schema beside it, and
+  **`lint.example-uncheckable`** reports an example left unchecked because the validator wouldn't read
+  that schema — which is a Docuccino bug, not yours. **`lint.unresolved-reference`** shares the same
+  pass and reports a `$ref` to a component the document never defines, usually after an overlay
+  renamed one. All three live under `lint.examples`.
+- **`lint.vacuous-union`** finds an `anyOf` with an unconstrained branch, where the typed branches
+  beside it add no constraint and the value validates as anything. It is the trace of an honest
+  widening, and it names the arm to pin. Configured under `lint.vacuous_union`.
+- **`lint.unpinned-redirect`** finds a redirect the document never says exactly one thing about.
+  Configured under `lint.unpinned_redirect`.
+
+### Does the document say what your API does?
+
+Both of these are **off** by default, and for the same reason: on an API that never documented
+anything they fire once per operation, which is a backlog rather than a diagnostic.
+
+- **`lint.missing-description`** warns on an operation publishing neither a summary nor a description.
+  Turn `lint.descriptions` on when you are closing that gap and want the list.
+- **`lint.undocumented-tag`** warns on a tag your operations carry that `tags.definitions` never
+  declares. Turn `lint.tags` on once your declared tags are meant to be the complete set — it stays
+  silent until the document declares at least one either way.
+
+Every key, every default and every per-rule detail is in the
+[configuration reference](/laravel/reference/configuration/#lint); the codes, their severities and
+their remedies are in the [diagnostics reference](/laravel/reference/diagnostics/#lint-rules).
+
+<Aside type="note" title="Why the defaults are uneven">
+A pass is on by default when it was measured to fire where you can act, and off when it wasn't. A
+diagnostic that mostly fires where nothing can be done teaches you to ignore the channel, and takes
+the useful ones with it — so the defaults follow the measurement rather than whether the rule would be
+technically correct.
+</Aside>
+
+## Three ways to make one stop
+
+They are not interchangeable, and picking the wrong one is how a real finding goes missing later.
+
+| Move | Scope | The finding | Use it when |
+| --- | --- | --- | --- |
+| `lint.<rule>.enabled: false` | The whole pass, every document | Never raised | The rule doesn't describe a problem you have. |
+| `lint.<rule>.allow: [...]` | One target | Never raised for that target | This one hit is fine; the rest of the pass still earns its place. |
+| [`diagnostics.accept`](/laravel/reference/configuration/#diagnostics) | The code, everywhere | **Still printed**, marked `accepted` | You want the gate green today without going blind. |
+
+The middle row is almost always the right one. A safelist is a decision you made about a specific
+property, operation or pointer, written where the next reader can see what you decided and check
+whether it still holds. Turning the pass off is a decision about all the hits you haven't had yet.
+
+The third row is different in kind: `diagnostics.accept` doesn't silence anything. The diagnostic
+still prints, marked `accepted` and counted in a closing line, and only stops counting towards
+[`--fail-on`](/laravel/reference/commands/#docuccinoexport). That is what makes a stricter gate
+adoptable — and an entry nothing reports any more says so with `config.accept-unused`, so the list
+can't quietly rot.
+
+### What a safelist entry looks like
+
+Each pass takes the unit that fits what it finds — a property or parameter name or a JSON pointer for
+leakage, an operation signature (`GET /api/ping`) or an `operationId` for the operation-level passes, a
+tag name for tags. The [reference](/laravel/reference/configuration/#lint) gives the unit per rule.
+
+```yaml
+lint:
+  leakage:
+    allow:
+      - '/components/schemas/Invoice/properties/status'
+  descriptions:
+    enabled: true
+    allow: ['GET /api/ping']
+```
+
+<Aside type="caution" title="For leakage, a name and a pointer are not the same entry">
+Safelisting a **name** silences the lint and only the lint. The
+[response recorder](/laravel/documenting/examples/#credentials-never-reach-the-file) redacts by name
+regardless of what you allowed, and honors a **pointer** alone. So if a field really is public and you
+want its recorded value published as an example, the entry has to be the pointer — a bare name leaves
+the example redacted with no warning to tell you why.
+</Aside>
+
+## When silencing is the right answer
+
+A finding is worth silencing when the pass is right about the shape and wrong about the consequence:
+
+- A property genuinely named `token` that carries a public, opaque identifier — a URL slug, an
+  unsubscribe key with no privileges behind it.
+- A health-check or ping route with nothing to say, on a document where `lint.descriptions` is on
+  because everything *else* has something to say.
+- An `operationId` your organization mints in a shape a generator you don't use would object to.
+
+And it is the wrong answer when the finding is about a hole in what Docuccino could recover — a
+vacuous union, an operation with no success response, a property with no `items`. Those are telling
+you what a consumer loses, and the fix is an annotation on the code rather than a line in your config.
+[`docuccino:explain`](/laravel/reference/commands/#docuccinoexplain) tells you which layer produced the
+field the lint is complaining about, so you know where the annotation goes.
+
+<Aside type="tip" title="Silence with a reason beside it">
+Every `allow` entry is a claim that a specific thing is fine. Keep the list short enough that you can
+still check each claim, and prefer fixing the cause where the cause is yours — a safelist that grows
+faster than your API is the channel going quiet again.
+</Aside>
+
+## Gating on them in CI
+
+Lint findings are ordinary diagnostics, so `--fail-on` is the whole mechanism:
+
+```bash
+php artisan docuccino:export --fail-on=warning
+```
+
+Most report at `warning`, and a couple at `info` — so a `--fail-on=warning` gate never sees those, and
+tightening to `info` is what brings them in. The
+[diagnostics reference](/laravel/reference/diagnostics/#lint-rules) gives the severity of each. On an
+existing codebase start at `warning`, accept the codes you can't act on today, and tighten later — a
+gate that fires on day one is a gate the team switches off.
+
+<CardGrid>
+	<Card title="The document, not the code" icon="document">
+		Lints run on the emitted bytes, so they see what your consumers see — including anything an
+		overlay or an extension added after inference was done.
+	</Card>
+	<Card title="Never a changed byte" icon="approve-check">
+		No lint can alter the document. Turning one on or off changes what you're told and nothing
+		about what you ship.
+	</Card>
+</CardGrid>
+
+## Where to go next
+
+- [Lint configuration](/laravel/reference/configuration/#lint) — every key, default and safelist unit.
+- [Lint diagnostics](/laravel/reference/diagnostics/#lint-rules) — every code, its severity and its
+  remedy.
+- [Contract testing](/laravel/guides/contract-testing/) — holding the running application to the
+  document the lints just checked.
+- [Recorded examples](/laravel/documenting/examples/#examples-your-tests-recorded) — where the values
+  the leakage pass reads most often come from.

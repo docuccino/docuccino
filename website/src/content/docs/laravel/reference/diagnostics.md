@@ -373,7 +373,8 @@ recorded](/laravel/documenting/examples/#examples-your-tests-recorded).
 
 ## Lint rules
 
-Document-quality rules. `lint.data-leakage` is on by default; the rest are opt-in — see
+Document-quality rules, run over the finished document — what each pass is for and how to quiet one
+is in [Linting the document](/laravel/guides/linting/); every key and default is under
 [Lint](/laravel/reference/configuration/#lint).
 
 | Code | Severity | What it means | What to do |

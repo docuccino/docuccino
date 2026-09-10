@@ -155,7 +155,27 @@ framework-neutral vocabulary, or delete with the default that replaces it.
 
 ## Not doing
 
-- A `.spectral.yaml` reader, or a Spectral-compatible rule engine. Unmeasured demand.
+- **A `.spectral.yaml` reader, or a Spectral-compatible rule engine.** Measured now, rather than
+  assumed. The per-rule audit is [spectral-audit.md](./spectral-audit.md), and the shape of it is the
+  argument: 28 of the `oas` ruleset's 56 rules either cannot fire against anything we emit, or report a
+  defect in our own output that no reader of the diagnostic can act on. Of the rules that genuinely
+  belong to the application, six already have a Docuccino lint firing on the same defect and firing
+  less often. The rest measured between zero and one hit per document across the emitted goldens and
+  the workbench application. The one that measured higher, `operation-operationId`, was a default of
+  ours rather than a rule to add, and it is settled: every operation now publishes an id. Reading the
+  format would mean carrying JSONPath and Spectral's function library to configure rules that mostly
+  cannot fire. The audit is a dated snapshot of both tools, not a commitment to follow Spectral's
+  releases; it carries the hash to re-fetch and re-run it with, and says which of its rows a change to
+  Docuccino can move on its own.
+- **`extends`, for sharing lint configuration across repositories.** Half of the ask turns out not to
+  exist: `lint` is already a top-level key, shared by every document in a build, so "configuration is
+  per document" was never true of it. What is left is sharing one file between repositories, and the
+  population it would configure is the audit's house-style bucket — none of which Docuccino reports at
+  all, and which fire five times between them across the whole workbench application, never more than
+  twice for any one rule. An include also brings its own questions: where the file resolves from, what
+  a relative path inside it means, and what `configHash` does when a file outside the repository
+  changes. Revisit when a rule Docuccino actually raises needs a severity somebody wants to change —
+  that is the measurement nobody has yet.
 - A rule *vocabulary* for org lint rules. The ruleset audit found the seven org-config candidates
   collapse to one table of required members keyed by document position, plus a min/max pair on operation
   tag count — a handful of scalars and one list, for which the precedent is the existing
