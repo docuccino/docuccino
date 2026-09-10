@@ -896,6 +896,98 @@ shape, which a client keeps compiling against and silently gets wrong. Hoisting 
 the boundary local at the cost of a `components` bucket holding one entry per one-off error body:
 more indirection, more names to collide, a worse document for reader and generator both.
 
+### A contested published slot: merged member-wise, or handed whole to one contributor
+
+Much of what a document publishes is a collection whose members must be DISTINCT: the top-level `tags`
+array ("Each tag name in the list MUST be unique"), an operation's `parameters` ("A unique parameter is
+defined by a combination of a name and location"), `security`, `enum`, `required`, the `x-permissions`
+a route enforces, a Postman request's `header` list, the content nav under one parent. Those are SLOTS
+rather than positions, and more than one producer can reach one. What follows is the section above
+carried from a minted NAME to the value a slot holds, and it binds every producer that fills one — the
+sites named below are where each SHAPE is worked out, not a census of the producers.
+
+**Three obligations hold at every one of them.**
+
+1. **A slot key is what a member SAYS**, never where it was met and never a position in the list it
+   arrived in. A key that is not a function of the member's own content eventually puts two unrelated
+   contributors in one slot, or one contributor in two.
+2. **The answer is a function of the contributors, never of the order they arrived.** Deterministic is
+   not enough — a first-come winner is stable per build and still reassigns meaning when an unrelated
+   route is added. Where a producer does keep the first of several, "first" has to be a CONTENT order
+   something sorted it into: the adapter hands the assembler its fragments sorted by method, URI and
+   host, and the content compiler sorts its pages by source path, which is what makes
+   `Pipeline\Assembler::buildPaths()` and the slug dedup in `Content\ContentResolver::resolve()`
+   legitimate rather than lucky. A producer relying on that owes the sentence saying so.
+3. **Whatever is dropped is named in a diagnostic**, and the message identifies the LOSER — naming
+   only the winner leaves the author hunting for a file the build already knew. The one exception is
+   below.
+
+**How a contest resolves turns on a single question: are the slot's members independent claims about a
+shared object, or is the whole node one contributor's single statement?**
+
+- **Independent claims → merge member-wise.** A tag entry is several separate assertions about one
+  tag — a summary, a description, a parent, a kind — and two definitions of one name are not two tags,
+  so `Extensions\Context\DocumentConfig::mergeTagDefinitions()` settles the entry a member at a time.
+  Silence is not a competing claim, so a member only one definition states is carried; a member two of
+  them state DIFFERENTLY is published by NEITHER, because awarding it to one publishes a summary the
+  other contradicts and the document is then confidently wrong rather than merely thin.
+- **One indivisible statement → the winner takes the whole slot.** A nav node is one page's statement
+  about where it sits — its type, its target, its title — so `Content\ContentResolver::ordered()` keeps
+  the node the parent's own order puts first (explicit `nav.order`, then title, then slug, total
+  because slugs are unique) and drops the loser WHOLE. Blending two would publish a link neither page
+  asked for.
+
+The test between them is not the data type; both are objects with members. Ask what a blended node
+would MEAN. Half of one tag definition beside half of another is still a true description of that tag.
+Half of one nav node beside half of another is a link nobody wrote.
+
+**Where the contributors are not making the same KIND of claim, the merge is member-wise and
+asymmetric.** A Postman header slot is reached by a DERIVED contributor stating a fact about the
+message the collection actually carries — the media type of the body written beside it, the cookie
+parameters assembled into one `Cookie` — and by a DECLARED one restating a parameter object. Those are
+not two readings of one thing, so `Emit\Postman\Headers::place()` gives each member to whichever side
+is authoritative for it: the derived side takes the spelling and the value, because a request whose
+`Content-Type` disagrees with its own body cannot work; the declared side keeps the prose only it has;
+and `enabled` is the union, because a header the document calls required does not become optional for
+having been described twice. This is still the member-wise shape — what is asymmetric is the per-member
+rule, not the resolution.
+
+**Deduplication is not a merge, and it is the one case owing no diagnostic.** Where the slot key IS the
+member's whole published form, a contest cannot happen: two contributors landing on one key said
+exactly the same thing, so nothing is dropped and there is nothing to report. That is how the
+authorization requirements a route enforces are held (`Integrations\Permission\PermissionExtension`
+and `Integrations\Sanctum\SanctumAbilitiesExtension` key each requirement by the JSON of the array it
+publishes, so one middleware written two ways is one entry), and how `Support\Arr::distinctValues()`
+holds an `enum`'s values for the canonicalizer and for `x-enum-varnames` alike. The thing to check at
+one of these is that the key really is the whole published member: dedupe by one key and publish
+another and the slot silently becomes a function of which contributors happened to collide.
+
+**A declaration the spec says is not one never reaches a slot at all.** OAS ignores a header parameter
+named `Accept`, `Content-Type` or `Authorization`, and a response header named `Content-Type`, because
+`requestBody.content`, a response's `content` and a security scheme are where those facts belong.
+`Document\IgnoredHeaders` is the one reading of that sentence, and it is one because the readers ACT on
+it: the Postman emitter drops the declaration from a request, and the contract checker declines to
+enforce it — a build whose emitter and checker read different lists ships an artifact its own checker
+disagrees with. The declaration is still PUBLISHED. Deleting what an author explicitly wrote, out of
+the artifact they cannot watch being built, substitutes our reading of their intent for theirs, and a
+conforming consumer is already told to ignore it. What they get instead is
+`document.ignored-header-declaration` from `Pipeline\IgnoredHeaderAudit`, an info where the operation
+publishes the same fact in the member OAS reserves for it (so only the wording is lost) and a warning
+where it does not (so the document says nothing about it at all). Reported once per SITE the
+declaration is written at — an operation, a path item, or the `components` entry others `$ref` — never
+once per operation reaching it, because the author has one edit and obligation 3 owes them one
+diagnostic for it. It follows that nothing we mint may carry a reserved name: `Versioning\ApiVersionHeader`
+refuses an `api_version.header` naming one and says so, rather than publishing a parameter the author
+never wrote and cannot delete.
+
+| Shape | Worked out in | Identity | A contest resolves by |
+|---|---|---|---|
+| member-wise merge | `Extensions\Context\DocumentConfig::mergeTagDefinitions()` | tag name | each member separately; a contradicted member published by neither |
+| member-wise, asymmetric | `Emit\Postman\Headers::place()` | lowercased header name | per member, by which contributor is authoritative for it |
+| winner takes the node | `Content\ContentResolver::ordered()` | node type + ref, per parent | a total content-derived sort; the loser dropped whole |
+| dedupe, so no contest | `Support\Arr::distinctValues()` | the member's whole published form | nothing to resolve — the two said the same thing |
+| not a contributor | `Document\IgnoredHeaders` | — | the spec: the declaration contributes nothing, prose included |
+
 ## 3. Canonicalization (normative in the spec)
 
 1. Fixed member order per object type (published as `x-canonicalOrder` in the meta-schema);
