@@ -39,9 +39,12 @@ it('sweeps every fixture controller that writes a throw', function (): void {
     // The corpus is "the controllers written to exercise throws", and what makes one of those is that its
     // own source raises one. A controller that only CALLS a thrower is outside this rule and has to be
     // added by hand — which is the boundary, stated rather than left to be discovered.
+    // A throw is a throw whatever it is built out of: the pattern that used to stand here knew
+    // `throw new X` and `throw $e` and read straight past `throw X::for(…)` and `throw static::make()`,
+    // which is six of the eleven throwing files in this tree. Asked of the parsed source instead.
     $throwing = [];
     foreach (fixtureControllerPaths() as $relPath) {
-        if (preg_match('/\bthrow\s+(new\s|\$)/', (string) file_get_contents(fixtureSourcePath($relPath))) === 1) {
+        if (phpRaisesThrow((string) file_get_contents(fixtureSourcePath($relPath)))) {
             $throwing[] = $relPath;
         }
     }
@@ -57,11 +60,8 @@ it('names a class for each swept controller that the file really declares', func
     // A row naming a file that moved, or a class the file no longer declares, would reduce every sweep to
     // whatever is left of the list.
     foreach (throwCorpusControllers() as $relPath => $class) {
-        $source = (string) file_get_contents(fixtureSourcePath($relPath));
-        $namespace = preg_match('/^namespace (.+);$/m', $source, $found) === 1 ? $found[1] : '';
-
         expect(fixtureSourcePath($relPath))->toBeFile()
-            ->and($namespace.'\\'.basename($relPath, '.php'))->toBe($class);
+            ->and(phpDeclaredTypes((string) file_get_contents(fixtureSourcePath($relPath))))->toContain($class);
     }
 });
 
