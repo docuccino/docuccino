@@ -11,9 +11,9 @@ use Docuccino\Core\Emit\OpenApi30DownlevelEmitter;
 use Docuccino\Core\Emit\OpenApi31DownlevelEmitter;
 use Docuccino\Core\Emit\OpenApi32Emitter;
 use Docuccino\Core\Emit\ReportingEmitter;
+use Docuccino\Core\SpecValidation\OpenApiMetaSchema;
 use Docuccino\Core\SpecValidation\Validator;
 use Docuccino\Core\Tests\Support\EmittedDocument;
-use Docuccino\Core\Tests\Support\OpenApiMetaSchema;
 
 /**
  * The 3.0 downlevel. It chains off the 3.1 emitter, so the tests here cover only what 3.0 itself
@@ -43,7 +43,9 @@ function downlevel30(array $schema): array
         'openapi' => '3.2.0',
         'info' => ['title' => 'API', 'version' => '1.0.0'],
         'paths' => [],
-        'components' => ['schemas' => ['S' => $schema]],
+        // `Other` is what the rows that carry a `$ref` name: a document referencing a component it does
+        // not define is one no build emits, and the emitted-artifact check says so.
+        'components' => ['schemas' => ['S' => $schema, 'Other' => ['type' => 'object']]],
     ]));
 
     $decoded = json_decode($result->output, true, flags: JSON_THROW_ON_ERROR);
@@ -485,10 +487,15 @@ describe('schema dialect conversions', function (): void {
             ['type' => 'string'],
             [],
         ],
-        'an unknown keyword passes through untouched' => [
+        // A keyword outside the product's own vocabulary — an overlay's, an attribute's, a JSON Schema
+        // revision newer than this — is dropped like any other 3.0 does not define. It used to pass
+        // through, and 3.0's Schema Object is closed: one unrecognised member made the whole artifact
+        // invalid, so a 3.0 consumer lost the document rather than the member. `x-` survives, being the
+        // one thing that object does admit.
+        'an unknown keyword is dropped, naming it' => [
             ['type' => 'string', 'x-enumDescriptions' => ['a' => 'A'], 'somethingNew' => 1],
-            ['type' => 'string', 'somethingNew' => 1, 'x-enumDescriptions' => ['a' => 'A']],
-            [],
+            ['type' => 'string', 'x-enumDescriptions' => ['a' => 'A']],
+            ['downlevel.unsupported-keyword'],
         ],
     ]);
 

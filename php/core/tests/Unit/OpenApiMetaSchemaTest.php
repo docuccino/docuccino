@@ -5,8 +5,8 @@ declare(strict_types=1);
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\EmitOptions;
 use Docuccino\Core\Emit\Formats;
+use Docuccino\Core\SpecValidation\OpenApiMetaSchema;
 use Docuccino\Core\Tests\Support\EmittedDocument;
-use Docuccino\Core\Tests\Support\OpenApiMetaSchema;
 
 /**
  * The meta-schema oracle: every OpenAPI artifact the emitters produce, in both serialisations, answers to
