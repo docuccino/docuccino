@@ -108,6 +108,41 @@ function lintReferenceRuleRows(): array
     return $rows;
 }
 
+/**
+ * The rule keys the linting guide names. The guide teaches the passes rather than tabulating them, so
+ * it names each one as the config key a reader edits — `lint.leakage`, `lint.operation_ids` — and that
+ * is the token read back here.
+ *
+ * @return list<string>
+ */
+function lintGuideRuleKeys(): array
+{
+    $page = (string) file_get_contents(
+        dirname(__DIR__, 2).'/website/src/content/docs/laravel/guides/linting.mdx',
+    );
+
+    preg_match_all('/\blint\.([A-Za-z0-9_]+)\b/', $page, $matches);
+
+    $keys = array_values(array_unique($matches[1]));
+    sort($keys);
+
+    return $keys;
+}
+
+it('names every shipped lint on the guide that introduces them', function (): void {
+    // The guide is the page a reader meets linting on, and a guide that silently stops covering a pass
+    // is the hand-maintained-full-set failure with a friendlier face. Read the keys off the shipped
+    // settings, not off the guide, so a pass added tomorrow fails here.
+    $keys = lintConfigRuleKeys();
+    $named = lintGuideRuleKeys();
+
+    $unmentioned = array_values(array_diff($keys, $named));
+
+    expect($unmentioned)->toBe([], 'lint rules the guide never names: '.implode(', ', $unmentioned))
+        // Anti-vacuity: a reader that matched nothing would agree with every key list there is.
+        ->and(count($named))->toBeGreaterThanOrEqual(count($keys));
+});
+
 it('gives every shipped lint a config bag and a row in the reference table', function (): void {
     // The lint catalogue had no guard of its own: the config-reference sync accepts a key documented in
     // the section's PHP block OR in a table, so a rule could lose its ROW — the part of the page a reader

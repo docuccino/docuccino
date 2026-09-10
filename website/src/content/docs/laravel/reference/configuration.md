@@ -626,6 +626,9 @@ registrations **at build time, never at boot**. See [extension authoring](/exten
 
 ## Lint
 
+The keys below configure the document lints. [Linting the document](/laravel/guides/linting/)
+introduces what each pass catches and when to silence one.
+
 ```yaml
 lint:
   leakage:
