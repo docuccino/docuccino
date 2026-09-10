@@ -427,6 +427,52 @@ Anything outside that table still gets documented if its status is known: the fi
 `{ "message": string }` under the exception's status, or `500` when no status could be determined. Set
 `error_responses` to `none` to emit no error responses at all.
 
+### When a `500` is a stand-in
+
+A `500` in your document is not one fact. It is the right answer when your code says so, and it is the
+right answer for an exception that is no HTTP error at all — Laravel really does answer `500` for a bare
+`RuntimeException`. It is a **stand-in** only in the third case: the error is an `HttpException`
+subclass, nothing in your code stated a number for it, and the table above has no row for the class
+either. A response has to be keyed by status, so it is filed at `500` — a key the document cannot do
+without, not a claim about what your server sends.
+
+Those three look identical from the outside, so the document says which it is. A stand-in carries one
+member and the other two carry nothing:
+
+```json
+"500": {
+  "description": "Internal Server Error",
+  "x-docuccino": { "facts": { "statusUnplaced": true } }
+}
+```
+
+`docuccino:explain` prints the same thing in words, beside the class and the line the `throw` is written
+at:
+
+```
+responses.500
+  ! this status is a stand-in: nothing read one for the error filed here
+  from App\Exceptions\LedgerRejectedException  app/Queries/LedgerReviewQuery.php:28
+```
+
+Two things follow. Do not suppress a `500` because you assume it is a placeholder — check the member
+first, or you will delete a status your API really answers with. And if you want the build to fail while
+any endpoint publishes a status nothing read, that member is what to gate on: it appears on exactly the
+responses that stand in, in the exported document and in `docuccino:explain --json` alike.
+
+### Where the build stops looking
+
+Two shapes end the trace, and an endpoint whose only error is one of them publishes no error response
+and no diagnostic — there is nothing for either to be about:
+
+- a `throw` written inside a `catch` block, which the analysis does not surface;
+- a `throw` in a **private** helper of a collaborator your action calls, which is one hop past where the
+  analysis descends.
+
+Both are reachable by moving the `throw` to somewhere the call can see — a public method on the
+collaborator, or a guard clause before the `try` — or by documenting the response with
+`#[Response(status: …)]` on the action.
+
 Both of those bodies are the **framework's**, so neither is published over a handler of yours that
 replaces it. Where Docuccino can see that your handler renders an exception and cannot read what it
 renders it to, the response keeps its status and its description and carries no body at all — a shape
