@@ -314,7 +314,14 @@ writes no base classes and no traits. It landed twice over one vendor. A Data cl
 `calculateResponseStatus()` from an application base documented spatie's default, so a POST published
 201 where the server sends 202; and a FormRequest whose `authorize()` sits on a shared base published
 no 403 at all, on a framework that declares no `authorize()` anywhere and so had no default to mistake
-it for.
+it for. Under the ANALYSER the same test fails the other way round: PHPStan reports the class that
+DECLARES an inherited override, whose own file is the method's file, so a base never looked like the
+vendor — but PHP flattens a trait into the using class while reflection still names the trait's file,
+which is indistinguishable from the package's own concern. Both Data return-type extensions therefore
+spoke for a response an application had written once on a shared trait, publishing spatie's default
+envelope and losing the status, media type and payload the refiner reads out of a hand-written
+`new JsonResponse(...)`. Same misreading, opposite hierarchy — which is why the fix names the concern
+rather than the shape of the hierarchy.
 Beside those, class ATTRIBUTES: spatie's attribute collection walks the parent chain from the concrete
 class, and the name-mapping read asked the class DECLARING the property instead — which is neither
 end of the hierarchy — so an inherited property under a mapped subclass published a key no request or
@@ -335,9 +342,16 @@ answer the class may not have. Where the fact is a FILE, ask the member rather t
 (`ReflectionMethod::getFileName()`, `DeclarationFiles`), and record both. The probes are the guard: a
 subclass under a base that also builds it, a base building `self` rather than `static`, and a base carrying
 a trait — each of which flips when the walk is removed. For the vendor test, name the vendor's own declaration and
-compare against THAT — `DataResponseStatus::concernFile()` — and where the framework declares nothing at
-all, having the method is the whole answer. The probe is a three-row set: the vendor supplies it, the
-class replaced it, a BASE replaced it; only the third moves.
+compare against THAT — `DataResponseStatus::concernFile()`, `VendorConcern::provides()` — and where the
+framework declares nothing at all, having the method is the whole answer. The probe is a four-row set:
+the vendor supplies it, the class replaced it, a BASE replaced it, a TRAIT replaced it; which of the
+last two moves depends on whether reflection reports the declaring class or the using one, so a probe
+short of either row proves nothing about the other.
+
+*One more trap under the analyser.* Take every path you compare from the SAME reflection. PHPStan spells
+a vendor file as composer's autoloader recorded it (`vendor/composer/../spatie/...`) and PHP spells it
+canonically, so one file looked up across the two providers is never string-equal — a test that holds
+in isolation and answers false for every class in a real analysis.
 
 ## An illustration read against fewer keywords than its schema states
 

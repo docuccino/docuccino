@@ -284,11 +284,11 @@ would sit a fraction of a statement above the figure (see `laravel` below).
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **97.39%** | 97    | fully in-process-measurable; 0.39pp above it, ~52 statements |
-| `laravel`           | **96.88%** | 96    | ratcheted 95 → 96; 0.88pp above it, ~119 statements |
-| `inference-phpstan` | **49.83%** | 49    | real path is subprocess-only → `fixture`-proven; ratcheted 48 → 49; 0.83pp, ~22 statements |
+| `core`              | **97.39%** | 97    | fully in-process-measurable; 0.39pp above it, ~53 statements |
+| `laravel`           | **96.93%** | 96    | ratcheted 95 → 96; 0.93pp above it, ~126 statements |
+| `inference-phpstan` | **49.98%** | 49    | real path is subprocess-only → `fixture`-proven; ratcheted 48 → 49; 0.98pp, ~26 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 92.98%     | —     | informational only; no longer a gate             |
+| Overall             | 93.01%     | —     | informational only; no longer a gate             |
 
 Every figure here is one `composer test:coverage` run of the whole set, so the three read off the same
 clover report and the floors file quotes the same numerators. A record that disagrees with itself is the

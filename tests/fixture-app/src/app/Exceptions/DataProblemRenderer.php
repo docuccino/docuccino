@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Exceptions;
 
 use App\Data\OwnResponseProblemData;
+use App\Data\InheritedProblemData;
 use App\Data\ProblemDocumentData;
+use App\Data\TraitResponseProblemData;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -28,6 +30,11 @@ use Throwable;
  *     only evidence that this response carries either;
  *   - `$e instanceof HttpException` reaches the Data through TWO hops (arm → `renderHttpProblem()` →
  *     `problem()`), matching how a real renderer layers its branches, and supplies neither optional member;
+ *   - the `TypeError` arm renders through a payload whose `toResponse()` lives in an application
+ *     TRAIT rather than in the class, which reflection reports as another file exactly as spatie's
+ *     own concern is — the two are told apart by WHICH file, never by "not this class's";
+ *   - the `AssertionError` arm writes it on a BASE CLASS instead, where reflection reports the
+ *     method and its declaring class against one file and no such confusion arises;
  *   - the `ArithmeticError` arm writes a class constant named like a credential and renders through the
  *     negotiated helper, so it pins both refusals: no folded secret, and no label borrowed from the
  *     helper's other branch;
@@ -72,6 +79,18 @@ final class DataProblemRenderer
             // A Data class that writes its own response: the constructor's status and Content-Type must win
             // over anything spatie's own `toResponse()` would have said.
             return (new OwnResponseProblemData(type: 'about:blank', status: 503))->toResponse($request);
+        }
+
+        if ($e instanceof \TypeError) {
+            // The same response as the RuntimeException arm above, written once in a trait instead of in
+            // the class. Nothing about what the consumer is owed changes because the app moved the method.
+            return (new TraitResponseProblemData(type: 'about:blank', status: 422))->toResponse($request);
+        }
+
+        if ($e instanceof \AssertionError) {
+            // And once more from a base class, the third place the same method can be written.
+            return (new InheritedProblemData(type: 'about:blank', status: 409, detail: 'Already published.'))
+                ->toResponse($request);
         }
 
         if ($e instanceof \ArithmeticError) {
