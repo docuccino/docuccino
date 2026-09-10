@@ -23,7 +23,9 @@ Every `{param}` in a route's URI becomes a path parameter. Docuccino types it fr
 - A parameter bound to a model through **route-model binding** is typed from the model's route key:
   a `uuid`- or `ulid`-formatted string for a `HasUuids` / `HasUlids` model, an `integer` for the default
   incrementing key, or a plain `string` for a non-incrementing string key — so a UUID- or ULID-keyed
-  model is documented correctly with no annotation.
+  model is documented correctly with no annotation. A model that overrides `getRouteKeyName()` binds on
+  a column its method body picks, which nothing static can read, so that segment is a plain `string`
+  and the build reports `route-binding.untyped` rather than typing it off a key it does not use.
 - A binding that names its own column — `{post:slug}` — is typed from **that** column instead: its
   `$casts` entry, or the `@property` type the analyzer recovered for it.
 - An **unbound** segment is a required `string`.
@@ -43,7 +45,30 @@ Route::get('/posts/{post:slug}', [PostController::class, 'show']);    // {post} 
 When nothing types the named column — no cast, no `@property` tag, no analyzer installed — the
 parameter falls back to a plain `string` and the build reports `route-binding.column-untyped` naming
 it. It never falls back to the model's route key: an endpoint that takes a slug documented as an
-`integer` id is a wrong answer, and a plain `string` is at least a true one.
+`integer` id is a wrong answer, and a plain `string` is at least a true one. Declaring the segment's
+type with [`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) settles it and the notice
+stops — the parameter then carries the type you wrote, so nothing is being described loosely.
+
+### What the binding tells a consumer
+
+A schema says what shape the segment is. It does not say which attribute of the resource the server
+looks the value up by, whether the record has to belong to the one before it in the path, or whether a
+deleted record still resolves — and none of that is guessable from the URL. Docuccino writes what it
+can prove onto the parameter, as a description a person reads and as an `x-docuccino.facts.routeBinding`
+object a client generator can read:
+
+| Fact | Written when | Says |
+| --- | --- | --- |
+| `key` | The route names a column (`{post:slug}`), or the model's route key is its declared `$primaryKey` | The attribute the value is matched against |
+| `scopedTo` | The framework resolves this parameter through the one before it — `->scopeBindings()`, or a nested child naming its own column, and not where the route calls `->withoutScopedBindings()` | Only records belonging to that parent match, so a valid id from elsewhere still `404`s |
+| `withTrashed` | The route calls `->withTrashed()` | A soft-deleted record resolves here too |
+
+`key` is left out wherever the column stops being a declaration: a model that overrides
+`getRouteKeyName()`, or a segment with a binder of the application's own
+([`Route::bind`](https://laravel.com/docs/routing#explicit-binding)) both decide it in a method body.
+The parameter then falls back to a plain `string` and says nothing about the column, because naming
+the wrong one would send every client to fetch by the wrong attribute. Pin it with
+[`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) where you know the answer.
 
 Reach for [`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) to refine a parameter — set
 an OpenAPI `format`, a description, or an example, or give an unbound segment a non-string type:
