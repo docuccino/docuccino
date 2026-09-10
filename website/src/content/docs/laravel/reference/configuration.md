@@ -454,7 +454,8 @@ examples.
 representation:
   filters: 'bracketed'       # bracketed | deepObject (Query Builder filter/field style)
   nullable: 'type-array'     # type-array (type: [x, null]) | anyof ({type: null} branch)
-  operation_id: 'route-name' # route-name | controller-method ({ShortController}@{method})
+  operation_id: 'route-name' # route-name | controller-method ({ShortController}@{method});
+                             # an unnamed route or a closure is named from its method and path
   # enums:
   #   naming: 'names'  # names (both hint spellings) | none | x-enumNames | x-enum-varnames
   #   components: true # true hoists each enum to a $ref'd component | false inlines it everywhere
@@ -475,7 +476,7 @@ from "API changed".
 | --- | --- | --- | --- |
 | `filters` | `bracketed` \| `deepObject` | `bracketed` | Query Builder filter/field style: one flat `filter[status]` / `fields[type]` parameter each (`bracketed`), or a single `filter` / `fields` object parameter with `style: deepObject` (`deepObject`). See [Spatie Query Builder](/laravel/packages/query-builder/). |
 | `nullable` | `type-array` \| `anyof` | `type-array` | How nullability is expressed: `type: ["string","null"]` vs a `{type: null}` `anyOf` branch (legacy tooling). |
-| `operation_id` | `route-name` \| `controller-method` | `route-name` | `operationId` strategy. |
+| `operation_id` | `route-name` \| `controller-method` | `route-name` | Where the `operationId` comes from. `route-name` uses the route's name, `controller-method` builds `{ShortController}@{method}`. Neither source is always there — an unnamed route is the ordinary case, and a closure route has no controller — and an operation with no `operationId` is one a client generator names a method for out of the path, differently per generator. So whichever strategy is set, an operation the strategy cannot name is named from its own method and path, spelled so the path can be read back off the name: `GET /api/forms` becomes `get.api.forms`, `GET /api/forms/{form}` becomes `get.api.forms.@form`. That spelling is what keeps one name to one operation — a reduction that folded `-`, `_` and `/` together would name `/api/user-profile` and `/api/user/profile` alike. Nothing outside the operation is read, so a name never moves because another route was added, removed or renamed. Either way [`#[OperationId]`](/laravel/reference/attributes/#operationid) still wins. |
 | `enums.naming` | `names` \| `none` \| `x-enumNames` \| `x-enum-varnames` | `names` | SDK member-name hints on enum schemas. The default `names` emits both spellings (`x-enum-varnames` for OpenAPI Generator and the TypeScript toolchain, `x-enumNames` for NSwag); a single-key keyword pins one tool's shape; `none` turns hints off. Read by the [Enum integration](/laravel/documenting/schemas/#enums) and the [Query Builder sort/include enums](/laravel/packages/query-builder/#sorts-and-includes-are-enums-of-the-allow-list). |
 | `enums.components` | `true` \| `false` | `true` | Whether each reflectable enum hoists to a shared `#/components/schemas` entry that properties and query-parameter item schemas `$ref` (`true`), or its `type`/`enum`/`x-enumDescriptions` are inlined at every use site (`false`). |
 | `errors.components` | `true` \| `false` | `true` | Whether a repeated error body hoists to shared components — its shape into `#/components/schemas`, and the whole response into `#/components/responses` where operations state it identically (`true`) — or every copy is inlined (`false`). |

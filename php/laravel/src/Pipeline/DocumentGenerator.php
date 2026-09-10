@@ -34,6 +34,7 @@ use Docuccino\Core\Pipeline\OperationPipeline;
 use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
 use Docuccino\Core\SpecValidation\Validator;
+use Docuccino\Core\Support\RouteOperationId;
 use Docuccino\Laravel\Registry\ConfigDiagnostics;
 use Docuccino\Laravel\Registry\DefaultExtensions;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
@@ -785,6 +786,16 @@ final class DocumentGenerator
 
         $operation = new OperationDraft;
         $operation->setDescription('Documentation could not be generated for this route.', Contribution::fallback());
+        // A skeleton is still an operation a client generator will name a method after, so it owes an
+        // operationId like any other. The strategies that read the ACTION cannot answer here — the
+        // action is what could not be read — so this is the route's own name, or the mint that stands
+        // in for one, and never the empty field that leaves the generator to invent a name.
+        $operation->setOperationId(
+            $descriptor->name === null || $descriptor->name === ''
+                ? RouteOperationId::mint($method, $path)
+                : $descriptor->name,
+            Contribution::fallback(),
+        );
 
         return $this->stamped(
             new OperationFragment($path, $method, $operation->freeze(), $signature),

@@ -131,7 +131,7 @@ field by field:
 
 | Layer | Comes from | Typical use |
 | --- | --- | --- |
-| `fallback` | Docuccino's own defaults | A route-name operation id, an `OK` response description, an untyped path parameter |
+| `fallback` | Docuccino's own defaults | An operation id from the route name or, where there is none, from the method and path; an `OK` response description; an untyped path parameter |
 | `inference` | The static-analysis engine | Return types, validation rules, resource shapes, thrown exceptions |
 | `integration` | A package integration, e.g. `integration:query-builder` | Filters and sorts, pagination envelopes, security schemes, `Data` object schemas |
 | `docblock` | PHPDoc on the action or class | A summary and description — the leading prose, or `@summary`/`@description` where the prose is for maintainers — plus `@param`/`@return` detail |
