@@ -71,9 +71,10 @@ const FLOORS = [
     // were asking for — the rule deciding what a SET of throw readings states came out into
     // `ThrowSiteStatus`, where no scope reaches it and a dataset can drive every way a set fails to speak
     // (18 statements, all covered). Measured 49.49% (1271/2568), about thirteen statements of margin, so
-    // the floor stays at the measured integer rather than ratcheting. Recorded as measured so the number
-    // cannot drift silently, and read the same way as before: mostly proven out-of-process, never
-    // untested.
+    // the floor stays at the measured integer rather than ratcheting. That figure is the measurement this
+    // decision was taken on, not the tree's current one — nothing compares the two, so it is here to be
+    // read against a fresh run rather than to detect drift by itself. Read the same way as before: mostly
+    // proven out-of-process, never untested.
     'inference-phpstan' => 49,
 ];
 
