@@ -40,6 +40,15 @@ use SplFileInfo;
  * proves of an entry — the declarations that would have stated a status are somebody else's — is a
  * property of the CLASS, so every throw site that reaches one inherits the same proof. A silent class
  * that is not written down fails, whichever line it is written at.
+ *
+ * And the two directions only ever see a throw the document PUBLISHES with no status, which leaves two
+ * populations in the gap between them: a throw the document carries nothing at all for, and one demoted to
+ * `internal` and so carried nowhere. Both are worse to read than the placeholder these directions are
+ * about — a consumer told nothing cannot even see that an error exists — so each gets a column and a
+ * checked ledger of its own, and every swept action is asserted to land in exactly one column. The
+ * denominator is asserted too: the actions come off the controllers rather than a list, and BOTH the
+ * controller inside the descend scope and the one outside it are swept, because a guard whose corpus is
+ * one directory says nothing about the application's other directories.
  */
 beforeEach(function (): void {
     ensureFixtureAvailable(FixtureRunner::available());
@@ -152,84 +161,227 @@ function fixtureAutoloadedFiles(array $paths): array
 }
 
 /**
- * Every action the fixture controller declares, read off the file rather than listed here: a new
- * action whose unplaced status goes unreported has to fail this guard, and it cannot if the guard
- * only knows the actions somebody remembered to add.
+ * The controllers the sweep covers, by relative path => FQCN. Two, and which two is the point: one inside
+ * the descend scope the fixture runs with (`app/`) and one outside it in a primed `Modules\…` root, which
+ * is where a modular application writes most of its actions. A corpus of the first alone cannot see
+ * anything the second does differently, and every defect this file guards against has a modular spelling.
+ *
+ * @return array<string, string>
+ */
+function throwCorpusControllers(): array
+{
+    return [
+        'app/Http/Controllers/ThrowsController.php' => 'App\\Http\\Controllers\\ThrowsController',
+        'modules/Billing/LedgerThrowsController.php' => 'Modules\\Billing\\LedgerThrowsController',
+    ];
+}
+
+/**
+ * Every action one controller declares, read off the file rather than listed here: a new action whose
+ * unplaced status goes unreported has to fail this guard, and it cannot if the guard only knows the
+ * actions somebody remembered to add.
  *
  * @return list<string>
  */
-function throwActionMethods(): array
+function throwActionMethods(string $relPath): array
 {
-    $source = (string) file_get_contents(FixtureRunner::path('app/Http/Controllers/ThrowsController.php'));
+    $source = (string) file_get_contents(FixtureRunner::path($relPath));
 
     preg_match_all('/^    public function (\w+)\(/m', $source, $matches);
 
     /** @var list<string> $methods */
     $methods = $matches[1];
 
-    // A scan that matched nothing must fail rather than pass forever — the file is real and holds
-    // dozens of actions, so a pattern that stopped seeing them is the defect, not an empty corpus.
-    expect(count($methods))->toBeGreaterThan(30);
+    // A scan that matched nothing must fail rather than pass forever — both files are real and hold
+    // actions, so a pattern that stopped seeing them is the defect, not an empty corpus.
+    expect($methods)->not->toBeEmpty();
 
     return $methods;
 }
 
+/** The source of one swept action, for a ledger row that has to check its own excuse. */
+function throwActionSource(string $relPath, string $method): string
+{
+    $source = (string) file_get_contents(FixtureRunner::path($relPath));
+    $start = strpos($source, '    public function '.$method.'(');
+    if ($start === false) {
+        return '';
+    }
+
+    $next = strpos($source, "\n    public function ", $start + 1);
+
+    return $next === false ? substr($source, $start) : substr($source, $start, $next - $start);
+}
+
 /**
- * One sweep of the whole controller, decoded into the two sides this file compares: per action, the
- * classes a notice named, and the throws the document publishes with no status of their own.
+ * The file the application declares a class in, or null for one it does not declare — the same autoload
+ * map {@see fixtureDeclaresClass()} reads, answering where rather than whether.
+ */
+function fixtureDeclarationFile(string $fqcn): ?string
+{
+    /** @var array<string, array{psr-4?: array<string, string>}> $composer */
+    $composer = json_decode((string) file_get_contents(FixtureRunner::path('composer.json')), true, flags: JSON_THROW_ON_ERROR);
+
+    foreach (['autoload', 'autoload-dev'] as $section) {
+        foreach ($composer[$section]['psr-4'] ?? [] as $prefix => $directory) {
+            if ($prefix === '' || ! str_starts_with($fqcn, $prefix)) {
+                continue;
+            }
+
+            $relative = str_replace('\\', '/', substr($fqcn, strlen($prefix)));
+            $file = rtrim($directory, '/').'/'.$relative.'.php';
+            if (is_file(FixtureRunner::path($file))) {
+                return $file;
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Every class name a snippet of one file names, resolved the way PHP would: an already-qualified name as
+ * written, a short name through the file's own `use` map, and anything left over against the file's own
+ * namespace. A checker that only understood qualified names would answer "no class here" for the ordinary
+ * spelling — a `use` at the top and a bare parameter type — which is the one answer that lets an excuse be
+ * believed wrongly.
  *
- * @return array<string, array{named: array<string, true>, unplaced: array<string, list<string>>}>
+ * @return list<string>
+ */
+function fixtureNamesIn(string $relPath, string $snippet): array
+{
+    $file = (string) file_get_contents(FixtureRunner::path($relPath));
+
+    $namespace = preg_match('/^\s*namespace\s+([^;{]+)/m', $file, $matches) === 1 ? trim($matches[1]) : '';
+
+    $imports = [];
+    preg_match_all('/^\s*use\s+([A-Za-z0-9_\\\\]+)(?:\s+as\s+([A-Za-z0-9_]+))?\s*;/m', $file, $uses, PREG_SET_ORDER);
+    foreach ($uses as $use) {
+        $alias = ($use[2] ?? '') !== '' ? $use[2] : substr($use[1], (int) strrpos('\\'.$use[1], '\\'));
+        $imports[ltrim($alias, '\\')] = $use[1];
+    }
+
+    preg_match_all('/\\\\?([A-Z][A-Za-z0-9_]*(?:\\\\[A-Z][A-Za-z0-9_]*)*)/', $snippet, $found);
+
+    $names = [];
+    foreach ($found[1] as $name) {
+        $names[$name] = true;
+
+        $head = strstr($name, '\\', true);
+        $head = $head === false ? $name : $head;
+        if (isset($imports[$head])) {
+            $names[$imports[$head].substr($name, strlen($head))] = true;
+        }
+
+        if ($namespace !== '' && ! str_contains($name, '\\')) {
+            $names[$namespace.'\\'.$name] = true;
+        }
+    }
+
+    return array_keys($names);
+}
+
+/**
+ * One sweep of both controllers, decoded into the four columns this file compares. Keyed by
+ * `Class::method` — an action's identity now that the corpus spans two classes — and holding, per action:
+ * the classes a notice named, the throws the document publishes with no status of their own, the throws it
+ * demoted and so carries nowhere, and how many throws the analysis surfaced at all (zero being its own
+ * population).
+ *
+ * @return array<string, array{named: array<string, true>, unplaced: array<string, list<string>>, demoted: array<string, true>, surfaced: int}>
  */
 function unplacedSweep(): array
 {
-    // Both tests below read the same sweep, and it is a real-engine analysis of the whole controller in
-    // a subprocess — so it is taken once per process rather than once per test.
-    /** @var array<string, array{named: array<string, true>, unplaced: array<string, list<string>>}>|null $memo */
+    // Every test below reads the same sweep, and it is a real-engine analysis of both controllers in a
+    // subprocess — so it is taken once per process rather than once per test.
+    /** @var array<string, array{named: array<string, true>, unplaced: array<string, list<string>>, demoted: array<string, true>, surfaced: int}>|null $memo */
     static $memo = null;
     if ($memo !== null) {
         return $memo;
     }
 
-    $analyses = FixtureRunner::analyzeMany(
-        'app/Http/Controllers/ThrowsController.php',
-        'App\\Http\\Controllers\\ThrowsController',
-        throwActionMethods(),
-    );
-
     $sweep = [];
-    foreach ($analyses as $method => $analysis) {
-        /** @var array{throws: list<array<string, mixed>>, diagnostics: list<array<string, mixed>>} $analysis */
-        $named = [];
-        foreach ($analysis['diagnostics'] as $diagnostic) {
-            if (($diagnostic['code'] ?? null) !== 'inference.http-exception-status-unread') {
-                continue;
+    foreach (throwCorpusControllers() as $relPath => $class) {
+        $analyses = FixtureRunner::analyzeMany($relPath, $class, throwActionMethods($relPath));
+
+        foreach ($analyses as $method => $analysis) {
+            /** @var array{throws: list<array<string, mixed>>, diagnostics: list<array<string, mixed>>} $analysis */
+            $named = [];
+            foreach ($analysis['diagnostics'] as $diagnostic) {
+                if (($diagnostic['code'] ?? null) !== 'inference.http-exception-status-unread') {
+                    continue;
+                }
+
+                // The sentence opens with the class it is about — the same shape the reader sees.
+                $message = (string) $diagnostic['message'];
+                $named[substr($message, 0, (int) strpos($message, ' '))] = true;
             }
 
-            // The sentence opens with the class it is about — the same shape the reader sees.
-            $message = (string) $diagnostic['message'];
-            $named[substr($message, 0, (int) strpos($message, ' '))] = true;
-        }
+            $unplaced = [];
+            $demoted = [];
+            foreach ($analysis['throws'] as $throw) {
+                // Only a SIGNAL reaches the document. One that does not is carried nowhere, so there is
+                // no response for a reader to be unable to explain — and no response at all, which is
+                // its own defect and gets its own column rather than being dropped here.
+                if (($throw['disposition'] ?? null) !== 'signal') {
+                    $demoted[(string) $throw['exceptionFqcn']] = true;
 
-        $unplaced = [];
-        foreach ($analysis['throws'] as $throw) {
-            // Only a SIGNAL reaches the document, and the invariant is about what the document
-            // publishes: an `internal` throw is carried nowhere, so there is no response for a reader
-            // to be unable to explain. One that stops being demoted arrives here as a new row.
-            if ($throw['httpStatusHint'] !== null || ($throw['disposition'] ?? null) !== 'signal') {
-                continue;
+                    continue;
+                }
+
+                if ($throw['httpStatusHint'] !== null) {
+                    continue;
+                }
+
+                /** @var list<array{symbol: string, location: array{file: string, line: int}}> $chain */
+                $chain = $throw['callChain'];
+                $deepest = $chain[count($chain) - 1]['location'];
+
+                $unplaced[(string) $throw['exceptionFqcn']][] = basename($deepest['file']).':'.$deepest['line'];
             }
 
-            /** @var list<array{symbol: string, location: array{file: string, line: int}}> $chain */
-            $chain = $throw['callChain'];
-            $deepest = $chain[count($chain) - 1]['location'];
-
-            $unplaced[(string) $throw['exceptionFqcn']][] = basename($deepest['file']).':'.$deepest['line'];
+            $sweep[$class.'::'.$method] = [
+                'named' => $named,
+                'unplaced' => $unplaced,
+                'demoted' => $demoted,
+                'surfaced' => count($analysis['throws']),
+            ];
         }
-
-        $sweep[(string) $method] = ['named' => $named, 'unplaced' => $unplaced];
     }
 
     return $memo = $sweep;
+}
+
+/**
+ * The actions the analysis surfaces NO throw for, with the boundary that swallowed it. A row here is the
+ * worst outcome of the four: the application really raises an error and the document says nothing, so a
+ * consumer cannot even see that the endpoint can fail. Each excuse is checked below, so a new one cannot
+ * be closed by pasting a sentence.
+ *
+ * @return array<string, string>
+ */
+function unsurfacedThrowActions(): array
+{
+    return [
+        'App\\Http\\Controllers\\ThrowsController::arrowThrownStatus' => 'the `throw` is written in an ARROW function, which PHPStan models with no statement result, so the analysis is handed no throw point to read',
+        'App\\Http\\Controllers\\ThrowsController::modularThrowSiteStatus' => 'the `throw` is written in a callee the descend scope excludes, so descent stops at the call and never reaches it — `project_paths` is the knob, and widening it is the fix',
+        'Modules\\Billing\\LedgerThrowsController::modularExceptionOneCallAway' => 'the same descend boundary, one modular root calling another: the callee is the application\'s and outside the descend scope, so nothing is read of its body',
+    ];
+}
+
+/**
+ * The classes the analysis demotes to `internal`, by action, with why the demotion is right. `ThrowSignal`
+ * only demotes a DECLARED throw from outside the application, so the excuse each row rests on is that the
+ * application does not declare the class — checked, not trusted.
+ *
+ * @return array<string, string>
+ */
+function demotedThrowActions(): array
+{
+    return [
+        'App\\Http\\Controllers\\ThrowsController::anyThrowableNoise' => 'Psr\\SimpleCache\\InvalidArgumentException',
+        'App\\Http\\Controllers\\ThrowsController::vendorDeclaredHttpStatus' => 'Symfony\\Component\\HttpKernel\\Exception\\UnauthorizedHttpException',
+    ];
 }
 
 it('reports every unplaced status it publishes, bar the ones nobody can act on', function (): void {
@@ -265,8 +417,8 @@ it('reports every unplaced status it publishes, bar the ones nobody can act on',
 
     // The corpus really contains both halves. Without this the comparison below is satisfied by an
     // analysis that surfaced no throws at all.
-    expect($unplaced)->toBeGreaterThan(8)
-        ->and($reported)->toBeGreaterThan(6);
+    expect($unplaced)->toBeGreaterThan(14)
+        ->and($reported)->toBeGreaterThan(13);
 
     // Exactly the ledger: nothing silent that is not written down, and nothing written down that the
     // build has since started reporting — a stale excuse is how a notice ends up owed and never given.
@@ -314,6 +466,158 @@ it('reports nothing about a throw the document does not publish', function (): v
     }
 
     // Again the anti-vacuity floor: the sweep really has notices to hold against the document.
-    expect($checked)->toBeGreaterThan(6)
+    expect($checked)->toBeGreaterThan(13)
         ->and($stray)->toBe([]);
+})->group('fixture');
+
+/**
+ * The denominator, asserted rather than assumed. Every guard in this file is a scan over one sweep, and a
+ * sweep is silent about a population it never looked at — which is how a modular action went unswept while
+ * the whole file stayed green: its status was never read, no notice was owed for it, and both directions
+ * agreed about a corpus that did not contain it.
+ *
+ * So the corpus is held against the axis the defect lived on: the descend scope. One controller inside it
+ * and at least one outside it but inside a root the build primes, both really analysed, both really
+ * holding actions. The paths are checked to be what they claim — a row naming a file that has moved would
+ * otherwise reduce the sweep to whatever is left.
+ */
+it('sweeps a controller on both sides of the descend scope', function (): void {
+    $controllers = throwCorpusControllers();
+    $sweep = unplacedSweep();
+
+    $inside = [];
+    $outside = [];
+    foreach ($controllers as $relPath => $class) {
+        expect(FixtureRunner::path($relPath))->toBeFile()
+            ->and(fixtureDeclarationFile($class))->toBe($relPath);
+
+        $actions = throwActionMethods($relPath);
+        foreach ($actions as $method) {
+            expect($sweep)->toHaveKey($class.'::'.$method);
+        }
+
+        // The fixture runs with `app/` as its only descend path (tests/bin/engine-runner.php), which is
+        // what makes "outside the descend scope" mean "outside app/" here.
+        str_starts_with($relPath, 'app/')
+            ? $inside[$relPath] = count($actions)
+            : $outside[$relPath] = count($actions);
+    }
+
+    expect($inside)->not->toBeEmpty()
+        ->and($outside)->not->toBeEmpty()
+        ->and(array_sum($inside))->toBeGreaterThan(30)
+        ->and(array_sum($outside))->toBeGreaterThan(3)
+        ->and(count($sweep))->toBe(array_sum($inside) + array_sum($outside));
+})->group('fixture');
+
+/**
+ * The union of the four columns against the domain they divide. Every swept action either publishes a
+ * status, publishes one nothing read, publishes nothing because every throw was demoted, or surfaces no
+ * throw at all — and the two directions above only see the second. An action owing no answer to them
+ * therefore has to land in a column that DOES ask something of it, rather than in the gap between two
+ * scans that each cover their own subset.
+ */
+it('lands every swept action in exactly one column', function (): void {
+    $columns = [];
+    foreach (unplacedSweep() as $action => $sides) {
+        $columns[$action] = match (true) {
+            $sides['surfaced'] === 0 => 'unsurfaced',
+            $sides['unplaced'] !== [] => 'unplaced',
+            $sides['demoted'] !== [] && $sides['surfaced'] === count($sides['demoted']) => 'demoted',
+            default => 'placed',
+        };
+    }
+
+    $counts = array_count_values($columns);
+
+    // Each column really holds something: a classification nothing lands in proves nothing about it, and
+    // three of the four are populations this file exists to keep visible.
+    expect($counts['placed'] ?? 0)->toBeGreaterThan(10)
+        ->and($counts['unplaced'] ?? 0)->toBeGreaterThan(10)
+        ->and($counts['unsurfaced'] ?? 0)->toBeGreaterThan(0)
+        ->and($counts['demoted'] ?? 0)->toBeGreaterThan(0)
+        ->and(array_sum($counts))->toBe(count($columns));
+
+    // And the two columns with a ledger hold exactly it — a new member fails until somebody writes down
+    // why the document may carry nothing for that action.
+    expect(array_keys(array_filter($columns, static fn (string $column): bool => $column === 'unsurfaced')))
+        ->toBe(array_keys(unsurfacedThrowActions()))
+        ->and(array_keys(array_filter($columns, static fn (string $column): bool => $column === 'demoted')))
+        ->toBe(array_keys(demotedThrowActions()));
+})->group('fixture');
+
+/**
+ * The unsurfaced ledger checked rather than believed. A throw may only vanish where the path to it crosses
+ * a boundary this build DECLARES — an arrow function, which PHPStan hands over with no statement result,
+ * or a callee outside the descend scope, which descent is bounded by on purpose. So each row has to name
+ * one of those in the action's own source; an action written entirely inside the descend scope with no
+ * arrow function in it has no excuse available, and a silent one there is a defect rather than a bound.
+ *
+ * The predicate is necessary, not sufficient — an action can name a modular class and still publish, and
+ * one does — so it is held against an action with neither boundary, which must fail it.
+ */
+it('excuses an unsurfaced throw only where a declared boundary is crossed', function (): void {
+    $ledger = unsurfacedThrowActions();
+    expect($ledger)->not->toBeEmpty();
+
+    $crosses = static function (string $action): bool {
+        [$class, $method] = explode('::', $action, 2);
+        $relPath = fixtureDeclarationFile($class);
+        if ($relPath === null) {
+            return false;
+        }
+
+        $source = throwActionSource($relPath, $method);
+        expect($source)->not->toBe('');
+
+        if (str_contains($source, 'fn (') || str_contains($source, 'fn(')) {
+            return true;
+        }
+
+        // A type the action names that the application declares outside the descend scope: the callee
+        // whose body descent is not entitled to read.
+        foreach (fixtureNamesIn($relPath, $source) as $named) {
+            $declaredIn = fixtureDeclarationFile($named);
+            if ($declaredIn !== null && ! str_starts_with($declaredIn, 'app/')) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    foreach ($ledger as $action => $reason) {
+        expect($crosses($action))->toBeTrue()
+            ->and($reason)->not->toBe('');
+    }
+
+    // The predicate answering "yes" to everything would pass the loop above without proving anything:
+    // this action throws in its own body, inside the descend scope, and really is surfaced.
+    expect($crosses('App\\Http\\Controllers\\ThrowsController::manifestStatusAtAction'))->toBeFalse();
+})->group('fixture');
+
+/**
+ * The demoted ledger checked rather than believed. `ThrowSignal` calls a throw plumbing only where the
+ * application declared none of it — not a literal `throw`, not a `@throws` its own code wrote, wherever in
+ * its own source that is. So a demoted class the application DECLARES is a real error filed as plumbing
+ * and carried nowhere, which is the one answer this row may not excuse.
+ */
+it('demotes only a class the application does not declare', function (): void {
+    $ledger = demotedThrowActions();
+    expect($ledger)->not->toBeEmpty();
+
+    $sweep = unplacedSweep();
+    foreach ($ledger as $action => $fqcn) {
+        expect($sweep)->toHaveKey($action)
+            ->and(array_keys($sweep[$action]['demoted']))->toBe([$fqcn])
+            ->and(fixtureDeclaresClass($fqcn))->toBeFalse();
+    }
+
+    // Every demotion anywhere in the sweep, not only the ledger's own rows: the rule is about the class,
+    // so a second action demoting an application class fails here even with no row of its own.
+    foreach ($sweep as $action => $sides) {
+        foreach (array_keys($sides['demoted']) as $fqcn) {
+            expect(fixtureDeclaresClass($fqcn))->toBeFalse("$action demotes $fqcn, which the application declares");
+        }
+    }
 })->group('fixture');

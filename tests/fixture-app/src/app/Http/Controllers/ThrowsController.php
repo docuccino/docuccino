@@ -7,6 +7,9 @@ namespace App\Http\Controllers;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Services\ExportProbeQuery;
+use App\Services\ManifestDeclaredQuery;
+use App\Services\ManifestRelayQuery;
+use App\Services\ManifestReviewQuery;
 use App\Services\OrderService;
 use App\Services\PayloadValidator;
 use App\Support\Concerns\GuardsProbeState;
@@ -520,5 +523,69 @@ class ThrowsController extends Controller
     public function deepUnreadHttpStatus(ExportProbeQuery $query): void
     {
         $query->results(true);
+    }
+
+    /**
+     * Case 10w: the named-factory idiom thrown from the action's own body. The
+     * class states no status, the factory the throw names states 404.
+     */
+    public function manifestStatusAtAction(): void
+    {
+        throw \App\Exceptions\ManifestRejectedException::notFound();
+    }
+
+    /**
+     * Case 10w': the same throw one undeclared call away, so descent is what has
+     * to reach the factory.
+     */
+    public function manifestStatusOneCallAway(ManifestReviewQuery $query): void
+    {
+        $query->results(true);
+    }
+
+    /**
+     * Case 10w'': the same throw two undeclared calls away.
+     */
+    public function manifestStatusTwoCallsAway(ManifestRelayQuery $query): void
+    {
+        $query->results(true);
+    }
+
+    /**
+     * Case 10x: the same throw behind a callee that DECLARES it, which is how most
+     * applications write a guard. The action's throw point carries the concrete
+     * type and no construction.
+     */
+    public function manifestStatusDeclaredByCallee(ManifestDeclaredQuery $query): void
+    {
+        $query->results(true);
+    }
+
+    /**
+     * Case 10y: the throw written outside the descend scope, in a modular PSR-4
+     * root the application autoloads and analyses but the engine never descends
+     * into. The exception class is the application's own.
+     */
+    public function modularThrowSiteStatus(\Modules\Billing\LedgerReviewQuery $query): void
+    {
+        $query->results(true);
+    }
+
+    /**
+     * Case 10y': the throw written HERE but the exception class declared outside
+     * the descend scope — the other half of the same axis.
+     */
+    public function modularExceptionClassStatus(): void
+    {
+        throw \Modules\Billing\LedgerRejectedException::notFound();
+    }
+
+    /**
+     * Case 10y'': the modular exception class reached through a declared callee,
+     * so neither the class nor the throw is inside the descend scope.
+     */
+    public function modularDeclaredStatus(\Modules\Billing\LedgerReviewQuery $query): void
+    {
+        $query->declaredResults(true);
     }
 }

@@ -601,12 +601,22 @@ owed a change for that; what it means is that a FIXTURE counting this hop has to
 BEFORE the closure it is measuring against, or it counts one answer on Laravel 12 and nothing at all on
 Laravel 13. `nestedClosureThrownStatus` is written that way and says so.
 
-Only PROJECT files are read. PHPStan strips an unprimed file's bodies, so a vendor subclass's
-`parent::__construct(409, …)` arrives as an empty statement list and the read declines anyway — measured
-against Symfony's own `ConflictHttpException`, whose harvested `__construct` has zero statements — while
-asking for it primes that file, grows the analysed set and discards every walk the replay layer had
-recorded. A folded value outside `100..599` is refused for the same reason a missing one is
-(`HttpStatusCode`): it would become a response key no consumer can read.
+Only the APPLICATION's OWN files are read, and that is every source root the adapter primes — `app/` and a
+modular `Modules\…` root alike — not the narrower descend scope `project_paths` bounds. PHPStan strips an
+unprimed file's bodies, so a vendor subclass's `parent::__construct(409, …)` arrives as an empty statement
+list and the read declines anyway — measured against Symfony's own `ConflictHttpException`, whose harvested
+`__construct` has zero statements — while asking for it primes that file, grows the analysed set and
+discards every walk the replay layer had recorded. That argument is about PRIMING, so it reaches vendor and
+stops there: a primed root is already in the analysed set, its bodies intact, and reading one grows nothing.
+Measured over one build of the fixture app's 51 throw actions, the analysed-file count is 163 whether the
+status reads are scoped to the application or to the descend paths — identical, so nothing recorded is
+discarded — and the wider scope costs one extra live file walk (22 against 21) for an exception class
+nothing else opened. Scoping these reads to the descend paths instead published a placeholder 500 for a
+modular exception whose 409 was written in a file the build was already holding open, and recorded nothing
+for a notice to be actionable about. **How far a walk may go and whose declaration this is are two
+questions**: `project_paths` is the knob for the first and has no business answering the second. A folded
+value outside `100..599` is refused for the same reason a missing one is (`HttpStatusCode`): it would become
+a response key no consumer can read.
 
 That decline is why the ADAPTER carries a table of the framework's `HttpException` subclasses
 (`FrameworkExceptionTable`, held to the installed packages by `FrameworkHttpExceptionPinsTest`). The
@@ -619,7 +629,11 @@ would make the number readable is in `vendor/`, so nobody owns it — which is t
 Where nothing folds, the status is null — "an HTTP error whose status did not fold", which is neither the
 500 that means "not an HTTP error at all" nor evidence of one. A class the build could not read is
 therefore not automatically a Signal: `ThrowSignal` demotes a foreign declaration whose status nothing
-could read, HttpException subclass or otherwise.
+could read, HttpException subclass or otherwise. Foreign there means a PACKAGE's, on the same reasoning: a
+`@throws` the application wrote is it saying what it raises wherever in its own source that is, so the
+demotion asks the prime scope too. Asking the descend scope made a modular guard's declared error vanish
+from the document altogether — the worst of the three outcomes, since a placeholder at least tells the
+consumer an error exists.
 
 **One reading, so the two conditions cannot disagree.** A missing status is produced in exactly one
 expression, `ThrowAnalyzer::unread()`: it files an `UnreadStatus` — which fold gave up, where the `throw` is
@@ -631,7 +645,9 @@ the build can REPORT on are one fact rather than two readers agreeing. They were
 the report was gated on the exception CLASS being declared in the project, which is not the file every fold
 reads. `abort($status)` raises the framework's own `HttpException`, so a status chosen at run time published
 the unplaced 500 and named nothing, while the expression that would not fold was a line of the application's
-own code with the constant it wanted missing from it.
+own code with the constant it wanted missing from it. The other half of the same rule is which SCOPE the
+file is judged against: actionability asks whether the reader owns the file, so it is the prime scope, and a
+notice suppressed because the code sits in `Modules/` rather than `app/` is one nobody asked to be spared.
 
 **The reason is what happened at the site; actionability is the file the fold READ.** The two come from two
 places on purpose. A `throw new HttpException($chosenAtRunTime)` written in a controller is the same defect
@@ -643,9 +659,12 @@ constructor PHPStan strips), a factory this build may not read, or a throw point
 at all. There the fold really was reading the class's declarations, and `ForeignClass` — the one reason with
 no remedy anyone owns — belongs to exactly that branch. Those firings are recorded and not reported.
 
-`UnplacedStatusReconciliationTest` holds the two conditions against each other over the whole fixture
-controller, in both directions: nothing published silently, and nothing reported that the document does not
-publish. Its hand-written ledger of the rows nobody can act on is itself checked — an entry is only
+`UnplacedStatusReconciliationTest` holds the two conditions against each other over the whole of the
+fixture's throw corpus, in both directions: nothing published silently, and nothing reported that the
+document does not publish. Its denominator is asserted rather than assumed — the actions are read off the
+controllers rather than listed, BOTH controllers are swept so a modular action is in the population, and
+the throws in neither column (one the document does not publish at all, one demoted to `internal`) are
+counted and pinned, because a guard that cannot see a row is not covering it. Its hand-written ledger of the rows nobody can act on is itself checked — an entry is only
 excusable while the application does not declare the class, read off the fixture's own autoload map — so a
 row cannot be closed by pasting a sentence. Both directions are keyed on (action, class), which is the unit
 the DOCUMENT has: the result is deduped on `(fqcn, httpStatusHint)`, so one class thrown at two lines with
@@ -666,12 +685,22 @@ authors had each written the status exactly once, in the class's only factory, a
 being reached by a throw point that carried no construction — nothing they could have changed would have
 helped, because the fold was never asked. What remains is the part an author CAN act on: a status chosen at
 run time, a construction behind an unreadable spread, a factory that builds the class two ways. The notice
-is gated on the code the fold read being the project's, because the remedy it names is an edit to that code
-— advice nobody can take for a file they do not own. Measured over the fixture controller after the
-widening: 13 unplaced statuses published, 12 reported, 1 silent (Symfony's own `ConflictHttpException`,
-whose status is written in a `vendor/` constructor whose body PHPStan strips), and the three firings the
-widening added are `abort($chosen)`, `abort_if($flag, $chosen)` and `throw new HttpException($chosen, …)` —
-the same defect at three spellings, where the constant the notice asks for goes on the line it names.
+is gated on the code the fold read being the APPLICATION's — every primed source root, not the descend
+scope — because the remedy it names is an edit to that code, and a reader owns a modular root as much as
+`app/`. Measured over the fixture's throw corpus, both controllers: 16 unplaced statuses published, 15
+reported, 1 silent (Symfony's own `ConflictHttpException`, whose status is written in a `vendor/`
+constructor whose body PHPStan strips). Three of the firings are `abort($chosen)`,
+`abort_if($flag, $chosen)` and `throw new HttpException($chosen, …)` — the same defect at three spellings,
+where the constant the notice asks for goes on the line it names — and one more is that third spelling
+written in a modular root, which the scope fix stopped suppressing.
+
+One firing in that population is NOT actionable, and it is the known `@throws` limitation rather than the
+scope: a callee's `@throws` makes descent take layer 1 and stop, so the throw point carries no construction,
+the class's own factories disagree, and `UnstatedByClass` fires. Its remedy is wrong for the factory idiom
+in both clauses — pinning one status in a class that has three would make the document lie, and "write the
+status at each `throw`" cannot be done through a private constructor. The fold that would answer is one hop
+further on (`FactoryStatus` reads `X::notFound()` to a 404 whenever the `throw` names it directly), so the
+fix is descent past the `@throws`, not the notice's wording.
 
 The sentence leaves the engine publishable, through the same `MessagePaths` relativiser every other message
 this engine composes goes through: the site comes straight off the analyser as an absolute path, the

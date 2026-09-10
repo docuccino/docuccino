@@ -7,15 +7,22 @@ namespace Docuccino\Inference\PhpStan\Support;
 use Closure;
 
 /**
- * Project code (descendable) or vendor code (never descended). This gate, not depth, does the real
- * containment of interprocedural descent: it stops at the first vendor-declared method even when the
- * receiver is a project class (`Model::findOrFail` on an `App\Models\User`).
+ * Whether a file sits under one of a set of directories. What that ANSWERS is the set it was built with,
+ * and the engine builds two of them (`PhpStanEngineFactory`), because a build asks two different
+ * questions about a file and they have different answers for the same one.
+ *
+ * The DESCEND scope is `engine.project_paths`, and this gate — not depth — does the real containment of
+ * interprocedural descent: it stops at the first method declared outside it even when the receiver is the
+ * application's own class (`Model::findOrFail` on an `App\Models\User`). The APPLICATION scope is every
+ * source root the adapter primes, which is where the reads live: whether a declaration is the
+ * application's own, and so whether a reader owns the edit a diagnostic asks for. Vendor is in neither,
+ * so nothing about containment loosens by asking the wider one.
  *
  * @internal
  */
 final class ProjectFilter
 {
-    /** @var list<string> normalised project directory prefixes */
+    /** @var list<string> normalised directory prefixes of whichever scope this filter was built for */
     private array $prefixes;
 
     /** @var Closure(string): string */
