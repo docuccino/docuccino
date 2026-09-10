@@ -835,3 +835,65 @@ the descend scope, and MEASURED: 163 analysed files either way, two extra live f
 was rewritten in the same change, because a diagnostic asking for an impossible edit is its own defect,
 and `UnstatedByClass` had no member of its population left afterwards, so the fixture that stands in the
 narrowed one (`rethrownAgreementStatus`) was written as part of the fix.
+
+## An invariant every producer has to remember
+
+A string an application chose — a route, a class, a config key, a message something threw — reaches a
+published sentence, and something in it steers whatever renders that sentence: an ANSI sequence
+recolours a terminal, a direction override reverses the line, a line separator forges a line of a log
+rendered as a page. `PlainText` has always known how to make that safe. What went wrong is WHERE the
+call sat: at the construction site, so every producer of a diagnostic owed the same one line, and the
+ones that forgot were silent about it.
+
+The asymmetry is that forgetting produces a passing test. A message with a raw escape in it reads
+correctly in every assertion, and the only reader who sees the difference is one holding a terminal or an
+artifact with a hostile name in it. So instances close one at a time, each as its own report.
+
+*Instances.* `PlainText::of` was hand-called at scores of construction sites spread over two packages,
+which is what let a site be missed at all; three misses had already been found and fixed one by one.
+Two more were pinned in place by tests that asserted the RAW text was correct
+(`SharedErrorResponsesTest`, `ErrorComponentAttributeTest`), each reasoning that `json_encode` escapes on
+the way into the document. It does not: the canonical writer uses `JSON_UNESCAPED_UNICODE`, so a C1
+introducer, a direction override and U+2028 all reach the artifact whole — only the ASCII controls are
+escaped, and only they were what those two tests happened to hold. The whole engine package was a sixth:
+seven diagnostics, every one naming a class or quoting a thrown message, and not one call.
+
+*The tell.* A neutralising call at a construction site rather than in the constructor — a rule about a
+KIND of value, restated once per place the value is made, so that being right depends on remembering. The
+second tell is a docblock arguing the escaping belongs at a RENDER boundary — true of anything only one
+renderer can interpret (Symfony's markup), and false the moment the same value is also published, since
+a published document has no render boundary of ours at all.
+
+*The fix that worked.* `Diagnostic` makes its own `code`, `message` and `help` safe at construction, so a
+producer cannot forget; the producer-side calls that had become redundant came out in the same change,
+because a reader cannot tell a load-bearing call from a habit. It rests on `PlainText` being idempotent,
+which is now a row rather than a claim — the sharp test being a WARM build, since `fromArray()` is how a
+diagnostic comes back off a fragment-cache hit and comes back through that constructor. `help` keeps its
+line breaks (`PlainText::lines()`): a console writer indents them, and a newline is the one control
+character every destination handles.
+
+*The one exemption, and why it is not a hole.* `routeSignature` is left whole. It is a key rather than a
+sentence — sorted on, and compared against the signature a live route answers with — so escaping only the
+published copy would make a diagnostic name a route nothing can find. It also removes nothing: the
+signature's bytes are the route's URI, which the document already publishes verbatim as the `paths` key,
+and it has to, because that key is the URL a client sends. Escaping there would publish an endpoint the
+server does not answer on, which is the confidently-wrong answer rather than the vague-but-true one. So
+the line the class draws is not "text we escape" against "text we don't": it is a SENTENCE we wrote about
+an application's text, which we own and neutralise, against a KEY that has to stay equal to the thing it
+names.
+
+*The other half of a render boundary: shape, not just characters.* Escaping stops a value steering a
+terminal; it does not stop a value being mistaken for a line the tool asserted. `help` keeps its line
+breaks by design, so a newline in it adds a line — and a help line printed in the same indent, colour and
+format as the reference link under it is a link a reader is invited to follow. The forged-diagnostic-line
+half of this was already closed by indenting help past a diagnostic line; the reference line was the same
+defect one row down. The general rule is that where a renderer prints OUR lines beside THEIRS, the marker
+has to sit on theirs: a marker on ours is one their content can reproduce, and a marker on theirs is one
+their content cannot remove. `RendersDiagnostics` therefore gutters every help line.
+
+The guard is `DiagnosticEscapingTest`, which registers a producer written the careless way, gives it a
+route whose own path carries every hazard, and holds the published diagnostic to carrying none of them
+outside that key. A guard listing the producers that remembered would be the defect again. It reads the
+DECODED document rather than the raw bytes: `json_encode` escapes `\x1B` and U+2028 as transport and hands
+them back whole on the way out, so a bytes-only row is vacuous for exactly those two — which is how two of
+its four rows once passed with nothing escaping them at all.
