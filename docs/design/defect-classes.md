@@ -897,3 +897,46 @@ outside that key. A guard listing the producers that remembered would be the def
 DECODED document rather than the raw bytes: `json_encode` escapes `\x1B` and U+2028 as transport and hands
 them back whole on the way out, so a bytes-only row is vacuous for exactly those two — which is how two of
 its four rows once passed with nothing escaping them at all.
+
+## Independent reasons, each trusted to be sufficient on its own
+
+A decision that changes published bytes is taken by several reasons in a row, each of which can answer
+alone, and they are not the same strength: one settles the question, another is only suggestive, and
+the code cannot tell them apart. The reasons compose by accident of writing order rather than by a
+rule, so the fix for each new symptom is another hand-applied `if` — and the next symptom arrives.
+
+*Instances.* Four in `MessagePaths` in one release cycle, each found by fixing the one before it. A
+wrapper scheme was trusted to prove a local file, and `compress.zlib://` can name a host. A recognised
+root was trusted to prove a machine word, and a one-segment root is a route mount as readily as a
+container's checkout — `Unknown route /app/users/profile` was published as `users/profile`. A brace and
+a backslash were trusted to refuse a run outright, so a proven path in the same sentence was published
+whole. And the wrapper table going short published the machine path an unlisted scheme named, which is
+the sibling class — table completeness — rather than this one, and was closed by a guard that reads
+`stream_get_wrappers()`.
+
+*The tell.* Ask each reason what it PROVES rather than whether it proves. Where two reasons in one
+decision answer that question differently — "this run is a path" and "this prefix is a machine word"
+are different claims, and only the second licenses removing text on the prefix's own account — a
+decision that treats them as interchangeable will authorise a rewrite on the weaker one. The second
+tell is an exclusion spelled as a veto: a brace is strong evidence of a template and weak evidence
+against a path, and the moment it refuses outright somebody has to special-case a way past it.
+
+*Where it hides.* Every guard in front of it read a TABLE — is the wrapper list short, is a registered
+scheme undecided, is a route method missing — and table completeness is not composition. Adding a
+fifth reason to the shipped class, uncorroborated, left the whole suite green: measured, not assumed
+— of seven such reasons tried, four never fired on the corpus at all and proved nothing either way,
+two were caught by a pinned row, and one (a run five segments deep authorises a reduction) changed the
+published answer for two runs with 11690 tests passing.
+
+*The fix that worked.* Give every reason and every objection a case of its own that declares the CLAIM
+it makes and whether it settles that claim alone (`PathReason`, `PathObjection`, `PathClaim`), and
+state the composition once: a claim stands when a reason proves it and no conclusive objection denies
+it, and a rewrite is authorised by a claim that stands and covers the text it removes. What a reason
+does not prove then becomes a member rather than silence — a nested scheme and a shallow root are
+objections, which is those two defects written down. The guard is `MessagePathsLadderTest`, in three
+parts, because each catches what the others cannot: the two tables restated in the test's own words,
+so a case added with no claim fails; the composition driven through the real class over every cell of
+the strength grid, with the rule written independently and two deliberately wrong rules that must each
+mispredict a row; and a reflection scan of the six methods where the ladder composes, holding their
+call sets, because a fifth reason does not have to arrive as a case — added as one more `if` it
+answers alone exactly as the four defects did, and every table guard still passes.
