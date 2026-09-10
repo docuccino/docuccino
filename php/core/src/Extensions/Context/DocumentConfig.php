@@ -194,26 +194,61 @@ final readonly class DocumentConfig
     }
 
     /**
-     * A deterministic fingerprint of the config that SHAPES this document — the sole owner of the
-     * config-hash (a fragment-cache key input and the document's `configHash`). Goes through
-     * {@see Json::stable()} so key order can't perturb it; falls back to the document key if the bag
-     * won't encode.
+     * A deterministic fingerprint of the config that SHAPES this document — the document's published
+     * `configHash`. Goes through {@see Json::stable()} so key order can't perturb it; falls back to
+     * the document key if the bag won't encode.
      *
      * `export` and `viewer` are excluded on purpose, on the same grounds: neither shapes an emitted
      * byte. `export` says where artifacts are written, never what they contain; `viewer` is boot-time
      * wiring — a route, its middleware and gate, which driver renders the page and where its script
      * comes from — read only by the runtime endpoints and the console, never by document assembly.
      * Folding either in would make moving a route or naming a second export target rewrite the
-     * document's `configHash` — changing emitted bytes, and cold-busting every cached fragment — over
-     * something no consumer of the document can see. Nothing a fragment holds can read an export
-     * destination or a viewer route, so this is not under-keying.
+     * document's `configHash` — changing emitted bytes — over something no consumer of the document
+     * can see.
      */
     public function hash(): string
+    {
+        return $this->digestOf($this->shapingBag());
+    }
+
+    /**
+     * The fragment cache's view of the same config: {@see hash()}'s bag minus `info` and
+     * `api_version`. Not interchangeable with it — this one is never published.
+     *
+     * Both of those genuinely shape the document, which is why the published fingerprint keeps them;
+     * they shape it at ASSEMBLY. `info` is copied into the emitted Info Object, and `api_version` is
+     * read by the version transformer and by the header it declares once in `components.parameters` —
+     * all of which run over a document that already has its operations. No operation fragment can
+     * reach either, and a fragment no longer carries an identity minted from the document, so two
+     * documents differing only in them build byte-identical fragments. Keying on the difference would
+     * make an application serving V versions of R routes pay R × V analyses for R routes' worth of
+     * work.
+     */
+    public function fragmentHash(): string
+    {
+        $bag = $this->shapingBag();
+        unset($bag['info'], $bag['api_version']);
+
+        return $this->digestOf($bag);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function shapingBag(): array
     {
         $shaping = $this->raw;
         unset($shaping['export'], $shaping['viewer']);
 
-        $stable = Json::stable($shaping);
+        return $shaping;
+    }
+
+    /**
+     * @param  array<string, mixed>  $bag
+     */
+    private function digestOf(array $bag): string
+    {
+        $stable = Json::stable($bag);
 
         return hash('sha256', $stable === '' ? $this->key : $stable);
     }

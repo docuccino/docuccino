@@ -13,6 +13,7 @@ use Docuccino\Core\Contract\Outcome;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
 use Docuccino\Core\Diff\SchemaComparator;
+use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Draft\SchemaDraft;
 use Docuccino\Core\Draft\SchemaKeywords;
@@ -25,6 +26,7 @@ use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
+use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Document\UirDocumentDraft;
 use Docuccino\Core\Extensions\ResolvedExtensions;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
@@ -60,6 +62,8 @@ use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureEdit;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 use Docuccino\Laravel\Commands\WatchCommand;
+use Docuccino\Laravel\Config\ConfigSplit;
+use Docuccino\Laravel\Config\DeclaredSettings;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Extensions\AttributeParametersExtension;
 use Docuccino\Laravel\Integrations\QueryBuilder\ListValueDescriber;
@@ -3925,4 +3929,196 @@ function docsAnchorSlug(string $heading): string
     $text = mb_strtolower(trim($text));
 
     return str_replace(' ', '-', (string) preg_replace('/[^\p{L}\p{N} _-]+/u', '', $text));
+}
+
+/**
+ * The `documents` bag for `$versions` documents over the whole workbench route set, differing in
+ * every setting the shared fragment key drops: the document key, the whole `info` bag and the whole
+ * `api_version` bag. What an application serving several live API versions looks like, and the
+ * population one stored fragment now has to answer for.
+ *
+ * @return array<string, array<string, mixed>>
+ */
+function sharedVersionDocuments(int $versions): array
+{
+    $base = documentSettings('default');
+    $documents = [];
+
+    for ($v = 1; $v <= $versions; $v++) {
+        $documents['edition-'.str_repeat('x', $v)] = [
+            ...$base,
+            'info' => ['title' => 'Edition '.$v, 'version' => $v.'.0.0', 'description' => 'the '.$v.'th'],
+            'api_version' => ['header' => 'X-Api-Version-'.$v],
+        ];
+    }
+
+    return $documents;
+}
+
+/**
+ * Every UIR node id the emitted document publishes, in document order — the whole of what a shared
+ * fragment could leak from one document into another.
+ *
+ * @return list<string>
+ */
+function publishedNodeIds(UirDocument $document): array
+{
+    $ids = [];
+    $node = $document->toArray();
+
+    array_walk_recursive(
+        $node,
+        static function (mixed $value, int|string $key) use (&$ids): void {
+            if ($key === 'id' && is_string($value) && preg_match('/^(op|par|res|sch):v\d+:/', $value) === 1) {
+                $ids[] = $value;
+            }
+        },
+    );
+
+    return $ids;
+}
+
+/**
+ * Diagnostics flattened to comparable lines — severity, code, route and message — so a warm build can
+ * be held to reporting what a cold one reported rather than merely reporting the same number of things.
+ *
+ * @param  list<Diagnostic>  $diagnostics
+ * @return list<string>
+ */
+function diagnosticLines(array $diagnostics): array
+{
+    return array_map(
+        static fn (Diagnostic $d): string => $d->severity->value.'|'.$d->code.'|'.($d->routeSignature ?? '').'|'.$d->message,
+        $diagnostics,
+    );
+}
+
+/** How many fragments a cache directory is holding. */
+function fragmentCount(string $dir): int
+{
+    return count(glob($dir.'/*.json') ?: []);
+}
+
+/**
+ * Extensions declared OUTSIDE every package this product ships — written to a temp file so the
+ * composer manifest walk above them finds none, which is what an application's own extension looks
+ * like from here. {@see applicationOwnedExtension()} is a named one and
+ * {@see applicationOwnedAnonymousTransformer()} an anonymous one, because PHP names an anonymous
+ * class after the interface it implements and that interface is ours: the two together are what
+ * separates reading ownership off the FILE from reading it off the namespace.
+ */
+function requireApplicationOwnedExtensions(): void
+{
+    if (class_exists('DocuccinoTestApplicationOwnedExtension', false)) {
+        return;
+    }
+
+    $file = sys_get_temp_dir().'/DocuccinoTestApplicationOwnedExtensions.php';
+    file_put_contents($file, <<<'SOURCE'
+        <?php
+
+        final class DocuccinoTestApplicationOwnedExtension implements Docuccino\Core\Extensions\Contracts\OperationExtension
+        {
+            public function phase(): Docuccino\Core\Extensions\Contracts\OperationPhase
+            {
+                return Docuccino\Core\Extensions\Contracts\OperationPhase::Overrides;
+            }
+
+            public function handle(Docuccino\Core\Draft\OperationDraft $operation, Docuccino\Core\Extensions\Context\RouteContext $context): void
+            {
+                $operation->setSummary('written by the application', Docuccino\Core\Patch\Contribution::config());
+            }
+        }
+
+        function docuccinoTestApplicationOwnedTransformer(): Docuccino\Core\Extensions\Contracts\DocumentTransformer
+        {
+            return new class implements Docuccino\Core\Extensions\Contracts\DocumentTransformer
+            {
+                public function transform(Docuccino\Core\Extensions\Document\UirDocumentDraft $document, Docuccino\Core\Extensions\Context\DocumentContext $context): void {}
+            };
+        }
+        SOURCE);
+
+    require_once $file;
+}
+
+/** A named operation extension an application wrote. */
+function applicationOwnedExtension(): OperationExtension
+{
+    requireApplicationOwnedExtensions();
+
+    /** @var OperationExtension */
+    return new DocuccinoTestApplicationOwnedExtension;
+}
+
+/** An ANONYMOUS document transformer an application wrote — PHP calls it one of ours. */
+function applicationOwnedAnonymousTransformer(): DocumentTransformer
+{
+    requireApplicationOwnedExtensions();
+
+    return docuccinoTestApplicationOwnedTransformer();
+}
+
+/**
+ * Every top-level key one document's raw configuration bag may carry, sorted — read off the two
+ * shipped files rather than listed anywhere. The build settings come from `docuccino.yaml` with its
+ * commented options live ({@see DeclaredSettings}, because a commented option is still an option),
+ * and the framework file contributes the one document member it owns
+ * ({@see ConfigSplit::FRAMEWORK_KEYS}). Their union is the whole domain, which is what a guard over a
+ * hand-written bag has to be held to.
+ *
+ * @return list<string>
+ */
+function shippedDocumentSettingKeys(): array
+{
+    $keys = [];
+    $collect = static function (array $paths) use (&$keys): void {
+        foreach ($paths as $path) {
+            $segments = explode('.', $path);
+            if (count($segments) === 3 && $segments[0] === 'documents' && $segments[1] === '*') {
+                $keys[$segments[2]] = true;
+            }
+        }
+    };
+
+    $collect(DeclaredSettings::shipped());
+    $collect(ConfigSplit::FRAMEWORK_KEYS);
+
+    $keys = array_keys($keys);
+    sort($keys);
+
+    return $keys;
+}
+
+/**
+ * A document transformer declared in a directory of the test's own, under a composer.json naming
+ * $package. Ownership is decided by the package above an extension's FILE, so this is the only way to
+ * ask the trust gate about a package name it has never seen.
+ *
+ * One process may declare a class once, so the class name carries the package it was written for and
+ * a second call for the same package hands back another instance of the same class.
+ */
+function packageOwnedExtension(string $package): DocumentTransformer
+{
+    $suffix = substr(hash('sha256', $package), 0, 12);
+    $class = 'DocuccinoTestPackageOwnedExtension'.$suffix;
+
+    if (! class_exists($class, false)) {
+        $dir = sys_get_temp_dir().'/docuccino-package-'.$suffix.'-'.getmypid();
+        @mkdir($dir.'/src', 0777, true);
+        file_put_contents($dir.'/composer.json', json_encode(['name' => $package], JSON_THROW_ON_ERROR));
+        file_put_contents($dir.'/src/'.$class.'.php', <<<SOURCE
+            <?php
+
+            final class {$class} implements Docuccino\Core\Extensions\Contracts\DocumentTransformer
+            {
+                public function transform(Docuccino\Core\Extensions\Document\UirDocumentDraft \$document, Docuccino\Core\Extensions\Context\DocumentContext \$context): void {}
+            }
+            SOURCE);
+
+        require_once $dir.'/src/'.$class.'.php';
+    }
+
+    /** @var DocumentTransformer */
+    return new $class;
 }

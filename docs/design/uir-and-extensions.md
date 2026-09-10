@@ -1203,7 +1203,10 @@ Two supporting notes. `RouteContext::$operationId` carries the already-minted id
 because a recording is filed under identity (so it survives a route rename) and deriving the id a second
 time is how two answers to "which operation is this" start disagreeing; the recording file joins
 `RouteContext::dependencies()` whether or not it exists, so creating one invalidates exactly as editing
-one does. And every recording DIAGNOSTIC comes from `Core\Examples\RecordedExampleAudit`, a
+one does. That id is DOCUMENT-scoped, which is why a document naming a recordings directory keeps its
+fragment-cache entries to itself rather than sharing them with the other versions of the same API
+(§10) — the recording it reads is one version's, and a shared fragment would carry it into all of
+them. And every recording DIAGNOSTIC comes from `Core\Examples\RecordedExampleAudit`, a
 `DocumentTransformer`: only a whole-document pass can tell a recording nobody claimed from one that is
 simply another operation's, and a transformer runs on every build, so warm reports what cold reports
 without any of it having to ride a cached fragment.
@@ -1997,11 +2000,12 @@ Extensions/Integrations line and an extension may not import an integration.
 ## 10. Fragment caching
 
 Unit = OperationFragment (operation + registered components + diagnostics + document-level notes +
-provenance, serialized as UIR JSON fragments). Key = sha256(tool ver ‖ spec ver ‖ identity-algo ver ‖
-document id ‖ doc configHash ‖ environment digest ‖ build fingerprint ‖ resolved extension list (FQCNs +
-package versions + source digests) ‖ route cache-signature ‖ sha256 of each file in
-`ActionAnalysis::$dependencyFiles`). Assembly → canonicalize → validate always run fresh.
-Watch mode later = loop incremental build + SSE push.
+provenance, serialized as UIR JSON fragments) — and NOT its identities, which are stamped on the way
+out (below). Key = sha256(tool ver ‖ spec ver ‖ identity-algo ver ‖ document scope ‖ fragment config
+hash ‖ environment digest ‖ build fingerprint ‖ resolved extension list (FQCNs + package versions +
+source digests) ‖ route cache-signature ‖ sha256 of each file in `ActionAnalysis::$dependencyFiles`).
+Assembly → canonicalize → validate always run fresh. Watch mode later = loop incremental build + SSE
+push.
 
 The route cache-signature (`RouteDescriptor::cacheSignature()`) is method + URI + NAME + resolved
 action + normalised middleware + any scalar `cacheInputs` a resolver folds in — the name is in
@@ -2013,16 +2017,37 @@ and the app's `composer.lock` hash — installing the engine or upgrading the an
 inference recovers without touching one analysed file. Tool ver additionally carries this package's
 own installed source reference where Composer can answer for it, so a `path`/dev checkout edited in
 place — the maintainer's loop, invisible to the app's lock file — doesn't share fragments with the
-release it was checked out from. The document id is keyed separately from the configHash because a fragment carries ids MINTED from it
-(§2) while the configHash deliberately excludes `export` and `viewer` — so the same shaping config
-written twice under two export destinations or behind two viewer routes, and two API versions that
-have not yet stated an `info.version`, hash alike, and without the id the second document would be
-served the first's identity tree. Widening the configHash instead is not the fix: it is the document's
-published fingerprint, so it would move emitted bytes over a filename. The store itself is emptied by
-`docuccino:clear --fragments`.
+release it was checked out from. The store itself is emptied by `docuccino:clear --fragments`.
 
-Both exclusions answer the same test — does the key shape an emitted byte? `export` says where
-artifacts land, never what they hold. `viewer` is boot-time wiring for the runtime endpoints: the
+**Fragments are shared between documents, and identities are what makes that safe.** A fragment used
+to carry the ids minted from the document that built it (§2), which made every document's entries its
+own: an application publishing V API versions of R routes stored R × V fragments and asked the engine
+R × V times for R routes' worth of analysis, because `info` and `api_version` differ per version and
+both are in the config hash. Identities are now stamped by `Core\Identity\OperationIdentities` AFTER
+the cache — one site, on the cold path and the warm one alike, so a warm build's ids are a cold
+build's by construction — and the key drops both the document id and those two config keys
+(`DocumentConfig::fragmentHash()`, which is not the published `configHash`). V versions of R routes
+then cost R. Neither key reaches a fragment: `info` is copied into the Info Object at assembly, and
+`api_version` is read by the version transformer and the header it declares, both of which run over a
+document that already has its operations.
+
+The sharing rests on nothing the build reads differing between the documents, and two things take a
+build outside that, so a document doing either passes its own id as the **document scope** and keeps
+its entries to itself (`Core\Pipeline\FragmentCache::documentScope()`, beside the key it feeds).
+First, committed example recordings are filed under the operation's document-scoped
+identity (`RouteContext::$operationId`), so a document reading them reads its own identity while
+building. Second, an extension this product did not ship can read whatever it likes off
+the context — `ResolvedExtensions::foreignExtensions()` answers that from the composer package above
+each extension's FILE rather than from its namespace, because PHP names an anonymous class after the
+interface it implements and that interface is ours. The packages that count as ours are NAMED
+(`ResolvedExtensions::SHIPPED_PACKAGES`) rather than matched on a `docuccino/` vendor prefix: nothing
+reserves that segment, so a fork, a path repository or a private registry could otherwise publish
+under it and be handed sharing on a name it chose for itself. Over-keying costs a rebuild per
+document; under-keying serves one document's answer to another, and a version set is exactly where
+that is hardest to notice.
+
+`export` and `viewer` are out of the published `configHash` too, and both exclusions answer the same
+test — does the key shape an emitted byte? `export` says where artifacts land, never what they hold. `viewer` is boot-time wiring for the runtime endpoints: the
 route the provider registers, its middleware and gate, which source the served spec comes from, which
 driver renders the page, and where that driver's script loads. Every reader of it is a request or a
 console command downstream of a finished document — the provider's route loop, `DocsController`,
