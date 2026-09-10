@@ -737,13 +737,31 @@ The sentence leaves the engine publishable, through the same `MessagePaths` rela
 this engine composes goes through: the site comes straight off the analyser as an absolute path, the
 adapter scrubs again on the way into a fragment, and an engine is a contract another host can call.
 
-And the notice is where the CAUSE lives, because the provenance trail has nowhere to put it: a
-contribution records a producer, a rung, a value and one source, so it can say the `fallback` rung
-published the 500 at the action's line and cannot say which exception, or which fold gave up. So the
-notice names all three — exception, `throw` site, reason — and the site it names is the LAST frame of the
-throw's own call chain, which is the same code the response's provenance is built from.
-`docuccino:explain` prints the operation's diagnostics under its trail, which is what joins the two
-halves on one screen.
+The notice is where the CAUSE lives, because the provenance trail has nowhere to put it: a contribution
+records a producer, a rung, a value and one source, so it cannot say which fold gave up. So the notice
+names all three — exception, `throw` site, reason — and the site it names is the LAST frame of the
+throw's own call chain. `docuccino:explain` prints the operation's diagnostics under its trail, which is
+what joins the two halves on one screen.
+
+What the trail CAN say, it now says, and both halves were missing. Its source names the EXCEPTION and
+that same last frame (`ErrorResponsesExtension::throwSource()`) — it used to name the action and the
+FIRST frame, so a reader was pointed at where the operation is rather than where its status came from,
+and given no class at all. That is a dead end with a measured cost: one reader ran six experiments
+against a class that was not the source of the status. And the response says whether its status was READ
+or STOOD IN for (`ResponseDraft::STATUS_UNPLACED`, an `x-docuccino.facts` member), because a `500` is
+three different facts wearing one number — a status the code states, an exception that is no HTTP error
+and really renders 500, and a stand-in — and only the third is a placeholder. Without the member the
+same reader's planned remedy was to suppress every 500, which would have erased correct ones with no
+diagnostic objecting. `FrameworkExceptionTable::place()` answers the status and that flag in ONE
+expression, so the key the document publishes and the account of why cannot come apart; the accumulation
+onto the response is an `and` over every producer that reached the status
+(`ResponseDraft::recordStatusPlacement()`), never a guarded field, because precedence keeps the first
+writer at a tie and would make the answer a function of throw order.
+
+The two shapes that end the trace — a `throw` inside a `catch`, and one in a private helper of a
+collaborator, which is a hop past where descent goes — are written down for readers on the errors page
+of the docs site rather than here, because the reader who needs them is the one looking at an endpoint
+that published nothing.
 
 Result model: `ThrownException{exceptionFqcn, httpStatusHint: ?int, callChain: list<Frame>,
 confidence: certain|declared|likely, disposition: signal|internal|dropped}` —
