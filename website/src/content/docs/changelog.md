@@ -13,6 +13,22 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.16.0
+
+### Breaking changes
+
+- **laravel**: descend into the source roots the application declares ([#442](https://github.com/docuccino/docuccino/pull/442))
+  - `Docuccino\Core\Inference\TypeEngineBuilder::build()` takes a new `array $declaredPaths = []` parameter — the descend scope before the host narrowed it, which the engine uses as the yardstick for whether a declined hop is the host's own narrowing (reportable) or the engine's containment (not). It is optional and empty means "no yardstick, report nothing", so a host that ignores it keeps working; but any third-party IMPLEMENTOR of the interface must add the parameter to match the signature. The one in-repo caller passes it by name, and a positional caller that previously passed `$configFile` sixth now hits a TypeError rather than misbehaving silently.
+
+### Bug fixes
+
+- **core**: escape a name once, where the diagnostic that carries it is made ([#438](https://github.com/docuccino/docuccino/pull/438))
+- **inference-phpstan**: read the status a declared throw was built with ([#440](https://github.com/docuccino/docuccino/pull/440))
+- **inference-phpstan**: read a status the application declared wherever it lives ([#437](https://github.com/docuccino/docuccino/pull/437))
+- bump astro from 7.2.0 to 7.3.2 in /website ([#435](https://github.com/docuccino/docuccino/pull/435))
+- bump js-yaml from 4.3.1 to 4.3.2 in /website ([#434](https://github.com/docuccino/docuccino/pull/434))
+- bump sharp from 0.35.3 to 0.35.4 in /website ([#433](https://github.com/docuccino/docuccino/pull/433))
+
 ## v0.15.0
 
 ### Breaking changes
