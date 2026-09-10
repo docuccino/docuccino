@@ -49,10 +49,12 @@ final class ValidateCommand extends Command
 
             $this->renderDiagnostics($key, $diagnostics);
 
-            return $schemaErrors !== [] || $this->failsOnAny($diagnostics) ? self::FAILURE : self::SUCCESS;
+            return $schemaErrors !== [] ? self::FAILURE : self::SUCCESS;
         });
 
-        return $this->reportStaleAcceptances($exit);
+        $this->reportStaleAcceptances();
+
+        return $this->withSeverityGate($exit);
     }
 
     /**

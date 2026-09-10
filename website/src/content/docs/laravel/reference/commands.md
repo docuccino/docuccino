@@ -196,7 +196,7 @@ docuccino:export
 | `document` | any configured key / all documents | Which document(s) to export. Unknown key → exit 1. |
 | `--format` | `uir` \| `openapi-3.2` \| `openapi-3.1` \| `openapi-3.0` \| `postman` / all configured targets | Writes **only** this format, replacing the document's [`export.targets`](/laravel/reference/configuration/#export) for that run. `uir` → raw UIR; `openapi-3.1` and `openapi-3.0` → the downlevel emitters; `postman` → a [Postman Collection v2.1.0](#postman-collections). An invalid value errors (no silent fallback). |
 | `--out` | path / the matching target, else [`export.path`](/laravel/reference/configuration/#export) | Overrides the output path — resolved against `base_path()` unless already absolute, and missing directories are created. Rejected when it would have to hold several artifacts at once: more than one document configured and no `document` argument, or a document with several [`export.targets`](/laravel/reference/configuration/#export) and no `--format` — in both cases each write would clobber the last. Name a document, pass `--format`, or configure per-document targets. |
-| `--fail-on` | `none` \| `error` \| `warning` \| `info` \| `hint` / `none` | The quietest severity that still fails the run: anything reported at that severity **or louder** makes the exit code non-zero, and `none` never fails on severity. `error` catches errors only, `warning` adds warnings, `info` adds the recovery reports — an unrecoverable payload, a model with no readable columns, a validation rule that could not be read — and `hint` catches everything the build said. An invalid value errors (no silent fallback) — a typo must not quietly remove the gate. Codes listed under [`diagnostics.accept`](/laravel/reference/configuration/#diagnostics) still print but never fail the run; errors are never accepted. |
+| `--fail-on` | `none` \| `error` \| `warning` \| `info` \| `hint` / `none` | The quietest severity that still fails the run: anything reported at that severity **or louder** makes the exit code non-zero, and `none` never fails on severity. `error` catches errors only, `warning` adds warnings, `info` adds the recovery reports — an unrecoverable payload, a model with no readable columns, a validation rule that could not be read — and `hint` catches everything. The floor reads everything the run **prints**: what the build found, what an emitter reported while writing each artifact, and what reading your export configuration reported before the build started. An invalid value errors (no silent fallback) — a typo must not quietly remove the gate. Codes listed under [`diagnostics.accept`](/laravel/reference/configuration/#diagnostics) still print but never fail the run; errors are never accepted. |
 | `--provenance` | `none` \| `winners` \| `full` / `winners` | UIR provenance detail. `full` keeps every record including its `overrode` trail, `winners` keeps the records but drops the trails, `none` strips provenance entirely. An invalid value errors (no silent fallback). Only `--format=uir` carries provenance — the OpenAPI emitters always drop it. |
 | `--drop-ids` | flag / off | Omits the flat `x-docuccino-id` member. OpenAPI exports carry it **by default**: `x-docuccino` itself never survives emission (it holds provenance — source file, line, symbol — which has no business in a published spec), but the id is an opaque hash of members the document already publishes, and it is what lets [`docuccino:diff`](#docuccinodiff) pair a committed artifact by identity instead of by method + path. Drop it if you want bytes indistinguishable from a hand-written spec, accepting the weaker diff. No effect on `--format=uir`, which carries identities natively. |
 | `--yaml` | flag / off | Emit YAML instead of JSON, for the single-target `--format` override. Configured targets state it in their own path instead (`.yaml`/`.yml`). Rejected with `--format=uir` and `--format=postman`, which have no YAML form. |
@@ -219,10 +219,18 @@ and the command exits non-zero.
 **Downlevel notes.** OpenAPI 3.1 and 3.0 are older, smaller specs, so a downlevel sometimes has to
 convert or drop something the UIR carries. Every one of those steps prints a `downlevel.*` diagnostic
 naming the construct and the JSON pointer it sat at, right after that target's `Wrote` line — so the
-artifact never quietly ships a weaker contract than your code describes. These are reported, not
-enforced: `--fail-on` reads the **build's** diagnostics, so adding a 3.0 target never turns a green
-pipeline red on its own. The table under
-[OpenAPI 3.0 export](/laravel/getting-started/first-export/#openapi-30-export) lists what 3.0 changes.
+artifact never quietly ships a weaker contract than your code describes.
+
+`--fail-on` reads them like any other report, because what an artifact loses on the way out is a fact
+about the contract you are shipping. Most of them are `info`, so a pipeline at `--fail-on=warning`
+sees only the losses a 3.0 consumer would actually notice — a dropped `webhooks` section, a dropped
+parameter, a schema keyword 3.0 has no word for. Where the older target's price is one you have
+already accepted, name the code under
+[`diagnostics.accept`](/laravel/reference/configuration/#diagnostics): it keeps printing and stops
+failing. The table under
+[OpenAPI 3.0 export](/laravel/getting-started/first-export/#openapi-30-export) lists what 3.0 changes,
+and the [diagnostics reference](/laravel/reference/diagnostics/#emitting-openapi-31-and-30) has the
+severity of every code.
 
 ### Postman collections
 
