@@ -66,7 +66,9 @@ Because the analysis follows types rather than executing calls, it traces *throu
 methods: a query builder assembled a few methods deep is still understood, an inline
 `Validator::make(...)` still yields real parameters, and an exception thrown by a service the
 controller calls still becomes a documented error response. The walk is bounded and stays inside your
-own code — `engine.project_paths` says where to descend, and `vendor/` is never analyzed.
+own code — it descends into the PSR-4 source roots your `composer.json` declares, so a modular
+`Modules\…` root counts, and `vendor/` is never analyzed. `engine.project_paths` narrows that where you
+want less.
 
 Because it really is PHPStan, the analyzer extensions you already maintain apply here too: point
 [`engine.config`](/laravel/reference/configuration/#engine) at your own `phpstan.neon` and whatever it

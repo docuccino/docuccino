@@ -119,6 +119,9 @@ final class PhpStanTypeEngine implements TypeEngine
         private readonly ProjectFilter $projectFilter,
         private readonly ClassMetadataFactory $classMetadataFactory,
         private readonly ProjectFilter $appFilter,
+        // The descend scope the host would have used with nothing configured: not a scope anything
+        // walks by, only the one that says which declined hops are the host's narrowing to undo.
+        private readonly ProjectFilter $declaredFilter,
         private readonly FileWalks $walks,
     ) {
         $this->labels = new MessagePaths(new RootRelativeSourcePathResolver(''));
@@ -704,6 +707,7 @@ final class PhpStanTypeEngine implements TypeEngine
             $this->adapter->reflectionProvider(),
             $this->projectFilter,
             $this->appFilter,
+            $this->declaredFilter,
             $this->fileAnalyzer,
             $this->config->knownThrowers,
             new CalleeResolver($this->adapter->reflectionProvider()),

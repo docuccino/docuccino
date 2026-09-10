@@ -190,16 +190,7 @@ function throwCorpusControllers(): array
  */
 function throwActions(string $relPath): array
 {
-    $source = (string) file_get_contents(FixtureRunner::path($relPath));
-
-    preg_match_all('/^    (?:final\s+|abstract\s+)?public(?:\s+static)?\s+function\s+(\w+)\s*\(/m', $source, $matches, PREG_OFFSET_CAPTURE);
-
-    $actions = [];
-    foreach ($matches[1] as $index => $name) {
-        $start = (int) $matches[0][$index][1];
-        $end = isset($matches[0][$index + 1]) ? (int) $matches[0][$index + 1][1] : strlen($source);
-        $actions[(string) $name[0]] = substr($source, $start, $end - $start);
-    }
+    $actions = controllerActions((string) file_get_contents(FixtureRunner::path($relPath)));
 
     // A scan that matched nothing must fail rather than pass forever — both files are real and hold
     // actions, so a pattern that stopped seeing them is the defect, not an empty corpus.
@@ -303,7 +294,7 @@ function unplacedSweep(): array
 {
     // Every test below reads the same sweep, and it is a real-engine analysis of both controllers in a
     // subprocess — so it is taken once per process rather than once per test.
-    /** @var array<string, array{named: array<string, true>, unplaced: array<string, list<string>>, demoted: array<string, true>, surfaced: int}>|null $memo */
+    /** @var array<string, array{named: array<string, true>, unplaced: array<string, list<string>>, demoted: array<string, true>, demotedThrows: int, surfaced: int}>|null $memo */
     static $memo = null;
     if ($memo !== null) {
         return $memo;
@@ -328,12 +319,16 @@ function unplacedSweep(): array
 
             $unplaced = [];
             $demoted = [];
+            // Throws, not classes: `demoted` dedupes by FQCN, so holding it against `surfaced` would
+            // read two demoted throws of one class as one and call an all-demoted action partly placed.
+            $demotedThrows = 0;
             foreach ($analysis['throws'] as $throw) {
                 // Only a SIGNAL reaches the document. One that does not is carried nowhere, so there is
                 // no response for a reader to be unable to explain — and no response at all, which is
                 // its own defect and gets its own column rather than being dropped here.
                 if (($throw['disposition'] ?? null) !== 'signal') {
                     $demoted[(string) $throw['exceptionFqcn']] = true;
+                    $demotedThrows++;
 
                     continue;
                 }
@@ -353,6 +348,7 @@ function unplacedSweep(): array
                 'named' => $named,
                 'unplaced' => $unplaced,
                 'demoted' => $demoted,
+                'demotedThrows' => $demotedThrows,
                 'surfaced' => count($analysis['throws']),
             ];
         }
@@ -373,8 +369,6 @@ function unsurfacedThrowActions(): array
 {
     return [
         'App\\Http\\Controllers\\ThrowsController::arrowThrownStatus' => 'the `throw` is written in an ARROW function, which PHPStan models with no statement result, so the analysis is handed no throw point to read',
-        'App\\Http\\Controllers\\ThrowsController::modularThrowSiteStatus' => 'the `throw` is written in a callee the descend scope excludes, so descent stops at the call and never reaches it — `project_paths` is the knob, and widening it is the fix',
-        'Modules\\Billing\\LedgerThrowsController::modularExceptionOneCallAway' => 'the same descend boundary, one modular root calling another: the callee is the application\'s and outside the descend scope, so nothing is read of its body',
     ];
 }
 
@@ -426,8 +420,11 @@ it('reports every unplaced status it publishes, bar the ones nobody can act on',
 
     // The corpus really contains both halves. Without this the comparison below is satisfied by an
     // analysis that surfaced no throws at all.
-    expect($unplaced)->toBeGreaterThan(14)
-        ->and($reported)->toBeGreaterThan(13);
+    // Anti-vacuity floors, sized well under what the corpus holds (15 unplaced, 14 of them reported):
+    // a floor at "today minus one" fails the first legitimate deletion, which teaches the next author to
+    // edit the number rather than read the comparison below it.
+    expect($unplaced)->toBeGreaterThan(8)
+        ->and($reported)->toBeGreaterThan(8);
 
     // Exactly the ledger: nothing silent that is not written down, and nothing written down that the
     // build has since started reporting — a stale excuse is how a notice ends up owed and never given.
@@ -474,8 +471,9 @@ it('reports nothing about a throw the document does not publish', function (): v
         }
     }
 
-    // Again the anti-vacuity floor: the sweep really has notices to hold against the document.
-    expect($checked)->toBeGreaterThan(13)
+    // Again the anti-vacuity floor, and again with room under the 14 the corpus holds: the sweep really
+    // has notices to hold against the document.
+    expect($checked)->toBeGreaterThan(8)
         ->and($stray)->toBe([]);
 })->group('fixture');
 
@@ -485,12 +483,12 @@ it('reports nothing about a throw the document does not publish', function (): v
  * the whole file stayed green: its status was never read, no notice was owed for it, and both directions
  * agreed about a corpus that did not contain it.
  *
- * So the corpus is held against the axis the defect lived on: the descend scope. One controller inside it
- * and at least one outside it but inside a root the build primes, both really analysed, both really
- * holding actions. The paths are checked to be what they claim — a row naming a file that has moved would
- * otherwise reduce the sweep to whatever is left.
+ * So the corpus is held against the axis the defect lived on: which PSR-4 root an action is written in.
+ * One controller in `app/` and at least one in a root the application maps separately, both really
+ * analysed, both really holding actions. The paths are checked to be what they claim — a row naming a file
+ * that has moved would otherwise reduce the sweep to whatever is left.
  */
-it('sweeps a controller on both sides of the descend scope', function (): void {
+it('sweeps a controller in a modular root as well as in app/', function (): void {
     $controllers = throwCorpusControllers();
     $sweep = unplacedSweep();
 
@@ -505,8 +503,8 @@ it('sweeps a controller on both sides of the descend scope', function (): void {
             expect($sweep)->toHaveKey($class.'::'.$method);
         }
 
-        // The fixture runs with `app/` as its only descend path (tests/bin/engine-runner.php), which is
-        // what makes "outside the descend scope" mean "outside app/" here.
+        // `app/` on one side, every other declared root on the other — both descendable now, and the
+        // split is what keeps the sweep from being one directory's story.
         str_starts_with($relPath, 'app/')
             ? $inside[$relPath] = count($actions)
             : $outside[$relPath] = count($actions);
@@ -515,7 +513,7 @@ it('sweeps a controller on both sides of the descend scope', function (): void {
     expect($inside)->not->toBeEmpty()
         ->and($outside)->not->toBeEmpty()
         ->and(array_sum($inside))->toBeGreaterThan(30)
-        ->and(array_sum($outside))->toBeGreaterThan(3)
+        ->and(array_sum($outside))->toBeGreaterThan(1)
         ->and(count($sweep))->toBe(array_sum($inside) + array_sum($outside));
 })->group('fixture');
 
@@ -525,17 +523,24 @@ it('sweeps a controller on both sides of the descend scope', function (): void {
  * throw at all — and the two directions above only see the second. An action owing no answer to them
  * therefore has to land in a column that DOES ask something of it, rather than in the gap between two
  * scans that each cover their own subset.
+ *
+ * So the union is asserted as MEMBERSHIP of the four named columns, and every classification the four
+ * do not cover is given a name of its own rather than a `default` that absorbs it. Counting instead
+ * proves nothing: `array_sum(array_count_values($x)) === count($x)` is arithmetic, true of every input,
+ * and stays true when a fifth column appears.
  */
 it('lands every swept action in exactly one column', function (): void {
     $columns = [];
     foreach (unplacedSweep() as $action => $sides) {
-        $columns[$action] = match (true) {
-            $sides['surfaced'] === 0 => 'unsurfaced',
-            $sides['unplaced'] !== [] => 'unplaced',
-            $sides['demoted'] !== [] && $sides['surfaced'] === count($sides['demoted']) => 'demoted',
-            default => 'placed',
-        };
+        $columns[$action] = unplacedColumn($sides);
     }
+
+    $named = unplacedColumnNames();
+
+    // The union against the domain: every swept action, in one of the four columns the guards above
+    // divide it into, and the offenders named rather than counted.
+    expect(array_keys(array_diff($columns, $named)))->toBe([])
+        ->and(array_keys($columns))->toBe(array_keys(unplacedSweep()));
 
     $counts = array_count_values($columns);
 
@@ -544,8 +549,7 @@ it('lands every swept action in exactly one column', function (): void {
     expect($counts['placed'] ?? 0)->toBeGreaterThan(10)
         ->and($counts['unplaced'] ?? 0)->toBeGreaterThan(10)
         ->and($counts['unsurfaced'] ?? 0)->toBeGreaterThan(0)
-        ->and($counts['demoted'] ?? 0)->toBeGreaterThan(0)
-        ->and(array_sum($counts))->toBe(count($columns));
+        ->and($counts['demoted'] ?? 0)->toBeGreaterThan(0);
 
     // And the two columns with a ledger hold exactly it — a new member fails until somebody writes down
     // why the document may carry nothing for that action.
@@ -561,6 +565,12 @@ it('lands every swept action in exactly one column', function (): void {
  * or a callee outside the descend scope, which descent is bounded by on purpose. So each row has to name
  * one of those in the action's own source; an action written entirely inside the descend scope with no
  * arrow function in it has no excuse available, and a silent one there is a defect rather than a bound.
+ *
+ * The descend scope is the roots the application SHIPS, so "outside it" now means a root declared only in
+ * `autoload-dev` — a modular `Modules\…` root is inside it, and the two rows this ledger used to carry for
+ * one are gone because the throws they hid are published. That is why the boundary is read off the
+ * autoload map rather than spelled as `app/`: written as a directory name, the predicate would go on
+ * excusing a silence the build stopped having.
  *
  * The predicate is necessary, not sufficient — an action can name a modular class and still publish, and
  * one does — so it is held against an action with neither boundary, which must fail it.
@@ -587,7 +597,7 @@ it('excuses an unsurfaced throw only where a declared boundary is crossed', func
         // whose body descent is not entitled to read.
         foreach (fixtureNamesIn($relPath, $source) as $named) {
             $declaredIn = fixtureDeclarationFile($named);
-            if ($declaredIn !== null && ! str_starts_with($declaredIn, 'app/')) {
+            if ($declaredIn !== null && ! fixtureDescends($declaredIn)) {
                 return true;
             }
         }

@@ -725,6 +725,46 @@ The tell is a config PATH, not the token `docuccino.`. The emitted document's ow
 different namespace, and a live `config('docuccino.enabled')` names a key that really is still there —
 so a find-and-replace on the prefix corrupts three readers to fix one comment.
 
+## A default sized to one application shape, and a template that pins it
+
+A default is the product. Where it is written as a literal rather than derived from what the application
+declares, it is right for the shape somebody had in mind and silently wrong for every other — and a
+shipped config template that writes the key LIVE makes the code default unreachable for everyone who
+already installed, so fixing the default fixes nobody.
+
+*Instances.* `engine.project_paths` defaulted to `['app']`, which is the descend scope for throw
+classification and inline rules. A modular application maps its own `Modules\…` roots, so a throw written
+a hop below a controller there is a bare-`Throwable` layer-3 point whose hop descent declines — and the
+document then publishes no response at all for an error the application really raises. Two fixture
+actions were ledgered as "unsurfaced" on exactly that boundary. The second half is the template: the
+shipped `docuccino.yaml` wrote `project_paths: ['app']` live, so every install had it pinned and a
+code-default change would have reached none of them.
+
+*The tell.* A default written as a literal beside a reader that already derives the same fact for a
+neighbouring purpose. `primePaths()` had been deriving every PSR-4 root from `composer.json` for the
+priming question all along; the descend question sat two lines away answering `['app']`. The second tell
+is a shipped config key that is not commented out, which is a default the code no longer owns — and the
+third is a fixture harness pinning the OLD default, so no test could have noticed: the engine runner
+hardcoded `descendPaths: [app/]` and the reconciliation ledger wrote the boundary down as `app/` rather
+than reading it off the autoload map, which would have gone on excusing a silence the build had stopped
+having.
+
+*The fix that worked.* Derive both scopes from the one reader, with the sections askable separately —
+`Psr4Namespaces::roots()` for prime (both sections: a helper a test root declares still has to reflect)
+and `::shipped()` for descend (`autoload` only: a test root is not the API surface). Comment the shipped
+key out so the derived default is reachable. Then MEASURE before moving it, and state the benefit as a
+number: identical analysed-file count and identical live walks for a stock skeleton, +6 walks and +2 MB
+for the modular root, and 2 error responses that had been missing from the document entirely
+(inference-embedding.md §6c). And tell the population the template cannot reach, only where the narrowing
+cost them: `inference.descend-scope-narrowed` fires per declined hop into the application's own declared
+code — 7 firings on the fixture corpus with descent pinned, 7 actionable, 0 not, and 0 at the derived
+default. The guard is `NarrowedDescendScopeTest`, which runs the same corpus through the same engine at
+both scopes and asserts the delta literally rather than counting it.
+
+*The other half nobody keys.* Deriving a scope from `composer.json` makes its `autoload` map a build
+input, and `composer.lock` cannot stand in for it — composer's content hash does not cover `autoload`, so
+`dump-autoload` after mapping a new root moves no locked byte. `BuildFingerprint` digests the map.
+
 ## One flag answering two questions: how far to walk, and whose code this is
 
 A build has two different reasons to ask about a file. **How far may I walk into it** is a containment

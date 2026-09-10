@@ -49,9 +49,10 @@ Docuccino ran out of memory while analyzing your code.
 …
   * Raise the ceiling — set engine.memory_limit in docuccino.yaml (e.g. '2G'), or pass
     --memory-limit=2G to this command.
-  * Narrow the analysis — engine.project_paths, in the same file, decides how far
-    interprocedural descent goes, and a wide value costs memory. Vendor code is never
-    analyzed.
+  * Narrow the analysis — engine.project_paths, in the same file, bounds interprocedural
+    descent. It is unset by default, which descends into every PSR-4 source root your
+    composer.json declares, so writing it and naming fewer of them costs memory back.
+    Vendor code is never analyzed.
 ```
 
 PHP can't catch memory exhaustion, so this is the one failure Docuccino explains on the way out instead
@@ -79,7 +80,6 @@ php artisan docuccino:export --memory-limit=2G
 engine:
   mode: 'in-process' # DOCUCCINO_ENGINE overrides this
   memory_limit: '2G'
-  project_paths: ['app']
 ```
 
 Every console entry point picks it up — `export`, `validate`, `diff`, `cache` — so nobody has to
@@ -140,10 +140,10 @@ is warm never starts the analyzer at all. [Speeding up
 builds](/laravel/guides/speeding-up-builds/) explains what invalidates a fragment, how to reuse the
 store in CI, and when it isn't worth enabling.
 
-If a *first* build is the slow one, narrowing
-[`engine.project_paths`](/laravel/reference/configuration/#engine) bounds how far interprocedural
-descent goes — read that note before shrinking it, since priming, not descent, is what makes most
-classes resolvable.
+If a *first* build is the slow one, [`engine.project_paths`](/laravel/reference/configuration/#engine)
+narrows how far interprocedural descent goes — it is unset by default, which descends into every source
+root you declare. Read that note before writing it: priming, not descent, is what makes most classes
+resolvable, and every throw written in a callee you exclude is documented nowhere.
 
 ---
 
