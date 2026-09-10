@@ -39,16 +39,20 @@ use PHPStan\Type\Type;
  * A status comes from {@see KnownThrowers} where a name-keyed entry has one, and otherwise from what an
  * `HttpException` subclass sets on itself ({@see HttpExceptionStatus}) or, for a class that sets none, from
  * the construction THIS throw makes — the arguments of a `throw new X(…)`, or the `new` inside the static
- * factory it names ({@see FactoryStatus}). A throw carrying no construction at all — one inside a closure
- * the callee runs, one written in a trait and declared at the caller, a rethrow — falls back to the status
- * every construction the class writes of itself agrees on. Only when none of them speaks is the answer the
- * 500 that means "not an HTTP error at all" — which is the fallback {@see ThrowSignal} reads to tell an API
- * error from vendor plumbing.
+ * factory it names ({@see FactoryStatus}). A throw whose point carries no construction because a callee
+ * DECLARED it is read one hop on, off that callee's own `throw` ({@see inDeclaringCallee()}): a `@throws`
+ * says which class, never which status. What is left — a throw inside a closure the callee runs, one
+ * written in a trait and declared at the caller, a rethrow — falls back to the status every construction
+ * the class writes of itself agrees on. Only when none of them speaks is the answer the 500 that means
+ * "not an HTTP error at all" — which is the fallback {@see ThrowSignal} reads to tell an API error from
+ * vendor plumbing.
  *
  * Result identity is `(fqcn, httpStatusHint)` — two aborts (403/404) are two responses, so never dedupe by
  * FQCN alone. Vendor-declared 500-class exceptions are demoted to `internal`; dropped bare-`Throwable`
  * noise is discarded silently — how much of it there was says nothing about the API, and nothing the
  * author writes would change it.
+ *
+ * @phpstan-import-type StatedRead from ThrowSiteStatus
  *
  * @internal
  */
@@ -307,7 +311,7 @@ final class ThrowAnalyzer
 
         $results = [];
         foreach ($this->concreteClasses($type) as $class) {
-            $resolution = $this->statusForType($class, $node, $scope, $frame);
+            $resolution = $this->statusForType($class, $callee, $node, $scope, $frame);
             $results[] = new ThrownException(
                 $class,
                 $resolution['status'],
@@ -536,7 +540,7 @@ final class ThrowAnalyzer
      *
      * @return array{status: int|null, fellBack: bool}
      */
-    private function statusForType(string $fqcn, Node $node, Scope $scope, Frame $frame): array
+    private function statusForType(string $fqcn, ?Callee $callee, Node $node, Scope $scope, Frame $frame): array
     {
         // KnownThrowers is the single source: exact FQCN wins, else a subclass inherits its parent's status.
         $exact = $this->knownThrowers->statusForExceptionFqcn($fqcn);
@@ -558,7 +562,7 @@ final class ThrowAnalyzer
             // read" — not "the answer was the 500". Being an HttpException subclass is not itself a status:
             // a vendor `@throws` of one this build cannot read says no more about the API than any other
             // vendor plumbing, and calling it read would promote it to a Signal with nothing behind it.
-            $read = $this->httpStatus($fqcn, $node, $scope, $frame);
+            $read = $this->httpStatus($fqcn, $callee, $node, $scope, $frame);
 
             return ['status' => $read, 'fellBack' => $read === null];
         }
@@ -568,20 +572,24 @@ final class ThrowAnalyzer
 
     /**
      * What an `HttpException` subclass's status is here: the one the class pins on every instance, else the
-     * one THIS throw builds it with — and where the throw carries no construction at all, the one every
-     * construction the class writes of itself agrees on ({@see HttpExceptionStatus::agreed()}). Where none of
-     * them reads, the answer is a recorded {@see UnreadStatus}, which is what {@see diagnostics()} reports
-     * from.
+     * one THIS throw builds it with, else — where the throw is a call whose `@throws` is all this point
+     * carries — the one the callee that declared it builds with ({@see inDeclaringCallee()}), and only then
+     * the one every construction the class writes of itself agrees on ({@see HttpExceptionStatus::agreed()}).
+     * Where none of them reads, the answer is a recorded {@see UnreadStatus}, which is what
+     * {@see diagnostics()} reports from.
      *
-     * The order is what keeps the last of those honest. A site that DID present a construction has already
-     * said what this response is, and a `throw new X($chosenAtRunTime)` that would not fold has said the
-     * class's agreement is not it — so the class answers only where nothing at the site could.
+     * The order is what keeps the last two honest, and it runs from the most specific reading to the least.
+     * A site that DID present a construction has already said what this response is, and a
+     * `throw new X($chosenAtRunTime)` that would not fold has said the class's agreement is not it. A
+     * declaring callee is the next thing to have said something: what IT builds is what this call raises,
+     * where the class's every construction is only what the class raises somewhere. So each answers only
+     * where the reading above it could not speak.
      *
      * The reason each record carries is what happened at the SITE, while its actionability is the file the
      * fold that gave up was reading — the rule in docs/design/inference-embedding.md §6, which is also why
-     * only the last branch here, where nothing at the site could speak, may answer `ForeignClass`.
+     * only the last branch here, where nothing but the class could speak, may answer `ForeignClass`.
      */
-    private function httpStatus(string $fqcn, Node $node, Scope $scope, Frame $frame): ?int
+    private function httpStatus(string $fqcn, ?Callee $callee, Node $node, Scope $scope, Frame $frame): ?int
     {
         // The class's own file now decides what this route publishes, so it joins the dependency set.
         $this->dependOn($this->httpExceptionStatus->filesFor($fqcn));
@@ -605,7 +613,28 @@ final class ThrowAnalyzer
             );
         }
 
-        if (! $site['spoke']) {
+        $spoke = $site['spoke'];
+        if (! $spoke) {
+            $declared = $this->inDeclaringCallee($fqcn, $callee);
+            if ($declared['status'] !== null) {
+                return $declared['status'];
+            }
+
+            // A fold in the callee's own body gave up, so that is the file the notice is judged against —
+            // the same rule the site branch above reads, one hop along.
+            if ($declared['read'] !== null) {
+                return $this->unread(
+                    $fqcn,
+                    UnreadStatusReason::DynamicConstruction,
+                    $frame->location,
+                    $this->appFilter->isProjectFile($declared['read']),
+                );
+            }
+
+            $spoke = $declared['spoke'];
+        }
+
+        if (! $spoke) {
             $agreement = $this->httpExceptionStatus->agreed($fqcn);
             $this->dependOn($agreement['files']);
             if ($agreement['status'] !== null) {
@@ -613,21 +642,80 @@ final class ThrowAnalyzer
             }
         }
 
-        // Nothing at this site could state a status — the class forwards no slot to fold into, names a
-        // factory this build may not read, or the throw presented no construction at all — so the fold
-        // that gave up was reading the CLASS's own declarations. Where those belong to a package, no edit
-        // the reader owns would have made a number readable; the record is kept all the same, because the
-        // document publishes the unplaced status either way.
+        // Nothing that could speak for this response did — the class forwards no slot to fold into, names a
+        // factory this build may not read, or nothing anywhere on the path presented a construction — so the
+        // fold that gave up was reading the CLASS's own declarations. Where those belong to a package, no
+        // edit the reader owns would have made a number readable; the record is kept all the same, because
+        // the document publishes the unplaced status either way.
         $ownClass = $this->declaredByApplication($fqcn);
 
         return $this->unread(
             $fqcn,
             $ownClass
-                ? ($site['spoke'] ? UnreadStatusReason::DynamicConstruction : UnreadStatusReason::UnstatedByClass)
+                ? ($spoke ? UnreadStatusReason::DynamicConstruction : UnreadStatusReason::UnstatedByClass)
                 : UnreadStatusReason::ForeignClass,
             $frame->location,
             $ownClass,
         );
+    }
+
+    /**
+     * The status the callee that DECLARED this throw builds the exception with — the reading a `@throws`
+     * used to stand in the way of.
+     *
+     * A `@throws` is authoritative about WHICH class a call raises, and layer 1 takes it and stops. It says
+     * nothing about which STATUS, and the two are different claims: an application that documents its guards
+     * — the idiomatic thing to do — has a `throw X::notFound()` two lines into the callee, and stopping at
+     * the call turned every per-factory status into the placeholder 500 the class's disagreeing factories
+     * fall back to. So the construction is read one hop on, off the same body descent would have walked into
+     * had the docblock not been there.
+     *
+     * One hop and no further, and the same grammar the throw site reads: each `throw` of this class in the
+     * callee is folded by {@see atThrowSite()} in its own scope, and what a SET of those readings states is
+     * {@see ThrowSiteStatus}'s rule — which is where the three ways a set can fail to speak are written
+     * down, and why the answer is a function of the set rather than of the order the walk met it in.
+     *
+     * Reading a body is not walking into it: what descent bounds is which errors the document CARRIES, and
+     * this changes only what the error it already carries says. So the gate is the application's own source
+     * ({@see HttpExceptionStatus} for the whole argument, and the priming that makes it cost nothing), not
+     * the descend scope — a modular guard states its status as plainly as one in `app/`.
+     *
+     * `read` is the file whose expression gave up, for the actionability rule, and null where the callee
+     * only ever handed the question on.
+     *
+     * @return StatedRead
+     */
+    private function inDeclaringCallee(string $fqcn, ?Callee $callee): array
+    {
+        // No readings at all is how this says nothing — a literal `throw`, a package's declaration, a body
+        // this build cannot open — so the reads after it still run.
+        if ($callee === null || ! $this->appFilter->isProjectFile($callee->file)) {
+            return ThrowSiteStatus::stated([]);
+        }
+
+        $body = $this->fileAnalyzer->method($callee->file, $callee->class, $callee->method);
+        if ($body === null) {
+            return ThrowSiteStatus::stated([]);
+        }
+
+        // Both files, for the reason descent records both: a trait's guard clause is written in one file and
+        // reported by PHP as the using class's.
+        $this->dependOn([$callee->file, $callee->writtenIn()]);
+
+        $readings = [];
+        foreach ($body->getStatementResult()->getThrowPoints() as $throwPoint) {
+            $node = $throwPoint->getNode();
+            if (! $node instanceof Node\Expr\Throw_
+                || ! in_array($fqcn, $this->concreteClasses($throwPoint->getType()), true)
+            ) {
+                continue;
+            }
+
+            $scope = $this->fileAnalyzer->stableScope($throwPoint->getScope());
+            $readings[] = [...$this->atThrowSite($fqcn, $node, $scope), 'file' => $scope->getFile()];
+        }
+
+        return ThrowSiteStatus::stated($readings);
     }
 
     /**
