@@ -276,7 +276,7 @@ Consequences:
   unit tests for its pure classes (translators, registries, config objects) — not more
   subprocess fixture tests.
 
-## Measured coverage (2026-09-08)
+## Measured coverage (2026-09-11)
 
 Line coverage (statements) over the suite excluding the `fixture` group. These are the numbers the
 floors are set from — measure, then set the floor to the measured integer, unless the measured integer
@@ -284,11 +284,11 @@ would sit a fraction of a statement above the figure (see `laravel` below).
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **97.31%** | 97    | fully in-process-measurable; 0.31pp behind it, ~39 statements |
-| `laravel`           | **96.30%** | 96    | ratcheted 95 → 96; 0.30pp behind it, ~35 statements |
-| `inference-phpstan` | **49.49%** | 49    | real path is subprocess-only → `fixture`-proven; ratcheted 48 → 49; 0.49pp, ~13 statements |
+| `core`              | **97.39%** | 97    | fully in-process-measurable; 0.39pp above it, ~52 statements |
+| `laravel`           | **96.88%** | 96    | ratcheted 95 → 96; 0.88pp above it, ~119 statements |
+| `inference-phpstan` | **49.83%** | 49    | real path is subprocess-only → `fixture`-proven; ratcheted 48 → 49; 0.83pp, ~22 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 92.44%     | —     | informational only; no longer a gate             |
+| Overall             | 92.98%     | —     | informational only; no longer a gate             |
 
 Every figure here is one `composer test:coverage` run of the whole set, so the three read off the same
 clover report and the floors file quotes the same numerators. A record that disagrees with itself is the

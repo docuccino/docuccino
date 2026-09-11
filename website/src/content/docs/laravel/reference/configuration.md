@@ -190,6 +190,18 @@ servers:
 
 Emitted as OAS `servers`, including server variables.
 
+**Leave it empty and Docuccino fills it in from `app.url`.** An application configured with
+`APP_URL=https://api.acme.com` publishes that as its one server without you writing a line — the
+common case, handled. The test is whether a reader of the document could reach the host, and the
+reader of a document you export is outside your network — so `localhost`, `127.0.0.1` and anything
+under `.test` or `.local` are dropped, and so are a private or link-local address (`192.168.1.50`,
+`10.0.0.5`, `169.254.169.254`), a container alias like `host.docker.internal`, and a name with no
+dots such as a CI runner's hostname. A value that is not a full `http`/`https` URL is dropped too.
+The document then publishes no servers at all, which OpenAPI reads as the origin the document is
+served from: a generated client and a viewer both keep working, and neither is sent at a host that
+answers only inside your network. Write the key yourself whenever the URL clients use is not the one
+the application runs on.
+
 **Every OpenAPI version requires a `default` on a variable**, so give each one a value you serve. A
 variable without one raises [`server.variable-no-default`](/laravel/reference/diagnostics/#servers)
 against every format the build emits, and what happens next depends on whether the variable declares an

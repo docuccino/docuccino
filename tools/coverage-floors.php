@@ -28,17 +28,17 @@ declare(strict_types=1);
  */
 const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
-    // phpdoc type grammar, the contract checker. Measured 97.31% (12237/12575) — ratcheted 96 → 97 back
+    // phpdoc type grammar, the contract checker. Measured 97.39% (13260/13616) — ratcheted 96 → 97 back
     // when the figure was 97.51% over a 571-statement smaller package, and it holds at the measured
-    // integer still, with 0.31pp behind it: about thirty-nine statements. The drop from 97.51 is the
+    // integer still, with 0.39pp above it: about fifty-two statements. The drop from 97.51 is the
     // denominator, not a lost proof — core has since absorbed work at slightly under its own average,
     // which is the ordinary direction and is why the floor stays where it is rather than ratcheting.
     'core' => 97,
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/, the
-    // contract-testing assertions. Measured 96.30% (11070/11495) — ratcheted 95 → 96 on the trigger the
+    // contract-testing assertions. Measured 96.88% (13133/13556) — ratcheted 95 → 96 on the trigger the
     // previous note set, which held the floor one short of the measured integer while 96.00% would have
-    // left four tenths of one statement of margin. The figure now clears 96 with 0.30pp behind it, about
-    // thirty-five statements, so a line going uncovered no longer fails the gate on its own.
+    // left four tenths of one statement of margin. The figure now clears 96 with 0.88pp above it, about
+    // a hundred and nineteen statements, so a line going uncovered no longer fails the gate on its own.
     'laravel' => 96,
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
@@ -70,7 +70,7 @@ const FLOORS = [
     // Scope-driven half by 47 statements, 49.70% → 48.87%, and the answer was again the one the standards
     // were asking for — the rule deciding what a SET of throw readings states came out into
     // `ThrowSiteStatus`, where no scope reaches it and a dataset can drive every way a set fails to speak
-    // (18 statements, all covered). Measured 49.49% (1271/2568), about thirteen statements of margin, so
+    // (18 statements, all covered). Measured 49.83% (1302/2613), about twenty-two statements of margin, so
     // the floor stays at the measured integer rather than ratcheting. That figure is the measurement this
     // decision was taken on, not the tree's current one — nothing compares the two, so it is here to be
     // read against a fresh run rather than to detect drift by itself. Read the same way as before: mostly
