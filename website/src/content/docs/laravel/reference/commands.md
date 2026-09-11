@@ -268,7 +268,7 @@ against the other side's paths.
 
 ## `docuccino:validate`
 
-Validate the generated document(s) against the bundled UIR schema.
+Validate the generated document(s), and every artifact they export, against their own schemas.
 
 ```
 docuccino:validate
@@ -280,13 +280,36 @@ docuccino:validate
 | Flag | Values / default | Effect |
 | --- | --- | --- |
 | `document` | configured key / all | Which document(s) to validate. Unknown → exit 1. |
-| `--fail-on` | `none` \| `error` \| `warning` \| `info` \| `hint` / `none` | *Additional* severity floor that also fails, read exactly as it is on [`export`](#docuccinoexport). Independent of the schema check. An invalid value errors, as it does on `export`. |
+| `--fail-on` | `none` \| `error` \| `warning` \| `info` \| `hint` / `none` | *Additional* severity floor that also fails, read exactly as it is on [`export`](#docuccinoexport). Independent of the two schema checks. An invalid value errors, as it does on `export`. |
 | `--memory-limit` | php.ini value, e.g. `2G` / unset | Raises the process memory limit; validation generates the document first, so it needs `export`'s headroom. |
 
-**A schema violation always fails**, even with the default `--fail-on=none` — `--fail-on` only adds
-warning/error gating on top. A valid document prints `<key>: valid against UIR <version>.`; an
-invalid one prints `<key>: N schema violation(s).` and lists them as `document.schema-invalid` error
-diagnostics grouped by route.
+This is the check-before-you-commit command, so it answers about both halves of what a build
+produces.
+
+**The UIR document**, against the bundled UIR schema. A valid one prints
+`<key>: valid against UIR <version>.`; an invalid one prints `<key>: N schema violation(s).` and
+lists them as `document.schema-invalid` error diagnostics grouped by route.
+
+**Each artifact the document exports**, against the published OpenAPI schema for the version that
+artifact claims — the same check [`docuccino:export`](#docuccinoexport) runs as it writes each file.
+Every format in [`export.targets`](/laravel/reference/configuration/#export) is emitted in memory and
+read back; nothing is written, and no file on disk changes. You get one line per target:
+`<key>: openapi-3.2 artifact valid against its published schema.` A `uir` or `postman` target says
+`has no published schema to hold an artifact to; not checked` instead — UIR answers to its own schema
+in the first half, above, and a Postman collection has no specification to be held to.
+
+Validating what you export rather than a fixed format is the point: if your pipeline ships
+`openapi-3.0`, this tells you about the 3.0 file. That also means the `downlevel.*` reports a
+downlevel target raises reach you here, before anything is written, and `--fail-on` reads them as it
+does on `export`.
+
+**Either schema failing always fails the run**, even with the default `--fail-on=none` — a document
+that doesn't answer to its own schema is not a quality note. `--fail-on` only adds severity gating on
+top.
+
+A broken [`export.targets`](/laravel/reference/configuration/#export) is refused here too, before the
+analysis: a target list that can't be read names no artifact to check, and a document whose
+configured artifacts can't be written isn't one to call sound.
 
 ## `docuccino:diff`
 
@@ -646,8 +669,11 @@ cache store (`null` uses your default store), so the runtime viewer can answer
 [`viewer.source: cache`](/laravel/reference/configuration/#viewer) without a rebuild. Stored
 forever: re-run the command to refresh it, typically as a deploy step.
 
-Prints `Cached document "<key>".` per document, then any diagnostics. There is no `--fail-on` here —
-diagnostics never affect the exit code. Fails only on a disabled install or an unknown document key.
+Prints `Cached document "<key>".` per document, then any diagnostics — the build's, and whatever the
+emitter reported while producing the payload. There is no `--fail-on` here, so severity never affects
+the exit code, with one exception: if the payload isn't a valid document of its own format
+(`document.openapi-invalid`) the command caches it and still exits non-zero, the way `export` does for
+a file it wrote. Otherwise it fails only on a disabled install or an unknown document key.
 `--memory-limit` applies here too — worth knowing, since warming the cache is usually a deploy step.
 
 ## `docuccino:clear`
@@ -1176,10 +1202,10 @@ What counts as failure:
 | Command | Exits `1` when |
 | --- | --- |
 | `install` | disabled; a configuration file could not be written; the first export failed |
-| `export` | disabled; unknown `--format`, `--fail-on` or `--provenance` value; `--out` given while exporting multiple documents, or without `--format` against a multi-target document; unknown document key; an unaccepted diagnostic matches `--fail-on` |
-| `validate` | disabled; unknown `--fail-on` value; unknown document key; **any** schema violation (regardless of `--fail-on`, and never acceptable — it's an error); an unaccepted diagnostic matches `--fail-on` |
+| `export` | disabled; unknown `--format`, `--fail-on` or `--provenance` value; `--out` given while exporting multiple documents, or without `--format` against a multi-target document; unknown document key; an `export.targets` list it cannot read, or a `routes.filter` it cannot apply; an artifact it wrote is not a valid document of its own format (regardless of `--fail-on`); an unaccepted diagnostic matches `--fail-on` |
+| `validate` | disabled; unknown `--fail-on` value; unknown document key; an `export.targets` list it cannot read, or a `routes.filter` it cannot apply; **either** schema violation — the UIR document's or an artifact's (regardless of `--fail-on`, and never acceptable — it's an error); an unaccepted diagnostic matches `--fail-on` |
 | `diff` | disabled; unknown document key; `old` missing, unreadable or not valid JSON; `git show` fails; a ref or path starting with `-`; the two documents are incomparable; `--enforce` with an unsatisfied verdict |
-| `cache` | disabled; unknown document key |
+| `cache` | disabled; unknown document key; the payload is not a valid document of its own format — cached anyway, so the viewer still has something |
 | `clear` | unknown document key (no enabled guard) |
 | `watch` | disabled; unknown document key; `--interval` that isn't a positive number; no documents configured. A failing rebuild does **not** stop the session — it prints and waits for the next change |
 | `coverage` | disabled; unknown document key; `--min` outside `0`–`100`; a merge that is incomplete (a directory missing, one holding no log, or a log that isn't one); no artifact to measure against, or one that isn't JSON; coverage below `--min` |

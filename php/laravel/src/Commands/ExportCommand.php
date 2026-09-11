@@ -299,19 +299,24 @@ final class ExportCommand extends Command
 
         // An emitter reports an ERROR only for a defect of OURS — a file that is not a valid document
         // of the format it claims — so the run fails at `--fail-on=none`, below the floor's reach, the
-        // way `docuccino:validate` already treats the UIR half. Everything quieter is the gate's.
-        return array_filter(
-            $result->report->diagnostics,
-            static fn (Diagnostic $d): bool => $d->severity === Severity::Error,
-        ) === [];
+        // way `docuccino:validate` treats both halves. Everything quieter is the gate's.
+        return ! $result->report->hasError();
     }
 
+    /**
+     * What this run writes $target with: the bare-export options ({@see DocumentEmitOptions::canonical()})
+     * with every flag laid over them. Each of the three settings canonical states is overwritten here
+     * unconditionally, so what starting from it buys is the document's own say plus a base a fourth
+     * setting cannot fall out of — that a bare run writes the same bytes `docuccino:validate` checks
+     * and the contract assertions compare against follows from the flags' own defaults, and is proved
+     * by the executed byte comparison in `ArtifactSoundnessReachTest`.
+     */
     private function emitOptions(ExportTarget $target, DocumentConfig $config): EmitOptions
     {
         // `--yaml` is the single-target override's say; a configured target states it in its own path.
         $yaml = $this->option('yaml') === true || $target->yaml();
 
-        return DocumentEmitOptions::for($config)
+        return DocumentEmitOptions::canonical($config, $target)
             ->withYaml($yaml && Formats::serialisesYaml($target->format))
             ->withProvenance($this->provenanceLevel())
             ->withKeepIds($this->option('drop-ids') !== true);

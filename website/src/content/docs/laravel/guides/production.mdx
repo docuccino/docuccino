@@ -158,7 +158,7 @@ upload step reads from, and add that upload after the checks below pass.
 	# 1. Regenerate; fail if anything got worse than a warning.
 	php artisan docuccino:export --fail-on=warning
 
-	# 2. Structural check against the UIR schema.
+	# 2. Structural check: the UIR document, and each artifact you export, against their schemas.
 	php artisan docuccino:validate
 
 	# 3. Compare with the committed artifact and enforce the versioning policy.

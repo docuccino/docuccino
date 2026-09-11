@@ -105,7 +105,12 @@ it('does not call an acceptance stale when only an emitter reported its code', f
     @unlink($out);
 });
 
-it('fails on an info raised by reading the export configuration, before any build', function (): void {
+/**
+ * Driven over both commands that read the export configuration. The channel is the configuration, not
+ * the writing, so the floor has to read it identically wherever it is read — and the non-fatal half
+ * is the one a run can only prove by staying green at the floor above.
+ */
+it('fails on an info raised by reading the export configuration, before any build', function (string $command, bool $writes): void {
     // `targets` supersedes `path`, so the path is never written — reported at info, and printed
     // before the analysis rather than by it, which is why it used to miss the gate too.
     setBuild('documents.default.export', [
@@ -113,17 +118,21 @@ it('fails on an info raised by reading the export configuration, before any buil
         'targets' => [['format' => 'openapi-3.2', 'path' => 'docs/openapi.json']],
     ]);
     $out = reachOut();
+    $args = $writes ? ['--out' => $out] : [];
 
-    $this->artisan('docuccino:export', ['--out' => $out, '--fail-on' => 'info'])
+    $this->artisan($command, $args + ['--fail-on' => 'info'])
         ->expectsOutputToContain('config.export-path-ignored')
         ->assertFailed();
 
-    $this->artisan('docuccino:export', ['--out' => $out, '--fail-on' => 'warning'])
+    $this->artisan($command, $args + ['--fail-on' => 'warning'])
         ->expectsOutputToContain('config.export-path-ignored')
         ->assertSuccessful();
 
     @unlink($out);
-});
+})->with([
+    'docuccino:export' => ['docuccino:export', true],
+    'docuccino:validate' => ['docuccino:validate', false],
+]);
 
 /**
  * The other half of a gate: where it must NOT fire. The shipped configuration writes one OpenAPI 3.2
