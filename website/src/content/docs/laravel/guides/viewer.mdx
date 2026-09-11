@@ -153,6 +153,21 @@ a warning goes to your log naming the drivers that *are* registered. A typo cost
 asked for, never the docs page.
 </Aside>
 
+### What each driver shows from an enum
+
+The document is the same either way, but the two drivers don't read the same decoration. If your
+enums carry [`#[CaseDescription]`](/laravel/reference/attributes/#casedescription) prose, this is
+where a reader finds it:
+
+| `driver` | Per-case prose | Codegen member names |
+| --- | --- | --- |
+| `scalar` | Beside each value, in parameters and request bodies. A response body's **Show Schema** panel shows the schema itself, so the prose is in that JSON rather than beside the value. | Beside the value, as `draft = Draft` |
+| `redoc` | Beside each value, wherever the enum appears | Not read |
+
+Redoc reads the value-keyed form only — the one the document carries when **every** case of an enum
+is described. Describe them all and Redoc shows them all; leave a gap and that enum's prose reaches
+Redoc readers only through the document. Scalar reads both forms, so partial prose still shows.
+
 ## Serving the asset
 
 By default a driver's script is bundled with the package and served from your own app, so the viewer
