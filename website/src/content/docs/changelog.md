@@ -13,6 +13,35 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.17.0
+
+### Breaking changes
+
+- **laravel**: check the artifact a consumer receives wherever a run produces one ([#469](https://github.com/docuccino/docuccino/pull/469))
+  - `docuccino:validate` now exits non-zero for an artifact that is not a valid document of its own format, and for an `export.targets` list it cannot read — both at the default `--fail-on=none`, as `docuccino:export` already does. It also reports what a downlevel target loses, so `--fail-on=info`/`hint` can go red where it was green; those sit at `info`, so a pipeline gating at `warning` is untouched and an `openapi-3.2` target loses nothing on the way out. `docuccino:cache` exits non-zero for an invalid payload. Name a code under `diagnostics.accept` to keep it printing and stop it counting.
+- **laravel**: gate --fail-on on everything a run reports, not on the build alone ([#468](https://github.com/docuccino/docuccino/pull/468))
+  - `docuccino:export --fail-on=warning` (or `info`/`hint`) now exits non-zero for reports an emitter raised while writing an artifact, and for `config.export-path-ignored`. A pipeline that exports an `openapi-3.1`, `openapi-3.0` or `postman` target can go red on a loss it had been reading past. Ship the 3.2 artifact to consumers that can read it, or list the codes whose price you have accepted under `diagnostics.accept` — they keep printing and stop counting. An `openapi-3.2` target loses nothing on the way out and is unaffected.
+- **core**: name an operation whose route has no name ([#453](https://github.com/docuccino/docuccino/pull/453))
+  - every operation whose route has no name now publishes an `operationId` minted from its method and path, in the form `get.api.forms.@form`. A client generated from the document names its methods after those ids instead of deriving them from the path. Named routes and `#[OperationId]` are unaffected; name the route or set the attribute to pin a name of your own.
+
+### Features
+
+- **laravel**: fill in the servers and route-binding facts the application already states ([#472](https://github.com/docuccino/docuccino/pull/472))
+- **core**: validate every emitted OpenAPI artifact against its own published schema ([#450](https://github.com/docuccino/docuccino/pull/450))
+- **core**: share one stored fragment between the documents that build it alike ([#449](https://github.com/docuccino/docuccino/pull/449))
+
+### Bug fixes
+
+- **inference-phpstan**: tell spatie's own Data body from one an application wrote in a trait ([#473](https://github.com/docuccino/docuccino/pull/473))
+- **laravel**: read a Data class's inherited declarations the way the vendor does ([#471](https://github.com/docuccino/docuccino/pull/471))
+- **core**: state the contested-slot policy once, and read the ignored-header rule once ([#466](https://github.com/docuccino/docuccino/pull/466))
+- **core**: publish no machine directory in a diagnostic that names one ([#465](https://github.com/docuccino/docuccino/pull/465))
+- **laravel**: say which exception a response is for, and whether its status was read
+- **core**: hold one entry per name in the collections a document must not repeat ([#452](https://github.com/docuccino/docuccino/pull/452))
+- **laravel**: make every reading of spatie's unwrapping say which value it is about ([#451](https://github.com/docuccino/docuccino/pull/451))
+- **core**: make every reason the message scrubber weighs say what it proves ([#448](https://github.com/docuccino/docuccino/pull/448))
+- **core**: publish one tags entry per name, whatever the config defines twice ([#447](https://github.com/docuccino/docuccino/pull/447))
+
 ## v0.16.0
 
 ### Breaking changes
