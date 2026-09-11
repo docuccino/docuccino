@@ -940,3 +940,43 @@ the strength grid, with the rule written independently and two deliberately wron
 mispredict a row; and a reflection scan of the six methods where the ladder composes, holding their
 call sets, because a fifth reason does not have to arrive as a case — added as one more `if` it
 answers alone exactly as the four defects did, and every table guard still passes.
+
+## A channel with a renderer and no gate
+
+A CLI gate reads a list, and the list is whatever the call site happened to pass it. Every producer
+whose reports reach the console by another route is then outside the gate — and outside it silently,
+because the reports still print. `--fail-on` says "anything reported at that severity or louder makes
+the exit code non-zero"; what it read was one producer's list.
+
+*Instances.* `docuccino:export` gated on the build's diagnostics alone. The emit report — everything
+an emitter says while writing an artifact, which is the whole `downlevel.*`, `server.*` and
+`postman.*` surface — was rendered and dropped. It closed one severity at a time: the ERROR half went
+first, as the artifact-validity check, because that one had to fail below the floor's reach; the
+warning and info half stayed outside for a release, so `--fail-on=warning` could not see a dropped
+`webhooks` section and `diagnostics.accept` could not quiet one. `config.export-path-ignored` was a
+second instance one layer earlier — reported by reading the export configuration, before any build,
+so no build list could ever have carried it.
+
+*The tell.* Two ways for a report to reach the reader and one way for it to reach the exit code. The
+second tell is a sentence in the docs granting the exemption in the tool's own voice ("these are
+reported, not enforced"), which reads as design and is really the shape of the code being described
+back. And the third is corroboration the mechanism itself offers: the console already printed
+`Accepted, so --fail-on ignores them` over emit-report codes and already counted them as used when
+deciding an acceptance was stale — so two of the three mechanisms treated the channel as gated and
+only the gate did not.
+
+*The fix that worked.* Make printing and gating one act. `RendersDiagnostics` records every
+diagnostic it prints, and `FailsOnSeverity::withSeverityGate()` reads THAT set once at the end,
+so a channel is gated by being shown rather than by a call site remembering. A report a command
+treats as fatal on its own terms — an artifact that is not a valid document of its own format —
+still fails below the floor, which is the one exception and runs the other way.
+
+The guard is `FailOnReachTest`, which drives the real command over both out-of-build channels: an
+emitter warning at `--fail-on=warning`, an emitter info at `info` and not at `warning`, and the
+configuration info raised before the build starts. Each row states the floor from the commands
+reference rather than from the code, pairs the failing run with the accepted one so acceptance is
+shown carving into a gate that was really closed, and every test narrows to a route whose build is
+silent — so a green row is the gate staying quiet rather than the build being loud elsewhere. The
+last row is the other half: every floor, up to `hint`, stays green for the OpenAPI 3.2 target the
+shipped configuration writes, which is what keeps widening the gate from being a way to fail
+everybody's pipeline.

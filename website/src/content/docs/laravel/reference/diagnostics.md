@@ -20,7 +20,9 @@ appears in a run — so a code you met in your terminal is one click from what i
 ## Severities
 
 A diagnostic's severity is what `--fail-on` gates on: pass it a floor and anything that loud or
-louder exits non-zero.
+louder exits non-zero. Every code on this page counts, whichever part of the run raised it — the
+build, an emitter writing one of your artifacts, or the reader that opened your export configuration
+before the build started.
 
 | Severity | What it means |
 |---|---|
@@ -417,6 +419,18 @@ rewriting — nothing dedupes across formats. `downlevel.empty-responses` comes 
 so it appears once in a build exporting 3.0 and not at all in one exporting 3.2, 3.1 or Postman. A 3.0
 export chains through the 3.1 emitter, so it also carries every code the 3.1 target raises. `--format=uir`
 emits no report of this kind at all.
+
+:::caution[These gate CI, and they didn't used to]
+`--fail-on` reads what an emitter reports along with what the build found. Nothing about your
+application changed, so if you export an `openapi-3.1`, `openapi-3.0` or `postman` target and gate CI
+at `--fail-on=warning`, the first build after upgrading can go red on a loss you had been reading
+past. An `openapi-3.2` target is unaffected: it loses nothing on the way out.
+
+Two ways forward. Ship the 3.2 artifact to consumers that can read it, which is what most of the
+rows below tell you to do anyway. Or list the codes you have accepted the price of under
+[`diagnostics.accept`](/laravel/reference/configuration/#diagnostics): they keep printing and stop
+counting towards the exit code, and the artifacts are byte-identical either way.
+:::
 
 | Code | Severity | What it means | What to do |
 |---|---|---|---|
