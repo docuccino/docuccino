@@ -768,6 +768,56 @@ function uirDocuments(): array
 }
 
 /**
+ * Every JSON Schema document in the repository, as absolute paths, sorted.
+ *
+ * This is the DOMAIN the pinning guards divide between them, and `VendoredSchemaCoverageTest` holds
+ * them to it. Discovered rather than listed, for the reason the list would fail: the Postman collection
+ * schema sat vendored and unpinned from the day it arrived, because the sweep that would have found it
+ * was a person remembering, and every other schema in the tree was pinned.
+ *
+ * A JSON Schema document is one declaring a `json-schema.org` dialect in `$schema`. That is a fact
+ * about the file rather than about where it sits, so a schema added under a new directory is inside
+ * the domain the moment it exists.
+ *
+ * Which files are IN the repository is git's answer rather than a skip list's. A vendored schema is
+ * a committed file by definition, so everything generated is out for free — the provisioned fixture
+ * app, and the docs site's build output, which publishes a collection schema of its own and was
+ * counted as a third-party one owing a pin on any tree where the site had been built.
+ *
+ * @return list<string>
+ */
+function schemaDocuments(): array
+{
+    $root = dirname(__DIR__);
+
+    $listed = shell_exec(sprintf('git -C %s ls-files -z -- %s', escapeshellarg($root), escapeshellarg('*.json')));
+
+    $found = [];
+
+    foreach (explode("\0", (string) $listed) as $relative) {
+        if ($relative === '') {
+            continue;
+        }
+
+        $path = $root.'/'.$relative;
+
+        if (! is_file($path)) {
+            continue;
+        }
+
+        $decoded = json_decode((string) file_get_contents($path), true);
+
+        if (is_array($decoded) && is_string($decoded['$schema'] ?? null) && str_contains($decoded['$schema'], 'json-schema.org')) {
+            $found[] = $path;
+        }
+    }
+
+    sort($found);
+
+    return $found;
+}
+
+/**
  * The subset of {@see uirDocuments()} under $directory, named relative to it.
  *
  * @return list<string>
