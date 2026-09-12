@@ -13,6 +13,21 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.18.1
+
+### Bug fixes
+
+- **core**: reach every required member of a deepObject container ([#492](https://github.com/docuccino/docuccino/pull/492))
+- **core**: claim a date-time format only where the bytes were read ([#491](https://github.com/docuccino/docuccino/pull/491))
+- **laravel**: drop the filter an author ignored wherever the document publishes it ([#490](https://github.com/docuccino/docuccino/pull/490))
+- **laravel**: answer a cast's schema in the direction the document asks it ([#489](https://github.com/docuccino/docuccino/pull/489))
+- **laravel**: say what each producer recovered, not what the document says ([#487](https://github.com/docuccino/docuccino/pull/487))
+- **laravel**: describe one query surface once, in the form the document declares ([#486](https://github.com/docuccino/docuccino/pull/486))
+- **core**: publish a date-time as the string it sends, not the object it is ([#485](https://github.com/docuccino/docuccino/pull/485))
+- **laravel**: read the declarations that publish a field before calling it undocumented ([#482](https://github.com/docuccino/docuccino/pull/482))
+- **laravel**: decide the eloquent notices on what the document published ([#481](https://github.com/docuccino/docuccino/pull/481))
+- **laravel**: decide the query-builder notices on what the document publishes ([#480](https://github.com/docuccino/docuccino/pull/480))
+
 ## v0.18.0
 
 ### Breaking changes
