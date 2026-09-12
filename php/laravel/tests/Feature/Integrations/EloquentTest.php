@@ -24,6 +24,7 @@ use Docuccino\Laravel\Integrations\Eloquent\DateColumnSchema;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
 use Docuccino\Laravel\Integrations\Eloquent\ModelSchema;
 use Docuccino\Laravel\Integrations\Support\DateWireFormat;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Astrolabe;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Blank;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Boutique;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Chronicle;
@@ -36,6 +37,7 @@ use Docuccino\Laravel\Tests\Fixtures\Eloquent\Hourglass;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Invoice;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Ledger;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Merchant;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Metronome;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Milestone;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Persona;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Placard;
@@ -106,6 +108,17 @@ function eloquentEngine(): StubTypeEngine
         Merchant::class => new ClassMetadata(Merchant::class, [
             new PropertyMetadata('id', ScalarT::int()),
             new PropertyMetadata('name', ScalarT::string()),
+        ]),
+        // The ide-helper tag types the date column; `filed_on` carries none, so the same cast is read
+        // from the docblock column path and from the floor.
+        Astrolabe::class => new ClassMetadata(Astrolabe::class, [
+            new PropertyMetadata('id', ScalarT::int()),
+            new PropertyMetadata('title', ScalarT::string()),
+            new PropertyMetadata('sighted_on', new ClassT('Illuminate\\Support\\Carbon')),
+        ]),
+        Metronome::class => new ClassMetadata(Metronome::class, [
+            new PropertyMetadata('id', ScalarT::int()),
+            new PropertyMetadata('title', ScalarT::string()),
         ]),
         Chronicle::class => new ClassMetadata(Chronicle::class, [
             new PropertyMetadata('id', ScalarT::int()),
@@ -543,6 +556,30 @@ it('omits an eager-loaded relation whose related model it could not resolve, and
         'Could not resolve the related model of '.Boutique::class.'::owner() (declared in $with), so it is omitted from the schema.',
     ])
         ->and($components->schemas()['Boutique']['properties'] ?? [])->not->toHaveKeys(['posts', 'owner']);
+});
+
+it('publishes a date-cast column as the date-time its own bytes carry', function (): void {
+    // A `date` cast rounds the value to start-of-day and then writes it through `serializeDate()` like
+    // any other date, so what the response carries is a full date-time — pinned off the bytes in
+    // CastSchemaTest. `format: date` would be a claim the server's own output fails, which a client
+    // validating the response rejects.
+    $astrolabe = modelSchema(new ClassT(Astrolabe::class))['Astrolabe'];
+
+    expect($astrolabe['properties']['sighted_on'])->toBe(['type' => 'string', 'format' => 'date-time'])
+        // The same answer from the floor, for a date-cast column no docblock tagged.
+        ->and($astrolabe['properties']['filed_on'])->toBe(['type' => 'string', 'format' => 'date-time']);
+});
+
+it('keeps the format a cast named for itself under a serializeDate() override, and reports no loss', function (): void {
+    // The override is the whole of why a date column's format stops being knowable, and a cast
+    // carrying its own format is never written through it. So the column keeps the format its
+    // parameter writes, and the model earns no notice for a loss that did not happen.
+    $registry = modelRegistry(new ClassT(Metronome::class));
+
+    expect($registry->schemas()['Metronome']['properties']['beat_on'])
+        ->toBe(['type' => 'string', 'format' => 'date'])
+        ->and(array_map(static fn ($d): string => $d->code, $registry->diagnostics()))
+        ->not->toContain('eloquent.custom-date-serialization');
 });
 
 it('weakens date claims to plain strings and diagnoses a serializeDate() override', function (): void {

@@ -136,10 +136,14 @@ final class EloquentModelReflector
 
     /**
      * The schema for the NAMED column a `{post:slug}` parameter binds on, or null when nothing types it.
-     * Precedence mirrors {@see ModelSchema}'s so a column can't be documented one way in a response and
-     * another way in the path: a uuid/ulid key beats a stale docblock, a `$casts` entry beats the date
-     * policy where it states its own format, the date policy beats the inferred type, and the engine's
+     * Precedence mirrors {@see ModelSchema}'s, so no source can be consulted here that a response body
+     * would not consult: a uuid/ulid key beats a stale docblock, a `$casts` entry beats the date policy
+     * where it states its own format, the date policy beats the inferred type, and the engine's
      * `@property` type is the floor.
+     *
+     * What the matching SOURCE then says can differ, because the question does — a segment carries the
+     * value a client types, a body the value the server wrote — so this reads the cast table's request
+     * direction ({@see CastSchema::accepted()}), which is where that split is stated.
      *
      * A column whose type can't be carried in a URL segment (an `array` cast, a `@property` naming a class)
      * is refused rather than emitted — the parameter is a path segment, not the serialised attribute.
@@ -166,11 +170,11 @@ final class EloquentModelReflector
 
         $cast = $facts['casts'][$column] ?? null;
         if ($cast !== null) {
-            if ($facts['overridesSerializeDate'] && CastSchema::isDateCast($cast)) {
+            if ($facts['overridesSerializeDate'] && CastSchema::serializesThroughDateHook($cast)) {
                 return DateColumnSchema::schema($facts, $formatGivenUp);
             }
 
-            $schema = self::asPathSegment(CastSchema::forCast($cast));
+            $schema = self::asPathSegment(CastSchema::accepted($cast));
             if ($schema !== null) {
                 return $schema;
             }

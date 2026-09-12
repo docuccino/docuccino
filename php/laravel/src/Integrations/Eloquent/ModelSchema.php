@@ -169,7 +169,7 @@ final class ModelSchema implements TypeToSchema
                 if (isset($properties[$append]) || ! self::serialises($append, $facts)) {
                     continue;
                 }
-                $properties[$append] = $this->castSchema($append, $facts, $context, $weakenedDates) ?? [];
+                $properties[$append] = $this->castSchema($append, $facts, $context) ?? [];
             }
 
             // An accessor is serialised in place of the column it shadows and never through
@@ -407,7 +407,7 @@ final class ModelSchema implements TypeToSchema
      */
     private function columnSchema(string $column, DType $type, array $facts, SchemaContext $context, array &$weakenedDates): array
     {
-        $pinned = $this->castSchema($column, $facts, $context, $weakenedDates);
+        $pinned = $this->castSchema($column, $facts, $context);
         if ($pinned === null && DateColumnSchema::isAttribute($column, $facts)) {
             $pinned = self::datedSchema($column, $facts, $weakenedDates);
         }
@@ -465,9 +465,10 @@ final class ModelSchema implements TypeToSchema
     }
 
     /**
-     * `[schema, isRequired]` for a floor column: the cast shape when cast, a date-time for a `$dates`
-     * entry, else permissive `{}` at lowered confidence. Cast/date columns are always serialised so
-     * they're required; a `$fillable`-only one stays optional because its presence is a guess.
+     * `[schema, isRequired]` for a floor column: the cast shape when cast, the date policy's shape when
+     * the column is a date attribute, else permissive `{}` at lowered confidence. Cast/date columns are
+     * always serialised so they're required; a `$fillable`-only one stays optional because its presence
+     * is a guess.
      *
      * @param  ModelFacts  $facts
      * @param  list<string>  $weakenedDates
@@ -475,12 +476,12 @@ final class ModelSchema implements TypeToSchema
      */
     private function floorColumnSchema(string $column, array $facts, SchemaContext $context, array &$weakenedDates): array
     {
-        $cast = $this->castSchema($column, $facts, $context, $weakenedDates);
+        $cast = $this->castSchema($column, $facts, $context);
         if ($cast !== null) {
             return [$cast, true];
         }
 
-        if (in_array($column, $facts['dates'], true)) {
+        if (DateColumnSchema::isAttribute($column, $facts)) {
             return [self::datedSchema($column, $facts, $weakenedDates), true];
         }
 
@@ -490,22 +491,18 @@ final class ModelSchema implements TypeToSchema
     }
 
     /**
-     * The shape a cast pins for a column, or null when there's no recognised cast (the column then falls
-     * back to its inferred type). Resolution order mirrors `HasAttributes::castAttribute`.
+     * The shape a cast pins for a column, or null when there's no recognised cast and when the cast is
+     * one the date policy answers for — the column then falls back to the date policy or to its inferred
+     * type, in that order. Resolution order mirrors `HasAttributes::castAttribute`.
      *
      * @param  ModelFacts  $facts
-     * @param  list<string>  $weakenedDates
      * @return array<string, mixed>|null
      */
-    private function castSchema(string $column, array $facts, SchemaContext $context, array &$weakenedDates): ?array
+    private function castSchema(string $column, array $facts, SchemaContext $context): ?array
     {
         $cast = $facts['casts'][$column] ?? null;
         if ($cast === null) {
             return null;
-        }
-
-        if ($facts['overridesSerializeDate'] && CastSchema::isDateCast($cast)) {
-            return self::datedSchema($column, $facts, $weakenedDates);
         }
 
         if (CastSchema::isEnum($cast)) {
@@ -517,7 +514,7 @@ final class ModelSchema implements TypeToSchema
             return ['type' => 'array', 'items' => $this->enumSchema($enumCollection, $context)];
         }
 
-        return $this->customCasterSchema($cast, $context) ?? CastSchema::forCast($cast);
+        return $this->customCasterSchema($cast, $context) ?? CastSchema::written($cast);
     }
 
     /**

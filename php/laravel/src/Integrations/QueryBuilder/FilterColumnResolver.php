@@ -70,7 +70,7 @@ final class FilterColumnResolver
                 return FilterColumn::enum($enum, $file !== null ? [$file] : []);
             }
 
-            $scalar = CastSchema::forCast($cast);
+            $scalar = CastSchema::accepted($cast);
             if ($scalar !== null) {
                 return FilterColumn::scalar($scalar);
             }
