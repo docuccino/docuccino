@@ -905,8 +905,8 @@ and inline rules, and unset it is the roots you ship — the `autoload` half of 
 stays readable and is never descended into; vendor code is never primed, read or followed.
 
 So leave this alone unless you want *less* than that. Setting it narrows descent, and a throw written in
-a callee outside the narrowed scope is documented nowhere — the build says so, once per skipped call, as
-`inference.descend-scope-narrowed`.
+a callee outside the narrowed scope is never read, so it reaches none of the responses inference
+recovers — the build says so, once per skipped call, as `inference.descend-scope-narrowed`.
 
 If you installed before this became the default, your own `docuccino.yaml` still has
 `project_paths: ['app']` written in it. Delete the line to pick the derived scope up.

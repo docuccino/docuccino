@@ -259,6 +259,7 @@ it('reports the date format a bound path segment gave up', function (): void {
         ->and($reports)->toHaveCount(1)
         ->and($reports[0]->severity->value)->toBe('info')
         ->and($reports[0]->message)->toContain('Daybook::$posted_at')
+        ->and($reports[0]->message)->toContain('the shape recovered for the segment is a string with no format.')
         ->and($reports[0]->routeSignature)->toBe('GET /api/zz-daybooks/{daybook}');
 });
 
@@ -298,4 +299,35 @@ it('replays the weakened-date report on a warm build', function (): void {
     } finally {
         removeFragmentCacheDir($dir);
     }
+});
+
+/**
+ * The weakened-date notice against a segment whose format the author declared. `#[PathParameter]` lands
+ * a whole extension later and carries a `format:`, so the document publishes one — and the notice, which
+ * fires off the column read, is the reason its sentence names the shape that read recovered rather than
+ * the parameter (docs/design/defect-classes.md §"A diagnostic that asserts an outcome it never reads").
+ *
+ * That it still FIRES here is the condition, not the claim: the sibling notice at this site stands down
+ * on `PathParametersExtension::declaresType()` and this one has no such reading. Pinned so that whoever
+ * gives it one sees this row change deliberately.
+ */
+it('names the shape the column read recovered, not the parameter an author declared a format for', function (): void {
+    [$document, $diagnostics] = ($this->boundDocument)(static function (Router $router): void {
+        $router->get('api/zz-pinned-daybooks/{daybook:posted_at}', [BindingController::class, 'pinnedDaybook']);
+    });
+
+    $parameter = pathParameter($document['paths']['/api/zz-pinned-daybooks/{daybook}']['get'], 'daybook');
+    $reports = diagnosticsCoded($diagnostics, 'eloquent.custom-date-serialization');
+
+    expect($parameter)->not->toBeNull()
+        // The document does publish a format here, which is what the old sentence denied.
+        ->and($parameter['schema']['type'])->toBe('string')
+        ->and($parameter['schema']['format'])->toBe('date-time')
+        ->and($reports)->toHaveCount(1)
+        ->and($reports[0]->message)->toContain('Daybook::$posted_at')
+        ->and($reports[0]->message)->toContain('the shape recovered for the segment is a string with no format.')
+        ->and($reports[0]->message)->not->toContain('documented')
+        // And the help no longer denies the remedy the reader here already took.
+        ->and($reports[0]->help)->toContain('#[PathParameter]')
+        ->and($reports[0]->help)->not->toContain('no annotation puts one back');
 });

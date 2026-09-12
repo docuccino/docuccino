@@ -73,8 +73,32 @@ guard nobody watched fail is a guard nobody has.
 *Not every one of these is a defect.* `query-builder.partial-on-enum` makes the same shape of claim
 and was deliberately left: an author who types a partial filter as an enum publishes a set NARROWER
 than the server accepts, so the nudge is still right, and standing it down on the outcome would hide
-a real under-description. A claim falsifiable only by an overlay, disclosed in the help, is a
-documented trade rather than a defect.
+a real under-description. What exempts it is that the claim keeps its point once falsified, never
+that the help mentions the overlay: the help is where a reader learns about a trade, not where a
+sentence gets to be false. The other exemption is a producer that decides the node itself —
+`webhook.method-unknown` substitutes the method in the same expression, and the content of a bodyless
+status is dropped at the write for EVERY producer, so `attribute.body-on-bodyless-status` states an
+invariant rather than a guess about a later layer.
+
+*The sweep the entry cost.* Eight sentences moved into the producer's voice once the class was
+written down: the three the engine raises (`inference.response-shape-truncated`,
+`inference.http-exception-status-unread`, `inference.descend-scope-narrowed`), each falsified by a
+`#[Response]` the engine is structurally unable to see; `webhook.payload-unresolved`; the three
+spatie-data wrap and mapper notices; and the two branches of `config.format-sample-rejected` that
+spoke for the field. The config-side branch of that last code kept its wording — it reports a setting
+being ignored, which is its own act rather than a node somebody else may still write.
+
+Three more followed, and the last one shows why the outcome has to be reproduced rather than reasoned
+about. `query-builder.legacy-package-version` claimed the sort/include/fields lists were "documented as
+plain strings" while an `in:` rule in a form request publishes an enum over any of the three.
+`eloquent.custom-date-serialization` claimed, at its path-segment site, that "the parameter is documented
+as a plain string" — and a build proved the document publishing `format: date-time` on that very
+parameter from a `#[PathParameter]`, with the notice still speaking. Its HELP was the worse half: "no
+annotation puts one back" was written for a response column, where it is true, and carried to a path
+segment, where the attribute it denies is the one remedy. The model-schema site says the same thing
+about a component nothing but an overlay can answer for, and it moved too — one code may not speak in
+two voices depending on which site raised it. What did NOT move is `eloquent.no-columns` beside it:
+that one is asserted against the FINISHED property set, which is the first fix, not this defect.
 
 ## A subtraction leaves no evidence
 

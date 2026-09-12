@@ -572,7 +572,8 @@ transformer, the build raises
 
 ```text
 App\Data\FieldData::$tags is a nested collection of App\Data\FieldTagData, which laravel-data
-serialises as {"data": [ … ]} because `data.wrap` is set — this document describes it as a bare array.
+serialises as {"data": [ … ]} because `data.wrap` is set — the schema recovered for the property is a
+bare array, with no envelope.
 ```
 
 Resolve it whichever way your API actually behaves:
@@ -666,7 +667,7 @@ confidence rather than failing — then your annotations fill the gap. A Data cl
 all is documented as a bare `object`.
 
 One case is worth naming: a **custom name mapper** Docuccino doesn't recognize can't be applied
-without running it, so those keys are documented unmapped and the build emits a
+without running it, so the names recovered for those keys are the properties' own and the build emits a
 `spatie-data.unknown-mapper` info diagnostic naming the class. Rename the keys with an explicit
 `#[MapName('…')]` if it matters.
 

@@ -218,7 +218,11 @@ it('degrades sort, include and fields to plain strings and says so, on a pre-v7 
         ->and($byName['fields']['schema']['type'])->toBe('string')
         ->and($byName['fields']['schema'])->not->toHaveKey('items')
         ->and($legacy)->toHaveCount(1)
-        ->and($legacy[0]->message)->toBe('spatie/laravel-query-builder below v7 is installed, so the sort/include/fields allow-lists are documented as plain strings rather than value enums.');
+        ->and($legacy[0]->message)->toBe('spatie/laravel-query-builder below v7 is installed, so this integration types the sort/include/fields allow-lists it recovered as plain strings rather than value enums.')
+        // It speaks for its own typing and not for the finished parameters: a form-request `in:` rule
+        // publishes an enum over any of the three (docs/design/defect-classes.md §"A diagnostic that
+        // asserts an outcome it never reads").
+        ->and($legacy[0]->message)->not->toContain('documented as plain strings');
 });
 
 it('never reports a legacy package on the supported major, and skips the report where no list was recovered', function (): void {

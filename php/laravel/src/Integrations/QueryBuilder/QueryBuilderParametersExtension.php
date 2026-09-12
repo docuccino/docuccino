@@ -453,6 +453,11 @@ final class QueryBuilderParametersExtension implements OperationExtension
      * degrades all three to plain strings ({@see QueryBuilderParameters::listSchema()}) — said only
      * where one of those lists was actually recovered, per route the way {@see reportDefaultConfig()}
      * is.
+     *
+     * The sentence is about what this integration typed, not about the finished parameters: a rule in a
+     * form request publishes an enum over any of the three, and the notice would then be false for the
+     * reader who wrote one (docs/design/defect-classes.md §"A diagnostic that asserts an outcome it
+     * never reads").
      */
     private function reportLegacyPackage(QueryBuilderFacts $facts, RouteContext $context): void
     {
@@ -465,7 +470,7 @@ final class QueryBuilderParametersExtension implements OperationExtension
         $context->components->addDiagnostic(new Diagnostic(
             severity: Severity::Info,
             code: 'query-builder.legacy-package-version',
-            message: 'spatie/laravel-query-builder below v7 is installed, so the sort/include/fields allow-lists are documented as plain strings rather than value enums.',
+            message: 'spatie/laravel-query-builder below v7 is installed, so this integration types the sort/include/fields allow-lists it recovered as plain strings rather than value enums.',
             routeSignature: $context->route->signature(),
             help: 'Upgrade to spatie/laravel-query-builder ^7 to document the sort/include/fields allow-lists as enums.',
         ));

@@ -641,7 +641,7 @@ documents:
 It is a **merge**: the two formats above are replaced and every other format keeps its default. A
 format the table doesn't know can be added the same way. And a configured sample earns no exemption
 from the rule above — it is validated against each field's finished schema like a derived one, and on a
-field whose rules reject it the built-in sample is published there instead, with a
+field whose rules reject it the built-in sample is used there in its place, with a
 `config.format-sample-rejected` warning naming the format, your value and the keyword it failed. A
 sample for a format no schema uses is not an error; examples are demand-driven.
 
