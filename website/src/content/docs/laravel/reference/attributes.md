@@ -316,6 +316,12 @@ Leaving `required` off is neither: it says nothing, so a field your validation r
 required stays required. That is why the argument is `?bool` — a declaration written to document a
 `type:` must not quietly de-require a field the server insists on.
 
+A declaration also answers for the field in the diagnostics. A field whose rules the build cannot read
+statically is reported as omitted from the request schema — and where a `#[BodyParameter]` names that
+field, or a key inside it, the field is documented and the notice stops naming it. See
+[`validation.rule-unrecoverable`](/laravel/reference/diagnostics/#responses-recovered-from-your-code)
+and `validation.rule-values-unread`, which stands down the same way.
+
 Naming a key inside a container also settles what that container is. A bare `array` rule leaves a field
 [undecided](/laravel/documenting/requests/#nested-and-array-fields) — Laravel has one word for both shapes —
 and a declaration inside it answers the question, so `validation.container-undecided` stops firing for

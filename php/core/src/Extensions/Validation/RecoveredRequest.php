@@ -195,6 +195,49 @@ final class RecoveredRequest
     }
 
     /**
+     * Every `#[BodyParameter]` that can still answer for this route's body: the route attribute bag and
+     * the request TYPE's own declarations, and neither at a verb that writes no body
+     * ({@see documentsBody()}). Composed here rather than at each caller, so a reader that saw one of
+     * the two sites and not the other cannot exist.
+     *
+     * @return list<BodyParameter>
+     */
+    public static function declarationsReaching(RouteContext $context, ?string $sourceClass): array
+    {
+        if (! self::documentsBody($context)) {
+            return [];
+        }
+
+        return [...$context->attributes->all(BodyParameter::class), ...self::declaredOn($sourceClass, $context)];
+    }
+
+    /**
+     * Whether one of `$declarations` answers for `$field` — what a rules recoverer has to ask before it
+     * says what became of a field whose rules it could not read.
+     *
+     * A declaration naming the field is written OVER the property ({@see DeclaredBodyFields}), so what
+     * is published there is the author's whole and no recovered rule would have survived beside it; one
+     * naming a key inside the field publishes the field as that container. Either way the sentence a
+     * recoverer would write — the field is omitted, its constraint left off — describes a document the
+     * layer above it has already decided, and names a remedy the author went around. The narrower loss
+     * the second case leaves is the field's own constraints, which nothing has been seen to hit: a third
+     * sentence for that is a mechanism sized to what could be true, and a note firing where the reader
+     * has already declared the field is the population this reading exists to remove.
+     *
+     * @param  list<BodyParameter>  $declarations
+     */
+    public static function answersFor(array $declarations, string $field): bool
+    {
+        foreach ($declarations as $declaration) {
+            if (FieldPath::isWellFormed($declaration->name) && FieldPath::isAtOrUnder($declaration->name, $field)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * What the source class declares that nothing reads on a type ({@see SchemaClassAttributes}) —
      * reported here because this is the one place a class is known to be a request TYPE and not the
      * action, which is the whole difference between a declaration the route bag reads and one it never

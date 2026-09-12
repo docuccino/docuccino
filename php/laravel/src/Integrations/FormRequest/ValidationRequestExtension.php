@@ -22,7 +22,8 @@ use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
  * chain. Body verbs get a request body under the recovered media type (JSON, or multipart once a file rule
  * appears); read verbs get query parameters. Attributes still override, as this writes at the integration
  * layer — and a `#[BodyParameter]` overrides by PATCHING the body this wrote, which is why the
- * attribute body extension runs behind this one.
+ * attribute body extension runs behind this one — and why the recovery notes read that bag before they
+ * say a field went undocumented, since a declaration naming one publishes it after this runs.
  */
 final class ValidationRequestExtension implements OperationExtension
 {
@@ -76,10 +77,19 @@ final class ValidationRequestExtension implements OperationExtension
 
         $inline = $visitor->ruleSet();
 
+        // An inline body has no source class, so the route's own attribute bag is the whole of what can
+        // still document a field this trace could not read ({@see RecoveredRequest::answersFor()}).
+        $declared = RecoveredRequest::declarationsReaching($context, null);
+
         foreach ($visitor->unrecoverableFields() as $field) {
             if ($inline->fields[$field] ?? null) {
                 continue;
             }
+
+            if (RecoveredRequest::answersFor($declared, $field)) {
+                continue;
+            }
+
             $context->components->addDiagnostic(new Diagnostic(
                 severity: Severity::Info,
                 code: 'validation.rule-unrecoverable',
@@ -90,6 +100,10 @@ final class ValidationRequestExtension implements OperationExtension
         }
 
         foreach ($visitor->widenedFields() as $field) {
+            if (RecoveredRequest::answersFor($declared, $field)) {
+                continue;
+            }
+
             $context->components->addDiagnostic(new Diagnostic(
                 severity: Severity::Info,
                 code: 'validation.rule-values-unread',

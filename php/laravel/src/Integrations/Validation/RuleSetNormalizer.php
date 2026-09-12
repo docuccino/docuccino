@@ -90,10 +90,11 @@ final class RuleSetNormalizer
      * Both declaration sites, which is why `$sourceClass` is here: a `#[BodyParameter]` on the request
      * TYPE settles a container exactly as one on the action does, and a guard that read fewer sites than
      * the write it guards would ask for rules that a declaration had already answered — the note firing
-     * where nothing can be done. {@see RecoveredRequest::declaredOn()} is that one reader, so the two
-     * cannot drift. It has no default either: a caller with a source class that passed no argument here
-     * would read one of the two sites, so PHP refuses the call rather than a consumer finding the note
-     * in the document. `null` is a caller saying there is no class — an inline `validate()`.
+     * where nothing can be done. {@see RecoveredRequest::declarationsReaching()} is that one reader,
+     * shared with the rules recoverers' own notes, so none of them can drift. `$sourceClass` has no
+     * default either: a caller with a source class that passed no argument here would read one of the
+     * two sites, so PHP refuses the call rather than a consumer finding the note in the document. `null`
+     * is a caller saying there is no class — an inline `validate()`.
      */
     public static function report(RuleSet $normalized, RouteContext $context, ?string $sourceClass): void
     {
@@ -102,9 +103,7 @@ final class RuleSetNormalizer
             return;
         }
 
-        $declared = RecoveredRequest::documentsBody($context)
-            ? [...$context->attributes->all(BodyParameter::class), ...RecoveredRequest::declaredOn($sourceClass, $context)]
-            : [];
+        $declared = RecoveredRequest::declarationsReaching($context, $sourceClass);
         $types = new TypeStringParser;
 
         foreach ($undecided as $field) {
