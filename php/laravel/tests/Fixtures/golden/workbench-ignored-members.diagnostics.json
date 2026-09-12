@@ -16,7 +16,7 @@
     {
         "severity": "warning",
         "code": "attribute.ignore-param-unmatched",
-        "message": "#[IgnoreParam(name: \"filter[opaqu]\", in: \"query\")] dropped nothing: this operation documents no such parameter. It documents query:filter, query:filter[opaque], query:filter[status], query:filter[window], query:filter[window][from], query:filter[window][to], query:page.",
+        "message": "#[IgnoreParam(name: \"filter[opaqu]\", in: \"query\")] dropped nothing: this operation documents no such parameter or member. It documents query:filter, query:filter[opaque], query:filter[status], query:filter[window], query:filter[window][from], query:filter[window][to], query:page.",
         "source": {
             "file": "workbench/app/Http/Controllers/IgnoredMembersController.php",
             "line": 45,

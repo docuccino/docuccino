@@ -55,7 +55,7 @@ final class UnmatchedDeclaration
         return new Diagnostic(
             severity: Severity::Warning,
             code: 'attribute.ignore-param-unmatched',
-            message: $declaration.' dropped nothing: this operation documents no such parameter. '.self::documenting('parameters', $published),
+            message: $declaration.' dropped nothing: this operation documents no such parameter or member. '.self::documenting('parameters', $published),
             source: $source,
             routeSignature: $routeSignature,
             help: 'Correct the name to one this operation documents, or delete the declaration — a parameter that was renamed keeps its old spelling only in the attribute. A key only some of a controller\'s actions take belongs on the class, where an action that never documented it is not a mistake.',
