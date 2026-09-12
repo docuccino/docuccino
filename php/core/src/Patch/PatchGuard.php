@@ -87,8 +87,8 @@ final class PatchGuard
     }
 
     /**
-     * Every field written here, {@see Remove} sentinels included — what a node compares against what
-     * it publishes ({@see self::provenance()}).
+     * Every field written here, {@see Remove} sentinels included — what a node compares against what it
+     * publishes ({@see self::provenance()}).
      *
      * @return list<string>
      */
@@ -187,11 +187,9 @@ final class PatchGuard
     }
 
     /**
-     * Provenance records for the winning contributions, deterministically ordered.
-     *
-     * A node may publish a field this guard never wrote, and may not publish one it did — a keyword a
-     * declared shape retracted, a member a subtraction took off. Both are named here rather than
-     * patched into the records afterwards, so one grouping decides which fields share a record.
+     * Provenance records for the winning contributions, deterministically ordered. A node may publish a
+     * field this guard never wrote and withhold one it did, so both are named here rather than patched in
+     * afterwards — one grouping decides which fields share a record.
      *
      * @param  array<string, Contribution>  $also  published fields written elsewhere, and by whom
      * @param  list<string>  $except  fields written here that the node does not publish
@@ -208,8 +206,7 @@ final class PatchGuard
                 $groups[$key] = ['contribution' => $state->winner, 'fields' => [], 'overrode' => []];
             }
 
-            // An excepted field loses its NAME and keeps its trail: what a producer tried is still
-            // what it tried, and `overrode` is the only record of it.
+            // An excepted field loses its NAME and keeps its trail: `overrode` is the only record.
             if (! in_array($field, $except, true)) {
                 $groups[$key]['fields'][] = $field;
             }

@@ -8,13 +8,11 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Context\RouteNotes;
 
 /**
- * The filters this route recovered that the Query Builder integration could not type
+ * The filters this route recovered that the integration could not type
  * ({@see QueryBuilderParameters::typesNothing()}), each against the query parameter it was PUBLISHED
- * under — so the report {@see QueryBuilderUntypedFilterExtension} makes at the end of the build is
- * addressed at the node the parameters pass wrote, and never at one re-derived from the package config.
- *
- * A {@see RouteContext::notes()} channel because the two are separate passes over one route; it carries
- * no collector and rides the operation fragment, so a warm hit reports what a cold build reported.
+ * under — so {@see QueryBuilderUntypedFilterExtension}'s end-of-build report is addressed at the node
+ * the parameters pass wrote, never at one re-derived from config. A {@see RouteContext::notes()} channel
+ * because the two are separate passes, and it rides the operation fragment so a warm hit still reports.
  */
 final class UntypedFilters
 {
@@ -29,8 +27,8 @@ final class UntypedFilters
     }
 
     /**
-     * Query parameter ⇒ the filters published under it, sorted by {@see RouteNotes::all()}, so what is
-     * reported never depends on the order the chain declared them.
+     * Query parameter ⇒ the filters published under it, sorted by {@see RouteNotes::all()} so the report
+     * never depends on the order the chain declared them.
      *
      * @return array<string, list<string>>
      */

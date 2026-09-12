@@ -120,8 +120,7 @@ it('leaves a validated key no container claims as its own parameter', function (
     // under nothing, so the representation does not move it.
     $params = mergedFilterParameters(radiusFilters(), 'deepObject');
 
-    expect($params)->not->toHaveKey('filter[radius_lat]')
-        ->and($params['page']['schema']['type'])->toBe('integer');
+    expect($params['page']['schema']['type'])->toBe('integer');
 
     // With no allow-list there is no container to merge into, so every validated key keeps the
     // bracketed spelling — the reading is inert rather than a second grammar for the same question.

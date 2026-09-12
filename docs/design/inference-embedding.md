@@ -500,16 +500,11 @@ route bound on a date column (`{journal:filed_on}`), which reads the same policy
 Which casts the policy speaks for is `CastSchema::serializesThroughDateHook()`, and it is the
 framework's own list matched the framework's own way — the whole `$casts` VALUE, so a cast naming its
 format (`datetime:d/m/Y`) is written with that parameter, never reaches the hook, and an override takes
-nothing from it. That is also why `CastSchema` is read in two directions. A column's two appearances
-answer different questions: `written()` is what a response body carries, `accepted()` what a filter
-value, a scope argument or a bound segment may put in. Every row answers both alike except the date
-casts, and there the response direction is never the table's: a cast naming its own `:FORMAT` is written
-with that pattern (`CastSchema::ownDateFormat()`, one reading for all five date casts), and a cast naming
-none goes to `DateColumnSchema`, because it is rounded to start-of-day and serialised through the hook.
-So the body carries what the cast writes — a full date-time, or a bespoke string no keyword names — while
-the segment carries the date the column stores. Publishing one answer in both places is how a `format`
-claim came to be contradicted by the server's own bytes, twice: first for the whole `date` row, then for
-the parameter that row went on discarding after the split.
+nothing from it. That is also why `CastSchema` is read in two directions, `written()` and `accepted()`
+(defect-classes.md §"One table answering both directions of the wire" states the rule and what it cost).
+The date casts are the rows that branch: a cast naming its own `:FORMAT` is written with that pattern
+(`CastSchema::ownDateFormat()`, one reading for all five), and a cast naming none goes to
+`DateColumnSchema`.
 
 A `$dates` entry gets no such split, and the asymmetry is grounded rather than accidental: a cast names
 the column's temporal domain and `$dates` only marks the name as a date, so there is no narrower

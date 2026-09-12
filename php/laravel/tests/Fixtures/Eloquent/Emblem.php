@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Model;
  * `badge` in every response, so the schema is not a bare object and `eloquent.no-columns` must stay
  * quiet. Only ever reflected.
  */
-final class Placard extends Model
+final class Emblem extends Model
 {
     /** No timestamp columns, so nothing but the append reaches the schema. */
     public $timestamps = false;

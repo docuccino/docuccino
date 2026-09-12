@@ -73,8 +73,7 @@ final class EloquentRouteBindingSchema implements RouteBindingFieldSchemaResolve
         $metadata = $context->engine->classMetadata(new ClassRef($modelFqcn));
         $context->recordDependencyFiles($metadata->dependencyFiles);
 
-        $formatGivenUp = false;
-        $schema = $this->reflector->columnSchemaFor($modelFqcn, $field, $metadata, $formatGivenUp);
+        [$schema, $formatGivenUp] = $this->reflector->columnSchemaFor($modelFqcn, $field, $metadata);
 
         if ($formatGivenUp) {
             $this->reportWeakenedDate($context, $modelFqcn, $field);

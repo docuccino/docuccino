@@ -10,9 +10,11 @@ use Illuminate\Support\Carbon;
 use Workbench\App\Support\StampedDate;
 
 /**
- * {@see Journal} without the `serializeDate()` override — the same `php artisan ide-helper:models`
- * tags typing every date column with the Carbon class the attribute holds, the same binding on one of
- * them — so what the two publish differs by the override and nothing else.
+ * {@see Journal} without the `serializeDate()` override, tagged the same way: `php artisan
+ * ide-helper:models` types every date column with the Carbon class the attribute holds. The two are not
+ * otherwise a matched pair — this one carries more columns, reaches the date policy through `$dates` and
+ * `date` casts where Journal reaches it through `datetime` ones, and is bound on two columns rather than
+ * one — so what the override costs is read per column and not by diffing the two models.
  *
  * `observed_on` is the column bound on a `date` cast: the response sends the date-time the framework
  * writes for it and the segment carries the date it is stored as, so the document shows both answers

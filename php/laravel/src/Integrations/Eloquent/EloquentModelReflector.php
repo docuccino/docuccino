@@ -136,28 +136,26 @@ final class EloquentModelReflector
 
     /**
      * The schema for the NAMED column a `{post:slug}` parameter binds on, or null when nothing types it.
-     * Precedence mirrors {@see ModelSchema}'s, so no source can be consulted here that a response body
-     * would not consult: a uuid/ulid key beats a stale docblock, a `$casts` entry beats the date policy
-     * where it states its own format, the date policy beats the inferred type, and the engine's
-     * `@property` type is the floor.
-     *
-     * What the matching SOURCE then says can differ, because the question does — a segment carries the
-     * value a client types, a body the value the server wrote — so this reads the cast table's request
-     * direction ({@see CastSchema::accepted()}), which is where that split is stated.
+     * Precedence mirrors {@see ModelSchema}'s, so no source is consulted here that a response body would
+     * not: uuid/ulid key, then a `$casts` entry stating its own format, then the date policy, then the
+     * engine's `@property` type. What the matching SOURCE says can differ, because the question does, so
+     * this reads the cast table's request direction ({@see CastSchema::accepted()}).
      *
      * A column whose type can't be carried in a URL segment (an `array` cast, a `@property` naming a class)
      * is refused rather than emitted — the parameter is a path segment, not the serialised attribute.
-     * The Query Builder FilterColumnResolver mirrors the key/cast bracket — keep the precedence in
-     * step when editing here.
+     * The Query Builder `FilterColumnResolver` answers the same question for a filter down a ladder of
+     * its own, and shares the key/cast bracket with this one; `ColumnLadderAgreement` pins where the two
+     * agree and the date rows where they do not, so editing either against that table keeps them in step.
      *
-     * @param  bool  $formatGivenUp  raised when the parameter lost its date `format`, so the caller can
-     *                               report it ({@see DateColumnSchema}).
-     * @return array<string, mixed>|null
+     * Answers the shape and whether the DATE branch gave a `format` up, so the caller reports the loss
+     * without re-deciding which branch was taken ({@see DateColumnSchema}).
+     *
+     * @return array{0: array<string, mixed>|null, 1: bool}
      */
-    public function columnSchemaFor(string $fqcn, string $column, ClassMetadata $metadata, bool &$formatGivenUp): ?array
+    public function columnSchemaFor(string $fqcn, string $column, ClassMetadata $metadata): array
     {
         if (! self::isModel($fqcn) || ! class_exists($fqcn)) {
-            return null;
+            return [null, false];
         }
 
         $facts = $this->facts($fqcn);
@@ -165,40 +163,38 @@ final class EloquentModelReflector
 
         // HasUuids/HasUlids fix the key's format outright.
         if ($isKey && isset($facts['keySchema']['format'])) {
-            return $facts['keySchema'];
+            return [$facts['keySchema'], false];
         }
 
         $cast = $facts['casts'][$column] ?? null;
         if ($cast !== null) {
             if ($facts['overridesSerializeDate'] && CastSchema::serializesThroughDateHook($cast)) {
-                return DateColumnSchema::schema($facts, $formatGivenUp);
+                return [DateColumnSchema::schema($facts), DateColumnSchema::formatGivenUp($facts)];
             }
 
             $schema = self::asPathSegment(CastSchema::accepted($cast));
             if ($schema !== null) {
-                return $schema;
+                return [$schema, false];
             }
         }
 
-        // A date attribute publishes what `serializeDate()` wrote, never what named it
-        // ({@see DateColumnSchema}), so the policy is read once here rather than at each source below —
-        // a source that forgot to ask is how a date column reached the document typed by its tag.
+        // Read once here rather than at each source below: a source that forgot to ask is how a date
+        // column reached the document typed by its tag ({@see DateColumnSchema}).
         if (DateColumnSchema::isAttribute($column, $facts)) {
-            return DateColumnSchema::schema($facts, $formatGivenUp);
+            return [DateColumnSchema::schema($facts), DateColumnSchema::formatGivenUp($facts)];
         }
 
         foreach ($metadata->properties as $property) {
             if ($property->name === $column) {
                 $schema = self::segmentSchema($property->type);
                 if ($schema !== null) {
-                    return $schema;
+                    return [$schema, false];
                 }
             }
         }
 
-        // A `$fillable`-only name is deliberately NOT a floor here: it types the column as "anything",
-        // which for a path segment is no answer at all.
-        return $isKey ? $facts['keySchema'] : null;
+        // A `$fillable`-only name is NOT a floor here: "anything" is no answer for a path segment.
+        return [$isKey ? $facts['keySchema'] : null, false];
     }
 
     /**

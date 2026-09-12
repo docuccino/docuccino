@@ -463,7 +463,7 @@ function validationSchema(RuleSet $rules, SchemaConverter $context, bool $normal
  * @param  array<string, string>  $traces  `Class::method` → the PHP its visitor walks
  * @param  list<object>  $declarations  the attributes on the action
  */
-function validationRulesContext(array $traces = [], array $declarations = [], string $verb = 'POST', ?string $formRequestClass = null): RouteContext
+function validationRulesContext(array $traces = [], array $declarations = [], string $verb = 'POST'): RouteContext
 {
     return new RouteContext(
         route: new RouteDescriptor([$verb], 'api/listings'),
@@ -478,7 +478,6 @@ function validationRulesContext(array $traces = [], array $declarations = [], st
             typeToSchema: DefaultTypeMappers::all(),
             ruleTransformers: ValidationIntegration::transformers(),
         ),
-        formRequestClass: $formRequestClass,
     );
 }
 

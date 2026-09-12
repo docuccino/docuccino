@@ -41,9 +41,7 @@ it('types a bound column, or refuses to', function (string $fqcn, string $column
         $properties,
     ));
 
-    $formatGivenUp = false;
-
-    expect((new EloquentModelReflector)->columnSchemaFor($fqcn, $column, $metadata, $formatGivenUp))->toBe($expected);
+    expect((new EloquentModelReflector)->columnSchemaFor($fqcn, $column, $metadata)[0])->toBe($expected);
 })->with([
 
     // Every scalar the engine can recover for a column, i.e. every entry of the shared scalar table.
@@ -144,9 +142,7 @@ it('reads the same column the same way in a path as in a body', function (): voi
     // one column both ways is what stops the path table drifting away from ModelSchema's.
     $metadata = new ClassMetadata(Merchant::class, [new PropertyMetadata('name', ScalarT::string())]);
 
-    $formatGivenUp = false;
-
-    expect((new EloquentModelReflector)->columnSchemaFor(Merchant::class, 'name', $metadata, $formatGivenUp))
+    expect((new EloquentModelReflector)->columnSchemaFor(Merchant::class, 'name', $metadata)[0])
         ->toBe(schemaConverter()->convert(ScalarT::string()));
 });
 
@@ -154,19 +150,18 @@ it('leaves a nullable column non-null only in the path', function (DType $type):
     // The body keeps the null branch; the path drops it. Both are true of the same column.
     $metadata = new ClassMetadata(Merchant::class, [new PropertyMetadata('name', $type)]);
 
-    $formatGivenUp = false;
-
-    expect((new EloquentModelReflector)->columnSchemaFor(Merchant::class, 'name', $metadata, $formatGivenUp))
+    expect((new EloquentModelReflector)->columnSchemaFor(Merchant::class, 'name', $metadata)[0])
         ->toBe(['type' => 'string']);
 })->with([
+    // The null-last spelling is the table's own `a nullable scalar @property` row above; this states the
+    // other branch order, which no row does.
     'null first' => [UnionT::of([new NullT, ScalarT::string()])],
-    'null last' => [UnionT::of([ScalarT::string(), new NullT])],
 ]);
 
 /**
- * The flag beside the schema: a bound date column loses its `format` to a `serializeDate()` override,
+ * The answer beside the schema: a bound date column loses its `format` to a `serializeDate()` override,
  * and the caller only knows because the same call said so ({@see DateColumnSchema}). Both answers are
- * here, plus the columns that give nothing up, so a row that stopped raising it fails rather than
+ * here, plus the columns that give nothing up, so a row that stopped reporting it fails rather than
  * quietly publishing a weakened parameter nobody is told about.
  */
 it('says whether a bound column gave its date format up', function (string $fqcn, string $column, array $properties, bool $expected): void {
@@ -175,10 +170,7 @@ it('says whether a bound column gave its date format up', function (string $fqcn
         $properties,
     ));
 
-    $formatGivenUp = false;
-    (new EloquentModelReflector)->columnSchemaFor($fqcn, $column, $metadata, $formatGivenUp);
-
-    expect($formatGivenUp)->toBe($expected);
+    expect((new EloquentModelReflector)->columnSchemaFor($fqcn, $column, $metadata)[1])->toBe($expected);
 })->with([
     'a datetime cast under the override' => [Chronicle::class, 'published_at', [], true],
     'a $dates column under the override' => [Hourglass::class, 'posted_at', [], true],
@@ -209,12 +201,10 @@ it('accepts a date-cast segment as the date it is stored as, though the body sen
     // never sends.
     $metadata = new ClassMetadata(Astrolabe::class, [new PropertyMetadata('sighted_on', new ClassT('Illuminate\\Support\\Carbon'))]);
 
-    $formatGivenUp = false;
+    $facts = (new EloquentModelReflector)->facts(Astrolabe::class);
 
-    expect((new EloquentModelReflector)->columnSchemaFor(Astrolabe::class, 'sighted_on', $metadata, $formatGivenUp))
-        ->toBe(['type' => 'string', 'format' => 'date'])
-        ->and($formatGivenUp)->toBeFalse()
+    expect((new EloquentModelReflector)->columnSchemaFor(Astrolabe::class, 'sighted_on', $metadata))
+        ->toBe([['type' => 'string', 'format' => 'date'], false])
         ->and(CastSchema::written('date'))->toBeNull()
-        ->and(DateColumnSchema::schema((new EloquentModelReflector)->facts(Astrolabe::class), $formatGivenUp))
-        ->toBe(['type' => 'string', 'format' => 'date-time']);
+        ->and(DateColumnSchema::schema($facts))->toBe(['type' => 'string', 'format' => 'date-time']);
 });

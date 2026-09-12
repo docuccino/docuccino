@@ -344,6 +344,7 @@ it('names the construction sites whose code is not written beside it', function 
         'Emit/OpenApi31DownlevelEmitter.php',
         'Extensions/BuiltIn/AttributeExamplesExtension.php',
         'Extensions/BuiltIn/AttributeOverridesExtension.php',
+        'Integrations/FormRequest/UnrecoveredRules.php',
         'Pipeline/DocumentGenerator.php',
         'Support/MachineDependentValue.php',
     ]);

@@ -8,9 +8,9 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * {@see Hourglass} without the `serializeDate()` override — the same docblock-tagged `$dates` column,
- * the same Carbon type — so what the two publish differs by the override and nothing else. Only ever
- * reflected.
+ * {@see Hourglass} without the `serializeDate()` override. The two share ONE column — `posted_at`, a
+ * docblock-tagged `$dates` entry at the same Carbon type — and that column is the whole of what the
+ * pair compares: the rest differs, timestamps and column set included. Only ever reflected.
  *
  * `sealed_at` is the other way a date column arrives tagged: by the type the DB column has rather than
  * the one the attribute holds, which is what a hand-written docblock usually says. Neither tag is what

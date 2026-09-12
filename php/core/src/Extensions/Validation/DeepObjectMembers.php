@@ -12,37 +12,20 @@ use Docuccino\Core\Patch\Contribution;
 
 /**
  * Where a bracketed query name lands on an operation that already publishes the container it names as a
- * deepObject. `filter[min_days]` is the wire spelling of the `min_days` member of a `filter` object, so
- * under that representation the container IS the parameter: a flat parameter beside it would describe
- * the same bytes twice under two identities, which a consumer reads as two inputs and a generated
- * client may send both of. With no such container the bracketed name is the parameter and nothing here
- * applies — so this is inert under the bracketed representation rather than a second grammar for it.
+ * deepObject: `filter[min_days]` is then the `min_days` MEMBER of a `filter` object rather than a
+ * parameter of its own. With no such container this is inert. Names are read through
+ * {@see FieldPath::fromQueryName()}, the declared inverse of the write that produces them.
  *
- * Names are read through {@see FieldPath::fromQueryName()}, the declared inverse of the write that
- * produces them, so every depth the bracketed writer spells is a depth this recognises and a name
- * that write does not produce reaches nothing at all.
- *
- * Additive and subtractive declarations read the SAME name here — {@see schemaFor()} patches a member,
- * {@see remove()} takes one off — so the two representations answer a bracketed declaration alike. A
- * subtraction that could not reach a member would be the worst of the two to get wrong: it leaves
- * exactly the document a working one leaves, so the author goes on believing the field is hidden.
- *
- * The answer is a function of what the operation publishes WHEN IT IS ASKED, and that is all it is.
- * Containers are not all written in one phase — {@see RecoveredRequest} mints one in
- * {@see OperationPhase::Request}, a phase after the parameter attributes run — so a producer reading
- * this before that phase is answered about a container that does not exist yet. Only a reader in
- * {@see OperationPhase::Finalize} sees every container, which is where the subtractive pass runs.
- *
- * Requiredness is the one fact with no home on the member's own schema — it belongs to the list its
- * PARENT keeps — so it is accumulated here and stated per MEMBER by {@see flush()}, which is
- * {@see SchemaDraft::requirements()}'s reading. That a required member makes the container itself
- * required is the container's own, made where it freezes ({@see ParameterDraft::freeze()}).
+ * The answer is a function of what the operation publishes WHEN IT IS ASKED — containers are not all
+ * written in one phase, so only a {@see OperationPhase::Finalize} reader sees every one. Design:
+ * docs/design/uir-and-extensions.md §"deepObject / bracketed attribute parity"; the one-reading rule the
+ * additive and subtractive halves share is docs/design/defect-classes.md §"A subtraction leaves no
+ * evidence".
  */
 final class DeepObjectMembers
 {
     /**
-     * Per parent schema: the schema whose `required` list names the members, and what each member's
-     * requiredness was stated to be.
+     * Per parent: the schema whose `required` list names the members, and what each was stated to be.
      *
      * @var array<string, array{0: SchemaDraft, 1: array<string, bool>}>
      */
@@ -53,10 +36,8 @@ final class DeepObjectMembers
     ) {}
 
     /**
-     * The schema draft a bracketed query name patches, created if the container does not publish that
-     * member yet — a key the container's own producer never enumerated is still a key this producer
-     * knows the server takes. Null means no deepObject container claims the name, so the name is the
-     * parameter.
+     * The draft a bracketed name patches, minting the member if the container does not publish it yet.
+     * Null where no deepObject container claims the name, so the name is the parameter.
      */
     public function schemaFor(string $name): ?SchemaDraft
     {
@@ -65,11 +46,7 @@ final class DeepObjectMembers
         return $resolved === null ? null : $resolved[0]->property($resolved[1]);
     }
 
-    /**
-     * Record what a producer states about one member's requiredness. `null` is the absent statement and
-     * is not one; `false` is, and takes a member off the list. A name no container claims is not a
-     * member, so nothing is recorded for it.
-     */
+    /** Record one member's stated requiredness. `null` is the ABSENT statement and records nothing. */
     public function stateRequired(string $name, ?bool $required): void
     {
         $resolved = $this->resolve($name);
@@ -83,7 +60,7 @@ final class DeepObjectMembers
         $this->stated[$key][1][$member] = $required;
     }
 
-    /** State what was accumulated here, member by member, at the layer of the producer that stated it. */
+    /** State what was accumulated, member by member, at the layer of the producer that stated it. */
     public function flush(Contribution $by): void
     {
         foreach ($this->stated as [$parent, $members]) {
@@ -94,16 +71,9 @@ final class DeepObjectMembers
     }
 
     /**
-     * Take one bracketed member off the container that publishes it — the subtractive half of
-     * {@see schemaFor()}, and the only path a declaration naming `filter[opaque]` has to a document
-     * whose `opaque` is a MEMBER rather than a parameter of its own. Answers whether a container
-     * published the name, which is the caller's evidence that the declaration reached something: a
-     * subtraction leaves the same document whether it worked or not.
-     *
-     * Nothing is minted on the way, which is the one way this differs from the additive read: a name no
-     * container publishes has nothing to take away, so walking it must not create the very member it was
-     * asked to remove. What removal means for the container's `required` list, and for the container's
-     * own requiredness, is {@see SchemaDraft::removeProperty()}.
+     * Take one bracketed member off the container that publishes it, answering whether it published the
+     * name — the caller's only evidence that the declaration reached anything. Mints nothing on the way,
+     * which is where it parts from {@see schemaFor()}.
      */
     public function remove(string $name): bool
     {
@@ -113,10 +83,8 @@ final class DeepObjectMembers
     }
 
     /**
-     * Whether a container on this operation publishes the member a bracketed name points at — what
-     * {@see remove()} is about to answer, asked without removing anything. Reachability is the
-     * criterion for both halves: matching the written name against {@see memberNames()} instead
-     * compares two spellings and answers about neither the container nor the member.
+     * {@see remove()}'s own answer, asked without removing anything — reachability for both halves, not
+     * a spelling match against {@see memberNames()}, which would answer about neither.
      */
     public function publishes(string $name): bool
     {
@@ -126,14 +94,9 @@ final class DeepObjectMembers
     }
 
     /**
-     * Every member every deepObject query container on this operation publishes, under the bracketed
-     * name an author writes it as — what a report about a name that matched nothing has to name beside
-     * the parameters, or a bracketed typo is answered with the container alone and the member spelling
-     * is nowhere for the reader to compare against. It is also what the other representation already
-     * answers, where each of these members IS a parameter of its own.
-     *
-     * Byte-sorted, and read at every depth {@see remove()} reaches, so the answer is a function of what
-     * the operation publishes rather than of the order its producers wrote them.
+     * Every member every deepObject query container publishes, bracketed as an author writes it — what a
+     * report about an unmatched name lists beside the parameters. Byte-sorted, and read at every depth
+     * {@see remove()} reaches, so it never depends on producer order.
      *
      * @return list<string>
      */
@@ -161,10 +124,8 @@ final class DeepObjectMembers
     }
 
     /**
-     * The schema whose `required` list would name the member, the member's name, and the parent's own
-     * bracketed name as the accumulation key — or null when no deepObject container on this operation
-     * claims the bracketed name. The key is that name rather than the draft's object identity, so
-     * grouping is a function of the path and not of allocation order.
+     * The parent schema, the member name, and the parent's bracketed name as the accumulation key — that
+     * name rather than the draft's identity, so grouping never depends on allocation order.
      *
      * @return array{0: SchemaDraft, 1: string, 2: string}|null
      */
@@ -187,10 +148,8 @@ final class DeepObjectMembers
     }
 
     /**
-     * The same walk without minting anything: the schema that PUBLISHES the member, and the member's
-     * name. A depth held as a keyword-written `properties` map rather than as a nested draft is not
-     * descended into, which is exactly the depth {@see memberNames()} lists — so a name that is offered
-     * as droppable is one this can drop.
+     * The same walk minting nothing. It descends exactly the depths {@see memberNames()} lists, so a name
+     * offered as droppable is one this can drop.
      *
      * @return array{0: SchemaDraft, 1: string}|null
      */
@@ -217,9 +176,8 @@ final class DeepObjectMembers
     }
 
     /**
-     * The one reading of "does this bracketed name land in a deepObject container": the container's
-     * parameter, its name, and the path below it. Both walks start here, so a name cannot be a member
-     * for the producer that writes it and a parameter for the one that subtracts it.
+     * The ONE reading of "does this bracketed name land in a deepObject container". Both walks start
+     * here, so a name cannot be a member for one producer and a parameter for another.
      *
      * @return array{0: ParameterDraft, 1: string, 2: list<string>}|null
      */

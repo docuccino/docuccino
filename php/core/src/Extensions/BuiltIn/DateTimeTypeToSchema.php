@@ -22,11 +22,11 @@ use ReflectionMethod;
  *
  * `JsonSerializable` says a class states its own JSON form and never which one, so a form is PUBLISHED
  * only where its bytes have been read ({@see READ_JSON_FORM}). A class stating none encodes as PHP's own
- * `date`/`timezone_type`/`timezone` bag, which is the class mapper's bare object, so it is left there;
- * any other stated form, and the interface any of them may stand behind, is widened to an open schema.
- * `format: date-time` over a class writing an epoch integer costs a consumer a runtime failure, where
- * claiming nothing costs only type safety. A producer that knows the wire format better runs earlier
- * and pins the shape itself.
+ * `date`/`timezone_type`/`timezone` bag, so it is left to the class mapper; any other stated form, and
+ * the interface any may stand behind, is widened — `format: date-time` over a class writing an epoch
+ * integer costs a consumer a runtime failure where claiming nothing costs only type safety. A producer
+ * that knows the wire format better pins it from `Priorities::FIRST`, since an EARLY tie breaks by FQCN
+ * ascending and puts this mapper ahead of every adapter one.
  */
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class DateTimeTypeToSchema implements TypeToSchema
@@ -35,9 +35,9 @@ final class DateTimeTypeToSchema implements TypeToSchema
     public const SCHEMA = ['type' => 'string', 'format' => 'date-time'];
 
     /**
-     * The declarations whose bytes have been read — Carbon's, named by string because core requires
-     * none of them. Matched as the DECLARING class of `jsonSerialize()`, so a subclass inheriting one is
-     * covered and one restating it is widened.
+     * The declarations whose bytes have been read — Carbon's, by string because core requires none of
+     * them. Matched as the DECLARING class of `jsonSerialize()`, so an inheritor is covered and a
+     * restater widened.
      *
      * @var list<string>
      */
@@ -51,8 +51,7 @@ final class DateTimeTypeToSchema implements TypeToSchema
     {
         return $type instanceof ClassT
             && is_a($type->fqcn, DateTimeInterface::class, true)
-            // An interface stands for every implementation at once, so its wire form is unknowable
-            // whether or not the interface itself states one.
+            // An interface stands for every implementation at once, so its wire form is unknowable.
             && (interface_exists($type->fqcn) || is_a($type->fqcn, JsonSerializable::class, true));
     }
 
