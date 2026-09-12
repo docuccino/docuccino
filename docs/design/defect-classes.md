@@ -969,10 +969,21 @@ could not happen — the framework formats a parameterised cast with its paramet
 hook. `custom_datetime` sat on the same list for the same reason: it is the framework's INTERNAL cast
 type name, reaches no branch of `addCastAttributesToArray()`, and an override never touches it either.
 
+The split itself is not the fix, and the follow-up instance is the reason to say so. Having separated
+the two readings, the `date`/`immutable_date` row went on DISCARDING its `:FORMAT` parameter while the
+`datetime` row beside it honoured one, so `date:d/m/Y` published `format: date` over bytes of
+`02/01/2024` — a full-date validator rejects them, and the `date:c` sibling published a full-date
+keyword over a value carrying a time. The docblock added in the same change asserted that the guard
+"cannot recognise fewer forms than the fragment it decides", which is the sentence that tells the next
+reader not to look: the guard read the parameter and the fragment did not, so the file documented an
+invariant one of its own rows broke.
+
 *The tell.* One lookup whose call sites are split between a response mapper and a parameter resolver,
 and whose docblock says what a value "serialises to" while half its callers are asking what a request
 may send. The second tell is a guard beside such a table that unwraps fewer forms than the fragment it
-decides — a base where the framework reads a whole value. Sibling of
+decides — a base where the framework reads a whole value. The third is two rows of one family reading
+their parameter differently: a fix scoped to the row that was reported leaves its siblings answering the
+old way, and a prose invariant written in the same change then certifies them. Sibling of
 [one flag answering two questions](#one-flag-answering-two-questions-how-far-to-walk-and-whose-code-this-is):
 same shape, different axis.
 
@@ -983,7 +994,12 @@ tables whose 25 identical rows would drift. The divergent rows are the only ones
 the hook. The guard is `CastSchemaTest`, which states the rule from Laravel rather than from the table:
 two fixtures differing by `serializeDate()` alone are serialised and the BYTES compared, so a cast
 belongs to the hook when and only when replacing that method changes what the column emits, and the
-row set is asserted against the fixture's own casts so a new form cannot go unread.
+row set is asserted against the fixture's own casts so a new form cannot go unread. The parameter
+follow-up is one reading for all five date casts, called by the table and by the response direction
+both, and a guard that walks the WHOLE ladder: every cast form the fixture carries is serialised and the
+published `format` checked against the bytes by an RFC 3339 reader, so a row cannot agree with the
+table by construction, and the two producers' answers are asserted as a union so no form falls between
+them.
 
 ## A declaration trusted for more than it declares
 
@@ -1006,12 +1022,25 @@ METHOD NAME is the third: `KnownThrowers` is keyed on one, which is a guess abou
 fact, so it speaks only for callees this build cannot read. Two of the three were already gated; the tell
 is that nobody had asked what the third one's declaration actually claimed.
 
+`JsonSerializable` on a date class is the same shape in the schema layer. The interface states that the
+class decides its own JSON form; it says nothing about WHICH form, and the date-time mapper read it as
+evidence of RFC 3339 and published `{type: string, format: date-time}` for every implementation. Three
+classes with that identical declaration send `"2024-01-02T03:04:05.000000Z"`, `"02/01/2024"` and
+`1704164645`, so for two of them the document published a `format` the server contradicts and for one it
+published the wrong TYPE — a client's deserialiser fails at runtime on a value the document called a
+string. The same reading claimed too little in the other direction: a property typed at the bare
+`DateTimeInterface` states no form, so it fell to the class mapper's `type: object`, which is true only
+when the value is one of PHP's own and false for the Carbon a Laravel application almost always puts
+there.
+
 *The tell.* A reader that stops at a declaration and a reader that stops at a VALUE look identical in the
 code — both are an early return with the answer in hand — and only the first is trusting something. Ask
 what sentence the author wrote, and what sentence the code is now acting on. Where they differ, the extra
 claim is a guess, and the fix is to go and read the thing the author really did write. `class_exists()` as
 a version check is the same defect outside this file: presence is what it states, and a grammar is what an
-integration then emits from it.
+integration then emits from it. A fixture is the quiet accomplice: `SerialisingDate` was written to
+satisfy the predicate — a subclass rendering RFC 3339 — so the suite proved the predicate fires and
+never that it was right, and dropping half the predicate failed exactly one test.
 
 *The fix that worked.* Split the two claims rather than the reader: take the declared CLASS from layer 1
 and read the STATUS one hop on, off the callee's own `throw` (`ThrowAnalyzer::inDeclaringCallee()`), with
@@ -1022,6 +1051,17 @@ the descend scope, and MEASURED: 163 analysed files either way, two extra live f
 was rewritten in the same change, because a diagnostic asking for an impossible edit is its own defect,
 and `UnstatedByClass` had no member of its population left afterwards, so the fixture that stands in the
 narrowed one (`rethrownAgreementStatus`) was written as part of the fix.
+
+The date-time mapper's fix is the same move: publish a form only where the BYTES have been read, which
+is a named list of the declarations whose `jsonSerialize()` was encoded in a test, matched as the
+DECLARING class of that method so a subclass inheriting one is covered and one restating it is not.
+Everything else the domain holds — another stated form, or the bare interface any of them may stand
+behind — is widened to `{}`, which claims nothing and is therefore true; `lint.vacuous-union` already
+reports the widening where it meets a nullable arm, so the author is told rather than left reading an
+emptied schema. The catalogue guard instantiates every concrete name on the list and compares its bytes
+to the one date policy's form, so an entry cannot be added without its bytes being read, and the two
+fixtures that separate the cases are a declaration writing a string and an identical one writing an
+integer.
 
 ## An invariant every producer has to remember
 

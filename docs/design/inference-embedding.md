@@ -502,11 +502,14 @@ framework's own list matched the framework's own way — the whole `$casts` VALU
 format (`datetime:d/m/Y`) is written with that parameter, never reaches the hook, and an override takes
 nothing from it. That is also why `CastSchema` is read in two directions. A column's two appearances
 answer different questions: `written()` is what a response body carries, `accepted()` what a filter
-value, a scope argument or a bound segment may put in. Every row answers both alike except the hook's
-four, where `written()` returns null and hands the response direction to `DateColumnSchema` — a `date`
-cast is rounded to start-of-day and then serialised through the hook, so the body carries a full
-date-time while the segment carries the date the column stores. Publishing one answer in both places is
-how a `format` claim came to be contradicted by the server's own bytes.
+value, a scope argument or a bound segment may put in. Every row answers both alike except the date
+casts, and there the response direction is never the table's: a cast naming its own `:FORMAT` is written
+with that pattern (`CastSchema::ownDateFormat()`, one reading for all five date casts), and a cast naming
+none goes to `DateColumnSchema`, because it is rounded to start-of-day and serialised through the hook.
+So the body carries what the cast writes — a full date-time, or a bespoke string no keyword names — while
+the segment carries the date the column stores. Publishing one answer in both places is how a `format`
+claim came to be contradicted by the server's own bytes, twice: first for the whole `date` row, then for
+the parameter that row went on discarding after the split.
 
 A `$dates` entry gets no such split, and the asymmetry is grounded rather than accidental: a cast names
 the column's temporal domain and `$dates` only marks the name as a date, so there is no narrower
@@ -524,11 +527,23 @@ the hook.
 
 Typing a date-time in general is core's, not the adapter's: `DateTimeInterface` is a PHP type, PHP
 forbids userland implementations of it, and `json_encode` decides the bytes. `DateTimeTypeToSchema`
-therefore sits in core ahead of the class mapper and claims the half of that closed domain which states
-its own JSON form — every Carbon — publishing the RFC 3339 string it writes. PHP's own
-`DateTime`/`DateTimeImmutable` state none, and `json_encode` really does write them as an object
-(`{date, timezone_type, timezone}`), so they are left to the class mapper, whose bare object is the
-true, vague answer rather than a second guess.
+therefore sits in core ahead of the class mapper, and what it may SAY is bounded by bytes that have been
+read rather than by what a class declares. `JsonSerializable` says a class states its own JSON form and
+never which one, so the RFC 3339 string is published only for the declarations on the mapper's own
+`READ_JSON_FORM` list — Carbon's two classes and its interface, named by string because core requires
+none of them, and matched as the DECLARING class of `jsonSerialize()` so a subclass inheriting one is
+covered and one restating it is not. PHP's own `DateTime`/`DateTimeImmutable` state no form, and
+`json_encode` really does write them as an object (`{date, timezone_type, timezone}`), so they are left
+to the class mapper, whose bare object is the true answer rather than a second guess.
+
+Everything else the closed domain holds is widened to `{}` at low confidence: another stated form, whose
+bytes could be a UK date or a unix integer as easily as RFC 3339, and the bare `DateTimeInterface`, whose
+value may be any of the above — the class mapper's `type: object` is true there only for PHP's own.
+`lint.vacuous-union` reports the widening where it meets a nullable arm, which is the channel an author
+already reads, so no new code was minted for a population nothing in the corpus had measured. The one
+unknowable left is `Carbon::serializeUsing()`: a runtime call no static reading can see, so an
+application that makes it is documented at the default form. That is the same shape as `serializeDate()`
+on the Eloquent side, with no declaration to detect it by.
 
 **Source (2b) — Larastan schema knowledge — was investigated and deliberately skipped.**
 `ClassMetadataFactory` is a native-reflection + docblock component that never enters PHPStan's

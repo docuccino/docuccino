@@ -9,8 +9,9 @@ use JsonSerializable;
 
 /**
  * A date-time stating its own JSON form, in the shape every framework's date class states one: a
- * subclass of PHP's own, declaring `jsonSerialize()`. Its bytes are what the date-time mapper's claim
- * is checked against, so the format string is spelled here rather than borrowed from the mapper.
+ * subclass of PHP's own, declaring `jsonSerialize()`. This one happens to write RFC 3339; {@see
+ * EpochDate} is the identical declaration writing an integer, and the pair is the whole reason the
+ * mapper reads its answer off bytes it has seen rather than off the interface.
  */
 final class SerialisingDate extends DateTimeImmutable implements JsonSerializable
 {

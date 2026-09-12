@@ -36,6 +36,7 @@ class Dial extends Model
         'internal_named' => 'custom_datetime',
         'patterned' => 'datetime:d/m/Y',
         'patterned_date' => 'date:Y-m-d',
+        'patterned_date_bespoke' => 'date:d/m/Y',
         'patterned_immutable' => 'immutable_datetime:d/m/Y',
         'unixed' => 'timestamp',
     ];

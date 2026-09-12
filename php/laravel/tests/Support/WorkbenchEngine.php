@@ -30,6 +30,7 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use ReflectionClass;
 use Workbench\App\Http\Requests\StoreWidgetRequest;
+use Workbench\App\Support\StampedDate;
 
 /**
  * Builds the deterministic stub {@see TypeEngine} the feature tests bind for the workbench: canned
@@ -359,6 +360,10 @@ final class WorkbenchEngine
                     new PropertyMetadata('updated_at', new ClassT('Illuminate\\Support\\Carbon')),
                     new PropertyMetadata('recorded_on', new ClassT('Illuminate\\Support\\Carbon')),
                     new PropertyMetadata('observed_on', new ClassT('Illuminate\\Support\\Carbon')),
+                    new PropertyMetadata('closed_on', new ClassT('Illuminate\\Support\\Carbon')),
+                    // The two date types no declaration states a wire form for.
+                    new PropertyMetadata('stamped_on', new ClassT(StampedDate::class)),
+                    new PropertyMetadata('noted_at', new ClassT('DateTimeInterface')),
                 ]),
                 self::JOURNAL_MODEL => new ClassMetadata(self::JOURNAL_MODEL, [
                     new PropertyMetadata('id', ScalarT::int()),

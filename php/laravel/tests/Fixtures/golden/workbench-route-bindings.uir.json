@@ -124,7 +124,7 @@
                         "fields": [
                           "$ref"
                         ],
-                        "confidence": 0.9
+                        "confidence": 0.4
                       }
                     ]
                   },
@@ -1234,7 +1234,7 @@
                         "fields": [
                           "$ref"
                         ],
-                        "confidence": 0.9
+                        "confidence": 0.4
                       }
                     ]
                   },
@@ -1504,6 +1504,10 @@
         },
         "type": "object",
         "properties": {
+          "closed_on": {
+            "description": "Serialized using the date format \"d/m/Y\".",
+            "type": "string"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time"
@@ -1511,6 +1515,7 @@
           "id": {
             "type": "integer"
           },
+          "noted_at": {},
           "observed_on": {
             "type": "string",
             "format": "date-time"
@@ -1519,6 +1524,7 @@
             "type": "string",
             "format": "date-time"
           },
+          "stamped_on": {},
           "title": {
             "type": "string"
           },
@@ -1533,7 +1539,10 @@
           "created_at",
           "updated_at",
           "recorded_on",
-          "observed_on"
+          "observed_on",
+          "closed_on",
+          "stamped_on",
+          "noted_at"
         ]
       },
       "Journal": {
@@ -1629,7 +1638,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "2244501bd97fd1046666a18098ece840de689e5096e314125ac8d4bd33eafd91"
+      "contentHash": "4ea9a5483651224d26b3abeaceb4ef6357e62accbe823d9d11aadafa3c233f1e"
     },
     "generator": {
       "name": "docuccino/laravel",

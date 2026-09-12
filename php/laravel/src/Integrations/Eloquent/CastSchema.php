@@ -14,9 +14,10 @@ use Docuccino\Laravel\Integrations\Support\DateWireFormat;
  * The table is read in TWO directions, because a column's two appearances in the document answer
  * different questions: {@see written()} is what a response body carries for it, {@see accepted()} what
  * a filter value, a scope argument or a bound path segment may put in. Every row answers both alike
- * except the casts `Model::serializeDate()` governs ({@see serializesThroughDateHook()}) — a `date`
- * cast is WRITTEN as a full date-time and ACCEPTED as a date — and there the response direction is not
- * this table's to give: the one date policy decides it ({@see DateColumnSchema}).
+ * except the date casts, whose serialised form is never the stored one: written, a cast naming its own
+ * format gets that format ({@see ownDateFormat()}) and one naming none is the date policy's to decide
+ * ({@see DateColumnSchema}); accepted, both are the domain the cast names, because a request value is
+ * matched against the stored column rather than against the serialised attribute.
  *
  * Anything enum-valued returns null in both directions and is routed through the Enum integration by
  * {@see ModelSchema}, which owns that machinery — a backed-enum cast, `AsEnumCollection:Enum` and
@@ -65,6 +66,9 @@ final class CastSchema
         'immutable_datetime',
     ];
 
+    /** Every cast whose `:FORMAT` parameter is a date pattern — the hook's four plus the internal name. */
+    private const DATE_CASTS = [...self::DATE_HOOK_CASTS, 'custom_datetime'];
+
     /**
      * What a response body carries for a column with this cast, or null where the fragment is not this
      * table's to give: a cast the date hook governs is the date policy's to decide
@@ -75,14 +79,18 @@ final class CastSchema
      */
     public static function written(string $cast): ?array
     {
-        return self::serializesThroughDateHook($cast) ? null : self::fragment($cast);
+        if (self::serializesThroughDateHook($cast)) {
+            return null;
+        }
+
+        return self::ownDateFormat($cast) ?? self::fragment($cast);
     }
 
     /**
      * What a request may put in for a value of this cast — a filter value, a scope argument, a bound
-     * path segment. A date-cast column is accepted as a `date` even though it is written as a
-     * date-time: the segment a client types is matched against the stored column, not against the
-     * serialised attribute.
+     * path segment. A date-cast column is accepted as the domain the cast names however it is written:
+     * the segment a client types is matched against the stored column, not against the serialised
+     * attribute.
      *
      * @return array<string, mixed>|null
      */
@@ -112,10 +120,10 @@ final class CastSchema
             return self::fragment($parameter);
         }
 
+        // The date rows are the REQUEST answer — the domain the column stores. What each one WRITES is
+        // {@see written()}'s, through the cast's own format or through the date policy.
         return match (strtolower($base)) {
-            'datetime', 'immutable_datetime', 'custom_datetime' => self::datetime($parameter),
-            // The date the column stores, which is the REQUEST answer: written it is a start-of-day
-            // date-time, and {@see written()} sends the hook's casts to the date policy for that.
+            'datetime', 'immutable_datetime', 'custom_datetime' => ['type' => 'string', 'format' => 'date-time'],
             'date', 'immutable_date' => ['type' => 'string', 'format' => 'date'],
             'timestamp' => ['type' => 'integer'],
             'boolean', 'bool' => ['type' => 'boolean'],
@@ -131,21 +139,21 @@ final class CastSchema
     }
 
     /**
-     * A `datetime` cast honouring its `datetime:FORMAT` parameter, read through the one date policy
-     * ({@see DateWireFormat}): an ISO form claims the `format` its values satisfy, and a bespoke one is a
-     * plain string with the format noted in the description — better than a `format` claim that would be
-     * wrong. An UNPARAMETERISED cast has no format of its own, so this answers for the request
-     * direction only; {@see written()} sends it to the date policy instead.
+     * What a date cast's OWN `:FORMAT` parameter writes, or null for a cast naming none — Eloquent
+     * formats such a column with the parameter and never reaches `serializeDate()`, so this is the
+     * response direction of all five. Read through the one date policy ({@see DateWireFormat}): an ISO
+     * pattern claims the `format` its values satisfy, a bespoke one names the pattern in prose instead.
      *
-     * @return array<string, mixed>
+     * @return array<string, mixed>|null
      */
-    private static function datetime(?string $format): array
+    private static function ownDateFormat(string $cast): ?array
     {
-        if ($format === null || $format === '') {
-            return ['type' => 'string', 'format' => 'date-time'];
-        }
+        $parts = explode(':', $cast, 2);
+        $parameter = $parts[1] ?? '';
 
-        return DateWireFormat::serializedSchema($format);
+        return $parameter !== '' && in_array(strtolower($parts[0]), self::DATE_CASTS, true)
+            ? DateWireFormat::serializedSchema($parameter)
+            : null;
     }
 
     /** Whether a cast value names an enum. */
@@ -174,8 +182,8 @@ final class CastSchema
      *
      * Two casts that look like dates are not: `timestamp` serialises as a unix integer, and a
      * PARAMETERISED cast is formatted with its own parameter and never reaches the hook, so an override
-     * takes nothing away from it. "Parameterised" is read exactly as {@see datetime()} reads it — an
-     * empty parameter is none — so the guard cannot recognise fewer forms than the fragment it decides.
+     * takes nothing away from it. "Parameterised" is read exactly as {@see ownDateFormat()} reads it —
+     * an empty parameter is none — so the guard cannot recognise fewer forms than the answer it decides.
      */
     public static function serializesThroughDateHook(string $cast): bool
     {
