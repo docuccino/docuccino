@@ -6,9 +6,11 @@ namespace Docuccino\Laravel\Tests\Fixtures\RouteBindings;
 
 use Docuccino\Attributes\PathParameter;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Blank;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Daybook;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Merchant;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Post;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Vault;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Waterclock;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Widget;
 use Workbench\App\Enums\WidgetPriority;
 use Workbench\App\Enums\WidgetStatus;
@@ -36,6 +38,16 @@ final class BindingController
     }
 
     public function blank(Blank $blank): array
+    {
+        return [];
+    }
+
+    public function daybook(Daybook $daybook): array
+    {
+        return [];
+    }
+
+    public function waterclock(Waterclock $waterclock): array
     {
         return [];
     }

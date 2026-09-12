@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\Eloquent;
 
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\RouteBindingFieldSchemaResolver;
 use Docuccino\Core\Extensions\Contracts\RouteBindingKeyResolver;
@@ -71,6 +73,34 @@ final class EloquentRouteBindingSchema implements RouteBindingFieldSchemaResolve
         $metadata = $context->engine->classMetadata(new ClassRef($modelFqcn));
         $context->recordDependencyFiles($metadata->dependencyFiles);
 
-        return $this->reflector->columnSchemaFor($modelFqcn, $field, $metadata);
+        $formatGivenUp = false;
+        $schema = $this->reflector->columnSchemaFor($modelFqcn, $field, $metadata, $formatGivenUp);
+
+        if ($formatGivenUp) {
+            $this->reportWeakenedDate($context, $modelFqcn, $field);
+        }
+
+        return $schema;
+    }
+
+    /**
+     * A path segment is the other place a model's date attribute reaches the document, so it is the
+     * other place the `serializeDate()` override can take a `format` away ({@see DateColumnSchema}).
+     * Named per parameter rather than per model: a reader correcting this one overlays the parameter,
+     * not the component.
+     */
+    private function reportWeakenedDate(RouteContext $context, string $modelFqcn, string $field): void
+    {
+        $context->components->addDiagnostic(new Diagnostic(
+            severity: Severity::Info,
+            code: 'eloquent.custom-date-serialization',
+            message: sprintf(
+                'The parameter binds on %s::$%s, a date attribute of a model that overrides serializeDate(), so its wire format is not statically known; the parameter is documented as a plain string.',
+                $modelFqcn,
+                $field,
+            ),
+            routeSignature: $context->route->signature($context->httpMethod()),
+            help: 'The parameter is documented as `type: string` without a `format`, and no annotation puts one back: no attribute carries a column format, and a docblock type has no format to state. If clients need an exact one, state it in an overlay, which corrects the document and leaves this notice naming the parameter.',
+        ));
     }
 }

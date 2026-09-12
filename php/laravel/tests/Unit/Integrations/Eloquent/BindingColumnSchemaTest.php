@@ -15,6 +15,7 @@ use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Blank;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Chronicle;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Coupon;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Hourglass;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Invoice;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Ledger;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Merchant;
@@ -36,7 +37,9 @@ it('types a bound column, or refuses to', function (string $fqcn, string $column
         $properties,
     ));
 
-    expect((new EloquentModelReflector)->columnSchemaFor($fqcn, $column, $metadata))->toBe($expected);
+    $formatGivenUp = false;
+
+    expect((new EloquentModelReflector)->columnSchemaFor($fqcn, $column, $metadata, $formatGivenUp))->toBe($expected);
 })->with([
 
     // Every scalar the engine can recover for a column, i.e. every entry of the shared scalar table.
@@ -85,6 +88,17 @@ it('types a bound column, or refuses to', function (string $fqcn, string $column
     // engine recovered — the same order a response body reads it in.
     'a $dates column' => [Ledger::class, 'posted_at', [], ['type' => 'string', 'format' => 'date-time']],
     'a $dates column the engine typed' => [Ledger::class, 'posted_at', [['posted_at', ScalarT::int()]], ['type' => 'integer']],
+    // Under the override the value is a bespoke string whatever the docblock claimed, so the override
+    // is read before the engine's type rather than after it.
+    'a $dates column the engine typed, under a serializeDate override' => [
+        Hourglass::class,
+        'posted_at',
+        [['posted_at', ScalarT::int()]],
+        ['type' => 'string'],
+    ],
+    // A framework timestamp is a date attribute no `$casts`/`$dates` entry names, so nothing typed it
+    // before; under the override it is still a string the client sends.
+    'a framework timestamp under a serializeDate override' => [Hourglass::class, 'created_at', [], ['type' => 'string']],
     // A `$fillable`-only name types the column as "anything", which is no answer for a path segment.
     'a $fillable-only column' => [Ledger::class, 'reference', [], null],
 
@@ -111,7 +125,9 @@ it('reads the same column the same way in a path as in a body', function (): voi
     // one column both ways is what stops the path table drifting away from ModelSchema's.
     $metadata = new ClassMetadata(Merchant::class, [new PropertyMetadata('name', ScalarT::string())]);
 
-    expect((new EloquentModelReflector)->columnSchemaFor(Merchant::class, 'name', $metadata))
+    $formatGivenUp = false;
+
+    expect((new EloquentModelReflector)->columnSchemaFor(Merchant::class, 'name', $metadata, $formatGivenUp))
         ->toBe(schemaConverter()->convert(ScalarT::string()));
 });
 
@@ -119,9 +135,45 @@ it('leaves a nullable column non-null only in the path', function (DType $type):
     // The body keeps the null branch; the path drops it. Both are true of the same column.
     $metadata = new ClassMetadata(Merchant::class, [new PropertyMetadata('name', $type)]);
 
-    expect((new EloquentModelReflector)->columnSchemaFor(Merchant::class, 'name', $metadata))
+    $formatGivenUp = false;
+
+    expect((new EloquentModelReflector)->columnSchemaFor(Merchant::class, 'name', $metadata, $formatGivenUp))
         ->toBe(['type' => 'string']);
 })->with([
     'null first' => [UnionT::of([new NullT, ScalarT::string()])],
     'null last' => [UnionT::of([ScalarT::string(), new NullT])],
+]);
+
+/**
+ * The flag beside the schema: a bound date column loses its `format` to a `serializeDate()` override,
+ * and the caller only knows because the same call said so ({@see DateColumnSchema}). Both answers are
+ * here, plus the columns that give nothing up, so a row that stopped raising it fails rather than
+ * quietly publishing a weakened parameter nobody is told about.
+ */
+it('says whether a bound column gave its date format up', function (string $fqcn, string $column, array $properties, bool $expected): void {
+    $metadata = new ClassMetadata($fqcn, array_map(
+        static fn (array $property): PropertyMetadata => new PropertyMetadata($property[0], $property[1]),
+        $properties,
+    ));
+
+    $formatGivenUp = false;
+    (new EloquentModelReflector)->columnSchemaFor($fqcn, $column, $metadata, $formatGivenUp);
+
+    expect($formatGivenUp)->toBe($expected);
+})->with([
+    'a datetime cast under the override' => [Chronicle::class, 'published_at', [], true],
+    'a $dates column under the override' => [Hourglass::class, 'posted_at', [], true],
+    'a $dates column the docblock typed, under the override' => [
+        Hourglass::class,
+        'posted_at',
+        [['posted_at', ScalarT::int()]],
+        true,
+    ],
+    'a framework timestamp under the override' => [Hourglass::class, 'created_at', [], true],
+
+    // The same columns without an override keep their `format`, so there is nothing to report.
+    'a datetime cast with no override' => [Widget::class, 'created_at', [], false],
+    'a $dates column with no override' => [Ledger::class, 'posted_at', [], false],
+    // Not a date attribute at all, on a model that does override.
+    'a plain column on an overriding model' => [Chronicle::class, 'title', [['title', ScalarT::string()]], false],
 ]);

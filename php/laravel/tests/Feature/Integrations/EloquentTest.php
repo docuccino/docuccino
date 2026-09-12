@@ -29,6 +29,7 @@ use Docuccino\Laravel\Tests\Fixtures\Eloquent\Coupon;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\CustomCaster;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Depot;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Gadget;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Hourglass;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Invoice;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Ledger;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Merchant;
@@ -40,6 +41,7 @@ use Docuccino\Laravel\Tests\Fixtures\Eloquent\Showcase;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Signpost;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Strongbox;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Vault;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Waterclock;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Waybill;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Widget;
 use Workbench\App\Enums\WidgetStatus;
@@ -122,6 +124,17 @@ function eloquentEngine(): StubTypeEngine
         Signpost::class => new ClassMetadata(Signpost::class, [
             new PropertyMetadata('id', ScalarT::int()),
             new PropertyMetadata('label', ScalarT::string()),
+        ]),
+        // The tags `php artisan ide-helper:models` writes: every column, dates included, typed by the
+        // Carbon class the attribute holds.
+        Waterclock::class => new ClassMetadata(Waterclock::class, [
+            new PropertyMetadata('posted_at', new ClassT('Carbon\\CarbonImmutable')),
+        ]),
+        Hourglass::class => new ClassMetadata(Hourglass::class, [
+            new PropertyMetadata('id', ScalarT::int()),
+            new PropertyMetadata('created_at', new ClassT('Illuminate\\Support\\Carbon')),
+            new PropertyMetadata('updated_at', new ClassT('Illuminate\\Support\\Carbon')),
+            new PropertyMetadata('posted_at', new ClassT('Carbon\\CarbonImmutable')),
         ]),
     ], callables: (static function (): array {
         // Accessor / custom-caster / relation return types scripted so the in-process mapper test drives
@@ -568,6 +581,35 @@ it('raises no date-serialisation notice for a model whose only date attributes a
     $registry = modelRegistry(new ClassT(Milestone::class));
 
     expect(array_keys($registry->schemas()['Milestone']['properties']))->toBe(['id', 'name']);
+
+    $codes = array_map(static fn ($d): string => $d->code, $registry->diagnostics());
+    expect($codes)->not->toContain('eloquent.custom-date-serialization');
+});
+
+it('weakens a date column a docblock tag claimed, and reports it', function (): void {
+    // The `@property` loop publishes a column before any date source is consulted, so a model carrying
+    // an ide-helper tag for its timestamps took the override's weakening at no site at all: it
+    // published the Carbon class's shape under no notice. A date attribute is a date attribute whatever
+    // typed the name.
+    $registry = modelRegistry(new ClassT(Hourglass::class));
+    $hourglass = $registry->schemas()['Hourglass'];
+
+    expect($hourglass['properties']['created_at'])->toBe(['type' => 'string'])
+        ->and($hourglass['properties']['updated_at'])->toBe(['type' => 'string'])
+        ->and($hourglass['properties']['posted_at'])->toBe(['type' => 'string']);
+
+    $codes = array_map(static fn ($d): string => $d->code, $registry->diagnostics());
+    expect($codes)->toContain('eloquent.custom-date-serialization');
+});
+
+it('leaves a docblock-typed date column alone where no override weakens it', function (): void {
+    // The boundary, pinned. Without the override the docblock's own type stands, so a Carbon-typed
+    // column publishes what the class mapper makes of it — an object, which is a separate defect with
+    // a separate fix. Nothing here depends on that shape being right; what it pins is that this mapper
+    // only reaches a date column when the override has made its wire format unstatable.
+    $registry = modelRegistry(new ClassT(Waterclock::class));
+
+    expect($registry->schemas()['Waterclock']['properties']['posted_at'])->toBe(['type' => 'object']);
 
     $codes = array_map(static fn ($d): string => $d->code, $registry->diagnostics());
     expect($codes)->not->toContain('eloquent.custom-date-serialization');

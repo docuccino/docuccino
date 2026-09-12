@@ -180,13 +180,16 @@ apart reliably:
 
 **Custom date serialization.** A model that overrides `serializeDate()` chooses its own wire format for
 every date attribute, which can't be known statically — so its date and datetime columns are documented
-as a plain `string` (no `format`), with an info diagnostic noting the format is unknowable. The notice
-follows the document, not the method: an override normally lives on a base model every class extends,
-and a subclass that publishes no date attribute — none at all, or only hidden ones — is not reported.
-Nothing you can annotate puts the `format` back — no attribute carries one for a column, and a docblock type has no
-format to state — so if your clients need an exact one, state it in an
+as a plain `string` (no `format`), with an info diagnostic noting the format is unknowable. That covers
+every date column the model has, a `@property`-tagged one included, and a path parameter bound on one
+(`/journals/{journal:filed_on}`) drops its `format` the same way and is reported against its route.
+
+The notice follows the document, not the method: an override normally lives on a base model every class
+extends, and a subclass that publishes no date attribute — none at all, or only hidden ones — is not
+reported. Nothing you can annotate puts the `format` back — no attribute carries one for a column, and a
+docblock type has no format to state — so if your clients need an exact one, state it in an
 [overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice). That corrects the document;
-the notice keeps naming the model.
+the notice keeps naming what lost the format.
 
 ## Enums
 

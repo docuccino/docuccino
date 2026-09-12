@@ -490,7 +490,17 @@ raised against the FINISHED property set, after appends and `$with` relations ha
 add a key: the notice claims the response is a bare object, so only what was published may decide it.
 The `eloquent.custom-date-serialization` notice reads the same way — it fires where a date attribute
 the document carries actually gave up its `format`, not where the model merely owns (or inherits) the
-`serializeDate()` override.
+`serializeDate()` override. `DateColumnSchema` is the one place that decides both, so the weakened
+shape and the flag come out of the same call and no publishing site can emit one without the other.
+A date attribute reaches the document at two of them: the model component, and the path parameter of a
+route bound on a date column (`{journal:filed_on}`), which reads the same policy through
+`EloquentModelReflector::columnSchemaFor()` and reports against the route.
+
+The override is read wherever a date column is published, INCLUDING one a `@property` tag already
+typed — the common shape, since `php artisan ide-helper:models` writes a tag for every column. Without
+an override a docblock-typed date column keeps whatever its type maps to, which for a Carbon-valued
+property is an object: typing `DateTimeInterface` is a gap of the class mapper, not of this policy, and
+is deliberately left to it.
 
 **Source (2b) — Larastan schema knowledge — was investigated and deliberately skipped.**
 `ClassMetadataFactory` is a native-reflection + docblock component that never enters PHPStan's

@@ -281,6 +281,11 @@ final class WorkbenchEngine
                     returns: [new ReturnSite($jsonResponse(new ArrayShapeT([new ArrayShapeField('ok', ScalarT::bool())]), 200), $location)],
                     throws: [new ThrownException(self::PAYMENT_EXCEPTION, 402, [], ThrowConfidence::Certain, ThrowDisposition::Signal)],
                 ),
+                // A model bound on one of its own date columns, returned as the response body — so the
+                // same weakened date is read in a path segment and in a component.
+                'Workbench\\App\\Http\\Controllers\\BindingController::showJournal' => new ActionAnalysis(
+                    returns: [new ReturnSite($jsonResponse(new ClassT(self::JOURNAL_MODEL), 200), $location)],
+                ),
                 ...$analysisOverrides,
             ],
             classes: [
@@ -340,6 +345,14 @@ final class WorkbenchEngine
                     new PropertyMetadata('id', ScalarT::int()),
                     new PropertyMetadata('reference', ScalarT::string(), 'The ledger\'s human reference.'),
                     new PropertyMetadata('opened_at', UnionT::of([ScalarT::string(), new NullT])),
+                ]),
+                // ide-helper's tags: every column typed, the dates by the Carbon class they hold.
+                self::JOURNAL_MODEL => new ClassMetadata(self::JOURNAL_MODEL, [
+                    new PropertyMetadata('id', ScalarT::int()),
+                    new PropertyMetadata('title', ScalarT::string()),
+                    new PropertyMetadata('created_at', new ClassT('Illuminate\\Support\\Carbon')),
+                    new PropertyMetadata('updated_at', new ClassT('Illuminate\\Support\\Carbon')),
+                    new PropertyMetadata('filed_on', new ClassT('Illuminate\\Support\\Carbon')),
                 ]),
                 self::GADGET_MODEL => new ClassMetadata(self::GADGET_MODEL, [
                     new PropertyMetadata('id', ScalarT::int()),
@@ -433,6 +446,8 @@ final class WorkbenchEngine
     private const POST_MODEL = 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Post';
 
     private const MERCHANT_MODEL = 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Merchant';
+
+    private const JOURNAL_MODEL = 'Workbench\\App\\Models\\Journal';
 
     private const LEDGER_MODEL = 'Workbench\\App\\Models\\Ledger';
 
