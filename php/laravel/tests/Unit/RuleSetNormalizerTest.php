@@ -2,14 +2,10 @@
 
 declare(strict_types=1);
 
-use Docuccino\Core\Extensions\Context\AttributeSet;
-use Docuccino\Core\Extensions\Context\DocumentConfig;
-use Docuccino\Core\Extensions\Context\RouteContext;
-use Docuccino\Core\Extensions\Context\RouteDescriptor;
+use Docuccino\Attributes\BodyParameter;
+use Docuccino\Attributes\QueryParameter;
 use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Extensions\Validation\ValidationRule;
-use Docuccino\Core\Inference\ActionRef;
-use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 
 /**
@@ -206,24 +202,21 @@ it('publishes both containers, and bounds both, for a field the rules leave open
     ]);
 });
 
-/** @return list<string> */
-function undecidedMessages(array $fields): array
+/**
+ * @param  array<string, list<string>>  $fields
+ * @param  list<object>  $declarations
+ * @return list<string>
+ */
+function undecidedMessages(array $fields, array $declarations = [], string $verb = 'POST'): array
 {
     $set = (new RuleSetNormalizer)->normalize(new RuleSet(array_map(
         static fn (array $names): array => array_map(static fn (string $name): ValidationRule => ValidationRule::of($name), $names),
         $fields,
     )));
 
-    $context = new RouteContext(
-        route: new RouteDescriptor(['POST'], 'api/nodes'),
-        actionRef: new ActionRef('', 'App\\C', 'store'),
-        attributes: new AttributeSet,
-        engine: new StubTypeEngine,
-        document: new DocumentConfig('default', []),
-    );
-
     // No source class: these rules are an inline `validate()` call's, so the action bag is every
     // declaration site there is.
+    $context = validationRulesContext(declarations: $declarations, verb: $verb);
     RuleSetNormalizer::report($set, $context, null);
 
     return array_values(array_map(
@@ -257,15 +250,54 @@ it('reports the field whose container it could not decide, and only that field',
  * argument is required, and this is the call that proves PHP refuses it.
  */
 it('refuses a caller that says nothing about a source class', function (): void {
-    $context = new RouteContext(
-        route: new RouteDescriptor(['POST'], 'api/nodes'),
-        actionRef: new ActionRef('', 'App\\C', 'store'),
-        attributes: new AttributeSet,
-        engine: new StubTypeEngine,
-        document: new DocumentConfig('default', []),
-    );
+    $context = validationRulesContext();
 
     /* @phpstan-ignore-next-line arguments.count — the missing argument IS the test */
     expect(static fn () => RuleSetNormalizer::report(new RuleSet(['meta' => [ValidationRule::of('array')]]), $context))
         ->toThrow(ArgumentCountError::class);
+});
+
+/**
+ * The declaration half of the same note, and the reason it is a table: what clears the container
+ * question is a function of the layer the rules LAND in, and the two layers write differently. A
+ * `#[BodyParameter]` is written into the recovered body, so a path anywhere on the field's branch
+ * decides it and a bare declaration publishes the attribute's own `string`. A `#[QueryParameter]` mints
+ * one parameter per name and touches nothing else, so only a type stated AT the field decides anything.
+ * A row that stands the note down where the document still says "either" is a widening the author is
+ * never told about; a row that keeps it where the document has decided is a note nothing can clear.
+ */
+it('asks only where a declaration has not already decided the container', function (array $declarations, string $verb, bool $reported): void {
+    $messages = undecidedMessages(['meta' => ['array']], $declarations, $verb);
+
+    expect($messages)->toHaveCount($reported ? 1 : 0);
+})->with([
+    'nothing declared' => [[], 'POST', true],
+    'a body declaration with a deciding type' => [[new BodyParameter(name: 'meta', type: 'object')], 'POST', false],
+    'a body declaration whose type decides nothing' => [[new BodyParameter(name: 'meta', type: 'array')], 'POST', true],
+    // The body writes the attribute's own default of `string` for a declaration with no type, which is
+    // an answer — not the shape the rules left open, but not "either" either.
+    'a body declaration with no type' => [[new BodyParameter(name: 'meta')], 'POST', false],
+    'a body declaration naming a key inside' => [[new BodyParameter(name: 'meta.locale', type: 'string')], 'POST', false],
+    'a body declaration naming the field it is inside' => [[new BodyParameter(name: 'elsewhere', type: 'object')], 'POST', true],
+    'a body declaration at a read verb' => [[new BodyParameter(name: 'meta', type: 'object')], 'GET', true],
+    'a query declaration with a deciding type' => [[new QueryParameter(name: 'meta', type: 'object')], 'GET', false],
+    // Nothing is written for a query declaration with no type, so the recovered "either" still stands…
+    'a query declaration with no type' => [[new QueryParameter(name: 'meta')], 'GET', true],
+    // …and a bracketed one patches a property of the parameter without touching the parameter's own
+    // type, so it leaves the question exactly as open as it found it.
+    'a query declaration naming a key inside' => [[new QueryParameter(name: 'meta[locale]', type: 'string')], 'GET', true],
+    'a query declaration at a body verb' => [[new QueryParameter(name: 'meta', type: 'object')], 'POST', true],
+]);
+
+/**
+ * The field the note is about is the field the declaration has to be read against. A container named
+ * ABOVE an undecided field is written over it whole, so the field is not in the document at all — and a
+ * note saying it is "documented as either" is false of the build that emitted it, with a remedy that
+ * changes nothing.
+ */
+it('says nothing about a field a declaration above it replaces', function (): void {
+    expect(undecidedMessages(
+        ['meta.tags' => ['array'], 'meta.name' => ['string']],
+        [new BodyParameter(name: 'meta', type: 'object')],
+    ))->toBe([]);
 });

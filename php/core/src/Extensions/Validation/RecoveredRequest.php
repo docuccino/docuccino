@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Extensions\Validation;
 
 use Docuccino\Attributes\BodyParameter;
+use Docuccino\Attributes\QueryParameter;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
@@ -168,13 +169,10 @@ final class RecoveredRequest
      *
      * - no class, so there is no type anything could be declared about;
      * - a read verb, where the same rules become QUERY parameters ({@see documentsBody()}) and a
-     *   declaration about a body reaches nothing — the reading `validation.container-undecided`'s
-     *   stand-down already takes, so the guard and the write see the same set;
+     *   declaration about a body reaches nothing;
      * - the source class IS the route's action, where ONE declaration site serves both roles and the
-     *   route attribute bag already reads it. Nothing was ever dropped there, and the operation-level
-     *   meaning it has today — patch the body, inline it — is the one that already exists. The defect
-     *   this reads for is a declaration on a class the bag never sees, which is exactly a source class
-     *   that is not the action.
+     *   route attribute bag already reads it. The defect this reads for is a declaration on a class the
+     *   bag never sees, which is exactly a source class that is not the action.
      *
      * What it reads on the class is {@see ClassDeclarations}'s: the class's own declarations, and
      * silence for one whose constructor rejects its arguments.
@@ -192,6 +190,35 @@ final class RecoveredRequest
         }
 
         return ClassDeclarations::of($sourceClass, BodyParameter::class);
+    }
+
+    /**
+     * Everything the author has already declared about the fields this route's recovered rules become,
+     * read at the layer that writes where those rules land — `#[BodyParameter]` for a body,
+     * `#[QueryParameter]` for the query parameters a read verb gets instead. Composed here rather than
+     * at each caller, so a reader that saw one of a layer's declaration sites and not the other cannot
+     * exist: a body is declared in two places, the route attribute bag and the request TYPE's own.
+     */
+    public static function declaredFields(RouteContext $context, ?string $sourceClass): DeclaredFields
+    {
+        if (! self::documentsBody($context)) {
+            return DeclaredFields::inQuery($context->attributes->all(QueryParameter::class));
+        }
+
+        return DeclaredFields::inBody([
+            ...$context->attributes->all(BodyParameter::class),
+            ...self::declaredOn($sourceClass, $context),
+        ]);
+    }
+
+    /**
+     * Where this route's recovered rules land, as a diagnostic about a lost field names it — the same
+     * verb reading {@see apply()} branches on, so a note cannot send a reader to a part of the document
+     * the rules were never written to.
+     */
+    public static function destination(RouteContext $context): string
+    {
+        return self::documentsBody($context) ? 'the request schema' : 'the query parameters';
     }
 
     /**
@@ -274,7 +301,7 @@ final class RecoveredRequest
 
     private function applyQueryParameters(OperationDraft $operation, ValidationSchema $result, Contribution $contribution): void
     {
-        foreach (self::queryLeaves($result->schema, '') as [$name, $schema, $required]) {
+        foreach (self::queryLeaves($result->schema, []) as [$name, $schema, $required]) {
             $parameter = $operation->parameter('query', $name);
             $parameter->setRequired($required, $contribution);
 
@@ -312,12 +339,14 @@ final class RecoveredRequest
      * The query parameters an object schema flattens to, as `[name, schema, required]`. A nested field is
      * a bracketed leaf, because `filter.radius_lat` in validator syntax IS `filter[radius_lat]` on the
      * wire — which also puts it on the same parameter identity a bracketing integration writes, so the
-     * two merge instead of duplicating.
+     * two merge instead of duplicating. The bracketing is {@see FieldPath::toQueryName()}'s, so a guard
+     * matching a declared parameter name against a validation key reads exactly the names written here.
      *
      * @param  array<array-key, mixed>  $schema
+     * @param  list<string>  $prefix  the segments already descended through
      * @return list<array{0: string, 1: array<array-key, mixed>, 2: bool}>
      */
-    private static function queryLeaves(array $schema, string $prefix): array
+    private static function queryLeaves(array $schema, array $prefix): array
     {
         $properties = $schema['properties'] ?? null;
         if (! is_array($properties)) {
@@ -332,18 +361,18 @@ final class RecoveredRequest
                 continue;
             }
 
-            $name = $prefix === '' ? $key : $prefix.'['.$key.']';
+            $path = [...$prefix, $key];
 
             $members = $child['properties'] ?? null;
             if (is_array($members) && $members !== []) {
-                foreach (self::queryLeaves($child, $name) as $leaf) {
+                foreach (self::queryLeaves($child, $path) as $leaf) {
                     $leaves[] = $leaf;
                 }
 
                 continue;
             }
 
-            $leaves[] = [$name, $child, in_array($key, $required, true)];
+            $leaves[] = [FieldPath::toQueryName($path), $child, in_array($key, $required, true)];
         }
 
         return $leaves;

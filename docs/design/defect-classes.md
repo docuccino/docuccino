@@ -1061,3 +1061,42 @@ claiming to say nothing, which is where the gap lived. Two facts one owner apiec
 byte-comparison per carrier because a YAML target checked as JSON would report a clean run over the
 wrong bytes; and `Formats::checksEmittedArtifact()` states which formats have a published schema at
 all, guarded by probing the behaviour of every format rather than by asking the table about itself.
+
+## A containment relation read in one direction only
+
+A note that stands down where the author has already declared the field has to ask whether a
+declaration reaches it — and "reaches" is a relation between two paths, which has two directions. The
+reading gets written for the direction the example had: a declaration AT the field, or naming a key
+inside it. The other direction — a declaration naming the CONTAINER the field sits in — is the one the
+writer beside it acts on hardest, because the declared node goes in whole and the field under it is
+gone whatever rules are written. So the note keeps firing, and its remedy ("express the field with
+recoverable rules") changes nothing: the unclearable report, arriving through the channel built to
+remove unclearable reports.
+
+*Instances.* `validation.rule-unrecoverable` named `meta.tags` as omitted from the request schema while
+`#[BodyParameter(name: 'meta', type: 'object')]` had replaced `meta` entirely. The container note's own
+reader carried the identical asymmetry, so `validation.container-undecided` said a field was
+"documented as either" when the field was not in the document at all. Both readers spelled the same
+two-clause predicate separately, which is how one could have been fixed and the other left behind.
+
+*The second half of the class.* The relation is not the only thing that is a function of the writer;
+WHICH declarations reach at all is too. The same three notes read `#[BodyParameter]` at every verb,
+while a read verb sends the rules to query parameters — so `#[QueryParameter('search')]` published the
+parameter and the note still called the field omitted "from the request schema", a false report with
+the wrong location word attached. The tell is a message naming a part of the document that the verb
+decides, written as a constant.
+
+*The tell.* Ask what the WRITER does with a declaration, then check the guard recognises exactly that.
+A writer that replaces a subtree makes the ancestor direction load-bearing; a writer that mints one
+independent parameter per name makes it meaningless, and reading the relation the same way at both is
+wrong in one of them. A guard whose containment clause can be replaced by `===` with the suite still
+green is the same thing said in the other direction — the branch that justifies the reading is never
+executed.
+
+*The fix that worked.* One reader for both questions, in the class that owns the body-or-query
+decision, with the layer difference stated once as the flag it is: `DeclaredFields`, built by
+`RecoveredRequest::declaredFields()` from whichever attribute writes where these rules land. The notes
+ask `publishes()`, the container note asks `decidesContainer()`, and the location word comes from
+`RecoveredRequest::destination()` rather than from a string in each message. The guard is
+`DeclaredFieldNoticesTest`'s table — a row per direction, per layer and per verb, each asserting the
+location word beside the field — plus `RuleSetNormalizerTest`'s table for the container half.

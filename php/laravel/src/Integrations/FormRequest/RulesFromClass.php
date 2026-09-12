@@ -7,6 +7,8 @@ namespace Docuccino\Laravel\Integrations\FormRequest;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\RouteContext;
+use Docuccino\Core\Extensions\Validation\DeclaredFields;
+use Docuccino\Core\Extensions\Validation\RecoveredRequest;
 use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Inference\ActionRef;
 use ReflectionClass;
@@ -27,6 +29,10 @@ use ReflectionClass;
  * whether the field is omitted outright or kept by another producer minus its constraints. A field that
  * recovered SOME of its rules and widened past values it could not read raises
  * `validation.rule-values-unread` instead: what it publishes is true, and quieter than the code.
+ *
+ * Neither fires for a field a declaration already publishes. Both sentences say what became of the field
+ * in the DOCUMENT, and a declaration writes it from a layer above this one, so the claim is not this
+ * class's to make ({@see DeclaredFields}).
  */
 final class RulesFromClass
 {
@@ -79,8 +85,15 @@ final class RulesFromClass
         $context->recordDependencyFiles([...$report->dependencyFiles, ...$visitor->dependencyFiles()]);
         $traceFields = $visitor->ruleSet()->fields;
 
+        // Read once for both notes below — see the class header for what it stands them down for.
+        $declared = RecoveredRequest::declaredFields($context, $class);
+
         foreach ($visitor->unrecoverableFields() as $field) {
             if (isset($shapeFields[$field]) || isset($traceFields[$field])) {
+                continue;
+            }
+
+            if ($declared->publishes($field)) {
                 continue;
             }
 
@@ -91,16 +104,20 @@ final class RulesFromClass
                 code: 'validation.rule-unrecoverable',
                 message: in_array($field, $documentedElsewhere, true)
                     ? sprintf('Validation field "%s" on %s has no statically recoverable rules; it is documented from its type alone, without the constraints they state.', $field, $class)
-                    : sprintf('Validation field "%s" on %s has no statically recoverable rules; it is omitted from the request schema.', $field, $class),
+                    : sprintf('Validation field "%s" on %s has no statically recoverable rules; it is omitted from %s.', $field, $class, RecoveredRequest::destination($context)),
                 help: RulesHarvestingVisitor::UNRECOVERABLE_HELP,
             ));
         }
 
         foreach ($visitor->widenedFields() as $field) {
+            if ($declared->publishes($field)) {
+                continue;
+            }
+
             $context->components->addDiagnostic(new Diagnostic(
                 severity: Severity::Info,
                 code: 'validation.rule-values-unread',
-                message: sprintf('Validation field "%s" on %s states values this build cannot read, so that constraint is left off the request schema; the rest of its rules are documented.', $field, $class),
+                message: sprintf('Validation field "%s" on %s states values this build cannot read, so that constraint is left off %s; the rest of its rules are documented.', $field, $class, RecoveredRequest::destination($context)),
                 help: RulesHarvestingVisitor::WIDENED_HELP,
             ));
         }
