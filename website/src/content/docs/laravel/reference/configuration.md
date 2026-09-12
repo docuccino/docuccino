@@ -949,6 +949,51 @@ cache:
 The third member of the `cache` family, [`cache.store`](#boot-configuration), is not here: it names a
 Laravel cache store that a **viewer request** reads, so it lives in the file a request can reach.
 
+## Settings left in `config/docuccino.php`
+
+Every build setting above is read from `docuccino.yaml` and from nowhere else. `config/docuccino.php`
+keeps `enabled`, `cache.store` and each document's `viewer`, and a build key still sitting beside them
+is **not merged and not given precedence** — it is detected and reported, and that is all. Merging the
+two would be worse than ignoring one: the symptom of a silent precedence rule is a document that
+quietly stops matching the file you edited.
+
+So the build tells you, in one of two ways:
+
+- No `docuccino.yaml` at all, and build keys in `config/docuccino.php` — every command that builds a
+  document refuses with [`config.not-migrated`](/laravel/reference/diagnostics/) before it starts. The
+  document would otherwise be assembled from defaults and look entirely plausible.
+- A `docuccino.yaml` beside the leftovers — [`config.stale-php-keys`](/laravel/reference/diagnostics/)
+  warns and names them. Nothing is lost; the YAML says what the document is.
+
+Both name the exact keys, so moving them is a copy under the same names into `docuccino.yaml`, then a
+delete from `config/docuccino.php`. Four keys are the exception.
+
+**Two were renamed.** Copied across as they were spelled, they name no setting, and the build reports
+them as [`config.unknown-setting`](/laravel/reference/diagnostics/):
+
+- `documents.*.security.auto_detect_middleware` is now
+  [`documents.*.security.auth_middleware`](#security).
+- `engine.neon` is now [`engine.config`](#engine) — the engine takes any analyser configuration file,
+  whatever its extension.
+
+**Two have no equivalent**, and they cost different things:
+
+- `documents.*.representation.lists` had no reader — both of its values emitted the same document — so
+  there is nothing to carry. Delete it.
+- `documents.*.routes.closure` **filtered routes**, and a closure has no form in a configuration file.
+  [`routes.filter`](#routes) names a class instead: move the predicate into a `RouteFilter`, and until
+  you do, the routes that closure held back are documented again.
+
+**Check your `env()` calls.** `config/docuccino.php` is PHP and can read a setting through `env()`;
+`docuccino.yaml` cannot. Where a setting was environment-dependent, write the value the file should
+carry — and note that `DOCUCCINO_ENGINE` and `DOCUCCINO_FRAGMENT_CACHE` still override `docuccino.yaml`,
+so those two levers keep working without a key at all.
+
+**And check your values.** `config/docuccino.php` can hold an enum case, a closure, a resource or a
+date; `docuccino.yaml` holds numbers, strings, booleans, and lists and maps of those. A setting whose
+value has no form in the file is better left out — an absent key takes its documented default, where a
+value changed on the way in builds a document you never configured.
+
 ## Boot configuration
 
 `config/docuccino.php`, published into your application's `config/` directory. Laravel loads every
