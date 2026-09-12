@@ -27,6 +27,7 @@ $dialCasts = [
     'the internal cast-type name' => ['internal_named', 'custom_datetime', false],
     'a parameterised datetime cast' => ['patterned', 'datetime:d/m/Y', false],
     'a parameterised date cast' => ['patterned_date', 'date:Y-m-d', false],
+    'a bespoke-pattern date cast' => ['patterned_date_bespoke', 'date:d/m/Y', false],
     'a parameterised immutable cast' => ['patterned_immutable', 'immutable_datetime:d/m/Y', false],
     'the unix timestamp cast' => ['unixed', 'timestamp', false],
 ];
@@ -86,20 +87,30 @@ it('strips decimal/plain parameters and is case-insensitive on the base', functi
         ->and(CastSchema::serializesThroughDateHook('DATE'))->toBeTrue();
 });
 
-it('publishes the format a datetime:FORMAT writes, in both directions', function (string $cast, array $expected): void {
-    // A cast naming its own format is written with that format and read with it: the hook is never
-    // reached, so there is one answer and both directions give it.
-    expect(CastSchema::written($cast))->toBe($expected)
-        ->and(CastSchema::accepted($cast))->toBe($expected);
+it('publishes the format a parameterised date cast writes, and accepts the domain it stores', function (string $cast, array $written, array $accepted): void {
+    // A cast naming its own format is WRITTEN with it, whichever of the five carries it; the hook is
+    // never reached. A request puts in the cast's domain either way — the value is matched against the
+    // stored column, which the parameter does not touch.
+    expect(CastSchema::written($cast))->toBe($written)
+        ->and(CastSchema::accepted($cast))->toBe($accepted);
 })->with([
     // ISO date-time forms.
-    'ISO atom' => ['datetime:Y-m-d\\TH:i:sP', ['type' => 'string', 'format' => 'date-time']],
-    'Carbon JSON form' => ['datetime:Y-m-d\\TH:i:s.u\\Z', ['type' => 'string', 'format' => 'date-time']],
-    'date-only' => ['datetime:Y-m-d', ['type' => 'string', 'format' => 'date']],
+    'ISO atom' => ['datetime:Y-m-d\\TH:i:sP', ['type' => 'string', 'format' => 'date-time'], ['type' => 'string', 'format' => 'date-time']],
+    'Carbon JSON form' => ['datetime:Y-m-d\\TH:i:s.u\\Z', ['type' => 'string', 'format' => 'date-time'], ['type' => 'string', 'format' => 'date-time']],
+    'date-only' => ['datetime:Y-m-d', ['type' => 'string', 'format' => 'date'], ['type' => 'string', 'format' => 'date-time']],
     // `date-time` is RFC 3339, which wants the `T` and an offset — a space-separated value has neither, so
     // it is a described string like any other format no keyword names.
-    'space-separated' => ['datetime:Y-m-d H:i:s', ['type' => 'string', 'description' => 'Serialized using the date format "Y-m-d H:i:s".']],
-    'custom format' => ['datetime:d/m/Y', ['type' => 'string', 'description' => 'Serialized using the date format "d/m/Y".']],
+    'space-separated' => ['datetime:Y-m-d H:i:s', ['type' => 'string', 'description' => 'Serialized using the date format "Y-m-d H:i:s".'], ['type' => 'string', 'format' => 'date-time']],
+    'custom format' => ['datetime:d/m/Y', ['type' => 'string', 'description' => 'Serialized using the date format "d/m/Y".'], ['type' => 'string', 'format' => 'date-time']],
+    // The `date` half, which read its parameter in neither direction: a bespoke pattern published
+    // `format: date` over bytes no full-date validator accepts, and `date:c` a full-date keyword over a
+    // value carrying a time.
+    'a date cast with a bespoke pattern' => ['date:d/m/Y', ['type' => 'string', 'description' => 'Serialized using the date format "d/m/Y".'], ['type' => 'string', 'format' => 'date']],
+    'a date cast with an ISO date pattern' => ['date:Y-m-d', ['type' => 'string', 'format' => 'date'], ['type' => 'string', 'format' => 'date']],
+    'a date cast with a full ISO pattern' => ['date:c', ['type' => 'string', 'format' => 'date-time'], ['type' => 'string', 'format' => 'date']],
+    'an immutable date cast with a bespoke pattern' => ['immutable_date:d/m/Y', ['type' => 'string', 'description' => 'Serialized using the date format "d/m/Y".'], ['type' => 'string', 'format' => 'date']],
+    // The internal name takes its parameter the same way, and it is the only form that MUST have one.
+    'the internal cast-type name' => ['custom_datetime:d/m/Y', ['type' => 'string', 'description' => 'Serialized using the date format "d/m/Y".'], ['type' => 'string', 'format' => 'date-time']],
 ]);
 
 it('decrypts-then-casts an encrypted:<inner> compound to the inner shape', function (): void {
@@ -206,3 +217,39 @@ it('gives a date cast its response direction up because the bytes carry a time',
         ->and(CastSchema::written('date'))->toBeNull()
         ->and(CastSchema::accepted('date'))->toBe(['type' => 'string', 'format' => 'date']);
 });
+
+/**
+ * Whether a value really satisfies the `format` a fragment claims — stated from RFC 3339, not from the
+ * pattern the value was written with, so it cannot agree with the table by construction. A fragment
+ * claiming no format has nothing to violate, so its `type` answers.
+ *
+ * @param  array<string, mixed>  $fragment
+ */
+function dateFragmentHoldsFor(array $fragment, mixed $value): bool
+{
+    return match ($fragment['format'] ?? null) {
+        'date' => is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1,
+        'date-time' => is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/', $value) === 1,
+        null => match ($fragment['type'] ?? null) {
+            'string' => is_string($value),
+            'integer' => is_int($value),
+            default => false,
+        },
+        default => false,
+    };
+}
+
+it('claims for every date cast only what the column really sends', function (string $column, string $cast, bool $hookGoverned): void {
+    // The whole ladder against the wire, read off the ENCODED document because a cast can leave a
+    // Carbon in `toArray()` and what a client validates is the JSON. The two producers divide the
+    // ladder, so their UNION is asserted: a cast the hook governs owes nothing here and the date policy
+    // answers, which on a model with no override is the framework's own form.
+    $raw = array_fill_keys(dialColumns(), Dial::RAW);
+    $sent = json_decode((string) json_encode((new Dial)->setRawAttributes($raw, true)->toArray()), true);
+
+    $published = CastSchema::written($cast) ?? DateWireFormat::serializedSchema(DateColumnSchema::DEFAULT_FORMAT);
+
+    expect(CastSchema::written($cast) === null)->toBe($hookGoverned)
+        ->and(dateFragmentHoldsFor($published, $sent[$column]))
+        ->toBeTrue($cast.' publishes '.json_encode($published).' for the bytes '.json_encode($sent[$column]));
+})->with($dialCasts);

@@ -116,8 +116,8 @@ A cast pins its column's shape. Native casts:
 | --- | --- |
 | `datetime`, `immutable_datetime` | `string`, `format: date-time` |
 | `date`, `immutable_date` | `string`, `format: date-time` in a response body; `format: date` in a filter or a bound path segment |
-| `datetime:Y-m-d` | `string`, `format: date` (a date-only pattern) |
-| `datetime:<custom format>` | `string`, with the format named in the description — a bespoke format is neither `date` nor `date-time`, so claiming one would be wrong |
+| `datetime:Y-m-d`, `date:Y-m-d` | `string`, `format: date` in a response body (a date-only pattern) |
+| `datetime:<custom format>`, `date:<custom format>` | `string`, with the format named in the description — a bespoke format is neither `date` nor `date-time`, so claiming one would be wrong |
 | `timestamp` | `integer` (a unix timestamp, not a date string) |
 | `boolean`, `bool` | `boolean` |
 | `integer`, `int` | `integer` |
@@ -191,12 +191,19 @@ route binds on (`/almanacs/{almanac:observed_on}`) — it is the date the column
 documents `format: date`. The two answers differ because the questions do: one describes what the server
 wrote, the other what it will match.
 
-A cast that names its own format (`datetime:d/m/Y`) never reaches the hook — Eloquent formats it with
-the parameter — so it is documented from that pattern in both directions.
+A cast that names its own format (`datetime:d/m/Y`, `date:d/m/Y`) never reaches the hook — Eloquent
+formats it with the parameter — so the response body is documented from that pattern: `format: date` or
+`format: date-time` where the pattern really writes one, and otherwise a plain `string` with the pattern
+named in the description. A request still accepts the domain the cast names, because the value a client
+sends is matched against the stored column and not against the serialised attribute.
 
 The same reading applies wherever else a date-time reaches the document — a DTO property, an accessor's
-return type, a webhook payload. A date class that states its own JSON form is documented as the RFC 3339
-string it sends, not as the object its properties would reflect into.
+return type, a webhook payload. A Carbon is documented as the RFC 3339 string it sends, not as the object
+its properties would reflect into. Your own date class is another matter: implementing `JsonSerializable`
+says the class chooses its own wire format, not what that format is, so a value typed at one — or at the
+bare `DateTimeInterface`, which any of them satisfies — is documented as an unconstrained schema rather
+than as a guess a client would validate against and fail. Pin it with `#[Response]`, a return docblock,
+or an overlay, and the document says what your class really sends.
 
 **Custom date serialization.** A model that overrides `serializeDate()` chooses its own wire format for
 every date attribute the hook reaches, which can't be known statically — so the shape recovered for those

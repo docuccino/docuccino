@@ -83,8 +83,11 @@ it('types a bound column, or refuses to', function (string $fqcn, string $column
     // The segment carries the value a client types, which for a date-cast column is the date the
     // column is stored as — not the date-time its response body carries.
     'a date cast' => [Astrolabe::class, 'sighted_on', [], ['type' => 'string', 'format' => 'date']],
-    // A cast naming its own format answers both directions, override or no override.
+    // A cast naming its own format is written with it and never reaches the hook, so the override
+    // changes nothing here. What a SEGMENT carries is still the stored column, which is why a bespoke
+    // pattern — the one the body describes in prose — leaves the parameter on `format: date`.
     'a cast naming its own format, under the override' => [Metronome::class, 'beat_on', [], ['type' => 'string', 'format' => 'date']],
+    'a cast naming a bespoke format, under the override' => [Metronome::class, 'chimed_on', [], ['type' => 'string', 'format' => 'date']],
     // Read off the Laravel 11+ `casts()` METHOD, which reflection of default properties cannot see.
     'a cast declared by the casts() method' => [Invoice::class, 'issued_at', [], ['type' => 'string', 'format' => 'date-time']],
     // A serializeDate() override makes the wire format unknowable, so the format claim is dropped.
@@ -195,6 +198,7 @@ it('says whether a bound column gave its date format up', function (string $fqcn
     // The override cannot reach a cast written with its own parameter, so there is no loss to report —
     // a notice here would name a format the model never gave up.
     'a cast naming its own format, under the override' => [Metronome::class, 'beat_on', [], false],
+    'a cast naming a bespoke format, under the override' => [Metronome::class, 'chimed_on', [], false],
 ]);
 
 it('accepts a date-cast segment as the date it is stored as, though the body sends a date-time', function (): void {

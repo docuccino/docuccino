@@ -72,6 +72,7 @@ it('recognises every source that makes a column a date attribute', function (str
     // A cast naming its own format is written with that format and never reaches the hook, so this
     // policy is not the one that decides it — the cast table answers both directions for it.
     'a cast that names its own format' => [Metronome::class, 'beat_on', false],
+    'a cast that names a bespoke format' => [Metronome::class, 'chimed_on', false],
     // The internal cast-type name reaches no branch of the framework's own serialisation, so an
     // override cannot touch it either.
     'the internal cast-type name' => [Dial::class, 'internal_named', false],

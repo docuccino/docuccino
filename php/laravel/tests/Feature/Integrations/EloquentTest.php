@@ -578,6 +578,10 @@ it('keeps the format a cast named for itself under a serializeDate() override, a
 
     expect($registry->schemas()['Metronome']['properties']['beat_on'])
         ->toBe(['type' => 'string', 'format' => 'date'])
+        // And where the pattern is one no keyword names, the column keeps the pattern instead — still
+        // untouched by the override, and still no loss to report.
+        ->and($registry->schemas()['Metronome']['properties']['chimed_on'])
+        ->toBe(['type' => 'string', 'description' => 'Serialized using the date format "d/m/Y".'])
         ->and(array_map(static fn ($d): string => $d->code, $registry->diagnostics()))
         ->not->toContain('eloquent.custom-date-serialization');
 });

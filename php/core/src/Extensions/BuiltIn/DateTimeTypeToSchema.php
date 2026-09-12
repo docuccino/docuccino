@@ -13,42 +13,69 @@ use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use JsonSerializable;
+use ReflectionMethod;
 
 /**
- * A date-time that states its own JSON form → the string it writes, superseding {@see ClassTypeToSchema}
- * by running earlier: reflecting one into an object publishes members no serializer ever sends, and the
- * richer the class's docblock the worse it gets — a `@property`-documented date-time hoists a component
- * of some two hundred calendar fields for a value that is one string.
+ * A date-time that is not an object on the wire, superseding {@see ClassTypeToSchema} by running
+ * earlier: reflecting one publishes members no serializer sends, and a `@property`-documented date class
+ * hoists a component of two hundred calendar fields for a value that is one string.
  *
- * PHP forbids userland implementations of `DateTimeInterface`, so the domain is closed to its own
- * `DateTime`/`DateTimeImmutable` and their subclasses, and `JsonSerializable` divides it exactly: a
- * subclass stating a JSON form writes an RFC 3339 string, and one stating none is left alone here
- * because `json_encode` really does write it as an object (its `date`/`timezone_type`/`timezone` bag).
- * A producer that knows the wire format better still wins — it runs earlier and pins the shape itself.
+ * `JsonSerializable` says a class states its own JSON form and never which one, so a form is PUBLISHED
+ * only where its bytes have been read ({@see READ_JSON_FORM}). A class stating none encodes as PHP's own
+ * `date`/`timezone_type`/`timezone` bag, which is the class mapper's bare object, so it is left there;
+ * any other stated form, and the interface any of them may stand behind, is widened to an open schema.
+ * `format: date-time` over a class writing an epoch integer costs a consumer a runtime failure, where
+ * claiming nothing costs only type safety. A producer that knows the wire format better runs earlier
+ * and pins the shape itself.
  */
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class DateTimeTypeToSchema implements TypeToSchema
 {
-    /** The RFC 3339 string a date-time's own `jsonSerialize()` renders, read off the bytes in test. */
+    /** The RFC 3339 string the forms below render, read off their bytes in test. */
     public const SCHEMA = ['type' => 'string', 'format' => 'date-time'];
+
+    /**
+     * The declarations whose bytes have been read — Carbon's, named by string because core requires
+     * none of them. Matched as the DECLARING class of `jsonSerialize()`, so a subclass inheriting one is
+     * covered and one restating it is widened.
+     *
+     * @var list<string>
+     */
+    private const READ_JSON_FORM = [
+        'Carbon\\Carbon',
+        'Carbon\\CarbonImmutable',
+        'Carbon\\CarbonInterface',
+    ];
 
     public function supports(DType $type): bool
     {
-        return $type instanceof ClassT && self::statesItsOwnJsonForm($type->fqcn);
+        return $type instanceof ClassT
+            && is_a($type->fqcn, DateTimeInterface::class, true)
+            // An interface stands for every implementation at once, so its wire form is unknowable
+            // whether or not the interface itself states one.
+            && (interface_exists($type->fqcn) || is_a($type->fqcn, JsonSerializable::class, true));
     }
 
     public function toSchema(DType $type, SchemaContext $context): ?SchemaResult
     {
-        if (! $this->supports($type)) {
+        if (! $type instanceof ClassT || ! $this->supports($type)) {
             return null;
         }
 
-        return new SchemaResult(self::SCHEMA, 0.9);
+        return self::writesTheFormWeHaveRead($type->fqcn)
+            ? new SchemaResult(self::SCHEMA, 0.9)
+            : new SchemaResult([], 0.4);
     }
 
-    /** Whether the class is a date-time whose value serialises through a JSON form it declares. */
-    private static function statesItsOwnJsonForm(string $fqcn): bool
+    /** Whether the class takes its JSON form, unrestated, from one of the declarations we have read. */
+    private static function writesTheFormWeHaveRead(string $fqcn): bool
     {
-        return is_a($fqcn, DateTimeInterface::class, true) && is_a($fqcn, JsonSerializable::class, true);
+        if (! is_a($fqcn, JsonSerializable::class, true)) {
+            return false;
+        }
+
+        $declaring = (new ReflectionMethod($fqcn, 'jsonSerialize'))->getDeclaringClass()->getName();
+
+        return in_array($declaring, self::READ_JSON_FORM, true);
     }
 }
