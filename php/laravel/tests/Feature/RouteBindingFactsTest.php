@@ -39,6 +39,9 @@ function bindingFactRoutes(): callable
         // any id of that column resolves whichever ledger the path names.
         $router->get('api/binding-ledgers/{ledger}/loose/{entry:title}', [BindingController::class, 'showEntryByTitle'])
             ->withoutScopedBindings();
+        // Bound on a date column of a model that picked its own wire format, so the parameter and the
+        // response body both publish a date the document cannot state a `format` for.
+        $router->get('api/binding-journals/{journal:filed_on}', [BindingController::class, 'showJournal']);
         $router->get('api/binding-articles/{article}', [BindingController::class, 'showArticle']);
         $router->get('api/binding-seasons/{season}', [BindingController::class, 'showSeason']);
         $router->get('api/binding-custom/{custom}', [BindingController::class, 'showBound']);

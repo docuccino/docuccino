@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Workbench\App\Enums\Season;
 use Workbench\App\Models\Article;
 use Workbench\App\Models\Form;
+use Workbench\App\Models\Journal;
 use Workbench\App\Models\Ledger;
 
 /**
@@ -39,6 +40,13 @@ final class BindingController
     public function showEntryByTitle(Ledger $ledger, Form $entry): JsonResponse
     {
         return response()->json($entry);
+    }
+
+    /** Show one journal, found by the day it was filed. */
+    #[Group('Bindings')]
+    public function showJournal(Journal $journal): JsonResponse
+    {
+        return response()->json($journal);
     }
 
     /** Show an article. */

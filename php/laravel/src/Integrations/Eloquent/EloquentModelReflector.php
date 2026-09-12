@@ -19,6 +19,8 @@ use ReflectionProperty;
  * Reads the presentation facts a model declares — `$visible`/`$hidden`/`$appends`, `$casts`, a
  * class-level `#[Hidden]` — off the class's default property values. The model is never instantiated,
  * so no boot side effects and no DB access. These refine the columns {@see ClassMetadata} supplies.
+ *
+ * @phpstan-type ModelFacts array{hidden: list<string>, visible: list<string>, appends: list<string>, casts: array<string, string>, classHidden: list<string>, fillable: list<string>, dates: list<string>, with: list<string>, timestamps: bool, softDeletes: bool, overridesSerializeDate: bool, keyName: string, keySchema: array<string, mixed>}
  */
 final class EloquentModelReflector
 {
@@ -143,9 +145,11 @@ final class EloquentModelReflector
      * The Query Builder FilterColumnResolver mirrors the key/cast bracket — keep the precedence in
      * step when editing here.
      *
+     * @param  bool  $formatGivenUp  raised when the parameter lost its date `format`, so the caller can
+     *                               report it ({@see DateColumnSchema}).
      * @return array<string, mixed>|null
      */
-    public function columnSchemaFor(string $fqcn, string $column, ClassMetadata $metadata): ?array
+    public function columnSchemaFor(string $fqcn, string $column, ClassMetadata $metadata, bool &$formatGivenUp): ?array
     {
         if (! self::isModel($fqcn) || ! class_exists($fqcn)) {
             return null;
@@ -159,13 +163,16 @@ final class EloquentModelReflector
             return $facts['keySchema'];
         }
 
+        // The override sends every date out as a bespoke string whatever else typed the name, so it is
+        // read once here rather than at each source below — a source that forgot to ask is how a date
+        // column reached the document with the weakening skipped.
+        if ($facts['overridesSerializeDate'] && DateColumnSchema::isAttribute($column, $facts)) {
+            return DateColumnSchema::schema($facts, $formatGivenUp);
+        }
+
         $cast = $facts['casts'][$column] ?? null;
         if ($cast !== null) {
-            $schema = self::asPathSegment(
-                $facts['overridesSerializeDate'] && CastSchema::isDateCast($cast)
-                    ? ['type' => 'string']
-                    : CastSchema::forCast($cast),
-            );
+            $schema = self::asPathSegment(CastSchema::forCast($cast));
             if ($schema !== null) {
                 return $schema;
             }
@@ -184,7 +191,7 @@ final class EloquentModelReflector
         // response body. A `$fillable`-only name is deliberately NOT a floor here: it types the column
         // as "anything", which for a path segment is no answer at all.
         if (in_array($column, $facts['dates'], true)) {
-            return $facts['overridesSerializeDate'] ? ['type' => 'string'] : ['type' => 'string', 'format' => 'date-time'];
+            return DateColumnSchema::schema($facts, $formatGivenUp);
         }
 
         return $isKey ? $facts['keySchema'] : null;
@@ -223,7 +230,7 @@ final class EloquentModelReflector
     }
 
     /**
-     * @return array{hidden: list<string>, visible: list<string>, appends: list<string>, casts: array<string, string>, classHidden: list<string>, fillable: list<string>, dates: list<string>, with: list<string>, timestamps: bool, softDeletes: bool, overridesSerializeDate: bool, keyName: string, keySchema: array<string, mixed>}
+     * @return ModelFacts
      */
     public function facts(string $fqcn): array
     {

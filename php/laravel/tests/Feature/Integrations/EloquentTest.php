@@ -27,15 +27,21 @@ use Docuccino\Laravel\Tests\Fixtures\Eloquent\Chronicle;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Consignment;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Coupon;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\CustomCaster;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Depot;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Gadget;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Hourglass;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Invoice;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Ledger;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Merchant;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Milestone;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Persona;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Placard;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Post;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Showcase;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Signpost;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Strongbox;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Vault;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Waterclock;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Waybill;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Widget;
 use Workbench\App\Enums\WidgetStatus;
@@ -111,6 +117,25 @@ function eloquentEngine(): StubTypeEngine
             new PropertyMetadata('name', ScalarT::string()),
             new PropertyMetadata('tally', ScalarT::string()),
         ]),
+        Milestone::class => new ClassMetadata(Milestone::class, [
+            new PropertyMetadata('id', ScalarT::int()),
+            new PropertyMetadata('name', ScalarT::string()),
+        ]),
+        Signpost::class => new ClassMetadata(Signpost::class, [
+            new PropertyMetadata('id', ScalarT::int()),
+            new PropertyMetadata('label', ScalarT::string()),
+        ]),
+        // The tags `php artisan ide-helper:models` writes: every column, dates included, typed by the
+        // Carbon class the attribute holds.
+        Waterclock::class => new ClassMetadata(Waterclock::class, [
+            new PropertyMetadata('posted_at', new ClassT('Carbon\\CarbonImmutable')),
+        ]),
+        Hourglass::class => new ClassMetadata(Hourglass::class, [
+            new PropertyMetadata('id', ScalarT::int()),
+            new PropertyMetadata('created_at', new ClassT('Illuminate\\Support\\Carbon')),
+            new PropertyMetadata('updated_at', new ClassT('Illuminate\\Support\\Carbon')),
+            new PropertyMetadata('posted_at', new ClassT('Carbon\\CarbonImmutable')),
+        ]),
     ], callables: (static function (): array {
         // Accessor / custom-caster / relation return types scripted so the in-process mapper test drives
         // the same shapes the real engine recovers; the recovery half is proven out-of-process in
@@ -131,6 +156,8 @@ function eloquentEngine(): StubTypeEngine
             Strongbox::class.'::keeper' => $returning(new ClassT('Illuminate\\Database\\Eloquent\\Relations\\BelongsTo', [new ClassT(Merchant::class)])),
             Showcase::class.'::getBadgeAttribute' => $returning(ScalarT::string()),
             Showcase::class.'::getRankingAttribute' => $returning(ScalarT::string()),
+            Placard::class.'::getBadgeAttribute' => $returning(ScalarT::string()),
+            Depot::class.'::keeper' => $returning(new ClassT('Illuminate\\Database\\Eloquent\\Relations\\BelongsTo', [new ClassT(Merchant::class)])),
         ];
     })());
 }
@@ -398,6 +425,32 @@ it('keeps the bare-object behaviour but raises an info diagnostic for an undocum
     expect($codes)->toContain('eloquent.no-columns');
 });
 
+it('raises no bare-object notice when an append is the one key the model publishes', function (): void {
+    // The notice asserts what the document PUBLISHES ("documented as a bare object"), so it may only be
+    // decided by the finished property set. Appends, accessors and eager loads all add keys after the
+    // column sources are exhausted, and a reader shown a schema with a property in it, under a notice
+    // saying it has none, learns to skip the channel rather than to annotate the model.
+    $registry = modelRegistry(new ClassT(Placard::class));
+
+    expect($registry->schemas()['Placard']['properties'])->toBe(['badge' => ['type' => 'string']]);
+
+    $codes = array_map(static fn ($d): string => $d->code, $registry->diagnostics());
+    expect($codes)->not->toContain('eloquent.no-columns');
+});
+
+it('raises no bare-object notice when an eager-loaded relation is the one key it publishes', function (): void {
+    // The other late key source, and the same reading: `$with` serialises on every response, so the
+    // document carries an object with a relation in it whatever the column sources yielded.
+    $registry = modelRegistry(new ClassT(Depot::class));
+
+    expect($registry->schemas()['Depot']['properties'])->toBe([
+        'keeper' => ['anyOf' => [['$ref' => '#/components/schemas/Merchant'], ['type' => 'null']]],
+    ]);
+
+    $codes = array_map(static fn ($d): string => $d->code, $registry->diagnostics());
+    expect($codes)->not->toContain('eloquent.no-columns');
+});
+
 it('discovers a model\'s classic and Attribute accessors via real reflection', function (): void {
     // Real reflection + php-parser over the idiomatic Boutique fixture, no stub: classic getters map to
     // snake-cased attribute names analysed by their own method; the Attribute accessor is located by the
@@ -506,6 +559,60 @@ it('weakens date claims to plain strings and diagnoses a serializeDate() overrid
     expect($note[0]->help)->toBe(
         'The date/datetime columns are documented as `type: string` without a `format`, and no annotation puts one back: no attribute carries a column format, and a docblock type has no format to state. If clients need an exact one, state it in an overlay, which corrects the document and leaves this notice naming the model.',
     );
+});
+
+it('raises no date-serialisation notice for a model that publishes no date attribute', function (): void {
+    // A serializeDate() override normally sits on a shared base, so every subclass inherits the fact
+    // and most of them have no date attribute at all. The notice names date attributes documented as
+    // plain strings: raised against a model that publishes none, it describes nothing in the document
+    // and leaves the reader nothing to do.
+    $registry = modelRegistry(new ClassT(Signpost::class));
+
+    expect(array_keys($registry->schemas()['Signpost']['properties']))->toBe(['id', 'label']);
+
+    $codes = array_map(static fn ($d): string => $d->code, $registry->diagnostics());
+    expect($codes)->not->toContain('eloquent.custom-date-serialization');
+});
+
+it('raises no date-serialisation notice for a model whose only date attributes are hidden', function (): void {
+    // Same reading one step further in: the model HAS timestamps, but `$hidden` keeps them out of every
+    // response, so nothing the document publishes lost a `format`. What the model owns is not what the
+    // document says.
+    $registry = modelRegistry(new ClassT(Milestone::class));
+
+    expect(array_keys($registry->schemas()['Milestone']['properties']))->toBe(['id', 'name']);
+
+    $codes = array_map(static fn ($d): string => $d->code, $registry->diagnostics());
+    expect($codes)->not->toContain('eloquent.custom-date-serialization');
+});
+
+it('weakens a date column a docblock tag claimed, and reports it', function (): void {
+    // The `@property` loop publishes a column before any date source is consulted, so a model carrying
+    // an ide-helper tag for its timestamps took the override's weakening at no site at all: it
+    // published the Carbon class's shape under no notice. A date attribute is a date attribute whatever
+    // typed the name.
+    $registry = modelRegistry(new ClassT(Hourglass::class));
+    $hourglass = $registry->schemas()['Hourglass'];
+
+    expect($hourglass['properties']['created_at'])->toBe(['type' => 'string'])
+        ->and($hourglass['properties']['updated_at'])->toBe(['type' => 'string'])
+        ->and($hourglass['properties']['posted_at'])->toBe(['type' => 'string']);
+
+    $codes = array_map(static fn ($d): string => $d->code, $registry->diagnostics());
+    expect($codes)->toContain('eloquent.custom-date-serialization');
+});
+
+it('leaves a docblock-typed date column alone where no override weakens it', function (): void {
+    // The boundary, pinned. Without the override the docblock's own type stands, so a Carbon-typed
+    // column publishes what the class mapper makes of it — an object, which is a separate defect with
+    // a separate fix. Nothing here depends on that shape being right; what it pins is that this mapper
+    // only reaches a date column when the override has made its wire format unstatable.
+    $registry = modelRegistry(new ClassT(Waterclock::class));
+
+    expect($registry->schemas()['Waterclock']['properties']['posted_at'])->toBe(['type' => 'object']);
+
+    $codes = array_map(static fn ($d): string => $d->code, $registry->diagnostics());
+    expect($codes)->not->toContain('eloquent.custom-date-serialization');
 });
 
 it('reflects $with and the serializeDate override in the model facts', function (): void {

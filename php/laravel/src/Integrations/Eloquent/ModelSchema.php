@@ -59,13 +59,16 @@ use Throwable;
  * - `$with` relations serialise on every response, so each becomes a nested model schema under the
  *   snake-cased key (to-many → array, to-one → nullable ref), depth-capped by the shared
  *   component-hoist cycle break — a relation back to a model mid-expansion becomes a `$ref`.
- * - a `serializeDate()` override makes the wire format statically unknowable, so date casts weaken to
- *   a plain string (no `format`) plus a diagnostic.
+ * - a date attribute publishes whatever {@see DateColumnSchema} says, weakened `format` and
+ *   diagnostic flag together.
  *
- * A model no source yields columns for renders as a bare object plus an info diagnostic telling the
- * author to add `@property` tags — never silently.
+ * Both of this mapper's notices claim something about the DOCUMENT, so both are decided by what was
+ * published rather than by what the model owns: the bare-object notice is raised after appends and
+ * eager loads have had their chance to add a key, and the date-serialisation one by the sites that
+ * published a date attribute. A model no source yields columns for still renders as a bare object plus
+ * an info diagnostic telling the author to add `@property` tags — never silently.
  *
- * @phpstan-type ModelFacts array{hidden: list<string>, visible: list<string>, appends: list<string>, casts: array<string, string>, classHidden: list<string>, fillable: list<string>, dates: list<string>, with: list<string>, timestamps: bool, softDeletes: bool, overridesSerializeDate: bool, keyName: string, keySchema: array<string, mixed>}
+ * @phpstan-import-type ModelFacts from EloquentModelReflector
  */
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class ModelSchema implements TypeToSchema
@@ -99,6 +102,11 @@ final class ModelSchema implements TypeToSchema
 
             $properties = [];
             $required = [];
+            // Raised by {@see DateColumnSchema::schema()} at whichever site published a date attribute,
+            // so the notice below is decided by the document rather than by the model owning the
+            // override. A local by-reference rather than state: ComponentHoist re-enters toSchema() per
+            // eager-loaded relation, and a nested model's weakened date is not this model's.
+            $plainDates = false;
             // Reflection reports the framework's own public properties ($exists, $timestamps, …) beside
             // the docblock columns, and every model inherits all of them; none is an attribute, so none
             // is ever in a response ({@see EloquentModelReflector::frameworkProperties()}).
@@ -108,7 +116,7 @@ final class ModelSchema implements TypeToSchema
                     continue;
                 }
 
-                $schema = $this->columnSchema($property->name, $property->type, $facts, $context);
+                $schema = $this->columnSchema($property->name, $property->type, $facts, $context, $plainDates);
                 if ($property->summary !== null) {
                     $schema['description'] = $property->summary;
                 }
@@ -126,19 +134,24 @@ final class ModelSchema implements TypeToSchema
                     continue;
                 }
 
-                [$schema, $isRequired] = $this->floorColumnSchema($column, $facts, $context);
+                [$schema, $isRequired] = $this->floorColumnSchema($column, $facts, $context, $plainDates);
                 $properties[$column] = $schema;
                 if ($isRequired) {
                     $required[] = $column;
                 }
             }
 
-            // created_at/updated_at/deleted_at — always present on a persisted model, so required.
-            foreach ($this->frameworkColumns($facts, $context) as [$name, $schema]) {
+            // created_at/updated_at/deleted_at — always present on a persisted model, so required. The
+            // shape is asked for HERE rather than assembled by the helper, so a column the visibility
+            // gate drops never reaches the policy and never raises its flag.
+            foreach (self::frameworkColumns($facts) as [$name, $nullable]) {
                 if (isset($properties[$name]) || ! self::serialises($name, $facts)) {
                     continue;
                 }
-                $properties[$name] = $schema;
+                $schema = DateColumnSchema::schema($facts, $plainDates);
+                $properties[$name] = $nullable
+                    ? SchemaUnion::nullable($schema, $context->representation()->nullable)
+                    : $schema;
                 $required[] = $name;
             }
 
@@ -148,6 +161,20 @@ final class ModelSchema implements TypeToSchema
                 $properties[$key] = $facts['keySchema'];
             }
 
+            // Appends stay permissive unless a cast pins the shape or the accessor pass below types it.
+            foreach ($facts['appends'] as $append) {
+                if (isset($properties[$append]) || ! self::serialises($append, $facts)) {
+                    continue;
+                }
+                $properties[$append] = $this->castSchema($append, $facts, $context, $plainDates) ?? [];
+            }
+
+            $this->applyAccessors($fqcn, $facts, $properties, $required, $context);
+            $this->applyEagerLoads($fqcn, $facts, $properties, $required, $context);
+
+            // Asserted against the FINISHED set: appends and eager loads put keys in a model no column
+            // source spoke for, and a notice calling that response a bare object would be describing a
+            // schema the reader can see has properties in it.
             if ($properties === []) {
                 $context->diagnostic(new Diagnostic(
                     severity: Severity::Info,
@@ -157,18 +184,9 @@ final class ModelSchema implements TypeToSchema
                 ));
             }
 
-            // Appends stay permissive unless a cast pins the shape or the accessor pass below types it.
-            foreach ($facts['appends'] as $append) {
-                if (isset($properties[$append]) || ! self::serialises($append, $facts)) {
-                    continue;
-                }
-                $properties[$append] = $this->castSchema($append, $facts, $context) ?? [];
-            }
-
-            $this->applyAccessors($fqcn, $facts, $properties, $required, $context);
-            $this->applyEagerLoads($fqcn, $facts, $properties, $required, $context);
-
-            if ($facts['overridesSerializeDate']) {
+            // The override alone is not the condition: it usually sits on a base model every class
+            // extends, so most subclasses inherit it and publish no date attribute for it to reach.
+            if ($plainDates) {
                 $context->diagnostic(new Diagnostic(
                     severity: Severity::Info,
                     code: 'eloquent.custom-date-serialization',
@@ -343,47 +361,54 @@ final class ModelSchema implements TypeToSchema
     }
 
     /**
-     * The schema for a column: its cast shape when the model casts it, else its inferred type.
+     * The schema for a column: its cast shape when the model casts it, the date policy's when the
+     * override has made its wire format unstatable, else its inferred type.
+     *
+     * The date branch is here because a `@property` tag claims most models' timestamps — ide-helper
+     * writes one per column — and the loops below skip a name this one already took, so the weakening
+     * would never reach that population. Without an override the tag's own type stands: typing a
+     * Carbon-valued property is the class mapper's question, not this one's.
      *
      * @param  ModelFacts  $facts
      * @return array<string, mixed>
      */
-    private function columnSchema(string $column, DType $type, array $facts, SchemaContext $context): array
+    private function columnSchema(string $column, DType $type, array $facts, SchemaContext $context, bool &$plainDates): array
     {
-        $cast = $this->castSchema($column, $facts, $context);
-        if ($cast === null) {
+        $pinned = $this->castSchema($column, $facts, $context, $plainDates);
+        if ($pinned === null && $facts['overridesSerializeDate'] && DateColumnSchema::isAttribute($column, $facts)) {
+            $pinned = DateColumnSchema::schema($facts, $plainDates);
+        }
+
+        if ($pinned === null) {
             return $context->convert($type);
         }
 
-        // A cast only describes the non-null shape, so contribute it to the union when the column type
-        // admits null — including when the cast is a `$ref`, which cannot carry `type: [x, null]` and
-        // so has to take an explicit branch rather than silently forbid the null.
+        // A pinned shape only describes the non-null one, so contribute it to the union when the column
+        // type admits null — including when it is a `$ref`, which cannot carry `type: [x, null]` and so
+        // has to take an explicit branch rather than silently forbid the null.
         return $type instanceof UnionT && $type->containsNull()
-            ? SchemaUnion::nullable($cast, $context->representation()->nullable)
-            : $cast;
+            ? SchemaUnion::nullable($pinned, $context->representation()->nullable)
+            : $pinned;
     }
 
     /**
-     * The timestamp / soft-delete columns as `[name, schema]` pairs. created_at/updated_at are non-null
-     * on any persisted model; deleted_at is null unless the row is trashed — expressed by contributing
-     * the one date-time shape to a union, so the two cannot drift apart.
+     * The timestamp / soft-delete columns the model really has, as `[name, isNullable]` pairs.
+     * created_at/updated_at are non-null on any persisted model; deleted_at is null unless the row is
+     * trashed.
      *
      * @param  ModelFacts  $facts
-     * @return list<array{0: string, 1: array<string, mixed>}>
+     * @return list<array{0: string, 1: bool}>
      */
-    private function frameworkColumns(array $facts, SchemaContext $context): array
+    private static function frameworkColumns(array $facts): array
     {
-        $dateTime = $facts['overridesSerializeDate']
-            ? ['type' => 'string']
-            : ['type' => 'string', 'format' => 'date-time'];
-
         $columns = [];
         if ($facts['timestamps']) {
-            $columns[] = ['created_at', $dateTime];
-            $columns[] = ['updated_at', $dateTime];
+            foreach (DateColumnSchema::TIMESTAMPS as $name) {
+                $columns[] = [$name, false];
+            }
         }
         if ($facts['softDeletes']) {
-            $columns[] = ['deleted_at', SchemaUnion::nullable($dateTime, $context->representation()->nullable)];
+            $columns[] = [DateColumnSchema::DELETED_AT, true];
         }
 
         return $columns;
@@ -414,15 +439,15 @@ final class ModelSchema implements TypeToSchema
      * @param  ModelFacts  $facts
      * @return array{0: array<string, mixed>, 1: bool}
      */
-    private function floorColumnSchema(string $column, array $facts, SchemaContext $context): array
+    private function floorColumnSchema(string $column, array $facts, SchemaContext $context, bool &$plainDates): array
     {
-        $cast = $this->castSchema($column, $facts, $context);
+        $cast = $this->castSchema($column, $facts, $context, $plainDates);
         if ($cast !== null) {
             return [$cast, true];
         }
 
         if (in_array($column, $facts['dates'], true)) {
-            return [$facts['overridesSerializeDate'] ? ['type' => 'string'] : ['type' => 'string', 'format' => 'date-time'], true];
+            return [DateColumnSchema::schema($facts, $plainDates), true];
         }
 
         $context->lowerConfidence(0.6);
@@ -437,7 +462,7 @@ final class ModelSchema implements TypeToSchema
      * @param  ModelFacts  $facts
      * @return array<string, mixed>|null
      */
-    private function castSchema(string $column, array $facts, SchemaContext $context): ?array
+    private function castSchema(string $column, array $facts, SchemaContext $context, bool &$plainDates): ?array
     {
         $cast = $facts['casts'][$column] ?? null;
         if ($cast === null) {
@@ -445,7 +470,7 @@ final class ModelSchema implements TypeToSchema
         }
 
         if ($facts['overridesSerializeDate'] && CastSchema::isDateCast($cast)) {
-            return ['type' => 'string'];
+            return DateColumnSchema::schema($facts, $plainDates);
         }
 
         if (CastSchema::isEnum($cast)) {
