@@ -9,7 +9,6 @@ use Docuccino\Core\Draft\ParameterDraft;
 use Docuccino\Core\Draft\SchemaDraft;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
-use Docuccino\Core\Patch\Remove;
 
 /**
  * Where a bracketed query name lands on an operation that already publishes the container it names as a
@@ -20,24 +19,24 @@ use Docuccino\Core\Patch\Remove;
  * applies — so this is inert under the bracketed representation rather than a second grammar for it.
  *
  * Names are read through {@see FieldPath::fromQueryName()}, the declared inverse of the write that
- * produces them, so every depth the bracketed writer spells is a depth this recognises.
+ * produces them, so every depth the bracketed writer spells is a depth this recognises and a name
+ * that write does not produce reaches nothing at all.
  *
  * Additive and subtractive declarations read the SAME name here — {@see schemaFor()} patches a member,
- * {@see Remove()} takes one off — so the two representations answer a bracketed declaration alike. A
+ * {@see remove()} takes one off — so the two representations answer a bracketed declaration alike. A
  * subtraction that could not reach a member would be the worst of the two to get wrong: it leaves
  * exactly the document a working one leaves, so the author goes on believing the field is hidden.
  *
- * The answer is a function of what the operation publishes rather than of registration order: every
- * producer of a deepObject container writes in {@see OperationPhase::Parameters}, at a priority ahead of
- * the parameter attributes, and every producer of a recovered rule set writes a whole phase later in
- * {@see OperationPhase::Request}. So a container that exists is there to be found, and one that does not
- * is never going to be.
+ * The answer is a function of what the operation publishes WHEN IT IS ASKED, and that is all it is.
+ * Containers are not all written in one phase — {@see RecoveredRequest} mints one in
+ * {@see OperationPhase::Request}, a phase after the parameter attributes run — so a producer reading
+ * this before that phase is answered about a container that does not exist yet. Only a reader in
+ * {@see OperationPhase::Finalize} sees every container, which is where the subtractive pass runs.
  *
  * Requiredness is the one fact with no home on the member's own schema — it belongs to the list its
- * PARENT keeps — so it is accumulated here and written once per parent by {@see flush()}: a second
- * equal-layer write to one `required` list would shadow it rather than append. That a required member
- * makes the container itself required is the container's own reading, made where it freezes
- * ({@see ParameterDraft::freeze()}).
+ * PARENT keeps — so it is accumulated here and stated per MEMBER by {@see flush()}, which is
+ * {@see SchemaDraft::requirements()}'s reading. That a required member makes the container itself
+ * required is the container's own, made where it freezes ({@see ParameterDraft::freeze()}).
  */
 final class DeepObjectMembers
 {
@@ -84,24 +83,13 @@ final class DeepObjectMembers
         $this->stated[$key][1][$member] = $required;
     }
 
-    /** Write each parent's merged `required` list, once, at the layer of the producer that stated it. */
+    /** State what was accumulated here, member by member, at the layer of the producer that stated it. */
     public function flush(Contribution $by): void
     {
         foreach ($this->stated as [$parent, $members]) {
-            $resolved = $parent->resolvedField('required');
-            $existing = is_array($resolved) ? array_values(array_filter($resolved, 'is_string')) : [];
-
-            $merged = array_values(array_unique([...$existing, ...array_keys(array_filter($members))]));
-            $merged = array_values(array_filter($merged, static fn (string $each): bool => $members[$each] ?? true));
-
-            if ($merged === $existing) {
-                continue;
+            foreach ($members as $member => $required) {
+                $parent->stateMemberRequired((string) $member, $required, $by);
             }
-
-            // Emptied rather than emptied-out: every other producer of a `required` list omits the
-            // keyword when it has no members, so a statement that takes the last one off owes the same
-            // shape — and only the removal sentinel reaches "absent" through the guard.
-            $parent->set('required', $merged === [] ? Remove::value() : $merged, $by);
         }
     }
 
@@ -125,13 +113,26 @@ final class DeepObjectMembers
     }
 
     /**
+     * Whether a container on this operation publishes the member a bracketed name points at — what
+     * {@see remove()} is about to answer, asked without removing anything. Reachability is the
+     * criterion for both halves: matching the written name against {@see memberNames()} instead
+     * compares two spellings and answers about neither the container nor the member.
+     */
+    public function publishes(string $name): bool
+    {
+        $located = $this->locate($name);
+
+        return $located !== null && $located[0]->publishesProperty($located[1]);
+    }
+
+    /**
      * Every member every deepObject query container on this operation publishes, under the bracketed
      * name an author writes it as — what a report about a name that matched nothing has to name beside
      * the parameters, or a bracketed typo is answered with the container alone and the member spelling
      * is nowhere for the reader to compare against. It is also what the other representation already
      * answers, where each of these members IS a parameter of its own.
      *
-     * Byte-sorted, and read at every depth {@see Remove()} reaches, so the answer is a function of what
+     * Byte-sorted, and read at every depth {@see remove()} reaches, so the answer is a function of what
      * the operation publishes rather than of the order its producers wrote them.
      *
      * @return list<string>
@@ -224,8 +225,8 @@ final class DeepObjectMembers
      */
     private function container(string $name): ?array
     {
-        $segments = FieldPath::segments(FieldPath::fromQueryName($name));
-        if (count($segments) < 2) {
+        $segments = FieldPath::fromQueryName($name);
+        if ($segments === null || count($segments) < 2) {
             return null;
         }
 

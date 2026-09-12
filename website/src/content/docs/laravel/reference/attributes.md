@@ -214,7 +214,10 @@ stops naming it. One parameter per name, so the declaration answers for the name
 
 A bracketed `name` (`filter[status]`) patches a flat `filter[status]` parameter, or — when the
 document uses the `deepObject` filter style — the `status` property of the `filter` object parameter.
-The same attribute works in either representation. Placed on a **Spatie Query Builder custom filter
+The same attribute works in either representation. Under `deepObject` a `required: true` there joins
+the container's `required` list beside whatever the validation rules require, and a `required:` on the
+**container** (`#[QueryParameter('filter', required: false)]`) is the last word on whether the whole
+object has to be sent. Placed on a **Spatie Query Builder custom filter
 class**, `#[QueryParameter]` documents that filter (its `name` is ignored — the name comes from
 `AllowedFilter::custom`), whether the filter is registered inline or through a factory of your own
 that wraps it; see [Query Builder → custom filter classes](/laravel/packages/query-builder/#custom-filter-classes).
@@ -583,6 +586,10 @@ public function index(): LengthAwarePaginator { /* … */ }
 A member nested deeper is reached the same way (`filter[window][from]`). If the container's schema
 required the member, that requirement goes with it — including the container's own `required`, when the
 member was the only reason for it. Naming the container itself (`filter`) still drops the whole object.
+
+Write the brackets the way the query string carries them: `filter[opaque` names a top-level
+`filter_opaque` on the wire rather than a member of `filter`, so it drops nothing and is reported
+rather than read as the nearest member it resembles.
 
 An `in:` that names no location drops nothing and says so
 ([`attribute.ignore-param-location`](/laravel/reference/diagnostics/#attributes)), and so does a

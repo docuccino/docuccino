@@ -192,3 +192,91 @@ it('lists the members of every deepObject container and nothing else', function 
         'filter[status]',
     ]);
 });
+
+/*
+ * The judge and the remover, on one name. A subtraction leaves no evidence, so the ANSWER a caller
+ * judges its declaration by is the only thing between a typo and silence — and an answer computed a
+ * different way from the removal is two readings of one question, which is how a member the author
+ * marked as not-for-publication stays published with no report beside it.
+ */
+it('judges a bracketed name by exactly what the removal reaches', function (string $name, bool $reaches): void {
+    $operation = new OperationDraft;
+    $by = Contribution::integration('query-builder');
+    $parameter = deepObjectContainer($operation);
+
+    // Two members whose names the bracketed spelling and the path grammar disagree about.
+    $parameter->schema()->property('a[b')->set('type', 'string', $by);
+    $parameter->schema()->property('a]b')->set('type', 'string', $by);
+
+    $members = new DeepObjectMembers($operation);
+    $before = $parameter->freeze()->toArray();
+
+    expect($members->publishes($name))->toBe($reaches)
+        ->and($members->remove($name))->toBe($reaches);
+
+    if (! $reaches) {
+        // The other half of the same defect: a name that reaches nothing must leave the document
+        // alone, or a declaration reported as having matched nothing has silently mutated the node.
+        expect($parameter->freeze()->toArray())->toBe($before);
+    }
+})->with([
+    'a member spelled as the write spells it' => ['filter[opaque]', true],
+    // `?filter[a[b]=x` sets the `a[b` key of `filter` on the wire, so this reaches that member. Read
+    // as two segments it would descend into an `a` nobody publishes and remove nothing, silently.
+    'a member whose name holds an opening bracket' => ['filter[a[b]', true],
+    // Unbalanced: on the wire this is a top-level `filter_opaque`, so it names no member. Read as a
+    // path it would remove `opaque`, a member the author never mentioned.
+    'an unterminated name' => ['filter[opaque', false],
+    // A member whose name holds a `]` is published and has no bracketed spelling, so no declaration
+    // addresses it — reported rather than guessed at.
+    'a member whose name holds a closing bracket' => ['filter[a]b]', false],
+    'an empty member' => ['filter[]', false],
+]);
+
+it('publishes a numeric member name as the string `required` is required to hold', function (): void {
+    $operation = new OperationDraft;
+    $by = Contribution::integration('query-builder');
+    $parameter = deepObjectContainer($operation);
+
+    $members = new DeepObjectMembers($operation);
+    $members->schemaFor('filter[2024]')?->set('type', 'string', $by);
+    $members->stateRequired('filter[2024]', true);
+    $members->flush($by);
+
+    // PHP normalises the array key `"2024"` to an int, and `required` is an array of STRINGS — an
+    // integer there is a document a validator rejects, and the numbers a generated client would read
+    // as positions.
+    expect($parameter->freeze()->toArray()['schema']['required'])->toBe(['2024']);
+
+    expect($members->remove('filter[2024]'))->toBeTrue();
+
+    $frozen = $parameter->freeze()->toArray();
+
+    // And the subtraction takes it with it: a `required` naming a member with no `properties` entry
+    // tells a consumer their request must carry a value the document does not describe, and the
+    // container was promoted to required off that phantom.
+    expect($frozen['schema'])->not->toHaveKey('required')
+        ->and($frozen['schema']['properties'])->not->toHaveKey('2024')
+        ->and($frozen['required'])->toBeFalse();
+});
+
+it('stops offering a member it published as a declared keyword once that member is gone', function (): void {
+    $operation = new OperationDraft;
+    $parameter = deepObjectContainer($operation);
+    $parameter->schema()->declareShape(
+        ['type' => 'object', 'properties' => ['status' => ['type' => 'string'], 'opaque' => ['type' => 'integer']]],
+        Contribution::attribute(),
+    );
+
+    $members = new DeepObjectMembers($operation);
+
+    expect($members->remove('filter[opaque]'))->toBeTrue();
+
+    // The list a report hands the reader, and the answer a second declaration is judged by. A keyword
+    // `properties` is not mutated by a removal — freeze() applies it — so a member list reading the
+    // keyword alone goes on offering a member nothing publishes, and a second declaration naming it
+    // is told it matched.
+    expect($members->memberNames())->toBe(['filter[status]'])
+        ->and($members->publishes('filter[opaque]'))->toBeFalse()
+        ->and($members->remove('filter[opaque]'))->toBeFalse();
+});

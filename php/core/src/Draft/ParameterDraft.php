@@ -6,7 +6,6 @@ namespace Docuccino\Core\Draft;
 
 use Docuccino\Core\Document\NodeExtension;
 use Docuccino\Core\Document\Parameter;
-use Docuccino\Core\Document\SchemaObject;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\PatchGuard;
 use Docuccino\Core\Patch\PatchResult;
@@ -166,13 +165,20 @@ final class ParameterDraft
         // Only a parameter stating its shape elsewhere ($ref/content) legitimately carries no schema.
         $schema = $this->schema->freeze();
 
-        // A deepObject container whose schema requires a member is itself required: the member has no
-        // parameter of its own under that representation, so an optional container would tell a
-        // consumer that a request omitting a value the server demands is valid. The same reading
-        // {@see \Docuccino\Core\Extensions\Validation\RecoveredRequest} makes of a field marked required
-        // deep inside a request body, where only the root `required` list is read for it.
-        if ($required !== true && ($resolved['style'] ?? null) === 'deepObject' && self::requiresAMember($schema)) {
+        // A deepObject container whose schema requires a member — at any depth — is itself required:
+        // the member has no parameter of its own under that representation, so an optional container
+        // would tell a consumer that a request omitting a value the server demands is valid. The
+        // derivation carries the authority of whoever stated the requirement rather than outranking
+        // everyone, so a `required: false` stated strictly above it still stands.
+        $requirement = $this->schema->memberRequirement();
+        $stated = $this->guard->contributions()['required']['by'] ?? null;
+        $derived = [];
+
+        if ($requirement !== null && ($resolved['style'] ?? null) === 'deepObject'
+            && ! ($stated !== null && $stated->outranks($requirement))) {
             $required = true;
+            // Provenance names whoever required the member, not the producer just replaced.
+            $derived['required'] = $requirement;
         }
 
         $statesShapeElsewhere = isset($resolved['content']) || isset($resolved['$ref']);
@@ -180,7 +186,7 @@ final class ParameterDraft
 
         $docuccino = new NodeExtension(
             id: $this->id,
-            provenance: $this->guard->provenance(),
+            provenance: $this->guard->provenance($derived, array_keys($derived)),
             rest: $this->facts === [] ? [] : ['facts' => $this->facts],
         );
 
@@ -194,13 +200,5 @@ final class ParameterDraft
             docuccino: $docuccino->isEmpty() ? null : $docuccino,
             rest: $resolved,
         );
-    }
-
-    /** Whether a schema names any member in its own `required` list. */
-    private static function requiresAMember(SchemaObject $schema): bool
-    {
-        $required = $schema->toArray()['required'] ?? null;
-
-        return is_array($required) && $required !== [];
     }
 }

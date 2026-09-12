@@ -1123,9 +1123,15 @@ in a Form Request or an inline `validate()` on a `GET`. Under `bracketed` the ru
 object. Either way the surface is described once: the document never carries a `filter` object *and* a
 `filter[status]` parameter for the same value, which a client generator would turn into two inputs.
 
-A member the rules mark `required` joins the object's `required` list, and the `filter` parameter
-itself becomes required with it — under `deepObject` the member has no parameter of its own, so an
-optional `filter` would say a request that omits a value the server demands is a valid one.
+A member the rules mark `required` joins the object's `required` list — alongside anything a
+`#[QueryParameter(..., required: true)]` requires, since both answer for the same list — and the
+`filter` parameter itself becomes required with it, however deep the required member sits. Under
+`deepObject` the member has no parameter of its own, so an optional `filter` would say a request that
+omits a value the server demands is a valid one.
+
+`#[QueryParameter('filter', required: false)]` is the last word on that: the container stays optional
+and its members stay required, which is what JSON Schema already means — send no `filter` and the
+request is valid, send one and it must carry what the list names.
 
 Dropping one works the same way. `#[IgnoreParam(name: 'filter[opaque]', in: 'query')]` removes the flat
 parameter under `bracketed` and the object's `opaque` member under `deepObject`, leaving every other

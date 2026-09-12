@@ -21,6 +21,9 @@ final class SchemaDraft
 {
     private readonly PatchGuard $guard;
 
+    /** What producers have stated about individual members' requiredness — see {@see requirements()}. */
+    private readonly PatchGuard $requiredMembers;
+
     /**
      * @var array<string, SchemaDraft>
      */
@@ -43,6 +46,7 @@ final class SchemaDraft
     public function __construct()
     {
         $this->guard = new PatchGuard;
+        $this->requiredMembers = new PatchGuard;
     }
 
     public function set(string $keyword, mixed $value, Contribution $by): PatchResult
@@ -105,6 +109,30 @@ final class SchemaDraft
     }
 
     /**
+     * State whether ONE member belongs in this schema's `required` list ({@see requirements()}).
+     *
+     * @internal Core-only. A member's requiredness belongs to the list its parent keeps and an
+     * extension does not hold the parent, so it states one through
+     * {@see DeepObjectMembers::stateRequired()}.
+     */
+    public function stateMemberRequired(string $member, bool $required, Contribution $by): PatchResult
+    {
+        return $this->requiredMembers->apply($member, $required, $by);
+    }
+
+    /**
+     * Whether this schema publishes a member of that name — {@see removeProperty()}'s own answer,
+     * asked without removing anything, so a caller judging a subtraction and the subtraction itself
+     * cannot disagree.
+     *
+     * @internal Core-only — see {@see propertyNames()}.
+     */
+    public function publishesProperty(string $name): bool
+    {
+        return in_array($name, $this->propertyNames(), true);
+    }
+
+    /**
      * The member names this schema will publish, in the order {@see freeze()} publishes them: the nested
      * property drafts where there are any, and otherwise the keys of a `properties` written whole as a
      * keyword. One reading rather than two, because whoever asks whether a name is a member of this
@@ -148,7 +176,7 @@ final class SchemaDraft
      */
     public function removeProperty(string $name): bool
     {
-        $published = in_array($name, $this->propertyNames(), true);
+        $published = $this->publishesProperty($name);
 
         unset($this->properties[$name]);
 
@@ -270,6 +298,22 @@ final class SchemaDraft
     {
         $data = $this->guard->resolved();
 
+        $requirements = $this->requirements();
+        $required = array_column($requirements, 0);
+        $also = [];
+
+        if ($required === []) {
+            unset($data['required']);
+        } else {
+            $data['required'] = $required;
+            // Attributed to the highest layer that put a member on the list: the guard holds no
+            // winning write for a keyword assembled here.
+            $also['required'] = array_reduce(
+                $requirements,
+                static fn (?Contribution $best, array $each): ?Contribution => self::higher($best, $each[1]),
+            );
+        }
+
         if ($this->properties !== []) {
             $properties = [];
             foreach ($this->properties as $name => $draft) {
@@ -279,12 +323,15 @@ final class SchemaDraft
         }
 
         if ($this->removed !== []) {
-            $data = self::without($data, $this->removed);
+            $data = self::withoutProperties($data, $this->removed);
         }
+
+        $except = array_values(array_diff($this->guard->fields(), array_map(strval(...), array_keys($data))));
+        $except[] = 'required';
 
         $docuccino = new NodeExtension(
             id: $this->id,
-            provenance: $this->guard->provenance(),
+            provenance: $this->guard->provenance(array_filter($also), $except),
             mock: $this->mock,
         );
 
@@ -296,41 +343,159 @@ final class SchemaDraft
     }
 
     /**
-     * `$data` with every subtracted member gone from `properties` and from `required`, each keyword
-     * omitted once nothing is left in it: an empty `required` states nothing, and every producer of that
-     * list already omits it rather than publishing the shape.
+     * `$data` with every subtracted member gone from `properties`, the keyword omitted once nothing is
+     * left in it — an object describing no members is vague and true. A subtracted member leaves
+     * `required` in {@see requirements()}.
      *
      * @param  array<string, mixed>  $data
      * @param  list<string>  $removed
      * @return array<string, mixed>
      */
-    private static function without(array $data, array $removed): array
+    private static function withoutProperties(array $data, array $removed): array
     {
         $properties = $data['properties'] ?? null;
-        if (is_array($properties)) {
-            foreach ($removed as $name) {
-                unset($properties[$name]);
-            }
-
-            $data['properties'] = $properties;
-            if ($properties === []) {
-                unset($data['properties']);
-            }
+        if (! is_array($properties)) {
+            return $data;
         }
 
-        $required = $data['required'] ?? null;
-        if (is_array($required)) {
-            $kept = array_values(array_filter(
-                $required,
-                static fn (mixed $each): bool => ! in_array($each, $removed, true),
-            ));
+        foreach ($removed as $name) {
+            unset($properties[$name]);
+        }
 
-            $data['required'] = $kept;
-            if ($kept === []) {
-                unset($data['required']);
-            }
+        $data['properties'] = $properties;
+        if ($properties === []) {
+            unset($data['properties']);
         }
 
         return $data;
+    }
+
+    /**
+     * Every member this schema's `required` list names, each with the contribution that says so: a
+     * `required` written whole as a keyword, patched by the per-member statements
+     * ({@see stateMemberRequired()}), minus whatever a subtraction took off.
+     *
+     * This is the ONE reading of that list — {@see freeze()} publishes it and
+     * {@see memberRequirement()} asks who is behind it — and requiredness is stated per member rather
+     * than merged into the keyword because the contested unit is the member: the guard arbitrates a
+     * FIELD, so a merged list from a second producer at a lower layer is shadowed whole and its member
+     * silently leaves the document. Names are cast because PHP normalises the key `"2024"` to an int
+     * while `required` is an array of strings. `docs/design/defect-classes.md` §"A second reading,
+     * narrower than the write it answers for" is the class all of that was an instance of.
+     *
+     * @return list<array{0: string, 1: Contribution}>
+     */
+    private function requirements(): array
+    {
+        /** @var array<string, int> $at */
+        $at = [];
+        /** @var array<int, array{0: string, 1: Contribution}> $named */
+        $named = [];
+
+        $keyword = $this->guard->contributions()['required'] ?? null;
+        if ($keyword !== null && is_array($keyword['value'])) {
+            foreach ($keyword['value'] as $each) {
+                if (! is_string($each) && ! is_int($each)) {
+                    continue;
+                }
+
+                $member = (string) $each;
+                if (! isset($at[$member])) {
+                    $at[$member] = count($named);
+                    $named[count($named)] = [$member, $keyword['by']];
+                }
+            }
+        }
+
+        foreach ($this->requiredMembers->contributions() as $key => $write) {
+            $member = (string) $key;
+            $position = $at[$member] ?? null;
+
+            if ($write['value'] !== true) {
+                if ($position !== null) {
+                    unset($named[$position], $at[$member]);
+                }
+
+                continue;
+            }
+
+            // A member already listed keeps its position: restating it must not reorder the list.
+            $at[$member] ??= count($named);
+            $named[$at[$member]] = [$member, $write['by']];
+        }
+
+        return array_values(array_filter(
+            $named,
+            fn (array $each): bool => ! in_array($each[0], $this->removed, true),
+        ));
+    }
+
+    /**
+     * The contribution behind this schema requiring a member — of its own, or of anything nested under
+     * it, at any depth — and the highest-ranking one where several do. Null when nothing does. A
+     * deepObject container's own requiredness is derived from it ({@see ParameterDraft::freeze()}).
+     *
+     * @internal Core-only.
+     */
+    public function memberRequirement(): ?Contribution
+    {
+        $best = null;
+
+        foreach ($this->requirements() as [, $by]) {
+            $best = self::higher($best, $by);
+        }
+
+        foreach ($this->properties as $name => $property) {
+            if (in_array((string) $name, $this->removed, true)) {
+                continue;
+            }
+
+            $best = self::higher($best, $property->memberRequirement());
+        }
+
+        // A `properties` map written whole, which freeze() publishes only where no draft does.
+        $resolved = $this->resolvedField('properties');
+        if ($this->properties === [] && is_array($resolved) && self::mapRequiresAMember($resolved, $this->removed)) {
+            $best = self::higher($best, $this->guard->contributions()['properties']['by'] ?? null);
+        }
+
+        return $best;
+    }
+
+    /**
+     * Whether any member of a `properties` map written as a keyword requires a member of its own, at
+     * any depth.
+     *
+     * @param  array<array-key, mixed>  $properties
+     * @param  list<string>  $removed
+     */
+    private static function mapRequiresAMember(array $properties, array $removed): bool
+    {
+        foreach ($properties as $name => $schema) {
+            if (! is_array($schema) || in_array((string) $name, $removed, true)) {
+                continue;
+            }
+
+            $required = $schema['required'] ?? null;
+            if (is_array($required) && $required !== []) {
+                return true;
+            }
+
+            $nested = $schema['properties'] ?? null;
+            if (is_array($nested) && self::mapRequiresAMember($nested, [])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function higher(?Contribution $incumbent, ?Contribution $candidate): ?Contribution
+    {
+        if ($incumbent === null || $candidate === null) {
+            return $incumbent ?? $candidate;
+        }
+
+        return $candidate->outranks($incumbent) ? $candidate : $incumbent;
     }
 }

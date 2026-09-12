@@ -59,16 +59,24 @@ final class DeclaredFields
 
     /**
      * The declarations that document QUERY parameters, read back into the path grammar the rules are
-     * keyed by ({@see FieldPath::fromQueryName()}).
+     * keyed by ({@see FieldPath::queryNameAsPath()}). One whose bracketed name has no spelling there
+     * answers for no field, which is what it does on the wire too.
      *
      * @param  list<QueryParameter>  $declarations
      */
     public static function inQuery(array $declarations): self
     {
-        return new self(
-            array_map(static fn (QueryParameter $each): array => ['path' => FieldPath::fromQueryName($each->name), 'type' => $each->type], $declarations),
-            wholeBranch: false,
-        );
+        /** @var list<DeclaredField> $paths */
+        $paths = [];
+
+        foreach ($declarations as $each) {
+            $path = FieldPath::queryNameAsPath($each->name);
+            if ($path !== null) {
+                $paths[] = ['path' => $path, 'type' => $each->type];
+            }
+        }
+
+        return new self($paths, wholeBranch: false);
     }
 
     /**
