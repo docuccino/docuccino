@@ -109,7 +109,11 @@ invisible by construction.
 *Instances.* `#[IgnoreParam]` and `#[IgnoreResponse]` dropped nothing on a stale name and said nothing.
 `#[Hidden]` was worse: a name matching no property hides nothing and so **publishes** the field the
 author marked as not-for-publication. `#[InDocs]` inverts — a key naming no configured document
-excludes the route from *every* document rather than pinning it to one.
+excludes the route from *every* document rather than pinning it to one. And the variant where the name
+is right and the GRAMMAR is short: under `representation.filters: deepObject` a filter is a member of
+one `filter` object rather than a parameter of its own, so `#[IgnoreParam(name: 'filter[opaque]')]`
+reached a parameter that does not exist and the filter stayed published — the report was honest and the
+capability was simply absent, which is the same document either way.
 
 *The tell.* An author-supplied name reaching a minting or mutating accessor with no `has*` guard.
 `#[Example]` is the counter-example that gets it right: it calls `hasParameter()` first and reports
@@ -118,6 +122,23 @@ excludes the route from *every* document rather than pinning it to one.
 *The fix that worked.* Say the declaration as written, say it took no effect, and name what the
 operation *does* document so the typo is visible beside it. Judge matches BEFORE the removal, or the
 second declaration naming one parameter reads as having reached nothing.
+
+Where the grammar was short, the fix is that the subtractive reading and the additive one are ONE
+reading of where a name lands (`DeepObjectMembers`), so a declaration cannot be a member for the
+producer that writes it and a parameter for the pass that drops it — and the report lists the members
+beside the parameters, since the reader's typo is in the half the old list never showed. Two things
+travel with a removed member: the parent's `required` list, which is the only lie a removal can tell
+(a request required to carry a value the document does not describe), and hence the container's own
+requiredness, which is derived from that list at one site rather than restated. A subtraction is
+applied at freeze rather than written through the guard, so nothing outranks it — the reading a whole
+parameter's removal already had, for the same reason.
+
+*The tests that recognise it.* `DeepObjectMemberRemovalTest` (the removal, the `required` reconciliation,
+a nested member, a member published as one declared keyword rather than as a draft, and a row per shape
+of "no such member" asserting the operation is BYTE-identical afterwards, because the additive walk mints
+what it does not find), and the deepObject rows of `IgnoreParamTest` — a whole build, with a committed
+golden pair standing in the affected population, since the corpus had no deepObject route an author had
+subtracted from.
 
 ## Does null carry two meanings?
 

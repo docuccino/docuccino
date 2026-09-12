@@ -38,9 +38,11 @@ use Docuccino\Core\Support\NameList;
 final class UnmatchedDeclaration
 {
     /**
-     * A name that matched no parameter. `$published` is what the operation is left documenting, as
-     * `in:name` keys — read AFTER the pass has done its removals, because the remedy has to name what
-     * the document actually publishes rather than what it held mid-build.
+     * A name that matched no parameter. `$published` is what the operation is left documenting, as the
+     * `in:name` addresses a declaration can name — read AFTER the pass has done its removals, because
+     * the remedy has to name what the document actually publishes rather than what it held mid-build.
+     * Where a representation publishes a surface as one container, its members are addresses too, so the
+     * caller lists them under the bracketed names that drop them.
      *
      * @param  list<string>  $published
      */

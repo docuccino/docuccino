@@ -1126,4 +1126,11 @@ object. Either way the surface is described once: the document never carries a `
 A member the rules mark `required` joins the object's `required` list, and the `filter` parameter
 itself becomes required with it — under `deepObject` the member has no parameter of its own, so an
 optional `filter` would say a request that omits a value the server demands is a valid one.
+
+Dropping one works the same way. `#[IgnoreParam(name: 'filter[opaque]', in: 'query')]` removes the flat
+parameter under `bracketed` and the object's `opaque` member under `deepObject`, leaving every other
+filter where it was — and taking the member off the object's `required` list, and the `filter`
+parameter's own `required` where that member was the only reason for it, because a request cannot be
+required to carry a value the document no longer describes. Deeper members are named the same way
+(`filter[window][from]`), and naming the container itself drops the whole object.
 </Aside>

@@ -567,12 +567,30 @@ public function index(): AnonymousResourceCollection { /* … */ }
 
 It is the last word on the parameter, whatever documented it: a rule set recovered from a FormRequest,
 a paginator key, the route's own path segment, or a parameter attribute on the controller class an
-action opts out of. An `in:` that names no location drops nothing and says so
+action opts out of.
+
+Write the name the way it rides in the query string, brackets included. Where a representation publishes
+a whole surface as one object parameter — `representation.filters: deepObject` puts every Query Builder
+filter inside a single `filter` — `filter[opaque]` names a **member** of that object, and the ignore
+drops that member and leaves the rest:
+
+```php
+// One filter dropped, under either filters representation.
+#[IgnoreParam(name: 'filter[opaque]', in: 'query')]
+public function index(): LengthAwarePaginator { /* … */ }
+```
+
+A member nested deeper is reached the same way (`filter[window][from]`). If the container's schema
+required the member, that requirement goes with it — including the container's own `required`, when the
+member was the only reason for it. Naming the container itself (`filter`) still drops the whole object.
+
+An `in:` that names no location drops nothing and says so
 ([`attribute.ignore-param-location`](/laravel/reference/diagnostics/#attributes)), and so does a
-`name:` on the action that matches no parameter
+`name:` on the action that matches no parameter or member
 ([`attribute.ignore-param-unmatched`](/laravel/reference/diagnostics/#attributes)) — a subtraction
 leaves no evidence, so without that report a typo'd or renamed name looks exactly like one that
-worked, and the message lists what the operation does document so the difference is visible beside it.
+worked, and the message lists every address the operation does document, members included, so the
+difference is visible beside it.
 A declaration inherited from the controller class stays silent: naming a key only some of its actions
 document is the ordinary way a class-level declaration is written.
 
