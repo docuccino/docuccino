@@ -1143,6 +1143,14 @@ interface ExceptionToResponse {
 // integration). Enforced once at the write so no producer can bypass it, and asked BEFORE building a
 // body — InferredResponsesExtension skips payload conversion, which is what keeps a dropped body's
 // schema out of components. An overlay (layer 45, applied post-freeze) can still write content there.
+// SchemaDraft splits the same way, and its read side carries saysNothingAboutTheInstance(): whether the
+// node AS IT STANDS says anything at all about the value, every keyword on it being an annotation. That
+// is the question a producer asks when its DIAGNOSTIC is about the outcome rather than about its own
+// write — a claim made at the integration rung about what the document publishes is one four layers can
+// still falsify. The built-in query-builder untyped-filter report reads it from a Finalize pass, so the
+// no-privileged-back-door promise makes it public: a third-party integration reporting on what its facts
+// ended up published as needs exactly the same read. Draft/ is frozen by name in CoreBoundaryArchTest,
+// so a method joining that promise is a decision rather than an accident.
 // Error-response resolution chain (first supports() wins; Phase 4):
 //   1. InferredHandlerExceptionToResponse — analyses the APP'S REAL exception handling:
 //      render callbacks discovered by reflecting the BOOTED app's handler (catches
