@@ -14,7 +14,9 @@ namespace Docuccino\Core\Extensions\Validation;
  * The same path has a second spelling in a query string, where a nested name rides as brackets:
  * {@see toQueryName()} writes it and {@see fromQueryName()} reads it back. Both live here so the
  * writer and the reader of that spelling cannot drift — a guard matching a declared parameter name
- * against a validation key has to recognise exactly the names the write produced.
+ * against a validation key has to recognise exactly the names the write produced, and nothing else:
+ * a subtraction judged against a lossy reading either leaves the field an author marked as
+ * not-for-publication published, or removes one they never named.
  *
  * Not to be confused with the adapter's `Integrations\Support\FieldPaths`, which asks what a SET of
  * recovered rule keys says about one field's container. This is the split itself.
@@ -72,6 +74,10 @@ final class FieldPath
      * `filter[radius_lat]`, and a top-level field is its own name. Escapes are already folded — the
      * segments are the names themselves — because brackets, not dots, separate them on the wire.
      *
+     * The wire spelling carries no escape of its own, so a segment holding a `]` has no spelling
+     * here: what this writes for one is a name {@see fromQueryName()} refuses, which is the honest
+     * end of it — such a member is listed for a reader and is not addressable by a declaration.
+     *
      * @param  non-empty-list<string>  $segments
      */
     public static function toQueryName(array $segments): string
@@ -86,17 +92,47 @@ final class FieldPath
     }
 
     /**
-     * The path a bracketed query name points at — {@see toQueryName()} read backwards. A dot inside a
-     * segment is the name's own, so it comes back escaped: the wire spelling has no separator to
-     * confuse it with, and the path grammar does.
+     * The segments a bracketed query name names — {@see toQueryName()} read backwards — or null for a
+     * name that write does not produce: an empty container name or member name, an unbalanced
+     * bracket, or text after the last `]`. A `[` INSIDE a group is a member's own character, which is
+     * how the wire reads it too (`?filter[a[b]=` sets the `a[b` key of `filter`), so the two agree on
+     * where the boundaries are.
+     *
+     * @return non-empty-list<string>|null
      */
-    public static function fromQueryName(string $name): string
+    public static function fromQueryName(string $name): ?array
     {
-        $segments = preg_split('/\]\[|\[|\]$/', $name) ?: [$name];
+        if (preg_match('/^([^\[\]]+)((?:\[[^\]]+\])*)$/', $name, $matched) !== 1) {
+            return null;
+        }
+
+        preg_match_all('/\[([^\]]+)\]/', $matched[2], $members);
+
+        return [$matched[1], ...$members[1]];
+    }
+
+    /**
+     * The same reading of a bracketed name, spelled in the path grammar the validation keys use —
+     * what a declaration is matched against. Null where {@see fromQueryName()} refuses the name, and
+     * also where a segment has no spelling in this grammar: one ending in `\` before another segment
+     * would read back as an escaped dot and so name a different field.
+     */
+    public static function queryNameAsPath(string $name): ?string
+    {
+        $segments = self::fromQueryName($name);
+        if ($segments === null) {
+            return null;
+        }
+
+        foreach (array_slice($segments, 0, -1) as $segment) {
+            if (str_ends_with($segment, '\\')) {
+                return null;
+            }
+        }
 
         return implode('.', array_map(
             static fn (string $segment): string => str_replace('.', '\\.', $segment),
-            array_values(array_filter($segments, static fn (string $segment): bool => $segment !== '')),
+            $segments,
         ));
     }
 

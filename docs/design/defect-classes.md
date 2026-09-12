@@ -1295,3 +1295,63 @@ ask `publishes()`, the container note asks `decidesContainer()`, and the locatio
 `RecoveredRequest::destination()` rather than from a string in each message. The guard is
 `DeclaredFieldNoticesTest`'s table — a row per direction, per layer and per verb, each asserting the
 location word beside the field — plus `RuleSetNormalizerTest`'s table for the container half.
+
+## A second reading, narrower than the write it answers for
+
+[`CLAUDE.md`](../../CLAUDE.md) states the rule for one shape of this — a guard that unwraps fewer
+expression forms than the fold it protects. The general shape is a WRITE that reaches a set of
+addresses and a READ that answers about a subset of them, where the read is what decides whether the
+write happened, what it said, or whether an author's declaration reached it. Outside the subset the
+read is not wrong in a way anything can see: it answers confidently about the part it covers, and the
+rest of what was written is simply invisible to it.
+
+*Instances.* Five in one representation, which is what makes it a class rather than five reports. A
+deepObject container's `required` list was WRITTEN as one merged keyword at the stating producer's own
+layer, and the layer arbiter's unit is the FIELD — so a second producer a phase later, at a lower
+layer, had its whole merge shadowed and its required member vanished, while the member itself stayed
+published: a document marking a request the server refuses as valid. The container's own requiredness
+was derived from the ROOT `required` list while requirements are written at every depth, so a member
+required two levels down left the container optional. Member names reached the list through a PHP array
+key, which normalises `"2024"` to an int, while the sibling that lists members had a `strval` in it —
+so `required: [2024]` published, invalid, and the strict `in_array` in the subtraction path could not
+match it back out, leaving a `required` naming a member with no `properties` entry and a container
+promoted off that phantom. The derivation itself read only "is `required` already `true`", so a
+resolved `false` — an attribute's, an overlay's, a config's — was flipped after the guard had settled
+it, with provenance still naming the producer whose answer had just been replaced. And the bracketed
+name grammar had a strict writer and a permissive reader: `filter[a[b]` re-parsed to two segments where
+the wire reads one member called `a[b`, so a subtraction silently failed and PUBLISHED the field an
+author marked as not-for-publication, while `filter[opaque` — a top-level `filter_opaque` on the wire,
+a member of nothing — was matched by the remover and reported as unmatched by the judge.
+
+*The tell.* Name the addresses the write can reach, then ask the read for each one. It is sharper than
+it sounds because each of these reads looks total: `requiresAMember()` reads "the" required list,
+`array_keys()` reads "the" member names, `$required !== true` reads "the" requiredness. Two more tells
+carry it where the naming does not. A read whose answer is a STRING EQUALITY against a list some other
+site spelled, where the write is a WALK — equality compares two spellings and answers about neither
+end. And a read of an aggregate whose contested unit is smaller than the aggregate: `required` is one
+keyword and requiredness is a fact per member, so the arbiter was asked the wrong question.
+
+*The fix that worked.* Make the read the write, or make it impossible for them to be two. Requiredness
+is stated per MEMBER through a guard of its own (`SchemaDraft::stateMemberRequired()`) and assembled
+once (`requirements()`), which `freeze()` publishes and `memberRequirement()` asks the authority of —
+so what the schema says and what the container derives cannot be two sets, and the string cast sits at
+the one place a name enters. The derivation carries the authority of whoever stated the requirement
+rather than outranking every layer, so it loses to a `required` stated strictly above it and the ladder
+stays the escape hatch the help texts point at. `FieldPath::fromQueryName()` answers `null` for any name
+`toQueryName()` does not produce — refusing is the whole point where the answer feeds a subtraction —
+and `queryNameAsPath()` derives from it rather than re-parsing. And the judge asks the remover:
+`DeepObjectMembers::publishes()` is `remove()` without the removal, so reachability is the criterion
+for both halves.
+
+*The tests that recognise it.* `DeepObjectRequiredMembersTest` states the layer rule independently of
+the code, as a row per pair of layers, and puts the same requirement at depth 1 and depth 2 against one
+expectation. `FieldPathTest` round-trips every segment shape holding a character the two grammars argue
+over, with a refusal row per name the write cannot produce and one row for the single asymmetry that
+remains — a member holding a `]`, written for a reader and refused by the reader, stated rather than
+discovered. `DeepObjectMemberRemovalTest` puts one name to the judge and to the remover and asserts they
+answer alike. The row that was missing until the guard was executed is the one where the two criteria
+part company at all: with the codec fixed, every name in the corpus answers the same either way, so
+reverting the judge to string equality passed the whole suite until a member whose name has no bracketed
+spelling was added. And `workbench-deep-required.uir.json` stands in the population, because the axis
+these act on is the published document and the corpus had no route whose container's requiredness two
+producers contested.

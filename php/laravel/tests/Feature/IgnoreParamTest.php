@@ -11,6 +11,7 @@ use Docuccino\Core\Extensions\Context\AttributeSet;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
+use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
@@ -21,6 +22,7 @@ use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Laravel\Extensions\IgnoredParametersExtension;
 use Docuccino\Laravel\Support\ParameterLocations;
@@ -446,4 +448,45 @@ it('emits the subtracted deepObject container and its diagnostics byte-identical
         'workbench-ignored-members.diagnostics.json',
         json_encode(diagnosticRecords($result->diagnostics), JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n",
     );
+});
+
+it('reports a bracketed member it could not reach, rather than reading the member list as a match', function (): void {
+    // The wire spelling has no escape, so a member whose name holds a `]` closes its own group early
+    // and no bracketed name means it. The member is LISTED for a reader — it is published — so judging
+    // the declaration by string equality against that list answers "matched" for a removal that
+    // reaches nothing, and a subtraction leaves the same document either way. Reachability is the
+    // criterion because it is what the removal itself will use.
+    $by = Contribution::integration('query-builder');
+    $operation = new OperationDraft;
+    $container = $operation->parameter('query', 'filter');
+    $container->set('style', 'deepObject', $by);
+    $container->schema()->set('type', 'object', $by);
+    $container->schema()->property('a]b')->set('type', 'string', $by);
+
+    $context = new RouteContext(
+        route: new RouteDescriptor(['GET'], 'api/gadgets'),
+        actionRef: new ActionRef('', 'App\\C', 'index'),
+        attributes: new AttributeSet([new IgnoreParam(name: 'filter[a]b]', in: 'query')]),
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', []),
+    );
+
+    (new IgnoredParametersExtension)->handle($operation, $context);
+
+    $reports = array_values(array_filter(
+        $context->components->diagnostics(),
+        static fn (Diagnostic $diagnostic): bool => $diagnostic->code === 'attribute.ignore-param-unmatched',
+    ));
+
+    expect($reports)->toHaveCount(1)
+        ->and(array_keys((array) $operation->parameter('query', 'filter')->freeze()->toArray()['schema']['properties']))
+        ->toBe(['a]b']);
+});
+
+it('runs where every deepObject container has already been written', function (): void {
+    // A container is not a Parameters-phase fact: the rules recovery mints one in the Request phase,
+    // so a pass asking which members exist before then is answered about a container that is not there
+    // yet. Finalize is the only phase from which the answer is complete, and this is the pass whose
+    // report and whose removal both depend on it.
+    expect((new IgnoredParametersExtension)->phase())->toBe(OperationPhase::Finalize);
 });

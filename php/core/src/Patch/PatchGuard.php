@@ -87,6 +87,17 @@ final class PatchGuard
     }
 
     /**
+     * Every field written here, {@see Remove} sentinels included — what a node compares against what
+     * it publishes ({@see self::provenance()}).
+     *
+     * @return list<string>
+     */
+    public function fields(): array
+    {
+        return array_map(strval(...), array_keys($this->fields));
+    }
+
+    /**
      * Whether `$by` outranks the winning contribution of every field written here — so a producer at
      * that layer speaks over the whole node rather than only the fields it happens to touch. A guard
      * nothing has written yet answers true: there is nothing there to outrank.
@@ -175,8 +186,17 @@ final class PatchGuard
         return $out;
     }
 
-    /** Provenance records for the winning contributions, deterministically ordered. */
-    public function provenance(): Provenance
+    /**
+     * Provenance records for the winning contributions, deterministically ordered.
+     *
+     * A node may publish a field this guard never wrote, and may not publish one it did — a keyword a
+     * declared shape retracted, a member a subtraction took off. Both are named here rather than
+     * patched into the records afterwards, so one grouping decides which fields share a record.
+     *
+     * @param  array<string, Contribution>  $also  published fields written elsewhere, and by whom
+     * @param  list<string>  $except  fields written here that the node does not publish
+     */
+    public function provenance(array $also = [], array $except = []): Provenance
     {
         /** @var array<string, array{contribution: Contribution, fields: list<string>, overrode: list<OverrodeEntry>}> $groups */
         $groups = [];
@@ -188,14 +208,29 @@ final class PatchGuard
                 $groups[$key] = ['contribution' => $state->winner, 'fields' => [], 'overrode' => []];
             }
 
-            $groups[$key]['fields'][] = $field;
+            // An excepted field loses its NAME and keeps its trail: what a producer tried is still
+            // what it tried, and `overrode` is the only record of it.
+            if (! in_array($field, $except, true)) {
+                $groups[$key]['fields'][] = $field;
+            }
+
             foreach ($state->overrode as $entry) {
                 $groups[$key]['overrode'][] = $entry;
             }
         }
 
+        foreach ($also as $field => $by) {
+            $key = $by->recordKey();
+            $groups[$key] ??= ['contribution' => $by, 'fields' => [], 'overrode' => []];
+            $groups[$key]['fields'][] = $field;
+        }
+
         $records = [];
         foreach ($groups as $group) {
+            if ($group['fields'] === [] && $group['overrode'] === []) {
+                continue;
+            }
+
             $fields = $group['fields'];
             sort($fields);
 

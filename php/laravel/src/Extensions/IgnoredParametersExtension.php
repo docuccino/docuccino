@@ -52,7 +52,6 @@ final class IgnoredParametersExtension implements OperationExtension
         // removing are two passes rather than one: a member removed mid-loop is a member the next
         // declaration would be told was never published.
         $present = $operation->parameterKeys();
-        $presentMembers = $members->memberNames();
 
         /** @var list<array{0: IgnoreParam, 1: list<string>, 2: bool}> $judged */
         $judged = [];
@@ -60,7 +59,10 @@ final class IgnoredParametersExtension implements OperationExtension
         foreach ($context->attributes->all(IgnoreParam::class) as $ignore) {
             // Asked once: it reports an `in:` that names no location, and asking twice would say so twice.
             $locations = $this->locations($context, $ignore);
-            $matched = in_array('query', $locations, true) && in_array($ignore->name, $presentMembers, true);
+
+            // Judged by the walk that is about to drop it, not by string equality against the member
+            // list — the half that reports and the half that removes must answer one name alike.
+            $matched = in_array('query', $locations, true) && $members->publishes($ignore->name);
 
             foreach ($locations as $location) {
                 $matched = $matched || in_array(ParameterDraft::keyFor($location, $ignore->name), $present, true);
