@@ -59,7 +59,7 @@ function allowedSwitchReads(): array
         'php/core/src/Document/DocumentGraph.php::nodeReaches' => [1, 'own reachability set membership'],
         'php/core/src/Emit/Formats.php::checksEmittedArtifact' => [1, 'own format table column'],
         'php/core/src/Emit/Formats.php::serialisesYaml' => [1, 'own format table column'],
-        'php/laravel/src/Extensions/AttributeParametersExtension.php::applyDeepRequired' => [1, 'own keep/drop map membership'],
+        'php/core/src/Extensions/Validation/DeepObjectMembers.php::flush' => [1, 'own keep/drop map membership'],
         'php/laravel/src/Versioning/ApiVersionTransformer.php::rewrite' => [1, 'own reachability set membership'],
 
         // ---- Not configuration: a property declared in application code and read through

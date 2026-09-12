@@ -6,6 +6,7 @@ namespace Docuccino\Core\Draft;
 
 use Docuccino\Core\Document\NodeExtension;
 use Docuccino\Core\Document\Parameter;
+use Docuccino\Core\Document\SchemaObject;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\PatchGuard;
 use Docuccino\Core\Patch\PatchResult;
@@ -164,6 +165,16 @@ final class ParameterDraft
         // the explicit unconstrained {} — dropping the member would make the document invalid, not vague.
         // Only a parameter stating its shape elsewhere ($ref/content) legitimately carries no schema.
         $schema = $this->schema->freeze();
+
+        // A deepObject container whose schema requires a member is itself required: the member has no
+        // parameter of its own under that representation, so an optional container would tell a
+        // consumer that a request omitting a value the server demands is valid. The same reading
+        // {@see \Docuccino\Core\Extensions\Validation\RecoveredRequest} makes of a field marked required
+        // deep inside a request body, where only the root `required` list is read for it.
+        if ($required !== true && ($resolved['style'] ?? null) === 'deepObject' && self::requiresAMember($schema)) {
+            $required = true;
+        }
+
         $statesShapeElsewhere = isset($resolved['content']) || isset($resolved['$ref']);
         $schemaOrNull = $schema->toArray() === [] && $statesShapeElsewhere ? null : $schema;
 
@@ -183,5 +194,13 @@ final class ParameterDraft
             docuccino: $docuccino->isEmpty() ? null : $docuccino,
             rest: $resolved,
         );
+    }
+
+    /** Whether a schema names any member in its own `required` list. */
+    private static function requiresAMember(SchemaObject $schema): bool
+    {
+        $required = $schema->toArray()['required'] ?? null;
+
+        return is_array($required) && $required !== [];
     }
 }

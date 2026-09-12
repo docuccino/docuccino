@@ -301,17 +301,38 @@ final class RecoveredRequest
 
     private function applyQueryParameters(OperationDraft $operation, ValidationSchema $result, Contribution $contribution): void
     {
-        foreach (self::queryLeaves($result->schema, []) as [$name, $schema, $required]) {
-            $parameter = $operation->parameter('query', $name);
-            $parameter->setRequired($required, $contribution);
+        $members = new DeepObjectMembers($operation);
 
+        foreach (self::queryLeaves($result->schema, []) as [$name, $schema, $required]) {
             // A hint is an x-docuccino member, not a schema keyword — it travels on the draft rather
             // than through the guard, which would publish it as a keyword of that name.
             $docuccino = $schema['x-docuccino'] ?? null;
             unset($schema['x-docuccino']);
-            if (is_array($docuccino) && is_array($docuccino['mock'] ?? null)) {
-                /** @var array<string, mixed> $mock */
-                $mock = $docuccino['mock'];
+            /** @var array<string, mixed>|null $mock */
+            $mock = is_array($docuccino) && is_array($docuccino['mock'] ?? null) ? $docuccino['mock'] : null;
+
+            $member = $members->schemaFor($name);
+            if ($member !== null) {
+                // The container already publishes this value; a parameter of this name beside it would
+                // be the same value twice. Its description is a property description where it lands,
+                // and requiredness belongs to the container's list, so neither is hoisted.
+                // A `false` is not stated here: these rules name only the keys they validate, and a
+                // higher layer's statement about another key is not theirs to retract.
+                $members->stateRequired($name, $required ? true : null);
+                if ($mock !== null) {
+                    $member->assignMock($mock);
+                }
+
+                foreach ($schema as $keyword => $value) {
+                    $member->set((string) $keyword, $value, $contribution);
+                }
+
+                continue;
+            }
+
+            $parameter = $operation->parameter('query', $name);
+            $parameter->setRequired($required, $contribution);
+            if ($mock !== null) {
                 $parameter->schema()->assignMock($mock);
             }
 
@@ -333,6 +354,8 @@ final class RecoveredRequest
                 $parameter->schema()->set((string) $keyword, $value, $contribution);
             }
         }
+
+        $members->flush($contribution);
     }
 
     /**
@@ -341,6 +364,8 @@ final class RecoveredRequest
      * wire — which also puts it on the same parameter identity a bracketing integration writes, so the
      * two merge instead of duplicating. The bracketing is {@see FieldPath::toQueryName()}'s, so a guard
      * matching a declared parameter name against a validation key reads exactly the names written here.
+     * Where the representation publishes that surface as one deepObject container instead, the leaf is
+     * that container's member and {@see DeepObjectMembers} is where it lands.
      *
      * @param  array<array-key, mixed>  $schema
      * @param  list<string>  $prefix  the segments already descended through
