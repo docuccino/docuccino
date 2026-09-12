@@ -485,7 +485,12 @@ first**, split across the placement boundary:
    floor column is treated as serialised (required); an untyped `$fillable`-only one stays optional.
 
 When **no** source yields a column the empty-object behaviour is kept, but `ModelSchema` raises the
-`eloquent.no-columns` info diagnostic telling the author to add `@property` tags — never silent.
+`eloquent.no-columns` info diagnostic telling the author to add `@property` tags — never silent. It is
+raised against the FINISHED property set, after appends and `$with` relations have had their chance to
+add a key: the notice claims the response is a bare object, so only what was published may decide it.
+The `eloquent.custom-date-serialization` notice reads the same way — it fires where a date attribute
+the document carries actually gave up its `format`, not where the model merely owns (or inherits) the
+`serializeDate()` override.
 
 **Source (2b) — Larastan schema knowledge — was investigated and deliberately skipped.**
 `ClassMetadataFactory` is a native-reflection + docblock component that never enters PHPStan's

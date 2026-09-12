@@ -62,8 +62,12 @@ use Throwable;
  * - a `serializeDate()` override makes the wire format statically unknowable, so date casts weaken to
  *   a plain string (no `format`) plus a diagnostic.
  *
- * A model no source yields columns for renders as a bare object plus an info diagnostic telling the
- * author to add `@property` tags — never silently.
+ * Both of this mapper's notices claim something about the DOCUMENT, so both are decided by what was
+ * published rather than by what the model owns: the bare-object notice is raised after appends and
+ * eager loads have had their chance to add a key, and the date-serialisation one only where a date
+ * attribute the document carries actually gave its `format` up. A model no source yields columns for
+ * still renders as a bare object plus an info diagnostic telling the author to add `@property`
+ * tags — never silently.
  *
  * @phpstan-type ModelFacts array{hidden: list<string>, visible: list<string>, appends: list<string>, casts: array<string, string>, classHidden: list<string>, fillable: list<string>, dates: list<string>, with: list<string>, timestamps: bool, softDeletes: bool, overridesSerializeDate: bool, keyName: string, keySchema: array<string, mixed>}
  */
@@ -99,6 +103,10 @@ final class ModelSchema implements TypeToSchema
 
             $properties = [];
             $required = [];
+            // Whether a date attribute the document actually PUBLISHES gave up its `format` to the
+            // serializeDate() override. Each site that weakens one raises it, so the notice below is
+            // decided by what was published rather than by the model owning the override.
+            $plainDates = false;
             // Reflection reports the framework's own public properties ($exists, $timestamps, …) beside
             // the docblock columns, and every model inherits all of them; none is an attribute, so none
             // is ever in a response ({@see EloquentModelReflector::frameworkProperties()}).
@@ -108,7 +116,7 @@ final class ModelSchema implements TypeToSchema
                     continue;
                 }
 
-                $schema = $this->columnSchema($property->name, $property->type, $facts, $context);
+                $schema = $this->columnSchema($property->name, $property->type, $facts, $context, $plainDates);
                 if ($property->summary !== null) {
                     $schema['description'] = $property->summary;
                 }
@@ -126,7 +134,7 @@ final class ModelSchema implements TypeToSchema
                     continue;
                 }
 
-                [$schema, $isRequired] = $this->floorColumnSchema($column, $facts, $context);
+                [$schema, $isRequired] = $this->floorColumnSchema($column, $facts, $context, $plainDates);
                 $properties[$column] = $schema;
                 if ($isRequired) {
                     $required[] = $column;
@@ -140,6 +148,9 @@ final class ModelSchema implements TypeToSchema
                 }
                 $properties[$name] = $schema;
                 $required[] = $name;
+                // Every framework column is a date attribute, so publishing one under the override is a
+                // `format` the document gave up. A hidden one is skipped above and gives up nothing.
+                $plainDates = $plainDates || $facts['overridesSerializeDate'];
             }
 
             // HasUuids/HasUlids definitively fix the key's format, beating a stale docblock type.
@@ -148,6 +159,20 @@ final class ModelSchema implements TypeToSchema
                 $properties[$key] = $facts['keySchema'];
             }
 
+            // Appends stay permissive unless a cast pins the shape or the accessor pass below types it.
+            foreach ($facts['appends'] as $append) {
+                if (isset($properties[$append]) || ! self::serialises($append, $facts)) {
+                    continue;
+                }
+                $properties[$append] = $this->castSchema($append, $facts, $context, $plainDates) ?? [];
+            }
+
+            $this->applyAccessors($fqcn, $facts, $properties, $required, $context);
+            $this->applyEagerLoads($fqcn, $facts, $properties, $required, $context);
+
+            // Asserted against the FINISHED set: appends and eager loads put keys in a model no column
+            // source spoke for, and a notice calling that response a bare object would be describing a
+            // schema the reader can see has properties in it.
             if ($properties === []) {
                 $context->diagnostic(new Diagnostic(
                     severity: Severity::Info,
@@ -157,18 +182,9 @@ final class ModelSchema implements TypeToSchema
                 ));
             }
 
-            // Appends stay permissive unless a cast pins the shape or the accessor pass below types it.
-            foreach ($facts['appends'] as $append) {
-                if (isset($properties[$append]) || ! self::serialises($append, $facts)) {
-                    continue;
-                }
-                $properties[$append] = $this->castSchema($append, $facts, $context) ?? [];
-            }
-
-            $this->applyAccessors($fqcn, $facts, $properties, $required, $context);
-            $this->applyEagerLoads($fqcn, $facts, $properties, $required, $context);
-
-            if ($facts['overridesSerializeDate']) {
+            // The override alone is not the condition: it usually sits on a base model every class
+            // extends, so most subclasses inherit it and publish no date attribute for it to reach.
+            if ($plainDates) {
                 $context->diagnostic(new Diagnostic(
                     severity: Severity::Info,
                     code: 'eloquent.custom-date-serialization',
@@ -348,9 +364,9 @@ final class ModelSchema implements TypeToSchema
      * @param  ModelFacts  $facts
      * @return array<string, mixed>
      */
-    private function columnSchema(string $column, DType $type, array $facts, SchemaContext $context): array
+    private function columnSchema(string $column, DType $type, array $facts, SchemaContext $context, bool &$plainDates): array
     {
-        $cast = $this->castSchema($column, $facts, $context);
+        $cast = $this->castSchema($column, $facts, $context, $plainDates);
         if ($cast === null) {
             return $context->convert($type);
         }
@@ -414,15 +430,21 @@ final class ModelSchema implements TypeToSchema
      * @param  ModelFacts  $facts
      * @return array{0: array<string, mixed>, 1: bool}
      */
-    private function floorColumnSchema(string $column, array $facts, SchemaContext $context): array
+    private function floorColumnSchema(string $column, array $facts, SchemaContext $context, bool &$plainDates): array
     {
-        $cast = $this->castSchema($column, $facts, $context);
+        $cast = $this->castSchema($column, $facts, $context, $plainDates);
         if ($cast !== null) {
             return [$cast, true];
         }
 
         if (in_array($column, $facts['dates'], true)) {
-            return [$facts['overridesSerializeDate'] ? ['type' => 'string'] : ['type' => 'string', 'format' => 'date-time'], true];
+            if (! $facts['overridesSerializeDate']) {
+                return [['type' => 'string', 'format' => 'date-time'], true];
+            }
+
+            $plainDates = true;
+
+            return [['type' => 'string'], true];
         }
 
         $context->lowerConfidence(0.6);
@@ -437,7 +459,7 @@ final class ModelSchema implements TypeToSchema
      * @param  ModelFacts  $facts
      * @return array<string, mixed>|null
      */
-    private function castSchema(string $column, array $facts, SchemaContext $context): ?array
+    private function castSchema(string $column, array $facts, SchemaContext $context, bool &$plainDates): ?array
     {
         $cast = $facts['casts'][$column] ?? null;
         if ($cast === null) {
@@ -445,6 +467,8 @@ final class ModelSchema implements TypeToSchema
         }
 
         if ($facts['overridesSerializeDate'] && CastSchema::isDateCast($cast)) {
+            $plainDates = true;
+
             return ['type' => 'string'];
         }
 
