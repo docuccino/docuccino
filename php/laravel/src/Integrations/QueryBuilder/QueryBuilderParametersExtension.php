@@ -357,7 +357,7 @@ final class QueryBuilderParametersExtension implements OperationExtension
             return FilterColumn::enum($type, $file !== null ? [$file] : []);
         }
 
-        $schema = CastSchema::forCast($type);
+        $schema = CastSchema::accepted($type);
 
         return $schema === null ? FilterColumn::none() : FilterColumn::scalar($schema);
     }

@@ -1118,6 +1118,158 @@
         }
       }
     },
+    "/api/binding-observations/{almanac}": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:ezqvwbnscztgivxe",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/BindingController.php",
+                "line": 55,
+                "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showAlmanac"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ]
+        },
+        "operationId": "get.api.binding-observations.@almanac",
+        "summary": "Show one almanac, found by the day it was recorded.",
+        "tags": [
+          "Bindings"
+        ],
+        "parameters": [
+          {
+            "x-docuccino": {
+              "id": "par:v1:6cgxdghc7v3twu6m",
+              "provenance": [
+                {
+                  "producer": "inference",
+                  "layer": "inference",
+                  "fields": [
+                    "description",
+                    "required"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/BindingController.php",
+                    "line": 55,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showAlmanac"
+                  }
+                }
+              ],
+              "facts": {
+                "routeBinding": {
+                  "key": "observed_on"
+                }
+              }
+            },
+            "name": "almanac",
+            "in": "path",
+            "description": "Matched on the resource's `observed_on`.",
+            "required": true,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "inference",
+                    "layer": "inference",
+                    "fields": [
+                      "format",
+                      "type"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/BindingController.php",
+                      "line": 55,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showAlmanac"
+                    }
+                  }
+                ]
+              },
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:743omqpwoyef4wbn",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "$ref"
+                        ],
+                        "confidence": 0.9
+                      }
+                    ]
+                  },
+                  "$ref": "#/components/schemas/Almanac"
+                }
+              }
+            }
+          },
+          "404": {
+            "x-docuccino": {
+              "id": "res:v1:xjdwih5kvt346qk7",
+              "provenance": [
+                {
+                  "producer": "integration:implicit-response",
+                  "layer": "integration",
+                  "fields": [
+                    "component",
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/BindingController.php",
+                    "line": 55,
+                    "symbol": "implicit:route-model-binding"
+                  }
+                }
+              ],
+              "facts": {
+                "component": "NotFound"
+              }
+            },
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/api/binding-refs/{ledger}": {
       "get": {
         "x-docuccino": {
@@ -1359,6 +1511,10 @@
           "id": {
             "type": "integer"
           },
+          "observed_on": {
+            "type": "string",
+            "format": "date-time"
+          },
           "recorded_on": {
             "type": "string",
             "format": "date-time"
@@ -1376,7 +1532,8 @@
           "title",
           "created_at",
           "updated_at",
-          "recorded_on"
+          "recorded_on",
+          "observed_on"
         ]
       },
       "Journal": {
@@ -1394,6 +1551,10 @@
           "id": {
             "type": "integer"
           },
+          "settled_on": {
+            "type": "string",
+            "format": "date"
+          },
           "title": {
             "type": "string"
           },
@@ -1406,7 +1567,8 @@
           "title",
           "created_at",
           "updated_at",
-          "filed_on"
+          "filed_on",
+          "settled_on"
         ]
       },
       "NotFound": {
@@ -1467,7 +1629,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "12eba87bc9be12f01a7d1389c442e59f07780df9ae074c5620c19044be0b744b"
+      "contentHash": "2244501bd97fd1046666a18098ece840de689e5096e314125ac8d4bd33eafd91"
     },
     "generator": {
       "name": "docuccino/laravel",

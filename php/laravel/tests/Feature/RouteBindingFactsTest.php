@@ -45,6 +45,9 @@ function bindingFactRoutes(): callable
         // The same binding on a model that did NOT pick one, so both publish the format the framework
         // writes — the pair is what keeps the weakening a consequence of the override alone.
         $router->get('api/binding-almanacs/{almanac:recorded_on}', [BindingController::class, 'showAlmanac']);
+        // The same model bound on a `date`-cast column instead: the segment carries the date the column
+        // is stored as, while the body carries the date-time the framework writes for it.
+        $router->get('api/binding-observations/{almanac:observed_on}', [BindingController::class, 'showAlmanac']);
         $router->get('api/binding-articles/{article}', [BindingController::class, 'showArticle']);
         $router->get('api/binding-seasons/{season}', [BindingController::class, 'showSeason']);
         $router->get('api/binding-custom/{custom}', [BindingController::class, 'showBound']);

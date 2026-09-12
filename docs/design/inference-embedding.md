@@ -480,6 +480,7 @@ first**, split across the placement boundary:
    `@property` tags included — a short name parsed without it can never be recognised as an enum.
 2. **Floor sources** — `$casts` keys (a cast key IS a column, typed by its cast via `CastSchema`),
    `$dates` entries (date-time), and `$fillable`-only names (permissive `{}` at lowered confidence).
+   A floor column the date policy speaks for is dated by it, not by the source that named it.
    These are Eloquent vocabulary, so they live **in the adapter** (`ModelSchema` unions them over the
    engine metadata; `EloquentModelReflector` reflects them without booting the model). A cast/date
    floor column is treated as serialised (required); an untyped `$fillable`-only one stays optional.
@@ -494,7 +495,22 @@ the document carries actually gave up its `format`, not where the model merely o
 shape and the flag come out of the same call and no publishing site can emit one without the other.
 A date attribute reaches the document at two of them: the model component, and the path parameter of a
 route bound on a date column (`{journal:filed_on}`), which reads the same policy through
-`EloquentModelReflector::columnSchemaFor()` and reports against the route. `ModelSchema` keeps the KEYS
+`EloquentModelReflector::columnSchemaFor()` and reports against the route.
+
+Which casts the policy speaks for is `CastSchema::serializesThroughDateHook()`, and it is the
+framework's own list matched the framework's own way — the whole `$casts` VALUE, so a cast naming its
+format (`datetime:d/m/Y`) is written with that parameter, never reaches the hook, and an override takes
+nothing from it. That is also why `CastSchema` is read in two directions. A column's two appearances
+answer different questions: `written()` is what a response body carries, `accepted()` what a filter
+value, a scope argument or a bound segment may put in. Every row answers both alike except the hook's
+four, where `written()` returns null and hands the response direction to `DateColumnSchema` — a `date`
+cast is rounded to start-of-day and then serialised through the hook, so the body carries a full
+date-time while the segment carries the date the column stores. Publishing one answer in both places is
+how a `format` claim came to be contradicted by the server's own bytes.
+
+A `$dates` entry gets no such split, and the asymmetry is grounded rather than accidental: a cast names
+the column's temporal domain and `$dates` only marks the name as a date, so there is no narrower
+request answer to give and the policy's date-time stands at both sites. `ModelSchema` keeps the KEYS
 that lost a format rather than a flag, because the accessor pass runs after the column passes and a
 mutated attribute is serialised as the accessor returned it — never through the override — so a column
 an accessor publishes stops counting towards the notice.

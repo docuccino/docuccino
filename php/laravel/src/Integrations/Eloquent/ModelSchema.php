@@ -169,11 +169,14 @@ final class ModelSchema implements TypeToSchema
                 if (isset($properties[$append]) || ! self::serialises($append, $facts)) {
                     continue;
                 }
-                $properties[$append] = $this->castSchema($append, $facts, $context, $weakenedDates) ?? [];
+                $properties[$append] = $this->castSchema($append, $facts, $context) ?? [];
             }
 
             // An accessor is serialised in place of the column it shadows and never through
             // `serializeDate()`, so a key it retypes is no longer a date the override weakened.
+            // Sorted, because the sentence publishes these names: a report is a function of which
+            // attributes lost a format, never of the order the property walk met them in.
+            sort($weakenedDates);
             $weakenedDates = array_values(array_diff(
                 $weakenedDates,
                 $this->applyAccessors($fqcn, $facts, $properties, $required, $context),
@@ -198,8 +201,11 @@ final class ModelSchema implements TypeToSchema
                 $context->diagnostic(new Diagnostic(
                     severity: Severity::Info,
                     code: 'eloquent.custom-date-serialization',
-                    message: sprintf('Model %s overrides serializeDate(), so its date attributes\' wire format is not statically known and the shapes recovered for them are plain strings with no format.', $fqcn),
-                    help: 'The date/datetime columns are recovered as `type: string` without a `format`, and no annotation puts one back: no attribute carries a column format, and a docblock type has no format to state. If clients need an exact one, state it in an overlay, which corrects the document and leaves this notice naming the model.',
+                    // The attributes are NAMED, not summarised: a model can carry both kinds at once —
+                    // a cast that states its own format is written with it and never reaches the hook —
+                    // so "its date attributes" would claim the loss for columns that kept their format.
+                    message: sprintf('Model %s overrides serializeDate(), so the wire format of the date attributes it serialises through that hook (%s) is not statically known and the shapes recovered for them are plain strings with no format.', $fqcn, implode(', ', $weakenedDates)),
+                    help: 'Those columns are recovered as `type: string` without a `format`, and no annotation puts one back: no attribute carries a column format, and a docblock type has no format to state. If clients need an exact one, state it in an overlay, which corrects the document and leaves this notice naming the model. A column whose cast names its own format (`datetime:d/m/Y`) is not among them.',
                 ));
             }
 
@@ -407,7 +413,7 @@ final class ModelSchema implements TypeToSchema
      */
     private function columnSchema(string $column, DType $type, array $facts, SchemaContext $context, array &$weakenedDates): array
     {
-        $pinned = $this->castSchema($column, $facts, $context, $weakenedDates);
+        $pinned = $this->castSchema($column, $facts, $context);
         if ($pinned === null && DateColumnSchema::isAttribute($column, $facts)) {
             $pinned = self::datedSchema($column, $facts, $weakenedDates);
         }
@@ -465,9 +471,10 @@ final class ModelSchema implements TypeToSchema
     }
 
     /**
-     * `[schema, isRequired]` for a floor column: the cast shape when cast, a date-time for a `$dates`
-     * entry, else permissive `{}` at lowered confidence. Cast/date columns are always serialised so
-     * they're required; a `$fillable`-only one stays optional because its presence is a guess.
+     * `[schema, isRequired]` for a floor column: the cast shape when cast, the date policy's shape when
+     * the column is a date attribute, else permissive `{}` at lowered confidence. Cast/date columns are
+     * always serialised so they're required; a `$fillable`-only one stays optional because its presence
+     * is a guess.
      *
      * @param  ModelFacts  $facts
      * @param  list<string>  $weakenedDates
@@ -475,12 +482,12 @@ final class ModelSchema implements TypeToSchema
      */
     private function floorColumnSchema(string $column, array $facts, SchemaContext $context, array &$weakenedDates): array
     {
-        $cast = $this->castSchema($column, $facts, $context, $weakenedDates);
+        $cast = $this->castSchema($column, $facts, $context);
         if ($cast !== null) {
             return [$cast, true];
         }
 
-        if (in_array($column, $facts['dates'], true)) {
+        if (DateColumnSchema::isAttribute($column, $facts)) {
             return [self::datedSchema($column, $facts, $weakenedDates), true];
         }
 
@@ -490,22 +497,18 @@ final class ModelSchema implements TypeToSchema
     }
 
     /**
-     * The shape a cast pins for a column, or null when there's no recognised cast (the column then falls
-     * back to its inferred type). Resolution order mirrors `HasAttributes::castAttribute`.
+     * The shape a cast pins for a column, or null when there's no recognised cast and when the cast is
+     * one the date policy answers for — the column then falls back to the date policy or to its inferred
+     * type, in that order. Resolution order mirrors `HasAttributes::castAttribute`.
      *
      * @param  ModelFacts  $facts
-     * @param  list<string>  $weakenedDates
      * @return array<string, mixed>|null
      */
-    private function castSchema(string $column, array $facts, SchemaContext $context, array &$weakenedDates): ?array
+    private function castSchema(string $column, array $facts, SchemaContext $context): ?array
     {
         $cast = $facts['casts'][$column] ?? null;
         if ($cast === null) {
             return null;
-        }
-
-        if ($facts['overridesSerializeDate'] && CastSchema::isDateCast($cast)) {
-            return self::datedSchema($column, $facts, $weakenedDates);
         }
 
         if (CastSchema::isEnum($cast)) {
@@ -517,7 +520,7 @@ final class ModelSchema implements TypeToSchema
             return ['type' => 'array', 'items' => $this->enumSchema($enumCollection, $context)];
         }
 
-        return $this->customCasterSchema($cast, $context) ?? CastSchema::forCast($cast);
+        return $this->customCasterSchema($cast, $context) ?? CastSchema::written($cast);
     }
 
     /**

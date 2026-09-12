@@ -115,7 +115,7 @@ A cast pins its column's shape. Native casts:
 | Cast | Documented as |
 | --- | --- |
 | `datetime`, `immutable_datetime` | `string`, `format: date-time` |
-| `date`, `immutable_date` | `string`, `format: date` |
+| `date`, `immutable_date` | `string`, `format: date-time` in a response body; `format: date` in a filter or a bound path segment |
 | `datetime:Y-m-d` | `string`, `format: date` (a date-only pattern) |
 | `datetime:<custom format>` | `string`, with the format named in the description — a bespoke format is neither `date` nor `date-time`, so claiming one would be wrong |
 | `timestamp` | `integer` (a unix timestamp, not a date string) |
@@ -184,15 +184,27 @@ as the string that writes: `string`, `format: date-time`. That holds whatever ty
 matters because `php artisan ide-helper:models` tags each date column with the Carbon class the
 attribute holds, and a Carbon is a PHP object rather than anything a response carries.
 
+A `date` cast is no exception: Eloquent rounds the value to the start of the day and then serialises it
+through the same hook, so a response sends `2024-01-01T00:00:00.000000Z` and the body documents a
+`date-time`. Where the same column is something a client *sends* — a `filter[...]` value, or a segment a
+route binds on (`/almanacs/{almanac:observed_on}`) — it is the date the column stores, and the parameter
+documents `format: date`. The two answers differ because the questions do: one describes what the server
+wrote, the other what it will match.
+
+A cast that names its own format (`datetime:d/m/Y`) never reaches the hook — Eloquent formats it with
+the parameter — so it is documented from that pattern in both directions.
+
 The same reading applies wherever else a date-time reaches the document — a DTO property, an accessor's
 return type, a webhook payload. A date class that states its own JSON form is documented as the RFC 3339
 string it sends, not as the object its properties would reflect into.
 
 **Custom date serialization.** A model that overrides `serializeDate()` chooses its own wire format for
-every date attribute, which can't be known statically — so the shape recovered for its date and datetime
-columns is a plain `string` (no `format`), with an info diagnostic noting the format is unknowable. That covers
-every date column the model has, a `@property`-tagged one included, and a path parameter bound on one
-(`/journals/{journal:filed_on}`) drops its `format` the same way and is reported against its route.
+every date attribute the hook reaches, which can't be known statically — so the shape recovered for those
+date and datetime columns is a plain `string` (no `format`), with an info diagnostic noting the format is
+unknowable. That covers every such column the model has, a `@property`-tagged one included, and a path
+parameter bound on one (`/journals/{journal:filed_on}`) drops its `format` the same way and is reported
+against its route. A column whose cast names its own format is untouched by the override and keeps that
+format.
 
 The notice follows the document, not the method: an override normally lives on a base model every class
 extends, and a subclass that publishes no date attribute — none at all, or only hidden ones — is not

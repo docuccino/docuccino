@@ -926,6 +926,44 @@ suite because the sweep's denominator was one directory — and whose four colum
 every swept action, so a throw the document carries nothing for, or demotes, can no longer sit in the gap
 between two scans.
 
+## One table answering both directions of the wire
+
+A schema fragment for a declaration answers one of two questions, and which one depends on where the
+fragment is published, not on what the declaration says. **What does the server WRITE for this?** is a
+response body's question, settled by the bytes the framework emits. **What may a client PUT IN for
+this?** is a parameter's — a filter value, a scope argument, a bound path segment — settled by what the
+server will match. For most declarations the two answers coincide, which is exactly why one table gets
+read for both and nobody notices until a row where they come apart. Then one direction is silently
+served the other's answer, and because a `format` is a CONSTRAINT, the wrong direction is not vague —
+it is a precise claim the server's own traffic contradicts.
+
+*Instances.* `CastSchema::forCast()` answered both directions of every Eloquent cast. An Eloquent
+`date` cast rounds its value to start-of-day and then serialises it through `serializeDate()` like any
+other date, so the response sends `2024-01-01T00:00:00.000000Z` — while the table published
+`format: date`, which a client validating that response rejects. The same table's hook predicate had
+the sibling defect one level down, in grammar rather than direction: it matched the cast BASE where the
+framework matches the whole cast value, so `datetime:d/m/Y` counted as hook-governed, and a model
+overriding `serializeDate()` had that column's format stripped and a notice raised for a loss that
+could not happen — the framework formats a parameterised cast with its parameter and never reaches the
+hook. `custom_datetime` sat on the same list for the same reason: it is the framework's INTERNAL cast
+type name, reaches no branch of `addCastAttributesToArray()`, and an override never touches it either.
+
+*The tell.* One lookup whose call sites are split between a response mapper and a parameter resolver,
+and whose docblock says what a value "serialises to" while half its callers are asking what a request
+may send. The second tell is a guard beside such a table that unwraps fewer forms than the fragment it
+decides — a base where the framework reads a whole value. Sibling of
+[one flag answering two questions](#one-flag-answering-two-questions-how-far-to-walk-and-whose-code-this-is):
+same shape, different axis.
+
+*The fix that worked.* Two named readings over ONE table — `CastSchema::written()` and
+`CastSchema::accepted()` — rather than a direction argument each call site could pass wrongly, or two
+tables whose 25 identical rows would drift. The divergent rows are the only ones that branch, and there
+`written()` returns null and hands the response direction to the single date policy that already reads
+the hook. The guard is `CastSchemaTest`, which states the rule from Laravel rather than from the table:
+two fixtures differing by `serializeDate()` alone are serialised and the BYTES compared, so a cast
+belongs to the hook when and only when replacing that method changes what the column emits, and the
+row set is asserted against the fixture's own casts so a new form cannot go unread.
+
 ## A declaration trusted for more than it declares
 
 A docblock, a default or a name states one fact, and a reader that acts on it acts on two. `@throws

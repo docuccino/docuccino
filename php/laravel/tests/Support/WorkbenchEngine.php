@@ -358,6 +358,7 @@ final class WorkbenchEngine
                     new PropertyMetadata('created_at', new ClassT('Illuminate\\Support\\Carbon')),
                     new PropertyMetadata('updated_at', new ClassT('Illuminate\\Support\\Carbon')),
                     new PropertyMetadata('recorded_on', new ClassT('Illuminate\\Support\\Carbon')),
+                    new PropertyMetadata('observed_on', new ClassT('Illuminate\\Support\\Carbon')),
                 ]),
                 self::JOURNAL_MODEL => new ClassMetadata(self::JOURNAL_MODEL, [
                     new PropertyMetadata('id', ScalarT::int()),
@@ -365,6 +366,7 @@ final class WorkbenchEngine
                     new PropertyMetadata('created_at', new ClassT('Illuminate\\Support\\Carbon')),
                     new PropertyMetadata('updated_at', new ClassT('Illuminate\\Support\\Carbon')),
                     new PropertyMetadata('filed_on', new ClassT('Illuminate\\Support\\Carbon')),
+                    new PropertyMetadata('settled_on', new ClassT('Illuminate\\Support\\Carbon')),
                 ]),
                 self::GADGET_MODEL => new ClassMetadata(self::GADGET_MODEL, [
                     new PropertyMetadata('id', ScalarT::int()),
