@@ -84,10 +84,17 @@ it('types a bound column, or refuses to', function (string $fqcn, string $column
     'an array cast' => [Widget::class, 'meta', [], null],
     'an enum cast' => [Widget::class, 'status', [], null],
 
-    // A `$dates` entry is a date-time column with no cast to say so, and it ranks below whatever the
-    // engine recovered — the same order a response body reads it in.
+    // A `$dates` entry is a date-time column with no cast to say so, and it outranks whatever the engine
+    // recovered — the same order a response body reads it in. A tag naming a different type is not a
+    // second opinion about the wire: the column is a date attribute, and a date attribute is whatever
+    // `serializeDate()` writes.
     'a $dates column' => [Ledger::class, 'posted_at', [], ['type' => 'string', 'format' => 'date-time']],
-    'a $dates column the engine typed' => [Ledger::class, 'posted_at', [['posted_at', ScalarT::int()]], ['type' => 'integer']],
+    'a $dates column the engine typed otherwise' => [
+        Ledger::class,
+        'posted_at',
+        [['posted_at', ScalarT::int()]],
+        ['type' => 'string', 'format' => 'date-time'],
+    ],
     // Under the override the value is a bespoke string whatever the docblock claimed, so the override
     // is read before the engine's type rather than after it.
     'a $dates column the engine typed, under a serializeDate override' => [
