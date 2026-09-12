@@ -12,7 +12,12 @@ use Illuminate\Database\Eloquent\Model;
  * the same Carbon type — so what the two publish differs by the override and nothing else. Only ever
  * reflected.
  *
+ * `sealed_at` is the other way a date column arrives tagged: by the type the DB column has rather than
+ * the one the attribute holds, which is what a hand-written docblock usually says. Neither tag is what
+ * the response carries.
+ *
  * @property CarbonImmutable $posted_at
+ * @property string $sealed_at
  */
 final class Waterclock extends Model
 {
@@ -22,5 +27,5 @@ final class Waterclock extends Model
     /**
      * @var list<string>
      */
-    protected $dates = ['posted_at'];
+    protected $dates = ['posted_at', 'sealed_at'];
 }

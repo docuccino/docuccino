@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use Carbon\Carbon;
 use Carbon\CarbonImmutable;
 use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Extensions\BuiltIn\DateTimeTypeToSchema;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\Context\AttributeSet;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
@@ -26,6 +28,8 @@ use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
+use Docuccino\Laravel\Integrations\Eloquent\DateColumnSchema;
+use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
 use Docuccino\Laravel\Integrations\SpatieData\DataRequestExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
@@ -33,6 +37,7 @@ use Docuccino\Laravel\Integrations\Support\DateWireFormat;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Ledger;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\DateLadderController;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\DateLadderData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\DateOverrideData;
@@ -400,6 +405,44 @@ it('documents the format the app configured, through the container', function ()
     expect($request['properties']['declaredOnly'] ?? null)->toBe(['type' => 'string', 'format' => 'date', 'example' => '2024-01-01'])
         ->and($response['properties']['declaredOnly'] ?? null)->toBe(['type' => 'string', 'format' => 'date']);
 });
+
+/**
+ * The generic half: a date-time reaching the converter with no producer to state its wire format. Three
+ * sites answer "what does a value written the framework's default way publish" — core's date-time
+ * mapper, the Eloquent date policy, and the date-format table they both read — and the document is only
+ * consistent if they answer alike.
+ */
+it('answers alike at every site that publishes a framework-default date-time', function (): void {
+    // The rule from Carbon rather than from any of them: what a date-time writes is its own JSON form,
+    // and the pattern that renders is the one the `format` is read off.
+    expect(json_encode(new CarbonImmutable('2024-01-01T00:00:00+00:00'), JSON_THROW_ON_ERROR))
+        ->toBe('"'.DateWireFormat::example(DateColumnSchema::DEFAULT_FORMAT).'"');
+
+    $formatGivenUp = false;
+
+    expect(DateTimeTypeToSchema::SCHEMA)
+        ->toBe(DateWireFormat::serializedSchema(DateColumnSchema::DEFAULT_FORMAT))
+        ->toBe(DateColumnSchema::schema((new EloquentModelReflector)->facts(Ledger::class), $formatGivenUp));
+});
+
+it('publishes every date class an application may name as the string it sends, and hoists none of them', function (string $fqcn): void {
+    // The population is the framework's date classes under all the names an application writes — its own
+    // alias and the two vendor ones — because a `@property` tag names whichever the file imported. The
+    // component check is the second half of the defect: these classes document their calendar fields as
+    // `@property` tags, so reflecting one publishes a two-hundred-member object AND a component named
+    // after a date.
+    $registry = new ComponentRegistry;
+    $schema = (new SchemaConverter(DefaultTypeMappers::all(), new StubTypeEngine, $registry))
+        ->toSchema(new ClassT($fqcn))
+        ->schema;
+
+    expect($schema)->toBe(DateTimeTypeToSchema::SCHEMA)
+        ->and($registry->schemas())->toBe([]);
+})->with([
+    'the framework alias' => ['Illuminate\Support\Carbon'],
+    'the mutable vendor class' => [Carbon::class],
+    'the immutable vendor class' => [CarbonImmutable::class],
+]);
 
 /**
  * The emitted `default` document with one route over the date ladder, built through the container so the

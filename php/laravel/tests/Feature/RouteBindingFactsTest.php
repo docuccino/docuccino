@@ -42,6 +42,9 @@ function bindingFactRoutes(): callable
         // Bound on a date column of a model that picked its own wire format, so the parameter and the
         // response body both publish a date the document cannot state a `format` for.
         $router->get('api/binding-journals/{journal:filed_on}', [BindingController::class, 'showJournal']);
+        // The same binding on a model that did NOT pick one, so both publish the format the framework
+        // writes — the pair is what keeps the weakening a consequence of the override alone.
+        $router->get('api/binding-almanacs/{almanac:recorded_on}', [BindingController::class, 'showAlmanac']);
         $router->get('api/binding-articles/{article}', [BindingController::class, 'showArticle']);
         $router->get('api/binding-seasons/{season}', [BindingController::class, 'showSeason']);
         $router->get('api/binding-custom/{custom}', [BindingController::class, 'showBound']);

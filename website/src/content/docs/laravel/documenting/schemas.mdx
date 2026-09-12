@@ -178,6 +178,16 @@ apart reliably:
 }
 ```
 
+**Dates.** Eloquent hands every date attribute — a date cast, a `$dates` entry, the framework
+timestamps, a soft-delete column — to `serializeDate()` before it goes out, so the column is documented
+as the string that writes: `string`, `format: date-time`. That holds whatever typed the name, which
+matters because `php artisan ide-helper:models` tags each date column with the Carbon class the
+attribute holds, and a Carbon is a PHP object rather than anything a response carries.
+
+The same reading applies wherever else a date-time reaches the document — a DTO property, an accessor's
+return type, a webhook payload. A date class that states its own JSON form is documented as the RFC 3339
+string it sends, not as the object its properties would reflect into.
+
 **Custom date serialization.** A model that overrides `serializeDate()` chooses its own wire format for
 every date attribute, which can't be known statically — so its date and datetime columns are documented
 as a plain `string` (no `format`), with an info diagnostic noting the format is unknowable. That covers
@@ -186,8 +196,10 @@ every date column the model has, a `@property`-tagged one included, and a path p
 
 The notice follows the document, not the method: an override normally lives on a base model every class
 extends, and a subclass that publishes no date attribute — none at all, or only hidden ones — is not
-reported. Nothing you can annotate puts the `format` back — no attribute carries one for a column, and a
-docblock type has no format to state — so if your clients need an exact one, state it in an
+reported. Nor is a column an accessor publishes instead of the override, since Laravel sends a mutated
+attribute exactly as the accessor returned it. Nothing you can annotate puts the `format` back — no
+attribute carries one for a column, and a docblock type has no format to state — so if your clients need
+an exact one, state it in an
 [overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice). That corrects the document;
 the notice keeps naming what lost the format.
 

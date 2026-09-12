@@ -4198,7 +4198,7 @@
               ],
               "source": {
                 "file": "workbench/app/Webhooks/FormSubmitted.php",
-                "line": 18,
+                "line": 19,
                 "symbol": "FormSubmitted"
               }
             },
@@ -4211,7 +4211,7 @@
               ],
               "source": {
                 "file": "workbench/app/Webhooks/FormSubmitted.php",
-                "line": 18,
+                "line": 19,
                 "symbol": "FormSubmitted"
               }
             },
@@ -4223,7 +4223,7 @@
               ],
               "source": {
                 "file": "workbench/app/Webhooks/FormSubmitted.php",
-                "line": 18,
+                "line": 19,
                 "symbol": "FormSubmitted"
               }
             }
@@ -4257,7 +4257,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Webhooks/FormSubmitted.php",
-                    "line": 18,
+                    "line": 19,
                     "symbol": "FormSubmitted"
                   }
                 }
@@ -4701,7 +4701,8 @@
             "type": "integer"
           },
           "submittedAt": {
-            "type": "string"
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -5140,7 +5141,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "a0c79d4aead16d93b4b37bfcd21306a1e5d536653870a4849ffb903971488d49",
-      "contentHash": "0bfbc149a097d0285a79f72eb4dad9d2310c809442de4c97056cd67aa16d4360"
+      "contentHash": "aa2b53df970cfed3a7b518615a9fe8f3be2da8d74e29dd2e1f646fa020acbd75"
     },
     "generator": {
       "name": "docuccino/laravel",

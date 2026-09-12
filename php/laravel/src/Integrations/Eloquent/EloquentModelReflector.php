@@ -137,8 +137,9 @@ final class EloquentModelReflector
     /**
      * The schema for the NAMED column a `{post:slug}` parameter binds on, or null when nothing types it.
      * Precedence mirrors {@see ModelSchema}'s so a column can't be documented one way in a response and
-     * another way in the path: a uuid/ulid key beats a stale docblock, a `$casts` entry beats the
-     * inferred type, and the engine's `@property` type is the floor.
+     * another way in the path: a uuid/ulid key beats a stale docblock, a `$casts` entry beats the date
+     * policy where it states its own format, the date policy beats the inferred type, and the engine's
+     * `@property` type is the floor.
      *
      * A column whose type can't be carried in a URL segment (an `array` cast, a `@property` naming a class)
      * is refused rather than emitted — the parameter is a path segment, not the serialised attribute.
@@ -163,19 +164,23 @@ final class EloquentModelReflector
             return $facts['keySchema'];
         }
 
-        // The override sends every date out as a bespoke string whatever else typed the name, so it is
-        // read once here rather than at each source below — a source that forgot to ask is how a date
-        // column reached the document with the weakening skipped.
-        if ($facts['overridesSerializeDate'] && DateColumnSchema::isAttribute($column, $facts)) {
-            return DateColumnSchema::schema($facts, $formatGivenUp);
-        }
-
         $cast = $facts['casts'][$column] ?? null;
         if ($cast !== null) {
+            if ($facts['overridesSerializeDate'] && CastSchema::isDateCast($cast)) {
+                return DateColumnSchema::schema($facts, $formatGivenUp);
+            }
+
             $schema = self::asPathSegment(CastSchema::forCast($cast));
             if ($schema !== null) {
                 return $schema;
             }
+        }
+
+        // A date attribute publishes what `serializeDate()` wrote, never what named it
+        // ({@see DateColumnSchema}), so the policy is read once here rather than at each source below —
+        // a source that forgot to ask is how a date column reached the document typed by its tag.
+        if (DateColumnSchema::isAttribute($column, $facts)) {
+            return DateColumnSchema::schema($facts, $formatGivenUp);
         }
 
         foreach ($metadata->properties as $property) {
@@ -187,13 +192,8 @@ final class EloquentModelReflector
             }
         }
 
-        // A `$dates` entry is a date-time column, ranked below the engine's types exactly as it is in a
-        // response body. A `$fillable`-only name is deliberately NOT a floor here: it types the column
-        // as "anything", which for a path segment is no answer at all.
-        if (in_array($column, $facts['dates'], true)) {
-            return DateColumnSchema::schema($facts, $formatGivenUp);
-        }
-
+        // A `$fillable`-only name is deliberately NOT a floor here: it types the column as "anything",
+        // which for a path segment is no answer at all.
         return $isKey ? $facts['keySchema'] : null;
     }
 

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Carbon\CarbonImmutable;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\BuiltIn\EnumSchema;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
@@ -19,8 +20,10 @@ use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Integrations\Eloquent\AccessorReader;
+use Docuccino\Laravel\Integrations\Eloquent\DateColumnSchema;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
 use Docuccino\Laravel\Integrations\Eloquent\ModelSchema;
+use Docuccino\Laravel\Integrations\Support\DateWireFormat;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Blank;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Boutique;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Chronicle;
@@ -37,6 +40,7 @@ use Docuccino\Laravel\Tests\Fixtures\Eloquent\Milestone;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Persona;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Placard;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Post;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Sandglass;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Showcase;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Signpost;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Strongbox;
@@ -129,6 +133,10 @@ function eloquentEngine(): StubTypeEngine
         // Carbon class the attribute holds.
         Waterclock::class => new ClassMetadata(Waterclock::class, [
             new PropertyMetadata('posted_at', new ClassT('Carbon\\CarbonImmutable')),
+            new PropertyMetadata('sealed_at', ScalarT::string()),
+        ]),
+        Sandglass::class => new ClassMetadata(Sandglass::class, [
+            new PropertyMetadata('posted_at', new ClassT('Carbon\\CarbonImmutable')),
         ]),
         Hourglass::class => new ClassMetadata(Hourglass::class, [
             new PropertyMetadata('id', ScalarT::int()),
@@ -144,6 +152,7 @@ function eloquentEngine(): StubTypeEngine
         $returning = static fn (DType $type): ActionAnalysis => new ActionAnalysis(returns: [new ReturnSite($type, $loc)]);
 
         return [
+            Sandglass::class.'::getPostedAtAttribute' => $returning(new ClassT('Carbon\\CarbonImmutable')),
             Boutique::class.'::getFullLabelAttribute' => $returning(ScalarT::string()),
             Boutique::class.'::getOptionsAttribute' => $returning(ScalarT::string()),
             CustomCaster::class.'::get' => $returning(ScalarT::string()),
@@ -574,6 +583,21 @@ it('raises no date-serialisation notice for a model that publishes no date attri
     expect($codes)->not->toContain('eloquent.custom-date-serialization');
 });
 
+it('raises no date-serialisation notice where an accessor publishes the date instead', function (): void {
+    // The same reading again, at the last pass that can change a key: Laravel adds a mutated attribute
+    // after the date attributes and never hands it to `serializeDate()`, so an accessor shadowing the
+    // model's only date attribute means the override reached nothing the response carries. The notice
+    // says those columns are documented as plain strings; this one is documented with a `format`, which
+    // is the value the accessor really writes.
+    $registry = modelRegistry(new ClassT(Sandglass::class));
+
+    expect($registry->schemas()['Sandglass']['properties']['posted_at'])
+        ->toBe(['type' => 'string', 'format' => 'date-time']);
+
+    $codes = array_map(static fn ($d): string => $d->code, $registry->diagnostics());
+    expect($codes)->not->toContain('eloquent.custom-date-serialization');
+});
+
 it('raises no date-serialisation notice for a model whose only date attributes are hidden', function (): void {
     // Same reading one step further in: the model HAS timestamps, but `$hidden` keeps them out of every
     // response, so nothing the document publishes lost a `format`. What the model owns is not what the
@@ -602,17 +626,35 @@ it('weakens a date column a docblock tag claimed, and reports it', function (): 
     expect($codes)->toContain('eloquent.custom-date-serialization');
 });
 
-it('leaves a docblock-typed date column alone where no override weakens it', function (): void {
-    // The boundary, pinned. Without the override the docblock's own type stands, so a Carbon-typed
-    // column publishes what the class mapper makes of it — an object, which is a separate defect with
-    // a separate fix. Nothing here depends on that shape being right; what it pins is that this mapper
-    // only reaches a date column when the override has made its wire format unstatable.
+it('publishes the format the framework writes for a docblock-typed date column no override weakens', function (): void {
+    // The boundary, pinned — and the reason it is the format rather than the tag's own type: the
+    // response never carries the Carbon the tag names, it carries what `serializeDate()` wrote, which
+    // with no override is `Carbon::toJSON()` — an RFC 3339 string. A consumer handed the tag's type
+    // gets an object they can never receive, so the tag decides the name of the column and nothing
+    // about its shape.
     $registry = modelRegistry(new ClassT(Waterclock::class));
 
-    expect($registry->schemas()['Waterclock']['properties']['posted_at'])->toBe(['type' => 'object']);
+    expect($registry->schemas()['Waterclock']['properties']['posted_at'])
+        ->toBe(['type' => 'string', 'format' => 'date-time'])
+        // And the same for a tag that named the DB column's type rather than a class: a `string` is not
+        // wrong about the wire, it is short of it, and the format is the whole of what a client needs.
+        ->and($registry->schemas()['Waterclock']['properties']['sealed_at'])
+        ->toBe(['type' => 'string', 'format' => 'date-time']);
 
     $codes = array_map(static fn ($d): string => $d->code, $registry->diagnostics());
     expect($codes)->not->toContain('eloquent.custom-date-serialization');
+});
+
+it('derives that format from the bytes the framework writes, not from the policy that claims it', function (): void {
+    // The premise of the row above, taken from Laravel rather than from this package: `serializeDate()`
+    // on a model that overrides nothing is what a date attribute is written with, and the value it
+    // returns is the pattern the published `format` is read off. Asserting `date-time` because the
+    // policy says `date-time` would ratify whatever the policy said.
+    $hook = new ReflectionMethod(Waterclock::class, 'serializeDate');
+    $written = $hook->invoke(new Waterclock, new CarbonImmutable('2024-01-01T00:00:00+00:00'));
+
+    expect($written)->toBe(CarbonImmutable::parse('2024-01-01T00:00:00+00:00')->format(DateColumnSchema::DEFAULT_FORMAT))
+        ->and(DateWireFormat::oas(DateColumnSchema::DEFAULT_FORMAT))->toBe('date-time');
 });
 
 it('reflects $with and the serializeDate override in the model facts', function (): void {

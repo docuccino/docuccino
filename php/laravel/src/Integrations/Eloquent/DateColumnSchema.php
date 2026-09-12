@@ -11,10 +11,13 @@ use Docuccino\Laravel\Integrations\Support\DateWireFormat;
  * and a route-bound path segment both come through here, so a column cannot be dated one way in one
  * and another way in the other.
  *
- * Every date a model serialises goes through `serializeDate()`, so an override sends a bespoke string
- * no analysis can name and the `format` is given up. That loss is the whole of what
- * `eloquent.custom-date-serialization` reports, which is why {@see schema()} raises the flag itself:
- * a caller that publishes the shape cannot publish it without reporting.
+ * Every date a model serialises goes through `serializeDate()`, whatever type a `@property` tag or a
+ * cast gave the column — so the tag never decides the shape, and a date-time class named by one is a
+ * PHP object that no response carries. The default hook writes Carbon's JSON form, which is where the
+ * `date-time` claim comes from; an override sends a bespoke string no analysis can name and the
+ * `format` is given up. That loss is the whole of what `eloquent.custom-date-serialization` reports,
+ * which is why {@see schema()} raises the flag itself: a caller that publishes the shape cannot publish
+ * it without reporting.
  *
  * @phpstan-import-type ModelFacts from EloquentModelReflector
  */

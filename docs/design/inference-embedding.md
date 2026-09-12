@@ -494,13 +494,25 @@ the document carries actually gave up its `format`, not where the model merely o
 shape and the flag come out of the same call and no publishing site can emit one without the other.
 A date attribute reaches the document at two of them: the model component, and the path parameter of a
 route bound on a date column (`{journal:filed_on}`), which reads the same policy through
-`EloquentModelReflector::columnSchemaFor()` and reports against the route.
+`EloquentModelReflector::columnSchemaFor()` and reports against the route. `ModelSchema` keeps the KEYS
+that lost a format rather than a flag, because the accessor pass runs after the column passes and a
+mutated attribute is serialised as the accessor returned it — never through the override — so a column
+an accessor publishes stops counting towards the notice.
 
-The override is read wherever a date column is published, INCLUDING one a `@property` tag already
-typed — the common shape, since `php artisan ide-helper:models` writes a tag for every column. Without
-an override a docblock-typed date column keeps whatever its type maps to, which for a Carbon-valued
-property is an object: typing `DateTimeInterface` is a gap of the class mapper, not of this policy, and
-is deliberately left to it.
+The policy is read wherever a date attribute is published, INCLUDING one a `@property` tag already
+typed — the common shape, since `php artisan ide-helper:models` writes a tag for every column, and what
+those tags name is a Carbon: an OBJECT, which is not what any response carries. So the tag decides that
+the column exists and never what shape it has. The `$casts` entry is the one source that outranks the
+policy, and only where it states its own format (`datetime:d/m/Y`), which Eloquent applies instead of
+the hook.
+
+Typing a date-time in general is core's, not the adapter's: `DateTimeInterface` is a PHP type, PHP
+forbids userland implementations of it, and `json_encode` decides the bytes. `DateTimeTypeToSchema`
+therefore sits in core ahead of the class mapper and claims the half of that closed domain which states
+its own JSON form — every Carbon — publishing the RFC 3339 string it writes. PHP's own
+`DateTime`/`DateTimeImmutable` state none, and `json_encode` really does write them as an object
+(`{date, timezone_type, timezone}`), so they are left to the class mapper, whose bare object is the
+true, vague answer rather than a second guess.
 
 **Source (2b) — Larastan schema knowledge — was investigated and deliberately skipped.**
 `ClassMetadataFactory` is a native-reflection + docblock component that never enters PHPStan's
