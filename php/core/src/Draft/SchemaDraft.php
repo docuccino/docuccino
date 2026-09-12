@@ -96,6 +96,10 @@ final class SchemaDraft
         return isset($this->properties[$name]);
     }
 
+    /**
+     * @internal Not part of the frozen extension-author surface — an identity is a function of the
+     * assembled document and is stamped on the frozen node, so nothing an extension sees decides one.
+     */
     public function assignId(?string $id): self
     {
         $this->id = $id;
@@ -143,14 +147,10 @@ final class SchemaDraft
     }
 
     /**
-     * Whether this draft, as it now stands, says nothing about the value it describes: every keyword on
-     * it is an annotation ({@see SchemaKeywords::saysNothingAboutTheInstance()}) and no property was
-     * written under it, so it freezes to the unconstrained schema plus prose.
-     *
-     * The question a producer asks when its claim is about the OUTCOME rather than about its own
-     * contribution — another layer may have typed the same node, and only the draft as it stands knows.
-     * A keyword this model does not classify counts as saying something, the same way
-     * {@see SchemaKeywords} declines to supersede what it cannot read.
+     * Whether this draft, as it now stands, says nothing about the value it describes: every keyword on it
+     * is an annotation ({@see SchemaKeywords::saysNothingAboutTheInstance()}) and no property was written
+     * under it. What a producer reads when its claim is about the OUTCOME rather than its own
+     * contribution. A keyword this model cannot classify counts as saying something.
      */
     public function saysNothingAboutTheInstance(): bool
     {

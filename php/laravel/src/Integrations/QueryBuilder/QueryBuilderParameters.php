@@ -114,8 +114,7 @@ final class QueryBuilderParameters
         if ($policy->filtersDeepObject()) {
             $properties = [];
             foreach ($facts->filters as $filter) {
-                [, $property] = self::filterTarget($filter->name, $policy, $config);
-                $properties[$property] = $this->filterProperty($filter, $policy, $config);
+                $properties[$filter->name] = $this->filterProperty($filter, $policy, $config);
             }
 
             return [new QueryParameterSpec(
@@ -129,10 +128,9 @@ final class QueryBuilderParameters
 
         $specs = [];
         foreach ($facts->filters as $filter) {
-            [$name] = self::filterTarget($filter->name, $policy, $config);
             [$schema, $style, $explode] = $this->filterSchema($filter, $policy, $config);
             $specs[] = new QueryParameterSpec(
-                name: $name,
+                name: self::filterParameter($filter->name, $policy, $config),
                 schema: $schema,
                 description: $this->filterDescription($filter, $config),
                 style: $style,
@@ -211,19 +209,14 @@ final class QueryBuilderParameters
     }
 
     /**
-     * Where one filter's value lands under the effective representation: the query parameter carrying it,
-     * and the object property within it — `''` where the parameter IS the filter, which is the bracketed
-     * form. The one reading of that mapping: {@see filterParameters()} publishes there and
-     * {@see QueryBuilderUntypedFilterExtension} looks there, so a report about an untyped filter cannot
-     * be about a node nobody wrote.
-     *
-     * @return array{0: string, 1: string}
+     * The query parameter one filter's value is published under — its own bracketed key, or the single
+     * object parameter the deepObject representation nests every filter in. Public because a report about
+     * what the document published has to be addressed where the filter actually landed
+     * ({@see UntypedFilters}).
      */
-    public static function filterTarget(string $name, RepresentationPolicy $policy, QueryBuilderConfig $config): array
+    public static function filterParameter(string $name, RepresentationPolicy $policy, QueryBuilderConfig $config): string
     {
-        return $policy->filtersDeepObject()
-            ? [$config->filter, $name]
-            : [$config->filterKey($name), ''];
+        return $policy->filtersDeepObject() ? $config->filter : $config->filterKey($name);
     }
 
     /**

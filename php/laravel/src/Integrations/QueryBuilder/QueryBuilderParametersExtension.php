@@ -90,12 +90,14 @@ final class QueryBuilderParametersExtension implements OperationExtension
 
         $contribution = Contribution::integration('query-builder', $context->actionSource());
 
-        foreach ($this->builder->build($facts, $context->representation(), $this->effectiveConfig($context), $describer) as $spec) {
+        $config = $this->effectiveConfig($context);
+
+        foreach ($this->builder->build($facts, $context->representation(), $config, $describer) as $spec) {
             $spec->applyTo($operation->parameter('query', $spec->name), $contribution);
         }
 
         $this->reportUnresolved($facts, $context);
-        $this->recordUntypedFilters($facts, $context);
+        $this->recordUntypedFilters($facts, $context, $config);
         $this->reportNoAllowLists($facts, $context);
         $this->reportDefaultConfig($context);
         $this->reportLegacyPackage($facts, $context);
@@ -380,32 +382,29 @@ final class QueryBuilderParametersExtension implements OperationExtension
     }
 
     /**
-     * A filter handled by the application's own code, which THIS layer could not type — recorded rather
-     * than reported, because whether it reaches the document with no type is not knowable yet: a
-     * validation rule, a docblock or an attribute lands on the same parameter behind us.
-     * {@see QueryBuilderUntypedFilterExtension} reads the record once they have.
-     *
-     * The condition is {@see QueryBuilderParameters::typesNothing()} rather than a second reading of
-     * the same kinds: what is recorded and what this layer published then cannot disagree.
+     * A filter this layer could not type, recorded against the parameter it was just published under —
+     * recorded rather than reported, because whether the document ends up with no type is not knowable
+     * here ({@see QueryBuilderUntypedFilterExtension}). Condition and address are the same readings the
+     * publication above is made under, so the record cannot disagree with what was written.
      */
-    private function recordUntypedFilters(QueryBuilderFacts $facts, RouteContext $context): void
+    private function recordUntypedFilters(QueryBuilderFacts $facts, RouteContext $context, QueryBuilderConfig $config): void
     {
         foreach ($facts->filters as $filter) {
             if (QueryBuilderParameters::typesNothing($filter)) {
-                UntypedFilters::record($context, $filter->name);
+                UntypedFilters::record(
+                    $context,
+                    QueryBuilderParameters::filterParameter($filter->name, $context->representation(), $config),
+                    $filter->name,
+                );
             }
         }
     }
 
     /**
      * An allow-list entry the fold could not read, named by its call site — which is all there is to name
-     * it by, since the expression that would have given it a name is the one that did not fold.
-     *
-     * So the claim is about the RECOVERY and not about the finished document: with no name there is
-     * nothing to look the outcome up by, and what is lost differs per list anyway — a filter's whole
-     * parameter, a sort/include/fields value that would have been one enum member of a parameter still
-     * published. What holds either way is that nothing this entry declares reached the allow-list read
-     * off the chain, and that stays true however the author documents the endpoint by hand.
+     * it by, since the expression that would have given it a name is the one that did not fold. With no
+     * name there is nothing to look an outcome up by, so the claim is about the RECOVERY, which stays
+     * true however the author documents the endpoint by hand.
      */
     private function reportUnresolved(QueryBuilderFacts $facts, RouteContext $context): void
     {

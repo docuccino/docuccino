@@ -43,9 +43,9 @@ function runFilterKinds(string $chain, ?QueryBuilderConfig $config = null, array
 
     $operation = new OperationDraft;
     (new QueryBuilderParametersExtension($config))->handle($operation, $context);
-    // The untyped-filter report is a finalize pass of its own, because it is about what the parameter
-    // ends up published as; running the pair is what this chain actually produces.
-    (new QueryBuilderUntypedFilterExtension($config))->handle($operation, $context);
+    // The untyped-filter report is a finalize pass of its own ({@see QueryBuilderUntypedFilterExtension}),
+    // so running the pair is what this chain actually produces.
+    (new QueryBuilderUntypedFilterExtension)->handle($operation, $context);
 
     $byName = [];
     foreach ($operation->freeze()->parameters as $parameter) {

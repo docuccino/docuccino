@@ -424,17 +424,17 @@ it('freezes the rule-transformer field façade at the methods it means to promis
  * `@internal` markers on `freeze()`, `guard()`, `absorb()` and `isSupersededBy()`, and a marker dropped
  * by accident is a promise made by accident.
  *
- * The lists are the DECISION and reflection is the source of truth. `__construct` is left out for the
- * same reason the façade freeze above leaves it out: constructing a draft is core's job, and an
- * extension is handed one. Every class under `Draft/` that is not itself `@internal` owes a row, so a
- * new draft cannot join the surface without one.
+ * The lists are the DECISION and reflection is the source of truth, so a row is defended rather than
+ * transcribed: a method with no caller outside `Draft/` is `@internal` until something needs it, which
+ * is why the identity setters are not here. `__construct` is left out for the same reason the façade
+ * freeze above leaves it out — constructing a draft is core's job. Every class under `Draft/` that is
+ * not itself `@internal` owes a row, so a new draft cannot join the surface without one.
  */
 it('freezes the drafts an extension writes through at the methods they mean to promise', function (): void {
     $promised = [
         DeprecationNote::class => ['marks', 'paragraph'],
         DescriptionAppender::class => ['append', 'joined'],
         OperationDraft::class => [
-            'assignId',
             'declareRequestBodyDescription',
             'declareRequestBodyExamples',
             'hasParameter',
@@ -458,7 +458,6 @@ it('freezes the drafts an extension writes through at the methods they mean to p
             'supersedeStatusRange',
         ],
         ParameterDraft::class => [
-            'assignId',
             'declareExamples',
             'key',
             'keyFor',
@@ -472,9 +471,9 @@ it('freezes the drafts an extension writes through at the methods they mean to p
             'setRequired',
         ],
         ResponseDraft::class => [
-            'assignId',
             'claimComponentName',
             'componentClaim',
+            // Read by exception-to-response mappers outside core, which pair them with the writes below.
             'componentClaimIsStatusDefault',
             'componentClaimNamesResponse',
             'content',
@@ -495,17 +494,13 @@ it('freezes the drafts an extension writes through at the methods they mean to p
             'supersedeMediaRange',
         ],
         SchemaDraft::class => [
-            'assignId',
             'assignMock',
             'declareShape',
             'hasProperty',
             'producerFor',
             'property',
-            // The read a producer needs when its DIAGNOSTIC is about the outcome rather than about its
-            // own write: whether this node, as it stands, says anything about the value at all. A
-            // built-in report reads it from a finalize pass (query-builder's untyped filter), and a
-            // third party reporting on what its facts ended up published as would otherwise have no way
-            // to ask — which is a capability we would be keeping for ourselves.
+            // The read a producer whose diagnostic is about the OUTCOME needs, and one a third party
+            // reporting on its own facts has no other way to make.
             'saysNothingAboutTheInstance',
             'resolvedField',
             'set',

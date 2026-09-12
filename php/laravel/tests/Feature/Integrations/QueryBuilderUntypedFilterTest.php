@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 use Docuccino\Attributes\IgnoreParam;
 use Docuccino\Attributes\QueryParameter;
+use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\Context\AttributeSet;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
@@ -138,11 +140,11 @@ it('still reports every untyped filter when no other layer types any of them', f
 });
 
 /**
- * The whole build over an ad-hoc route, so the phases run in the order the registry puts them in: the
- * filters are the application's own closures, one typed by the action's attribute, one by the
- * FormRequest recovered in the request phase, one by nothing at all.
+ * The ad-hoc route both whole-build cases are made over: the filters are the application's own
+ * closures, one typed by the action's attribute, one by the FormRequest recovered in the request
+ * phase, one by nothing at all.
  */
-function untypedFilterDocument(): array
+function registerAppFilteredRoute(): void
 {
     $action = AppFilteredListController::class.'::index';
 
@@ -178,6 +180,14 @@ function untypedFilterDocument(): array
     /** @var Router $router */
     $router = app('router');
     $router->get('api/app-filtered', [AppFilteredListController::class, 'index']);
+}
+
+/**
+ * That route as the whole pipeline builds it, so the phases run in the order the registry puts them in.
+ */
+function untypedFilterDocument(): array
+{
+    registerAppFilteredRoute();
 
     $result = generateDocument();
     /** @var list<array<string, mixed>> $parameters */
@@ -213,4 +223,86 @@ it('reports only the filter the finished document leaves untyped, whichever laye
         ->and($reports[0]->message)->toContain('"search"')
         ->and($reports[0]->severity)->toBe(Severity::Info)
         ->and($reports[0]->help)->toContain('#[QueryParameter(');
+});
+
+/**
+ * The workbench's own Query Builder list, built as a whole document: one filter the application's
+ * closure handles and nothing types, under whatever names the application configured.
+ *
+ * @return array{0: array<string, mixed>, 1: list<Diagnostic>}
+ */
+function ledgerQueryFilters(): array
+{
+    app()->instance(TypeEngine::class, WorkbenchEngine::make());
+    $result = generateDocument();
+
+    /** @var list<array<string, mixed>> $parameters */
+    $parameters = $result->document->toArray()['paths']['/api/ledger-query']['get']['parameters'] ?? [];
+    $schemas = [];
+    foreach ($parameters as $parameter) {
+        $schemas[(string) $parameter['name']] = $parameter['schema'] ?? null;
+    }
+
+    $reports = array_values(array_filter(
+        diagnosticsCoded($result->diagnostics, 'query-builder.untyped-filter'),
+        static fn (Diagnostic $diagnostic): bool => str_contains((string) $diagnostic->routeSignature, 'api/ledger-query'),
+    ));
+
+    return [$schemas, $reports];
+}
+
+/**
+ * The address is the whole mechanism: the pass that publishes the parameter and the pass that reports
+ * on it are different passes, so a report derived from anything but what was published is a report
+ * about a node nobody wrote — which finds nothing and says nothing, silently, on every route. Both
+ * representations are pinned under a RENAMED parameter, because at the package's default names a
+ * reporter that re-derived the address agrees with one that carries it.
+ */
+it('reports against the parameter name the application configured, not the package default', function (): void {
+    config()->set('query-builder.parameters.filter', 'q');
+
+    [$schemas, $reports] = ledgerQueryFilters();
+
+    // Anti-vacuity: the renamed key is what reached the document, and it really is published untyped.
+    expect($schemas)->toHaveKey('q[search]')
+        ->and($schemas)->not->toHaveKey('filter[search]')
+        ->and($schemas['q[search]'])->toBe([])
+        ->and($reports)->toHaveCount(1)
+        ->and($reports[0]->message)->toContain('"search"');
+});
+
+it('reports against the renamed deepObject parameter, at the property the filter is published as', function (): void {
+    config()->set('query-builder.parameters.filter', 'q');
+    setBuild('documents.default.representation.filters', 'deepObject');
+
+    [$schemas, $reports] = ledgerQueryFilters();
+
+    expect($schemas)->toHaveKey('q')
+        ->and($schemas['q']['properties']['search'])->not->toHaveKey('type')
+        ->and($reports)->toHaveCount(1)
+        ->and($reports[0]->message)->toContain('"search"');
+});
+
+/**
+ * The artifact this family had none of: the parameters three app-handled filters are published as, and
+ * the reports the same build hands the author, in bytes. A change to what the report says, which filter
+ * it fires on, or where it is addressed moves this file — so a claim that a rework changed nothing has
+ * something to be false about. Restricted to the one route, so no committed golden churns and no
+ * unrelated route can quiet the family by accident.
+ */
+it('emits the app-handled filter document and its diagnostics byte-identically', function (): void {
+    registerAppFilteredRoute();
+
+    $result = generateDocument(static function (array $raw): array {
+        $raw['info'] = ['title' => 'App-filtered API', 'version' => '1.0.0'];
+        $raw['routes'] = ['include' => ['api/app-filtered']];
+
+        return $raw;
+    });
+
+    assertGolden('workbench-app-filtered.uir.json', (new UirEmitter)->emit($result->document));
+    assertGolden(
+        'workbench-app-filtered.diagnostics.json',
+        json_encode(diagnosticRecords($result->diagnostics), JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n",
+    );
 });
