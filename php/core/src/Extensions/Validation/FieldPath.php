@@ -12,11 +12,9 @@ namespace Docuccino\Core\Extensions\Validation;
  * has to, or the same string means two things depending on who read it.
  *
  * The same path has a second spelling in a query string, where a nested name rides as brackets:
- * {@see toQueryName()} writes it and {@see fromQueryName()} reads it back. Both live here so the
- * writer and the reader of that spelling cannot drift — a guard matching a declared parameter name
- * against a validation key has to recognise exactly the names the write produced, and nothing else:
- * a subtraction judged against a lossy reading either leaves the field an author marked as
- * not-for-publication published, or removes one they never named.
+ * {@see toQueryName()} writes it and {@see fromQueryName()} reads it back. Both live here so the writer
+ * and the reader of that spelling cannot drift — a guard matching a declared parameter name against a
+ * validation key has to recognise exactly the names the write produced, and nothing else.
  *
  * Not to be confused with the adapter's `Integrations\Support\FieldPaths`, which asks what a SET of
  * recovered rule keys says about one field's container. This is the split itself.
@@ -71,12 +69,9 @@ final class FieldPath
 
     /**
      * The bracketed name a path takes in a query string: `filter.radius_lat` rides as
-     * `filter[radius_lat]`, and a top-level field is its own name. Escapes are already folded — the
-     * segments are the names themselves — because brackets, not dots, separate them on the wire.
-     *
-     * The wire spelling carries no escape of its own, so a segment holding a `]` has no spelling
-     * here: what this writes for one is a name {@see fromQueryName()} refuses, which is the honest
-     * end of it — such a member is listed for a reader and is not addressable by a declaration.
+     * `filter[radius_lat]`. Escapes are already folded, since brackets separate segments on the wire —
+     * and a segment holding a `]` has no spelling here at all, so {@see fromQueryName()} refuses what
+     * this would write for one.
      *
      * @param  non-empty-list<string>  $segments
      */
@@ -92,11 +87,9 @@ final class FieldPath
     }
 
     /**
-     * The segments a bracketed query name names — {@see toQueryName()} read backwards — or null for a
-     * name that write does not produce: an empty container name or member name, an unbalanced
-     * bracket, or text after the last `]`. A `[` INSIDE a group is a member's own character, which is
-     * how the wire reads it too (`?filter[a[b]=` sets the `a[b` key of `filter`), so the two agree on
-     * where the boundaries are.
+     * {@see toQueryName()} read backwards, or null for a name that write does not produce: an empty
+     * container or member name, an unbalanced bracket, text after the last `]`. A `[` inside a group is a
+     * member's own character, as the wire reads it (`?filter[a[b]=` sets `filter`'s `a[b`).
      *
      * @return non-empty-list<string>|null
      */
@@ -112,10 +105,9 @@ final class FieldPath
     }
 
     /**
-     * The same reading of a bracketed name, spelled in the path grammar the validation keys use —
-     * what a declaration is matched against. Null where {@see fromQueryName()} refuses the name, and
-     * also where a segment has no spelling in this grammar: one ending in `\` before another segment
-     * would read back as an escaped dot and so name a different field.
+     * The same reading in the path grammar the validation keys use — what a declaration is matched
+     * against. Null where {@see fromQueryName()} refuses the name, and where a segment ends in `\`
+     * before another, which would read back as an escaped dot and name a different field.
      */
     public static function queryNameAsPath(string $name): ?string
     {

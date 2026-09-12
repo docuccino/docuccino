@@ -193,11 +193,10 @@ final class RecoveredRequest
     }
 
     /**
-     * Everything the author has already declared about the fields this route's recovered rules become,
-     * read at the layer that writes where those rules land — `#[BodyParameter]` for a body,
-     * `#[QueryParameter]` for the query parameters a read verb gets instead. Composed here rather than
-     * at each caller, so a reader that saw one of a layer's declaration sites and not the other cannot
-     * exist: a body is declared in two places, the route attribute bag and the request TYPE's own.
+     * Everything the author already declared about the fields this route's rules become, read at the
+     * layer those rules land in — `#[BodyParameter]` for a body, `#[QueryParameter]` for a read verb's
+     * query parameters. Composed here, not per caller: a body is declared in two places, so a caller
+     * reading one and not the other cannot exist.
      */
     public static function declaredFields(RouteContext $context, ?string $sourceClass): DeclaredFields
     {
@@ -212,9 +211,9 @@ final class RecoveredRequest
     }
 
     /**
-     * Where this route's recovered rules land, as a diagnostic about a lost field names it — the same
-     * verb reading {@see apply()} branches on, so a note cannot send a reader to a part of the document
-     * the rules were never written to.
+     * Where this route's rules land, worded as a diagnostic names it — the same verb reading
+     * {@see apply()} branches on, so a note cannot point at a part of the document the rules never
+     * reached.
      */
     public static function destination(RouteContext $context): string
     {
@@ -313,11 +312,9 @@ final class RecoveredRequest
 
             $member = $members->schemaFor($name);
             if ($member !== null) {
-                // The container already publishes this value; a parameter of this name beside it would
-                // be the same value twice. Its description is a property description where it lands,
-                // and requiredness belongs to the container's list, so neither is hoisted.
-                // A `false` is not stated here: these rules name only the keys they validate, and a
-                // higher layer's statement about another key is not theirs to retract.
+                // The container already publishes this value, so a parameter beside it would be the
+                // same value twice; description and requiredness belong where it lands. No `false` is
+                // stated: these rules name only the keys they validate.
                 $members->stateRequired($name, $required ? true : null);
                 if ($mock !== null) {
                     $member->assignMock($mock);
@@ -363,9 +360,8 @@ final class RecoveredRequest
      * a bracketed leaf, because `filter.radius_lat` in validator syntax IS `filter[radius_lat]` on the
      * wire — which also puts it on the same parameter identity a bracketing integration writes, so the
      * two merge instead of duplicating. The bracketing is {@see FieldPath::toQueryName()}'s, so a guard
-     * matching a declared parameter name against a validation key reads exactly the names written here.
-     * Where the representation publishes that surface as one deepObject container instead, the leaf is
-     * that container's member and {@see DeepObjectMembers} is where it lands.
+     * reads exactly the names written here; under a deepObject representation the leaf is a container
+     * member and {@see DeepObjectMembers} places it.
      *
      * @param  array<array-key, mixed>  $schema
      * @param  list<string>  $prefix  the segments already descended through

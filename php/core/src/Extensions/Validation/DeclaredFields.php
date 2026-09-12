@@ -10,11 +10,10 @@ use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\TypeGrammar\TypeStringParser;
 
 /**
- * What the author's parameter declarations already say about a route's validated fields, and the two
- * questions a rules recoverer asks of them before it reports what became of a field whose rules it
- * could not read: is the field in the document anyway, and did a declaration decide which container it
- * is. A note that speaks without asking asserts what a later layer has already decided, and names a
- * remedy the author went around.
+ * What the author's parameter declarations already say about a route's validated fields — the two
+ * questions a rules recoverer asks before reporting what became of a field it could not read: is the
+ * field in the document anyway ({@see publishes()}), and did a declaration decide which container it is
+ * ({@see decidesContainer()}). A note that speaks without asking asserts what a later layer settled.
  *
  * One class for both layers because the question is one, and one flag inside it because the WRITERS
  * differ — a guard reads the same grammar as the write it guards:
@@ -59,8 +58,7 @@ final class DeclaredFields
 
     /**
      * The declarations that document QUERY parameters, read back into the path grammar the rules are
-     * keyed by ({@see FieldPath::queryNameAsPath()}). One whose bracketed name has no spelling there
-     * answers for no field, which is what it does on the wire too.
+     * keyed by ({@see FieldPath::queryNameAsPath()}) — one with no spelling there answers for no field.
      *
      * @param  list<QueryParameter>  $declarations
      */
@@ -96,15 +94,10 @@ final class DeclaredFields
 
     /**
      * Whether a declaration settles which container `$field` is — narrower than {@see publishes()},
-     * because a declaration can publish a field without saying which of the two shapes it takes.
-     *
-     * A declaration that is not AT the field settles it by existing, which only the body layer reaches:
-     * a path inside proves a container, one above replaces the field outright. A declaration AT the
-     * field settles it only as far as its type does, read by the parser that will do the writing —
-     * `array` and `mixed` resolve to no shape and publish the empty schema, which decides neither
-     * container. With no type at all the two layers part company: the body writes the attribute's own
-     * default of `string`, while a query parameter writes nothing and leaves the recovered "either"
-     * standing.
+     * because a declaration can publish a field without saying which of the two shapes it takes. Read
+     * off the two writers the class header describes: one that is not AT the field settles it by
+     * existing, which only the body layer reaches; one AT the field settles it as far as its type does,
+     * through the parser that will do the writing, and `array`/`mixed` resolve to no shape at all.
      */
     public function decidesContainer(string $field): bool
     {
@@ -134,13 +127,9 @@ final class DeclaredFields
     }
 
     /**
-     * Whether one declared path answers for `$field`. A path with an empty segment names no field and
-     * documents nothing, so there is nothing for it to have answered.
-     *
-     * A well-formed body path the body then turns out not to be able to carry — a scalar, a composition
-     * or a `$ref` parent — still counts: this is asked during recovery, with no body yet to ask, and the
-     * refusal is reported where it happens, against the declaration itself, where a second note asking
-     * for rules would name the wrong remedy for the same mistake.
+     * Whether one declared path answers for `$field`; a path with an empty segment names none. A body
+     * path the body turns out not to carry still counts — this runs during recovery, with no body to ask,
+     * and that refusal is reported against the declaration itself.
      */
     private function reaches(string $path, string $field): bool
     {

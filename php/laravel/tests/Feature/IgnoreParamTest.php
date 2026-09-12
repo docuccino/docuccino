@@ -297,6 +297,13 @@ it('escapes the two values it did not write into the location report', function 
  */
 function ignoredMembersDocument(): GenerationResult
 {
+    // One build for the whole family. The result is a value, and every caller only reads it, so the
+    // routes and the engine instance are installed once rather than once per assertion.
+    static $memo = null;
+    if ($memo instanceof GenerationResult) {
+        return $memo;
+    }
+
     $location = new SourceLocation('');
     $controller = IgnoredMembersController::class.'::';
 
@@ -307,17 +314,14 @@ function ignoredMembersDocument(): GenerationResult
         new ArrayShapeField('filter.window.to', new LiteralT('date')),
     ]);
 
-    $chain = <<<'PHP'
-        QueryBuilder::for(\Workbench\App\Models\Gadget::class)->allowedFilters([
-            AllowedFilter::exact('status'),
-            AllowedFilter::callback('opaque', static function (Builder $query, mixed $value): void {
-                $query->whereRaw('1 = 1');
-            }),
-            AllowedFilter::callback('window', static function (Builder $query, mixed $value): void {
-                $query->whereBetween('starts_at', (array) $value);
-            }),
-        ])->paginate(20)
-        PHP;
+    // Read out of the controller's real file, not copied: a chain written twice goes stale silently.
+    // forMethod does not descend into a callee, so the shared `gadgets()` helper is the target.
+    $chain = TraceScript::forMethod(
+        (string) (new ReflectionClass(IgnoredMembersController::class))->getFileName(),
+        IgnoredMembersController::class,
+        'gadgets',
+        receiverFqcn: 'Spatie\\QueryBuilder\\QueryBuilder',
+    );
 
     app()->instance(TypeEngine::class, WorkbenchEngine::make(
         analysisOverrides: [
@@ -326,9 +330,9 @@ function ignoredMembersDocument(): GenerationResult
             ),
         ],
         traceOverrides: [
-            $controller.'members' => TraceScript::forChain($chain),
-            $controller.'typo' => TraceScript::forChain($chain),
-            $controller.'repeated' => TraceScript::forChain($chain),
+            $controller.'members' => $chain,
+            $controller.'typo' => $chain,
+            $controller.'repeated' => $chain,
         ],
     ));
 
@@ -340,7 +344,7 @@ function ignoredMembersDocument(): GenerationResult
 
     setBuild('documents.default.representation.filters', 'deepObject');
 
-    return generateDocument(static function (array $raw): array {
+    return $memo = generateDocument(static function (array $raw): array {
         $raw['info'] = ['title' => 'Ignored members API', 'version' => '1.0.0'];
         $raw['routes'] = ['include' => ['api/ignored-members/*']];
 
@@ -368,35 +372,24 @@ function ignoredMembersContainer(GenerationResult $result, string $path): array
     return [];
 }
 
-it('drops the member a bracketed ignore names, and keeps the ones it does not', function (): void {
+it('drops the member a bracketed ignore names, and nothing else about the container', function (): void {
     $container = ignoredMembersContainer(ignoredMembersDocument(), '/api/ignored-members/list');
 
     // Anti-vacuity: the container really is the one object parameter this representation publishes, and
     // the members the author kept are still in it — so this is the removal and not a producer that
     // stopped running.
     expect($container['style'])->toBe('deepObject')
-        ->and(array_keys($container['schema']['properties']))->toBe(['status', 'window']);
-});
-
-it('takes the dropped member off the container`s required list, and off the container', function (): void {
-    $container = ignoredMembersContainer(ignoredMembersDocument(), '/api/ignored-members/list');
-
-    // `filter.opaque` is `required` in the application's rules, so the container required it and was
-    // itself required because of it. Both statements were ABOUT the dropped member: a required list
-    // naming a member nobody publishes tells a consumer their request must carry a value the document
-    // does not describe, and a generated client then demands a field it cannot name.
-    expect($container['schema'])->not->toHaveKey('required')
-        ->and($container['required'])->toBeFalse();
-});
-
-it('reaches a member nested below another', function (): void {
-    $container = ignoredMembersContainer(ignoredMembersDocument(), '/api/ignored-members/list');
-
-    $window = $container['schema']['properties']['window'];
-
-    // The sibling bound is untouched, so the removal is addressed at the leaf and not at its parent.
-    expect(array_keys($window['properties']))->toBe(['to'])
-        ->and($window['properties']['to']['format'])->toBe('date');
+        ->and(array_keys($container['schema']['properties']))->toBe(['status', 'window'])
+        // `filter.opaque` is `required` in the application's rules, so the container required it and was
+        // itself required because of it. Both statements were ABOUT the dropped member: a required list
+        // naming a member nobody publishes tells a consumer their request must carry a value the document
+        // does not describe, and a generated client then demands a field it cannot name.
+        ->and($container['schema'])->not->toHaveKey('required')
+        ->and($container['required'])->toBeFalse()
+        // And the nested leaf: the sibling bound is untouched, so the removal is addressed at the leaf
+        // and not at its parent.
+        ->and(array_keys($container['schema']['properties']['window']['properties']))->toBe(['to'])
+        ->and($container['schema']['properties']['window']['properties']['to']['format'])->toBe('date');
 });
 
 it('reports a bracketed name no member matches, and names the members beside the parameters', function (): void {

@@ -28,8 +28,7 @@ use Docuccino\Laravel\Support\UnmatchedDeclaration;
  * this dropped reports a missing target rather than illustrating a parameter the document no longer has.
  *
  * A bracketed name (`#[IgnoreParam(name: 'filter[opaque]')]`) drops the matching member of a deepObject
- * container where that representation publishes one, so the two filter representations honour the same
- * declaration. Which container a bracketed name belongs to is {@see DeepObjectMembers}'s reading, shared
+ * container where that representation publishes one, through {@see DeepObjectMembers}'s reading — shared
  * with the producers that write those members, so a name cannot be a member for one and a parameter for
  * the other.
  */
@@ -45,12 +44,9 @@ final class IgnoredParametersExtension implements OperationExtension
     {
         $members = new DeepObjectMembers($operation);
 
-        // Which declarations matched is decided against what stands BEFORE any removal, so two that name
-        // one address — a controller's and the action's own, or one spelling `in:` and one leaving it off
-        // — both count as having done their job. Judging the second against what the first left would
-        // report it as reaching nothing, which is the opposite of true. That is why the judging and the
-        // removing are two passes rather than one: a member removed mid-loop is a member the next
-        // declaration would be told was never published.
+        // Two passes, because which declarations matched is decided against what stands BEFORE any
+        // removal: two naming one address both did their job, and judging the second against what the
+        // first left would report it as having reached nothing.
         $present = $operation->parameterKeys();
 
         /** @var list<array{0: IgnoreParam, 1: list<string>, 2: bool}> $judged */
@@ -60,8 +56,7 @@ final class IgnoredParametersExtension implements OperationExtension
             // Asked once: it reports an `in:` that names no location, and asking twice would say so twice.
             $locations = $this->locations($context, $ignore);
 
-            // Judged by the walk that is about to drop it, not by string equality against the member
-            // list — the half that reports and the half that removes must answer one name alike.
+            // Judged by the walk that is about to drop it, so reporting and removing answer alike.
             $matched = in_array('query', $locations, true) && $members->publishes($ignore->name);
 
             foreach ($locations as $location) {
@@ -79,9 +74,7 @@ final class IgnoredParametersExtension implements OperationExtension
                 $operation->removeParameter($location, $ignore->name);
             }
 
-            // A bracketed name is a MEMBER of the container it names wherever a deepObject representation
-            // publishes one, so the same declaration has to reach it there — dropping the container
-            // instead would take away every other filter the author kept.
+            // Dropping the container instead would take away every other filter the author kept.
             if (in_array('query', $locations, true)) {
                 $members->remove($ignore->name);
             }
@@ -97,11 +90,9 @@ final class IgnoredParametersExtension implements OperationExtension
     }
 
     /**
-     * What the operation is left documenting, as the addresses a declaration can name: every parameter
-     * key, and every member of a deepObject container under the bracketed name that drops it. The
-     * members are the half a bracketed typo needs — answered with the container alone, the reader is
-     * handed back the one address they already tried — and they are what the other representation
-     * already answers, where each member IS a parameter of its own.
+     * The addresses a declaration can name: every parameter key, and every deepObject member under the
+     * bracketed name that drops it — the half a bracketed typo needs, since the container alone hands the
+     * reader back the address they already tried.
      *
      * @return list<string>
      */

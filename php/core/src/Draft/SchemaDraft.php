@@ -111,8 +111,7 @@ final class SchemaDraft
     /**
      * State whether ONE member belongs in this schema's `required` list ({@see requirements()}).
      *
-     * @internal Core-only. A member's requiredness belongs to the list its parent keeps and an
-     * extension does not hold the parent, so it states one through
+     * @internal Core-only — an extension does not hold the parent, so it states one through
      * {@see DeepObjectMembers::stateRequired()}.
      */
     public function stateMemberRequired(string $member, bool $required, Contribution $by): PatchResult
@@ -121,9 +120,8 @@ final class SchemaDraft
     }
 
     /**
-     * Whether this schema publishes a member of that name — {@see removeProperty()}'s own answer,
-     * asked without removing anything, so a caller judging a subtraction and the subtraction itself
-     * cannot disagree.
+     * {@see removeProperty()}'s own answer, asked without removing anything, so a caller judging a
+     * subtraction and the subtraction itself cannot disagree.
      *
      * @internal Core-only — see {@see propertyNames()}.
      */
@@ -133,16 +131,11 @@ final class SchemaDraft
     }
 
     /**
-     * The member names this schema will publish, in the order {@see freeze()} publishes them: the nested
-     * property drafts where there are any, and otherwise the keys of a `properties` written whole as a
-     * keyword. One reading rather than two, because whoever asks whether a name is a member of this
-     * object and `freeze()` deciding what the object says about that name have to agree — a reader that
-     * saw only the drafts would answer "no member" for a declared shape and leave a subtraction with
-     * nothing to take away.
+     * The member names {@see freeze()} will publish: the nested drafts where there are any, else the keys
+     * of a `properties` written whole. Both, or a subtraction against a declared shape finds nothing.
      *
-     * @internal Core-only. A name is a member of a CONTAINER and this class cannot see which parameter
-     * it belongs to, so an extension asks {@see DeepObjectMembers}
-     * instead.
+     * @internal Core-only — a name is a member of a CONTAINER, so an extension asks
+     * {@see DeepObjectMembers} instead.
      *
      * @return list<string>
      */
@@ -157,20 +150,10 @@ final class SchemaDraft
     }
 
     /**
-     * Take one member off this schema: it is not published, and the `required` list does not name it.
-     * Answers whether the schema published the name, which is the caller's evidence that a subtraction
-     * reached something — a member that was never there and one that was dropped leave the same object.
-     *
-     * **A subtraction is not a contribution.** It is applied at {@see freeze()} rather than written
-     * through the guard, so nothing outranks it — the unconditional reading
-     * {@see OperationDraft::removeParameter()} already makes of a whole parameter, for the same reason:
-     * an author's "do not publish this" that a later layer could quietly overrule leaves the very field
-     * they marked as not-for-publication in the document.
-     *
-     * The `required` list travels with it because that list belongs to the PARENT rather than to the
-     * member, so this is the only place both are in view. One naming a member nobody publishes tells a
-     * consumer their request must carry a value the document does not describe, and a generated client
-     * then demands a field it cannot name.
+     * Take one member off this schema, and off the `required` list its PARENT keeps — the only place both
+     * are in view. Answers whether the schema published the name. Applied at {@see freeze()} rather than
+     * through the guard, so nothing outranks it, as {@see OperationDraft::removeParameter()} already does
+     * for a whole parameter (docs/design/defect-classes.md §"A subtraction leaves no evidence").
      *
      * @internal Core-only — see {@see propertyNames()}.
      */
@@ -238,10 +221,9 @@ final class SchemaDraft
     }
 
     /**
-     * Whether this draft, as it now stands, says nothing about the value it describes: every keyword on it
-     * is an annotation ({@see SchemaKeywords::saysNothingAboutTheInstance()}) and no property was written
-     * under it. What a producer reads when its claim is about the OUTCOME rather than its own
-     * contribution. A keyword this model cannot classify counts as saying something.
+     * Whether this draft, as it stands, says nothing about the value it describes — every keyword an
+     * annotation and no property written. What a producer reads when its claim is about the OUTCOME
+     * rather than its own write; an unclassifiable keyword counts as saying something.
      */
     public function saysNothingAboutTheInstance(): bool
     {
@@ -343,9 +325,7 @@ final class SchemaDraft
     }
 
     /**
-     * `$data` with every subtracted member gone from `properties`, the keyword omitted once nothing is
-     * left in it — an object describing no members is vague and true. A subtracted member leaves
-     * `required` in {@see requirements()}.
+     * `$data` with every subtracted member gone from `properties`, the keyword dropped once it is empty.
      *
      * @param  array<string, mixed>  $data
      * @param  list<string>  $removed
@@ -371,17 +351,11 @@ final class SchemaDraft
     }
 
     /**
-     * Every member this schema's `required` list names, each with the contribution that says so: a
-     * `required` written whole as a keyword, patched by the per-member statements
-     * ({@see stateMemberRequired()}), minus whatever a subtraction took off.
-     *
-     * This is the ONE reading of that list — {@see freeze()} publishes it and
-     * {@see memberRequirement()} asks who is behind it — and requiredness is stated per member rather
-     * than merged into the keyword because the contested unit is the member: the guard arbitrates a
-     * FIELD, so a merged list from a second producer at a lower layer is shadowed whole and its member
-     * silently leaves the document. Names are cast because PHP normalises the key `"2024"` to an int
-     * while `required` is an array of strings. `docs/design/defect-classes.md` §"A second reading,
-     * narrower than the write it answers for" is the class all of that was an instance of.
+     * The ONE reading of this schema's `required` list: the keyword written whole, patched by the
+     * per-member statements ({@see stateMemberRequired()}), minus what a subtraction took off. Per member
+     * because the contested unit is the member — the guard arbitrates a FIELD, so a merged list would
+     * shadow a lower layer's whole (docs/design/defect-classes.md §"A second reading, narrower than the
+     * write it answers for"). Names are cast: PHP normalises the key `"2024"` to an int.
      *
      * @return list<array{0: string, 1: Contribution}>
      */
@@ -431,9 +405,8 @@ final class SchemaDraft
     }
 
     /**
-     * The contribution behind this schema requiring a member — of its own, or of anything nested under
-     * it, at any depth — and the highest-ranking one where several do. Null when nothing does. A
-     * deepObject container's own requiredness is derived from it ({@see ParameterDraft::freeze()}).
+     * The highest-ranking contribution behind this schema requiring a member, at any depth, or null.
+     * A deepObject container's own requiredness is derived from it ({@see ParameterDraft::freeze()}).
      *
      * @internal Core-only.
      */
@@ -463,8 +436,7 @@ final class SchemaDraft
     }
 
     /**
-     * Whether any member of a `properties` map written as a keyword requires a member of its own, at
-     * any depth.
+     * Whether a `properties` map written as a keyword requires a member of its own, at any depth.
      *
      * @param  array<array-key, mixed>  $properties
      * @param  list<string>  $removed

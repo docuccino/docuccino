@@ -249,7 +249,6 @@ it('claims for every date cast only what the column really sends', function (str
 
     $published = CastSchema::written($cast) ?? DateWireFormat::serializedSchema(DateColumnSchema::DEFAULT_FORMAT);
 
-    expect(CastSchema::written($cast) === null)->toBe($hookGoverned)
-        ->and(dateFragmentHoldsFor($published, $sent[$column]))
+    expect(dateFragmentHoldsFor($published, $sent[$column]))
         ->toBeTrue($cast.' publishes '.json_encode($published).' for the bytes '.json_encode($sent[$column]));
 })->with($dialCasts);

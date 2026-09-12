@@ -19,11 +19,11 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
  * publishing with no type at all, since a parameter claiming nothing becomes an untyped value at every
  * call site of a generated client.
  *
- * The claim is about the OUTCOME, so it is read off the parameter draft as it finally stands: the filter
- * kind is one producer's answer, and a validation rule, a docblock or an attribute — the very attribute
- * this help asks for — still lands on the same parameter behind the integration rung. Hence a pass of its
- * own at `Finalize` and `LAST`, which also keeps it quiet about a filter `#[IgnoreParam]` dropped. Only an
- * overlay comes later; a type written there leaves the report standing, and `diagnostics.accept` answers it.
+ * The claim is about the OUTCOME, so it is read off the parameter draft as it finally stands — a rule, a
+ * docblock or the very attribute this help asks for still lands on that parameter behind the integration
+ * rung (docs/design/defect-classes.md §"A diagnostic that asserts an outcome it never reads"). Hence a
+ * pass of its own at `Finalize` and `LAST`, which also keeps it quiet about a filter `#[IgnoreParam]`
+ * dropped. Only an overlay comes later, and `diagnostics.accept` answers that.
  */
 #[ExtensionOrder(priority: Priorities::LAST)]
 final class QueryBuilderUntypedFilterExtension implements OperationExtension
@@ -55,9 +55,9 @@ final class QueryBuilderUntypedFilterExtension implements OperationExtension
     }
 
     /**
-     * The schema the document publishes for one filter, or null where the operation carries no such node
-     * — the recorded parameter, and within it the property the deepObject representation nests the filter
-     * under ({@see QueryBuilderParameters::filterParameter()}).
+     * The schema the document publishes for one filter, or null where no such node exists — the recorded
+     * parameter, and within it the property a deepObject representation nests it under
+     * ({@see QueryBuilderParameters::filterParameter()}).
      */
     private function publishedSchema(OperationDraft $operation, RouteContext $context, string $parameter, string $filter): ?SchemaDraft
     {

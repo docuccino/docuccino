@@ -422,11 +422,9 @@ it('answers alike at every site that publishes a framework-default date-time', f
     expect(json_encode(new CarbonImmutable('2024-01-01T00:00:00+00:00'), JSON_THROW_ON_ERROR))
         ->toBe('"'.DateWireFormat::example(DateColumnSchema::DEFAULT_FORMAT).'"');
 
-    $formatGivenUp = false;
-
     expect(DateTimeTypeToSchema::SCHEMA)
         ->toBe(DateWireFormat::serializedSchema(DateColumnSchema::DEFAULT_FORMAT))
-        ->toBe(DateColumnSchema::schema((new EloquentModelReflector)->facts(Ledger::class), $formatGivenUp));
+        ->toBe(DateColumnSchema::schema((new EloquentModelReflector)->facts(Ledger::class)));
 });
 
 it('publishes every date class an application may name as the string it sends, and hoists none of them', function (string $fqcn): void {

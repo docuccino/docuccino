@@ -90,7 +90,7 @@
               "source": {
                 "file": "workbench/app/Http/Controllers/ModelNoticesController.php",
                 "line": 30,
-                "symbol": "Workbench\\App\\Http\\Controllers\\ModelNoticesController::showPlacard"
+                "symbol": "Workbench\\App\\Http\\Controllers\\ModelNoticesController::showEmblem"
               }
             },
             {
@@ -136,7 +136,7 @@
                       }
                     ]
                   },
-                  "$ref": "#/components/schemas/Placard"
+                  "$ref": "#/components/schemas/Emblem"
                 }
               }
             }
@@ -294,7 +294,7 @@
               "source": {
                 "file": "workbench/app/Http/Controllers/ModelNoticesController.php",
                 "line": 45,
-                "symbol": "Workbench\\App\\Http\\Controllers\\ModelNoticesController::showMilestone"
+                "symbol": "Workbench\\App\\Http\\Controllers\\ModelNoticesController::showDaybook"
               }
             },
             {
@@ -340,7 +340,7 @@
                       }
                     ]
                   },
-                  "$ref": "#/components/schemas/Milestone"
+                  "$ref": "#/components/schemas/Daybook"
                 }
               }
             }
@@ -592,6 +592,24 @@
           "updated_at"
         ]
       },
+      "Daybook": {
+        "x-docuccino": {
+          "id": "sch:v1:e3wx4d3xkw672a73"
+        },
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ]
+      },
       "Depot": {
         "x-docuccino": {
           "id": "sch:v1:zlranrvg4m4a7no3"
@@ -612,6 +630,17 @@
         "required": [
           "keeper"
         ]
+      },
+      "Emblem": {
+        "x-docuccino": {
+          "id": "sch:v1:en34rccnrkamried"
+        },
+        "type": "object",
+        "properties": {
+          "badge": {
+            "type": "string"
+          }
+        }
       },
       "Merchant": {
         "x-docuccino": {
@@ -659,35 +688,6 @@
           "chimed_on"
         ]
       },
-      "Milestone": {
-        "x-docuccino": {
-          "id": "sch:v1:hpjlzm3uvq7f5dbf"
-        },
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer"
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name"
-        ]
-      },
-      "Placard": {
-        "x-docuccino": {
-          "id": "sch:v1:iwins3ab3z6srq3u"
-        },
-        "type": "object",
-        "properties": {
-          "badge": {
-            "type": "string"
-          }
-        }
-      },
       "Sandglass": {
         "x-docuccino": {
           "id": "sch:v1:pgcsshnknd3ydkjr"
@@ -727,7 +727,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "d448926cfb49c8d2d080d27e362fea98ba5787c5757ac400b9634dc50a27ce6f"
+      "contentHash": "74c5e0a49a49e004ed2572dac045e3bd87fc67a4e9e04ede77207e4f6855bcd0"
     },
     "generator": {
       "name": "docuccino/laravel",

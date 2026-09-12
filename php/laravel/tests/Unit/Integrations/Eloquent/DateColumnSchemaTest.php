@@ -34,26 +34,15 @@ it('claims date-time only for the bytes the framework really writes', function (
 });
 
 it('publishes a date attribute with its format, or gives the format up and says so', function (string $fqcn, array $expected, bool $givenUp): void {
-    $formatGivenUp = false;
+    $facts = (new EloquentModelReflector)->facts($fqcn);
 
-    expect(DateColumnSchema::schema((new EloquentModelReflector)->facts($fqcn), $formatGivenUp))->toBe($expected)
-        ->and($formatGivenUp)->toBe($givenUp);
+    expect(DateColumnSchema::schema($facts))->toBe($expected)
+        ->and(DateColumnSchema::formatGivenUp($facts))->toBe($givenUp);
 })->with([
     'a model that serialises dates the framework way' => [Ledger::class, ['type' => 'string', 'format' => 'date-time'], false],
     'a model that overrides serializeDate()' => [Chronicle::class, ['type' => 'string'], true],
     'a model that inherits the override' => [Daybook::class, ['type' => 'string'], true],
 ]);
-
-it('never clears a flag another attribute already raised', function (): void {
-    // Several date attributes report as one notice, so the flag only ever goes up: a model whose first
-    // date lost its format does not stop having lost it because the next one was read on a model that
-    // did not.
-    $formatGivenUp = true;
-
-    DateColumnSchema::schema((new EloquentModelReflector)->facts(Ledger::class), $formatGivenUp);
-
-    expect($formatGivenUp)->toBeTrue();
-});
 
 it('recognises every source that makes a column a date attribute', function (string $fqcn, string $column, bool $expected): void {
     expect(DateColumnSchema::isAttribute($column, (new EloquentModelReflector)->facts($fqcn)))->toBe($expected);

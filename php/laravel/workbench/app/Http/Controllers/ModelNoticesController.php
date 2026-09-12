@@ -6,10 +6,10 @@ namespace Workbench\App\Http\Controllers;
 
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Blank;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Chronicle;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Daybook;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Depot;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Emblem;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Metronome;
-use Docuccino\Laravel\Tests\Fixtures\Eloquent\Milestone;
-use Docuccino\Laravel\Tests\Fixtures\Eloquent\Placard;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Sandglass;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Signpost;
 use RuntimeException;
@@ -27,7 +27,7 @@ final class ModelNoticesController
         throw new RuntimeException(__METHOD__.' is documented, not dispatched');
     }
 
-    public function showPlacard(): Placard
+    public function showEmblem(): Emblem
     {
         throw new RuntimeException(__METHOD__.' is documented, not dispatched');
     }
@@ -42,7 +42,7 @@ final class ModelNoticesController
         throw new RuntimeException(__METHOD__.' is documented, not dispatched');
     }
 
-    public function showMilestone(): Milestone
+    public function showDaybook(): Daybook
     {
         throw new RuntimeException(__METHOD__.' is documented, not dispatched');
     }

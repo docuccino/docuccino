@@ -52,7 +52,7 @@ producer holds, never by preference:
   `PathParametersExtension::declaresType()`, `RecoveredRequest::declaredOn()`,
   `InferredResponsesExtension::named()`, `ImplicitResponsesExtension`'s post-synthesis
   `hasResponse('403')`. Where several producers answer, compose the reading ONCE beside the writer's
-  own grammar (`RecoveredRequest::declarationsReaching()`), or the notes drift apart one at a time.
+  own grammar (`RecoveredRequest::declaredFields()`), or the notes drift apart one at a time.
 - **Say what the producer knows.** When the payload carries no key to look anything up by, an
   outcome check is not merely unwarranted, it is impossible: `query-builder.unresolved-entry` names
   a call site precisely because the expression that would have named the entry is the one that did

@@ -320,14 +320,15 @@ it('names the shape the column read recovered, not the parameter an author decla
     $reports = diagnosticsCoded($diagnostics, 'eloquent.custom-date-serialization');
 
     expect($parameter)->not->toBeNull()
-        // The document does publish a format here, which is what the old sentence denied.
+        // The document does publish a format here, so a notice claiming the parameter lost one would
+        // be false for this reader.
         ->and($parameter['schema']['type'])->toBe('string')
         ->and($parameter['schema']['format'])->toBe('date-time')
         ->and($reports)->toHaveCount(1)
         ->and($reports[0]->message)->toContain('Daybook::$posted_at')
         ->and($reports[0]->message)->toContain('the shape recovered for the segment is a string with no format.')
         ->and($reports[0]->message)->not->toContain('documented')
-        // And the help no longer denies the remedy the reader here already took.
+        // And the help names the remedy this reader already took, rather than denying one exists.
         ->and($reports[0]->help)->toContain('#[PathParameter]')
         ->and($reports[0]->help)->not->toContain('no annotation puts one back');
 });

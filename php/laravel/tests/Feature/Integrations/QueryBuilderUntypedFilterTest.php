@@ -35,11 +35,9 @@ use Workbench\App\Http\Controllers\AppFilteredListController;
 use Workbench\App\Http\Requests\FilterBoundsRequest;
 
 /**
- * `query-builder.untyped-filter` says the document publishes a filter with no type at all, so what it
- * has to read is the parameter as it FINALLY stands — the kind alone is a claim about one producer,
- * made at the integration rung with a validation rule, a docblock and an attribute still to land on the
- * same parameter. A report the author cannot clear (the type the help asks for, already applied) is the
- * failure this guards: it teaches them to skip the channel, and the filters nothing typed go with it.
+ * `query-builder.untyped-filter` says the document publishes a filter with no type at all, so it has to
+ * read the parameter as it FINALLY stands (docs/design/defect-classes.md §"A diagnostic that asserts an
+ * outcome it never reads"). A report the author cannot clear is the failure this guards.
  */
 function untypedFilterChain(): string
 {
@@ -51,9 +49,8 @@ function untypedFilterChain(): string
 }
 
 /**
- * The parameters and the untyped-filter reports the QB passes leave behind, with the layers that sit
- * between them in their real order: the parameter attributes behind the integration, then the two
- * finalize passes — the subtractive one first, this report last.
+ * The parameters and reports the QB passes leave behind, with the layers between them in their real
+ * order: parameter attributes behind the integration, then the two finalize passes, subtractive first.
  *
  * @param  list<object>  $attributes
  * @param  array<string, mixed>  $representation
@@ -94,8 +91,7 @@ it('reports the filter the document publishes untyped, and not the one an attrib
         new QueryParameter('filter[named]', type: 'string'),
     ]);
 
-    // The attribute is the very fix the help asks for, on the same action — so a report naming this
-    // filter would be one no edit could clear.
+    // The attribute is the very fix the help asks for, so a report here is one no edit could clear.
     expect($byName['filter[named]']['schema']['type'])->toBe('string')
         ->and($byName['filter[named]']['schema']['x-docuccino']['provenance'][0]['producer'])->toBe('attribute')
         ->and($reported)->toHaveCount(1)
@@ -157,25 +153,14 @@ function registerAppFilteredRoute(): void
                 new SourceLocation(''),
             )]),
         ],
-        traceOverrides: [$action => TraceScript::forChain(<<<'PHP'
-            QueryBuilder::for(\Workbench\App\Models\Gadget::class)->allowedFilters([
-                AllowedFilter::callback('search', static function (Builder $query, mixed $value): void {
-                    $query->where(static function (Builder $inner) use ($value): void {
-                        $inner->where('name', 'like', '%'.$value.'%')
-                            ->orWhere('status', 'like', '%'.$value.'%');
-                    });
-                }),
-                AllowedFilter::callback('label', static function (Builder $query, mixed $value): void {
-                    $query->whereHas('maker', static function (Builder $maker) use ($value): void {
-                        $maker->where('name', $value);
-                    });
-                }),
-                AllowedFilter::callback('min_days', static function (Builder $query, mixed $value): void {
-                    $query->whereDate('starts_at', '>=', now()->subDays((int) $value))
-                        ->orderByDesc('starts_at');
-                }),
-            ])->paginate(20)
-            PHP)],
+        // Read out of the controller's real file rather than copied here: a chain written twice leaves
+        // the suite green against the copy when somebody edits the application.
+        traceOverrides: [$action => TraceScript::forMethod(
+            (string) (new ReflectionClass(AppFilteredListController::class))->getFileName(),
+            AppFilteredListController::class,
+            'index',
+            receiverFqcn: 'Spatie\\QueryBuilder\\QueryBuilder',
+        )],
     ));
 
     /** @var Router $router */
@@ -184,46 +169,26 @@ function registerAppFilteredRoute(): void
 }
 
 /**
- * That route as the whole pipeline builds it, so the phases run in the order the registry puts them in.
+ * What this route PUBLISHES — the three schemas and the one report, severity and help included — is
+ * byte-locked in `workbench-app-filtered.uir.json` and its diagnostics pair, so it is not restated here.
+ * What a route-restricted golden build cannot show is that the report does not LEAK: the default
+ * workbench routes carry another Query Builder list with a free-text filter nothing types, and this pass
+ * runs at Finalize over the whole document. So the one fact left is a full build's count for this route.
  */
-function untypedFilterDocument(): array
-{
+it('reports the untyped filter to its own route, in a build carrying another route that has one', function (): void {
     registerAppFilteredRoute();
 
     $result = generateDocument();
-    /** @var list<array<string, mixed>> $parameters */
-    $parameters = $result->document->toArray()['paths']['/api/app-filtered']['get']['parameters'] ?? [];
-
-    $schemas = [];
-    foreach ($parameters as $parameter) {
-        $schemas[(string) $parameter['name']] = $parameter['schema'] ?? null;
-    }
-
-    // This route's own reports: the default workbench routes include another Query Builder list whose
-    // free-text filter nothing types, and it is not what this is about.
-    $reports = array_values(array_filter(
-        diagnosticsCoded($result->diagnostics, 'query-builder.untyped-filter'),
+    $all = diagnosticsCoded($result->diagnostics, 'query-builder.untyped-filter');
+    $mine = array_values(array_filter(
+        $all,
         static fn ($diagnostic): bool => str_contains((string) $diagnostic->routeSignature, 'api/app-filtered'),
     ));
 
-    return [$schemas, $reports];
-}
-
-it('reports only the filter the finished document leaves untyped, whichever layer typed the others', function (): void {
-    [$schemas, $reports] = untypedFilterDocument();
-
-    // Anti-vacuity: all three filters are published, and two of them carry a type that can only have
-    // come from a layer running behind the integration.
-    expect($schemas)->toHaveKeys(['filter[search]', 'filter[label]', 'filter[min_days]'])
-        ->and($schemas['filter[label]']['type'])->toBe('string')
-        ->and($schemas['filter[min_days]']['type'])->toBe('integer')
-        ->and($schemas['filter[min_days]']['maximum'])->toBe(90)
-        ->and($schemas['filter[search]'])->toBe([]);
-
-    expect($reports)->toHaveCount(1)
-        ->and($reports[0]->message)->toContain('"search"')
-        ->and($reports[0]->severity)->toBe(Severity::Info)
-        ->and($reports[0]->help)->toContain('#[QueryParameter(');
+    // Anti-vacuity: the other route really did report one too, or this proves no isolation at all.
+    expect($all)->toHaveCount(2)
+        ->and($mine)->toHaveCount(1)
+        ->and($mine[0]->message)->toContain('"search"');
 });
 
 /**
