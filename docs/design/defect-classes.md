@@ -40,8 +40,13 @@ producer holds, never by preference:
 
 - **Read the outcome.** Record the candidate while the producing pass runs, and report from a
   `Finalize` pass that reads the node as it finally stands (`QueryBuilderUntypedFilterExtension`).
-  Needs a key to look the node up by, and a single reading of *where* that producer publishes
-  (`QueryBuilderParameters::filterTarget()`), or a report lands on a node nobody wrote.
+  It needs somewhere to look, and the address is the PUBLISHER's to state rather than something both
+  sides re-derive: the note carries where the value was actually written. The first attempt had the
+  two passes compute one address from one shared helper, which is the same defect one layer down —
+  and it fails in the worst direction, because a report addressed at a node nobody wrote finds
+  nothing and stays SILENT. It survived its own review: at the package's default parameter names
+  both computations agree, so every test and every golden passed, and only a build under renamed
+  config showed the report vanishing.
 - **Consult the layer that could answer.** Cheaper and correct where exactly one later producer
   exists, and the repo already did this in four places before the class was named —
   `PathParametersExtension::declaresType()`, `RecoveredRequest::declaredOn()`,
