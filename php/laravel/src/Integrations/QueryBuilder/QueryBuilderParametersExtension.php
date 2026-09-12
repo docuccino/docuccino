@@ -397,13 +397,23 @@ final class QueryBuilderParametersExtension implements OperationExtension
         }
     }
 
+    /**
+     * An allow-list entry the fold could not read, named by its call site — which is all there is to name
+     * it by, since the expression that would have given it a name is the one that did not fold.
+     *
+     * So the claim is about the RECOVERY and not about the finished document: with no name there is
+     * nothing to look the outcome up by, and what is lost differs per list anyway — a filter's whole
+     * parameter, a sort/include/fields value that would have been one enum member of a parameter still
+     * published. What holds either way is that nothing this entry declares reached the allow-list read
+     * off the chain, and that stays true however the author documents the endpoint by hand.
+     */
     private function reportUnresolved(QueryBuilderFacts $facts, RouteContext $context): void
     {
         foreach ($facts->unresolved as $expression) {
             $context->components->addDiagnostic(new Diagnostic(
                 severity: Severity::Warning,
                 code: 'query-builder.unresolved-entry',
-                message: sprintf('Could not statically resolve a Query Builder allow-list entry (%s); it is omitted from the docs.', $expression),
+                message: sprintf('Could not statically resolve a Query Builder allow-list entry (%s), so nothing it declares is in the allow-list recovered from the chain.', $expression),
                 routeSignature: $context->route->signature(),
                 help: 'Use a literal value or a factory call (e.g. AllowedFilter::exact(\'status\')) so it can be recovered.',
             ));
