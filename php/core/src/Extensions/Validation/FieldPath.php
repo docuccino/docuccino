@@ -11,6 +11,11 @@ namespace Docuccino\Core\Extensions\Validation;
  * validation keys — and once one reader of a body path folds an escape, every reader of a body path
  * has to, or the same string means two things depending on who read it.
  *
+ * The same path has a second spelling in a query string, where a nested name rides as brackets:
+ * {@see toQueryName()} writes it and {@see fromQueryName()} reads it back. Both live here so the
+ * writer and the reader of that spelling cannot drift — a guard matching a declared parameter name
+ * against a validation key has to recognise exactly the names the write produced.
+ *
  * Not to be confused with the adapter's `Integrations\Support\FieldPaths`, which asks what a SET of
  * recovered rule keys says about one field's container. This is the split itself.
  */
@@ -60,6 +65,39 @@ final class FieldPath
     public static function isWellFormed(string $path): bool
     {
         return ! in_array('', self::segments($path), true);
+    }
+
+    /**
+     * The bracketed name a path takes in a query string: `filter.radius_lat` rides as
+     * `filter[radius_lat]`, and a top-level field is its own name. Escapes are already folded — the
+     * segments are the names themselves — because brackets, not dots, separate them on the wire.
+     *
+     * @param  non-empty-list<string>  $segments
+     */
+    public static function toQueryName(array $segments): string
+    {
+        $name = array_shift($segments);
+
+        foreach ($segments as $segment) {
+            $name .= '['.$segment.']';
+        }
+
+        return $name;
+    }
+
+    /**
+     * The path a bracketed query name points at — {@see toQueryName()} read backwards. A dot inside a
+     * segment is the name's own, so it comes back escaped: the wire spelling has no separator to
+     * confuse it with, and the path grammar does.
+     */
+    public static function fromQueryName(string $name): string
+    {
+        $segments = preg_split('/\]\[|\[|\]$/', $name) ?: [$name];
+
+        return implode('.', array_map(
+            static fn (string $segment): string => str_replace('.', '\\.', $segment),
+            array_values(array_filter($segments, static fn (string $segment): bool => $segment !== '')),
+        ));
     }
 
     /**

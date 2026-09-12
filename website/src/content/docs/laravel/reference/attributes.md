@@ -206,6 +206,12 @@ parameter an integration already proved required stays required. That is why the
 a declaration written to document a `type:` must not quietly de-require a parameter the server insists
 on, which would publish a contract a generated client can build a rejected request from.
 
+Validation rules on a read verb become query parameters, so a `#[QueryParameter]` answers for a field
+whose rules the build cannot read statically the way a [`#[BodyParameter]`](#bodyparameter) does for a
+body: name the parameter and
+[`validation.rule-unrecoverable`](/laravel/reference/diagnostics/#responses-recovered-from-your-code)
+stops naming it. One parameter per name, so the declaration answers for the name it states and no other.
+
 A bracketed `name` (`filter[status]`) patches a flat `filter[status]` parameter, or — when the
 document uses the `deepObject` filter style — the `status` property of the `filter` object parameter.
 The same attribute works in either representation. Placed on a **Spatie Query Builder custom filter
@@ -318,9 +324,12 @@ required stays required. That is why the argument is `?bool` — a declaration w
 
 A declaration also answers for the field in the diagnostics. A field whose rules the build cannot read
 statically is reported as omitted from the request schema — and where a `#[BodyParameter]` names that
-field, or a key inside it, the field is documented and the notice stops naming it. See
+field, a key inside it, or the container above it, the field is the declaration's and the notice stops
+naming it. See
 [`validation.rule-unrecoverable`](/laravel/reference/diagnostics/#responses-recovered-from-your-code)
-and `validation.rule-values-unread`, which stands down the same way.
+and `validation.rule-values-unread`, which stands down the same way. On a read verb the same rules
+become query parameters rather than a body, so there it is a [`#[QueryParameter]`](#queryparameter) that
+answers — a `#[BodyParameter]` patches a body the operation does not have.
 
 Naming a key inside a container also settles what that container is. A bare `array` rule leaves a field
 [undecided](/laravel/documenting/requests/#nested-and-array-fields) — Laravel has one word for both shapes —

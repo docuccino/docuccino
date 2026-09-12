@@ -83,6 +83,7 @@ use Docuccino\Laravel\Tests\Fixtures\SpatieData\NestedWrapItemData;
 use Docuccino\Laravel\Tests\Support\BuildSettings;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\FragmentCacheDirs;
+use Docuccino\Laravel\Tests\Support\RulesTraceScript;
 use Docuccino\Laravel\Tests\Support\ScriptedBuildRunner;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Docuccino\Laravel\Tests\TestCase;
@@ -448,6 +449,37 @@ function validationSchema(RuleSet $rules, SchemaConverter $context, bool $normal
     $ordered = (new RuleOrdering)->order($normalize ? (new RuleSetNormalizer)->normalize($rules) : $rules);
 
     return (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, $context)->schema;
+}
+
+/**
+ * A route context for the validation recoverers and the notes they raise: the rules arrays `$traces`
+ * scripts onto the stub engine, the parameter declarations the action carries, and the verb that decides
+ * whether those rules become a request body or query parameters.
+ *
+ * One builder for every suite that measures a validation note, because the reading those notes share —
+ * what the author already declared, at the layer the rules actually reach — is the thing under test, and
+ * a second builder is where one suite's cases quietly stop being the other's.
+ *
+ * @param  array<string, string>  $traces  `Class::method` → the PHP its visitor walks
+ * @param  list<object>  $declarations  the attributes on the action
+ */
+function validationRulesContext(array $traces = [], array $declarations = [], string $verb = 'POST', ?string $formRequestClass = null): RouteContext
+{
+    return new RouteContext(
+        route: new RouteDescriptor([$verb], 'api/listings'),
+        actionRef: new ActionRef('', 'App\\ListingController', 'store'),
+        attributes: new AttributeSet($declarations),
+        engine: new StubTypeEngine(traces: array_map(
+            static fn (string $php): callable => RulesTraceScript::forPhp($php),
+            $traces,
+        )),
+        document: new DocumentConfig('default', []),
+        extensions: new ResolvedExtensions(
+            typeToSchema: DefaultTypeMappers::all(),
+            ruleTransformers: ValidationIntegration::transformers(),
+        ),
+        formRequestClass: $formRequestClass,
+    );
 }
 
 /**
