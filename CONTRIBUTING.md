@@ -20,7 +20,7 @@ Pull requests whose commits are not signed off will not be merged.
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/), scoped to a
 package or area: `feat(laravel): …`, `fix(core): …`, `refactor(inference-phpstan): …`,
-`docs(website): …`, `chore(repo): …`. Do **not** add `Co-Authored-By` trailers.
+`docs(website): …`, `chore(repo): …`. `Co-Authored-By` trailers are in use; see CLAUDE.md.
 
 Pull requests are **squash-merged, and the squash subject is the pull request title** — so the title,
 not your individual commits, is the message that lands on `main`, and the only thing the changelog
