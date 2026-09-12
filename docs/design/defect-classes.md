@@ -88,6 +88,18 @@ spatie-data wrap and mapper notices; and the two branches of `config.format-samp
 spoke for the field. The config-side branch of that last code kept its wording — it reports a setting
 being ignored, which is its own act rather than a node somebody else may still write.
 
+Three more followed, and the last one shows why the outcome has to be reproduced rather than reasoned
+about. `query-builder.legacy-package-version` claimed the sort/include/fields lists were "documented as
+plain strings" while an `in:` rule in a form request publishes an enum over any of the three.
+`eloquent.custom-date-serialization` claimed, at its path-segment site, that "the parameter is documented
+as a plain string" — and a build proved the document publishing `format: date-time` on that very
+parameter from a `#[PathParameter]`, with the notice still speaking. Its HELP was the worse half: "no
+annotation puts one back" was written for a response column, where it is true, and carried to a path
+segment, where the attribute it denies is the one remedy. The model-schema site says the same thing
+about a component nothing but an overlay can answer for, and it moved too — one code may not speak in
+two voices depending on which site raised it. What did NOT move is `eloquent.no-columns` beside it:
+that one is asserted against the FINISHED property set, which is the first fix, not this defect.
+
 ## A subtraction leaves no evidence
 
 An **additive** declaration that reaches nothing shows up as an absent node — you can see it missing.

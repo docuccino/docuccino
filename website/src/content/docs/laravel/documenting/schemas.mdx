@@ -189,19 +189,21 @@ return type, a webhook payload. A date class that states its own JSON form is do
 string it sends, not as the object its properties would reflect into.
 
 **Custom date serialization.** A model that overrides `serializeDate()` chooses its own wire format for
-every date attribute, which can't be known statically — so its date and datetime columns are documented
-as a plain `string` (no `format`), with an info diagnostic noting the format is unknowable. That covers
+every date attribute, which can't be known statically — so the shape recovered for its date and datetime
+columns is a plain `string` (no `format`), with an info diagnostic noting the format is unknowable. That covers
 every date column the model has, a `@property`-tagged one included, and a path parameter bound on one
 (`/journals/{journal:filed_on}`) drops its `format` the same way and is reported against its route.
 
 The notice follows the document, not the method: an override normally lives on a base model every class
 extends, and a subclass that publishes no date attribute — none at all, or only hidden ones — is not
 reported. Nor is a column an accessor publishes instead of the override, since Laravel sends a mutated
-attribute exactly as the accessor returned it. Nothing you can annotate puts the `format` back — no
-attribute carries one for a column, and a docblock type has no format to state — so if your clients need
-an exact one, state it in an
-[overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice). That corrects the document;
-the notice keeps naming what lost the format.
+attribute exactly as the accessor returned it. Nothing puts a COLUMN's `format` back — no attribute
+carries one for a column, and a docblock type has no format to state — so if your clients need an exact
+one for a response column, state it in an
+[overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice). A bound path segment is the
+one place an annotation reaches: name it in a
+[`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) with a `format:`. Either way the
+notice keeps naming what could not state the format.
 
 ## Enums
 

@@ -86,8 +86,13 @@ final class EloquentRouteBindingSchema implements RouteBindingFieldSchemaResolve
     /**
      * A path segment is the other place a model's date attribute reaches the document, so it is the
      * other place the `serializeDate()` override can take a `format` away ({@see DateColumnSchema}).
-     * Named per parameter rather than per model: a reader correcting this one overlays the parameter,
-     * not the component.
+     * Named per parameter rather than per model: a reader correcting this one states the parameter, not
+     * the component.
+     *
+     * What it reports is the shape the column read came back with. The parameter itself is written a
+     * whole extension later and `#[PathParameter]` carries a `format:`, so a claim about the published
+     * parameter would be false for the reader who declared one
+     * (docs/design/defect-classes.md §"A diagnostic that asserts an outcome it never reads").
      */
     private function reportWeakenedDate(RouteContext $context, string $modelFqcn, string $field): void
     {
@@ -95,12 +100,12 @@ final class EloquentRouteBindingSchema implements RouteBindingFieldSchemaResolve
             severity: Severity::Info,
             code: 'eloquent.custom-date-serialization',
             message: sprintf(
-                'The parameter binds on %s::$%s, a date attribute of a model that overrides serializeDate(), so its wire format is not statically known; the parameter is documented as a plain string.',
+                'The parameter binds on %s::$%s, a date attribute of a model that overrides serializeDate(), so its wire format is not statically known and the shape recovered for the segment is a string with no format.',
                 $modelFqcn,
                 $field,
             ),
             routeSignature: $context->route->signature($context->httpMethod()),
-            help: 'The parameter is documented as `type: string` without a `format`, and no annotation puts one back: no attribute carries a column format, and a docblock type has no format to state. If clients need an exact one, state it in an overlay, which corrects the document and leaves this notice naming the parameter.',
+            help: 'Nothing recovers the format: no attribute carries a column format, and a docblock type has no format to state. If clients need an exact one, name the segment in a #[PathParameter] on the action and give it a `format:`, or state the parameter in an overlay — either publishes the format, and this notice keeps naming the column that could not state it.',
         ));
     }
 }

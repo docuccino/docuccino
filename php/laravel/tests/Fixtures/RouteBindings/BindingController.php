@@ -59,6 +59,13 @@ final class BindingController
         return [];
     }
 
+    /** The same weakened date column, with the segment's format declared on the action instead. */
+    #[PathParameter('daybook', type: 'string', format: 'date-time')]
+    public function pinnedDaybook(Daybook $daybook): array
+    {
+        return [];
+    }
+
     public function post(Post $post): array
     {
         return [];
