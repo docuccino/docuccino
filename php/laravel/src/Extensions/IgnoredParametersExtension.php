@@ -14,6 +14,7 @@ use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
+use Docuccino\Core\Extensions\Validation\DeepObjectMembers;
 use Docuccino\Laravel\Support\ParameterLocations;
 use Docuccino\Laravel\Support\UnmatchedDeclaration;
 
@@ -25,6 +26,12 @@ use Docuccino\Laravel\Support\UnmatchedDeclaration;
  *
  * It sits ahead of the example pass inside Finalize, so an `#[Example(parameter: …)]` naming something
  * this dropped reports a missing target rather than illustrating a parameter the document no longer has.
+ *
+ * A bracketed name (`#[IgnoreParam(name: 'filter[opaque]')]`) drops the matching member of a deepObject
+ * container where that representation publishes one, so the two filter representations honour the same
+ * declaration. Which container a bracketed name belongs to is {@see DeepObjectMembers}'s reading, shared
+ * with the producers that write those members, so a name cannot be a member for one and a parameter for
+ * the other.
  */
 #[ExtensionOrder(priority: Priorities::FIRST)]
 final class IgnoredParametersExtension implements OperationExtension
@@ -36,23 +43,45 @@ final class IgnoredParametersExtension implements OperationExtension
 
     public function handle(OperationDraft $operation, RouteContext $context): void
     {
-        // Which declarations matched is decided against the parameters standing BEFORE any removal, so
-        // two that name one parameter — a controller's and the action's own, or one spelling `in:` and
-        // one leaving it off — both count as having done their job. Judging the second against what the
-        // first left would report it as reaching nothing, which is the opposite of true.
-        $present = $operation->parameterKeys();
+        $members = new DeepObjectMembers($operation);
 
-        /** @var list<IgnoreParam> $unmatched */
-        $unmatched = [];
+        // Which declarations matched is decided against what stands BEFORE any removal, so two that name
+        // one address — a controller's and the action's own, or one spelling `in:` and one leaving it off
+        // — both count as having done their job. Judging the second against what the first left would
+        // report it as reaching nothing, which is the opposite of true. That is why the judging and the
+        // removing are two passes rather than one: a member removed mid-loop is a member the next
+        // declaration would be told was never published.
+        $present = $operation->parameterKeys();
+        $presentMembers = $members->memberNames();
+
+        /** @var list<array{0: IgnoreParam, 1: list<string>, 2: bool}> $judged */
+        $judged = [];
 
         foreach ($context->attributes->all(IgnoreParam::class) as $ignore) {
             // Asked once: it reports an `in:` that names no location, and asking twice would say so twice.
             $locations = $this->locations($context, $ignore);
-            $matched = false;
+            $matched = in_array('query', $locations, true) && in_array($ignore->name, $presentMembers, true);
 
             foreach ($locations as $location) {
                 $matched = $matched || in_array(ParameterDraft::keyFor($location, $ignore->name), $present, true);
+            }
+
+            $judged[] = [$ignore, $locations, $matched];
+        }
+
+        /** @var list<IgnoreParam> $unmatched */
+        $unmatched = [];
+
+        foreach ($judged as [$ignore, $locations, $matched]) {
+            foreach ($locations as $location) {
                 $operation->removeParameter($location, $ignore->name);
+            }
+
+            // A bracketed name is a MEMBER of the container it names wherever a deepObject representation
+            // publishes one, so the same declaration has to reach it there — dropping the container
+            // instead would take away every other filter the author kept.
+            if (in_array('query', $locations, true)) {
+                $members->remove($ignore->name);
             }
 
             // An `in:` naming no location has already been reported as exactly that; adding "and the
@@ -62,7 +91,29 @@ final class IgnoredParametersExtension implements OperationExtension
             }
         }
 
-        $this->reportUnmatched($context, $unmatched, $operation->parameterKeys());
+        $this->reportUnmatched($context, $unmatched, $this->published($operation, $members));
+    }
+
+    /**
+     * What the operation is left documenting, as the addresses a declaration can name: every parameter
+     * key, and every member of a deepObject container under the bracketed name that drops it. The
+     * members are the half a bracketed typo needs — answered with the container alone, the reader is
+     * handed back the one address they already tried — and they are what the other representation
+     * already answers, where each member IS a parameter of its own.
+     *
+     * @return list<string>
+     */
+    private function published(OperationDraft $operation, DeepObjectMembers $members): array
+    {
+        $keys = $operation->parameterKeys();
+
+        foreach ($members->memberNames() as $member) {
+            $keys[] = ParameterDraft::keyFor('query', $member);
+        }
+
+        sort($keys, SORT_STRING);
+
+        return $keys;
     }
 
     /**

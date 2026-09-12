@@ -6,6 +6,7 @@ use Docuccino\Attributes\IgnoreParam;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Extensions\Context\AttributeSet;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\RouteContext;
@@ -26,7 +27,9 @@ use Docuccino\Laravel\Support\ParameterLocations;
 use Docuccino\Laravel\Tests\Support\TraceScript;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
+use Workbench\App\Http\Controllers\IgnoredMembersController;
 use Workbench\App\Http\Controllers\IgnoredParamsController;
+use Workbench\App\Http\Requests\FilterWindowRequest;
 
 /**
  * `#[IgnoreParam]` is subtractive, so what it has to survive is every producer that could write the
@@ -276,4 +279,171 @@ it('escapes the two values it did not write into the location report', function 
         ->and($reports[0]->message)->not->toContain("\x07")
         ->and($reports[0]->message)->toContain('\x1B')
         ->and($reports[0]->message)->toContain('\x07');
+});
+
+/*
+ * The representation that publishes a filter surface as ONE object parameter. A bracketed
+ * `#[IgnoreParam]` names a MEMBER of that object there, not a parameter of its own, so a pass that only
+ * removed parameters dropped nothing and published the field the author marked as not-for-publication —
+ * a subtraction leaving no evidence, in the one place the author cannot see it happen.
+ */
+
+/**
+ * The two deepObject routes as the whole pipeline builds them: a Query Builder list whose filters are
+ * the container's members, with the application's own rules requiring one member and nesting two below
+ * another. Registered ad-hoc, so no committed golden churns.
+ */
+function ignoredMembersDocument(): GenerationResult
+{
+    $location = new SourceLocation('');
+    $controller = IgnoredMembersController::class.'::';
+
+    // rules() as the engine recovers it — the constant array the class really returns.
+    $rules = new ArrayShapeT([
+        new ArrayShapeField('filter.opaque', new LiteralT('required|string|max:40')),
+        new ArrayShapeField('filter.window.from', new LiteralT('date')),
+        new ArrayShapeField('filter.window.to', new LiteralT('date')),
+    ]);
+
+    $chain = <<<'PHP'
+        QueryBuilder::for(\Workbench\App\Models\Gadget::class)->allowedFilters([
+            AllowedFilter::exact('status'),
+            AllowedFilter::callback('opaque', static function (Builder $query, mixed $value): void {
+                $query->whereRaw('1 = 1');
+            }),
+            AllowedFilter::callback('window', static function (Builder $query, mixed $value): void {
+                $query->whereBetween('starts_at', (array) $value);
+            }),
+        ])->paginate(20)
+        PHP;
+
+    app()->instance(TypeEngine::class, WorkbenchEngine::make(
+        analysisOverrides: [
+            FilterWindowRequest::class.'::rules' => new ActionAnalysis(
+                returns: [new ReturnSite($rules, $location)],
+            ),
+        ],
+        traceOverrides: [
+            $controller.'members' => TraceScript::forChain($chain),
+            $controller.'typo' => TraceScript::forChain($chain),
+            $controller.'repeated' => TraceScript::forChain($chain),
+        ],
+    ));
+
+    /** @var Router $router */
+    $router = app('router');
+    $router->get('api/ignored-members/list', [IgnoredMembersController::class, 'members']);
+    $router->get('api/ignored-members/typo', [IgnoredMembersController::class, 'typo']);
+    $router->get('api/ignored-members/repeated', [IgnoredMembersController::class, 'repeated']);
+
+    setBuild('documents.default.representation.filters', 'deepObject');
+
+    return generateDocument(static function (array $raw): array {
+        $raw['info'] = ['title' => 'Ignored members API', 'version' => '1.0.0'];
+        $raw['routes'] = ['include' => ['api/ignored-members/*']];
+
+        return $raw;
+    });
+}
+
+/**
+ * One deepObject route's `filter` container, as the document publishes it.
+ *
+ * @return array<string, mixed>
+ */
+function ignoredMembersContainer(GenerationResult $result, string $path): array
+{
+    $document = $result->document->toArray();
+    /** @var list<array<string, mixed>> $parameters */
+    $parameters = $document['paths'][$path]['get']['parameters'] ?? [];
+
+    foreach ($parameters as $parameter) {
+        if (($parameter['name'] ?? null) === 'filter') {
+            return $parameter;
+        }
+    }
+
+    return [];
+}
+
+it('drops the member a bracketed ignore names, and keeps the ones it does not', function (): void {
+    $container = ignoredMembersContainer(ignoredMembersDocument(), '/api/ignored-members/list');
+
+    // Anti-vacuity: the container really is the one object parameter this representation publishes, and
+    // the members the author kept are still in it — so this is the removal and not a producer that
+    // stopped running.
+    expect($container['style'])->toBe('deepObject')
+        ->and(array_keys($container['schema']['properties']))->toBe(['status', 'window']);
+});
+
+it('takes the dropped member off the container`s required list, and off the container', function (): void {
+    $container = ignoredMembersContainer(ignoredMembersDocument(), '/api/ignored-members/list');
+
+    // `filter.opaque` is `required` in the application's rules, so the container required it and was
+    // itself required because of it. Both statements were ABOUT the dropped member: a required list
+    // naming a member nobody publishes tells a consumer their request must carry a value the document
+    // does not describe, and a generated client then demands a field it cannot name.
+    expect($container['schema'])->not->toHaveKey('required')
+        ->and($container['required'])->toBeFalse();
+});
+
+it('reaches a member nested below another', function (): void {
+    $container = ignoredMembersContainer(ignoredMembersDocument(), '/api/ignored-members/list');
+
+    $window = $container['schema']['properties']['window'];
+
+    // The sibling bound is untouched, so the removal is addressed at the leaf and not at its parent.
+    expect(array_keys($window['properties']))->toBe(['to'])
+        ->and($window['properties']['to']['format'])->toBe('date');
+});
+
+it('reports a bracketed name no member matches, and names the members beside the parameters', function (): void {
+    $result = ignoredMembersDocument();
+    $reports = ignoreParamUnmatched($result, '/api/ignored-members/typo');
+
+    expect($reports)->toHaveCount(1)
+        ->and($reports[0]->severity)->toBe(Severity::Warning)
+        ->and($reports[0]->message)->toContain('"filter[opaqu]"')
+        // The remedy has to carry the member spelling. Answered with `query:filter` alone, the reader is
+        // handed back the one address they already tried, a character away from the one that works —
+        // and it is what the bracketed representation already answers, where each member IS a parameter.
+        ->and($reports[0]->message)->toContain('query:filter[opaque]')
+        ->and($reports[0]->message)->toContain('query:filter[window][from]');
+
+    // Nothing was dropped, which is what the report says: the filter the author meant to hide is
+    // published, and that is the whole reason this declaration is not left silent.
+    expect(array_keys(ignoredMembersContainer($result, '/api/ignored-members/typo')['schema']['properties']))
+        ->toBe(['status', 'opaque', 'window']);
+});
+
+it('says nothing where a bracketed ignore reached a member', function (string $path): void {
+    $result = ignoredMembersDocument();
+
+    // Anti-vacuity: the build did raise this code on the route next door, so an empty haystack is not
+    // what proves it.
+    expect(ignoreParamUnmatched($result, '/api/ignored-members/typo'))->not->toBeEmpty()
+        ->and(ignoreParamUnmatched($result, $path))->toBe([]);
+})->with([
+    'a name that matched' => ['/api/ignored-members/list'],
+    // Two declarations naming ONE member, in two spellings that do not dedupe. The second is judged
+    // against what stood before the first removed anything, or it reports the member the first had just
+    // taken away as one that was never published.
+    'the same member named twice, two ways' => ['/api/ignored-members/repeated'],
+]);
+
+/**
+ * The artifact: the document a consumer receives for a filter surface an author subtracted from, in
+ * bytes. A member creeping back into the container, a `required` list naming one that is gone, or a
+ * container that claims to be required because of one, each moves these files — so a change to what
+ * this representation publishes has something to be false about. Restricted to the two routes, so no
+ * committed golden churns.
+ */
+it('emits the subtracted deepObject container and its diagnostics byte-identically', function (): void {
+    $result = ignoredMembersDocument();
+
+    assertGolden('workbench-ignored-members.uir.json', (new UirEmitter)->emit($result->document));
+    assertGolden(
+        'workbench-ignored-members.diagnostics.json',
+        json_encode(diagnosticRecords($result->diagnostics), JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n",
+    );
 });

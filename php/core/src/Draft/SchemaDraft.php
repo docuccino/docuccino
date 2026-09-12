@@ -6,6 +6,7 @@ namespace Docuccino\Core\Draft;
 
 use Docuccino\Core\Document\NodeExtension;
 use Docuccino\Core\Document\SchemaObject;
+use Docuccino\Core\Extensions\Validation\DeepObjectMembers;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\PatchGuard;
 use Docuccino\Core\Patch\PatchResult;
@@ -24,6 +25,13 @@ final class SchemaDraft
      * @var array<string, SchemaDraft>
      */
     private array $properties = [];
+
+    /**
+     * Member names a subtraction took off this schema ({@see removeProperty()}).
+     *
+     * @var list<string>
+     */
+    private array $removed = [];
 
     private ?string $id = null;
 
@@ -94,6 +102,61 @@ final class SchemaDraft
     public function hasProperty(string $name): bool
     {
         return isset($this->properties[$name]);
+    }
+
+    /**
+     * The member names this schema will publish, in the order {@see freeze()} publishes them: the nested
+     * property drafts where there are any, and otherwise the keys of a `properties` written whole as a
+     * keyword. One reading rather than two, because whoever asks whether a name is a member of this
+     * object and `freeze()` deciding what the object says about that name have to agree — a reader that
+     * saw only the drafts would answer "no member" for a declared shape and leave a subtraction with
+     * nothing to take away.
+     *
+     * @internal Core-only. A name is a member of a CONTAINER and this class cannot see which parameter
+     * it belongs to, so an extension asks {@see DeepObjectMembers}
+     * instead.
+     *
+     * @return list<string>
+     */
+    public function propertyNames(): array
+    {
+        $resolved = $this->resolvedField('properties');
+        $names = $this->properties !== []
+            ? array_keys($this->properties)
+            : array_keys(is_array($resolved) ? $resolved : []);
+
+        return array_values(array_diff(array_map(strval(...), $names), $this->removed));
+    }
+
+    /**
+     * Take one member off this schema: it is not published, and the `required` list does not name it.
+     * Answers whether the schema published the name, which is the caller's evidence that a subtraction
+     * reached something — a member that was never there and one that was dropped leave the same object.
+     *
+     * **A subtraction is not a contribution.** It is applied at {@see freeze()} rather than written
+     * through the guard, so nothing outranks it — the unconditional reading
+     * {@see OperationDraft::removeParameter()} already makes of a whole parameter, for the same reason:
+     * an author's "do not publish this" that a later layer could quietly overrule leaves the very field
+     * they marked as not-for-publication in the document.
+     *
+     * The `required` list travels with it because that list belongs to the PARENT rather than to the
+     * member, so this is the only place both are in view. One naming a member nobody publishes tells a
+     * consumer their request must carry a value the document does not describe, and a generated client
+     * then demands a field it cannot name.
+     *
+     * @internal Core-only — see {@see propertyNames()}.
+     */
+    public function removeProperty(string $name): bool
+    {
+        $published = in_array($name, $this->propertyNames(), true);
+
+        unset($this->properties[$name]);
+
+        if (! in_array($name, $this->removed, true)) {
+            $this->removed[] = $name;
+        }
+
+        return $published;
     }
 
     /**
@@ -215,6 +278,10 @@ final class SchemaDraft
             $data['properties'] = $properties;
         }
 
+        if ($this->removed !== []) {
+            $data = self::without($data, $this->removed);
+        }
+
         $docuccino = new NodeExtension(
             id: $this->id,
             provenance: $this->guard->provenance(),
@@ -226,5 +293,44 @@ final class SchemaDraft
         }
 
         return new SchemaObject($data);
+    }
+
+    /**
+     * `$data` with every subtracted member gone from `properties` and from `required`, each keyword
+     * omitted once nothing is left in it: an empty `required` states nothing, and every producer of that
+     * list already omits it rather than publishing the shape.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  list<string>  $removed
+     * @return array<string, mixed>
+     */
+    private static function without(array $data, array $removed): array
+    {
+        $properties = $data['properties'] ?? null;
+        if (is_array($properties)) {
+            foreach ($removed as $name) {
+                unset($properties[$name]);
+            }
+
+            $data['properties'] = $properties;
+            if ($properties === []) {
+                unset($data['properties']);
+            }
+        }
+
+        $required = $data['required'] ?? null;
+        if (is_array($required)) {
+            $kept = array_values(array_filter(
+                $required,
+                static fn (mixed $each): bool => ! in_array($each, $removed, true),
+            ));
+
+            $data['required'] = $kept;
+            if ($kept === []) {
+                unset($data['required']);
+            }
+        }
+
+        return $data;
     }
 }
