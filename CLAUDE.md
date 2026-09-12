@@ -116,7 +116,11 @@ it prevents.
   of that surface is partial — one entry of a rule whose values could not be read, one allow-list
   member behind an expression that would not fold — widen the whole parameter to a string with a
   diagnostic rather than publish the short enum.
-- **Conventional commits** (`feat(laravel): …`, `fix(core): …`), NO Co-Authored-By trailers.
+- **Conventional commits** (`feat(laravel): …`, `fix(core): …`). `Co-Authored-By` trailers are in
+  use — 20 of the last 50 commits on `main` carry one, releases included — where this line once
+  forbade them. A rule the history contradicts spends a reader's trust in every other rule here, so
+  it says what the repository does; if the intent was the opposite, the history and the tooling are
+  what need fixing.
   Merges are **squash-only and the PR title is the message that lands**, so the title is gated
   (`.github/workflows/pr-title.yml` → `tools/pr-title-lint.php`): a conventional type, an optional
   `!` that must be paired with a `BREAKING CHANGE:` body footer (both halves, or neither), and a
