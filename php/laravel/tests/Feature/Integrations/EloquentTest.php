@@ -603,13 +603,17 @@ it('weakens date claims to plain strings and diagnoses a serializeDate() overrid
         static fn ($d): bool => $d->code === 'eloquent.custom-date-serialization',
     ));
     expect($note[0]->help)->toBe(
-        'The date/datetime columns are recovered as `type: string` without a `format`, and no annotation puts one back: no attribute carries a column format, and a docblock type has no format to state. If clients need an exact one, state it in an overlay, which corrects the document and leaves this notice naming the model.',
+        'Those columns are recovered as `type: string` without a `format`, and no annotation puts one back: no attribute carries a column format, and a docblock type has no format to state. If clients need an exact one, state it in an overlay, which corrects the document and leaves this notice naming the model. A column whose cast names its own format (`datetime:d/m/Y`) is not among them.',
     )
         // Both halves speak for the recovery rather than the finished node — an overlay answers this
         // one, which is the remedy the help itself names
         // (docs/design/defect-classes.md §"A diagnostic that asserts an outcome it never reads").
         ->and($note[0]->message)->toContain('the shapes recovered for them are plain strings with no format.')
-        ->and($note[0]->message)->not->toContain('documented');
+        ->and($note[0]->message)->not->toContain('documented')
+        // The attributes are NAMED. A model can carry both kinds at once, so a sentence claiming "its
+        // date attributes" would be false for a column whose cast writes its own format — which is
+        // what `Metronome` in this suite is. Named, in a pinned order, because the names are published.
+        ->and($note[0]->message)->toContain('(created_at, published_at, updated_at)');
 });
 
 it('raises no date-serialisation notice for a model that publishes no date attribute', function (): void {

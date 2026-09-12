@@ -174,6 +174,9 @@ final class ModelSchema implements TypeToSchema
 
             // An accessor is serialised in place of the column it shadows and never through
             // `serializeDate()`, so a key it retypes is no longer a date the override weakened.
+            // Sorted, because the sentence publishes these names: a report is a function of which
+            // attributes lost a format, never of the order the property walk met them in.
+            sort($weakenedDates);
             $weakenedDates = array_values(array_diff(
                 $weakenedDates,
                 $this->applyAccessors($fqcn, $facts, $properties, $required, $context),
@@ -198,8 +201,11 @@ final class ModelSchema implements TypeToSchema
                 $context->diagnostic(new Diagnostic(
                     severity: Severity::Info,
                     code: 'eloquent.custom-date-serialization',
-                    message: sprintf('Model %s overrides serializeDate(), so its date attributes\' wire format is not statically known and the shapes recovered for them are plain strings with no format.', $fqcn),
-                    help: 'The date/datetime columns are recovered as `type: string` without a `format`, and no annotation puts one back: no attribute carries a column format, and a docblock type has no format to state. If clients need an exact one, state it in an overlay, which corrects the document and leaves this notice naming the model.',
+                    // The attributes are NAMED, not summarised: a model can carry both kinds at once —
+                    // a cast that states its own format is written with it and never reaches the hook —
+                    // so "its date attributes" would claim the loss for columns that kept their format.
+                    message: sprintf('Model %s overrides serializeDate(), so the wire format of the date attributes it serialises through that hook (%s) is not statically known and the shapes recovered for them are plain strings with no format.', $fqcn, implode(', ', $weakenedDates)),
+                    help: 'Those columns are recovered as `type: string` without a `format`, and no annotation puts one back: no attribute carries a column format, and a docblock type has no format to state. If clients need an exact one, state it in an overlay, which corrects the document and leaves this notice naming the model. A column whose cast names its own format (`datetime:d/m/Y`) is not among them.',
                 ));
             }
 
