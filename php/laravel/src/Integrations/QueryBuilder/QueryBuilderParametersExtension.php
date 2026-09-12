@@ -95,7 +95,7 @@ final class QueryBuilderParametersExtension implements OperationExtension
         }
 
         $this->reportUnresolved($facts, $context);
-        $this->reportUntypedFilters($facts, $context);
+        $this->recordUntypedFilters($facts, $context);
         $this->reportNoAllowLists($facts, $context);
         $this->reportDefaultConfig($context);
         $this->reportLegacyPackage($facts, $context);
@@ -380,28 +380,20 @@ final class QueryBuilderParametersExtension implements OperationExtension
     }
 
     /**
-     * A filter handled by the application's own code, which nothing typed: it reaches the document with
-     * no type at all — true, and thinner than a generated client can use, since a parameter claiming
-     * nothing becomes an untyped value at every call site. Reported per filter rather than per route,
-     * because the fix is per filter and the reader needs to know which one.
+     * A filter handled by the application's own code, which THIS layer could not type — recorded rather
+     * than reported, because whether it reaches the document with no type is not knowable yet: a
+     * validation rule, a docblock or an attribute lands on the same parameter behind us.
+     * {@see QueryBuilderUntypedFilterExtension} reads the record once they have.
      *
-     * The condition is {@see QueryBuilderParameters::publishesNoType()} rather than a second reading of
-     * the same kinds: what is reported and what is published then cannot disagree.
+     * The condition is {@see QueryBuilderParameters::typesNothing()} rather than a second reading of
+     * the same kinds: what is recorded and what this layer published then cannot disagree.
      */
-    private function reportUntypedFilters(QueryBuilderFacts $facts, RouteContext $context): void
+    private function recordUntypedFilters(QueryBuilderFacts $facts, RouteContext $context): void
     {
         foreach ($facts->filters as $filter) {
-            if (! QueryBuilderParameters::publishesNoType($filter)) {
-                continue;
+            if (QueryBuilderParameters::typesNothing($filter)) {
+                UntypedFilters::record($context, $filter->name);
             }
-
-            $context->components->addDiagnostic(new Diagnostic(
-                severity: Severity::Info,
-                code: 'query-builder.untyped-filter',
-                message: sprintf('Filter "%s" is handled by your own code and nothing types its value, so it is documented with no type at all.', $filter->name),
-                routeSignature: $context->route->signature(),
-                help: sprintf('Add #[QueryParameter(type: \'string\')] to the filter class, or to the action, to give "%s" a documented type.', $filter->name),
-            ));
         }
     }
 

@@ -63,6 +63,7 @@ use Docuccino\Laravel\Integrations\Passport\PassportSecurityExtension;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfig;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfigDigestContributor;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParametersExtension;
+use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderUntypedFilterExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
@@ -391,6 +392,15 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
                 QueryBuilderConfig::fromArray($config, self::spatieQueryBuilderMajor()),
                 isVendorFile: $vendor->isVendorFile(...),
             );
+        });
+
+        // The finalize pass reads the same names to find what the parameters pass published, so it takes
+        // the same config: a report addressed at a name nobody wrote would find nothing and stay silent.
+        $this->app->bind(QueryBuilderUntypedFilterExtension::class, static function (): QueryBuilderUntypedFilterExtension {
+            /** @var array<string, mixed> $config */
+            $config = (array) config('query-builder', []);
+
+            return new QueryBuilderUntypedFilterExtension(QueryBuilderConfig::fromArray($config, self::spatieQueryBuilderMajor()));
         });
 
         $this->app->bind(QueryBuilderConfigDigestContributor::class, static function (): QueryBuilderConfigDigestContributor {

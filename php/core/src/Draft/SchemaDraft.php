@@ -143,6 +143,31 @@ final class SchemaDraft
     }
 
     /**
+     * Whether this draft, as it now stands, says nothing about the value it describes: every keyword on
+     * it is an annotation ({@see SchemaKeywords::saysNothingAboutTheInstance()}) and no property was
+     * written under it, so it freezes to the unconstrained schema plus prose.
+     *
+     * The question a producer asks when its claim is about the OUTCOME rather than about its own
+     * contribution — another layer may have typed the same node, and only the draft as it stands knows.
+     * A keyword this model does not classify counts as saying something, the same way
+     * {@see SchemaKeywords} declines to supersede what it cannot read.
+     */
+    public function saysNothingAboutTheInstance(): bool
+    {
+        if ($this->properties !== []) {
+            return false;
+        }
+
+        foreach (array_keys($this->guard->resolved()) as $keyword) {
+            if (! SchemaKeywords::saysNothingAboutTheInstance((string) $keyword)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Whether a contribution outranks every keyword written here and in every nested property, so it
      * speaks over the schema as a whole — the nested half of {@see ResponseDraft::isSupersededBy()}.
      *

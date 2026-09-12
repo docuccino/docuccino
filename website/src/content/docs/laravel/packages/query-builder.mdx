@@ -420,10 +420,12 @@ that remains. It never guesses. A kind whose value is a string by construction �
 operator (`GREATER_THAN`), a dotted relation path (`customer.name`) — stays a plain string. A
 multi-clause closure or `__invoke` is different: a `callback` or `custom` filter takes whatever its
 own code takes, so its parameter publishes an explicit **empty schema** — unconstrained, rather than
-pinned to a `type` the filter's code could contradict. Each one is reported
-([`query-builder.untyped-filter`](/laravel/reference/diagnostics/)), because an unconstrained
-parameter reaches a generated client as an untyped value: add `#[QueryParameter(type: 'string')]` to
-the filter class, or to the action, and it carries a type again.
+pinned to a `type` the filter's code could contradict. Each one the finished document still
+publishes untyped is reported ([`query-builder.untyped-filter`](/laravel/reference/diagnostics/)),
+because an unconstrained parameter reaches a generated client as an untyped value: add
+`#[QueryParameter(type: 'string')]` to the filter class, or to the action, and it carries a type
+again. Anything else that types the same parameter — a validation rule on the filter key, a
+`#[QueryParameter]` on the action — settles it just as well, and silences the report with it.
 
 ### Filter factories (a `ListFilters`-style helper)
 

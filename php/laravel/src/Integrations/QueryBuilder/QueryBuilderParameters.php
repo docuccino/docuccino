@@ -114,7 +114,8 @@ final class QueryBuilderParameters
         if ($policy->filtersDeepObject()) {
             $properties = [];
             foreach ($facts->filters as $filter) {
-                $properties[$filter->name] = $this->filterProperty($filter, $policy, $config);
+                [, $property] = self::filterTarget($filter->name, $policy, $config);
+                $properties[$property] = $this->filterProperty($filter, $policy, $config);
             }
 
             return [new QueryParameterSpec(
@@ -128,9 +129,10 @@ final class QueryBuilderParameters
 
         $specs = [];
         foreach ($facts->filters as $filter) {
+            [$name] = self::filterTarget($filter->name, $policy, $config);
             [$schema, $style, $explode] = $this->filterSchema($filter, $policy, $config);
             $specs[] = new QueryParameterSpec(
-                name: $config->filterKey($filter->name),
+                name: $name,
                 schema: $schema,
                 description: $this->filterDescription($filter, $config),
                 style: $style,
@@ -193,17 +195,35 @@ final class QueryBuilderParameters
      */
     private static function schemaWithoutColumn(QbEntry $filter): array
     {
-        return self::publishesNoType($filter) ? [] : ['type' => 'string'];
+        return self::typesNothing($filter) ? [] : ['type' => 'string'];
     }
 
     /**
-     * Whether this filter reaches the document claiming no type at all — the one reading of it, because
-     * the extension reports the same fact as a diagnostic and a second reading would report a parameter
-     * that is typed, or stay quiet about one that is not.
+     * Whether this producer leaves the filter claiming no type at all — the one reading of it, because
+     * the same fact decides what it publishes and what {@see UntypedFilters} records, and a second
+     * reading could disagree with either. It is about this layer and NOT about the document: a validation
+     * rule or an attribute can still type the same parameter, so anything claiming the outcome reads the
+     * draft as it finally stands ({@see QueryBuilderUntypedFilterExtension}).
      */
-    public static function publishesNoType(QbEntry $filter): bool
+    public static function typesNothing(QbEntry $filter): bool
     {
         return $filter->columnSchema === null && in_array($filter->kind, self::OPAQUE_KINDS, true);
+    }
+
+    /**
+     * Where one filter's value lands under the effective representation: the query parameter carrying it,
+     * and the object property within it — `''` where the parameter IS the filter, which is the bracketed
+     * form. The one reading of that mapping: {@see filterParameters()} publishes there and
+     * {@see QueryBuilderUntypedFilterExtension} looks there, so a report about an untyped filter cannot
+     * be about a node nobody wrote.
+     *
+     * @return array{0: string, 1: string}
+     */
+    public static function filterTarget(string $name, RepresentationPolicy $policy, QueryBuilderConfig $config): array
+    {
+        return $policy->filtersDeepObject()
+            ? [$config->filter, $name]
+            : [$config->filterKey($name), ''];
     }
 
     /**
