@@ -22,6 +22,7 @@ use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Extensions\AttributeParametersExtension;
 use Docuccino\Laravel\Extensions\IgnoredParametersExtension;
@@ -286,23 +287,47 @@ it('reports against the renamed deepObject parameter, at the property the filter
 /**
  * The artifact this family had none of: the parameters three app-handled filters are published as, and
  * the reports the same build hands the author, in bytes. A change to what the report says, which filter
- * it fires on, or where it is addressed moves this file — so a claim that a rework changed nothing has
+ * it fires on, or where it is addressed moves these files — so a claim that a rework changed nothing has
  * something to be false about. Restricted to the one route, so no committed golden churns and no
  * unrelated route can quiet the family by accident.
  */
-it('emits the app-handled filter document and its diagnostics byte-identically', function (): void {
+function appFilteredDocument(): GenerationResult
+{
     registerAppFilteredRoute();
 
-    $result = generateDocument(static function (array $raw): array {
+    return generateDocument(static function (array $raw): array {
         $raw['info'] = ['title' => 'App-filtered API', 'version' => '1.0.0'];
         $raw['routes'] = ['include' => ['api/app-filtered']];
 
         return $raw;
     });
+}
+
+it('emits the app-handled filter document and its diagnostics byte-identically', function (): void {
+    $result = appFilteredDocument();
 
     assertGolden('workbench-app-filtered.uir.json', (new UirEmitter)->emit($result->document));
     assertGolden(
         'workbench-app-filtered.diagnostics.json',
+        json_encode(diagnosticRecords($result->diagnostics), JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n",
+    );
+});
+
+/**
+ * The same route under the other filter representation, which is the population the bracketed golden
+ * above cannot stand in for: two producers describe one filter surface, and this is the document that
+ * says whether they describe it once. What a consumer receives is one `filter` object — its members
+ * typed by whichever layer typed them — and not that object plus a `filter[...]` parameter per member
+ * restating the same value under a second identity.
+ */
+it('emits one deepObject container for the surface both producers describe, byte-identically', function (): void {
+    setBuild('documents.default.representation.filters', 'deepObject');
+
+    $result = appFilteredDocument();
+
+    assertGolden('workbench-app-filtered-deep.uir.json', (new UirEmitter)->emit($result->document));
+    assertGolden(
+        'workbench-app-filtered-deep.diagnostics.json',
         json_encode(diagnosticRecords($result->diagnostics), JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n",
     );
 });

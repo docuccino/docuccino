@@ -1104,17 +1104,26 @@ states it once for the whole document instead, keying on the action's return typ
 or an attribute of your own. See [Once, for a whole
 document](/laravel/documenting/requests/#pagination-docuccino-cant-see).
 
-<Aside title="One attribute, both representations">
-Addressing a single filter by name works the same under either
-[filter representation](/laravel/reference/configuration/#representation). Under the default
-`bracketed` style, `#[QueryParameter('filter[status]')]` patches the flat `filter[status]` parameter;
-under `deepObject` — where filters collapse into one `filter` object parameter with
-`explode: true` — the very same attribute patches that object's `status` property instead. You write
-it once and it lands correctly whichever style the document uses:
+<Aside title="One filter surface, either representation">
+A filter addressed by name lands in one place whichever
+[filter representation](/laravel/reference/configuration/#representation) the document uses. Under the
+default `bracketed` style that place is the flat `filter[status]` parameter; under `deepObject` — where
+the filters collapse into one `filter` object parameter with `explode: true` — it is that object's
+`status` property. You write it once and it lands correctly either way:
 
 ```php
 // Patches filter[status] (bracketed) OR the filter object's `status` property (deepObject).
 #[QueryParameter('filter[status]', type: 'string', description: 'Only active invoices.', required: true)]
 public function index() { /* … */ }
 ```
+
+The same holds for a validation rule that bounds a filter key — `'filter.status' => 'required|string'`
+in a Form Request or an inline `validate()` on a `GET`. Under `bracketed` the rule types the
+`filter[status]` parameter; under `deepObject` it types the `status` property of the one `filter`
+object. Either way the surface is described once: the document never carries a `filter` object *and* a
+`filter[status]` parameter for the same value, which a client generator would turn into two inputs.
+
+A member the rules mark `required` joins the object's `required` list, and the `filter` parameter
+itself becomes required with it — under `deepObject` the member has no parameter of its own, so an
+optional `filter` would say a request that omits a value the server demands is a valid one.
 </Aside>
