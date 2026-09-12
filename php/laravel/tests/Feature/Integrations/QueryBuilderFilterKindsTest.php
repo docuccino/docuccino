@@ -14,6 +14,7 @@ use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfig;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParameters;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParametersExtension;
+use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderUntypedFilterExtension;
 use Docuccino\Laravel\Tests\Support\TraceScript;
 use Spatie\QueryBuilder\AllowedFilter;
 use Workbench\App\Models\Beacon;
@@ -38,8 +39,13 @@ function runFilterKinds(string $chain, ?QueryBuilderConfig $config = null, array
         document: new DocumentConfig('default', [], raw: $integrations === [] ? [] : ['integrations' => $integrations]),
     );
 
+    $config ??= new QueryBuilderConfig;
+
     $operation = new OperationDraft;
-    (new QueryBuilderParametersExtension($config ?? new QueryBuilderConfig))->handle($operation, $context);
+    (new QueryBuilderParametersExtension($config))->handle($operation, $context);
+    // The untyped-filter report is a finalize pass of its own ({@see QueryBuilderUntypedFilterExtension}),
+    // so running the pair is what this chain actually produces.
+    (new QueryBuilderUntypedFilterExtension)->handle($operation, $context);
 
     $byName = [];
     foreach ($operation->freeze()->parameters as $parameter) {

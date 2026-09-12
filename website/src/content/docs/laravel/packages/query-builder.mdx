@@ -420,10 +420,12 @@ that remains. It never guesses. A kind whose value is a string by construction �
 operator (`GREATER_THAN`), a dotted relation path (`customer.name`) — stays a plain string. A
 multi-clause closure or `__invoke` is different: a `callback` or `custom` filter takes whatever its
 own code takes, so its parameter publishes an explicit **empty schema** — unconstrained, rather than
-pinned to a `type` the filter's code could contradict. Each one is reported
-([`query-builder.untyped-filter`](/laravel/reference/diagnostics/)), because an unconstrained
-parameter reaches a generated client as an untyped value: add `#[QueryParameter(type: 'string')]` to
-the filter class, or to the action, and it carries a type again.
+pinned to a `type` the filter's code could contradict. Each one the finished document still
+publishes untyped is reported ([`query-builder.untyped-filter`](/laravel/reference/diagnostics/)),
+because an unconstrained parameter reaches a generated client as an untyped value: add
+`#[QueryParameter(type: 'string')]` to the filter class, or to the action, and it carries a type
+again. Anything else that types the same parameter — a validation rule on the filter key, a
+`#[QueryParameter]` on the action — settles it just as well, and silences the report with it.
 
 ### Filter factories (a `ListFilters`-style helper)
 
@@ -501,12 +503,15 @@ private function referenceFilter(): AllowedFilter
 }
 ```
 
-An entry Docuccino can't fold is never guessed at: it's left out of the spec, you get a
-`query-builder.unresolved-entry` warning naming the file and line, and every other entry on the list is
-documented as usual. What the recovered entries no longer are is the *whole* list, so a sort, include
-or fields allow-list missing one entry is documented as a plain string rather than an enum — an enum
-short of a value would tell a generated client to reject a value your endpoint accepts. The other
-allow-lists on the same endpoint keep their enums. Three more shapes stay out of reach:
+An entry Docuccino can't fold is never guessed at: nothing it declares reaches the allow-list read off
+the chain, you get a `query-builder.unresolved-entry` warning naming the file and line, and every other
+entry on the list is documented as usual. What the recovered entries no longer are is the *whole* list,
+so a sort, include or fields allow-list missing one entry is documented as a plain string rather than an
+enum — an enum short of a value would tell a generated client to reject a value your endpoint accepts.
+The other allow-lists on the same endpoint keep their enums. The warning is about that recovery, so
+documenting the entry yourself with `#[QueryParameter]` publishes the parameter and leaves the warning
+standing and true: the chain is still short an entry, and the list still widens because of it. Three
+more shapes stay out of reach:
 
 - **A hand-off to another method.** The fold reads one body; it doesn't step into a second, so
   `return $this->buildFilter($key);` stays unresolved. A factory *call* in there is fine —
