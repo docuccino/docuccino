@@ -4,6 +4,73 @@ Patterns this codebase has hit more than once, with the test that recognises eac
 live in [`CLAUDE.md`](../../CLAUDE.md); this is the catalogue a reader consults when something feels
 familiar. Add a class when a second instance turns up, not on the first.
 
+## A diagnostic that asserts an outcome it never reads
+
+A producer knows what IT recovered. It does not know what the document ends up saying, because a
+later layer — a validation rule, a docblock, an attribute, another integration, an overlay — can
+still answer for the same node. A message written in the document's voice (*"is documented as…"*,
+*"is omitted from…"*, *"publishes no…"*) from a producer that cannot see the finished node is a
+claim that will eventually be false, and the reader it lies to is the one who already did what the
+help asked.
+
+The failure mode is worse than a wrong sentence. A report whose recommended remedy is **already
+applied** cannot be cleared by any edit, so a team that gates CI on diagnostics has two honest
+options: accept a permanently noisy code, or stop reading the channel. Both cost them the true
+positives, which is how one false report takes the useful ones down with it.
+
+*Instances.* `query-builder.untyped-filter` decided from the Spatie filter kind that a parameter
+would reach the document untyped, and said so, while a form-request rule and a route-level
+`#[QueryParameter]` were still to land — measured at 5 false of 16 firings on a real application,
+two of them naming the very attribute the help asks for, already present on the same action.
+`eloquent.no-columns` tested the property list before appends, accessors and eager loads had each
+had their chance to fill it — contradicted not by a later layer but by the rest of its own method.
+`validation.rule-unrecoverable` said a field "is omitted from the request schema" while
+`#[BodyParameter]` published it; its class-based twin had been hardened for other producers and
+still could not see that one. `eloquent.custom-date-serialization` is the variant with no later
+layer at all: it fired on the override flag alone, without checking that the model published a date
+attribute for the claim to be about.
+
+*The tell.* The message is in the document's voice, and the raise site is below the layer that
+decides. Grep the message, not the condition: *documented as*, *omitted from*, *publishes*, *is not
+documented*. Then ask two questions — can any later producer write this node, and is there an edit
+the reader could make that leaves the report standing?
+
+*The fix that worked.* Three different answers, and which one applies is decided by what the
+producer holds, never by preference:
+
+- **Read the outcome.** Record the candidate while the producing pass runs, and report from a
+  `Finalize` pass that reads the node as it finally stands (`QueryBuilderUntypedFilterExtension`).
+  Needs a key to look the node up by, and a single reading of *where* that producer publishes
+  (`QueryBuilderParameters::filterTarget()`), or a report lands on a node nobody wrote.
+- **Consult the layer that could answer.** Cheaper and correct where exactly one later producer
+  exists, and the repo already did this in four places before the class was named —
+  `PathParametersExtension::declaresType()`, `RecoveredRequest::declaredOn()`,
+  `InferredResponsesExtension::named()`, `ImplicitResponsesExtension`'s post-synthesis
+  `hasResponse('403')`. Where several producers answer, compose the reading ONCE beside the writer's
+  own grammar (`RecoveredRequest::declarationsReaching()`), or the notes drift apart one at a time.
+- **Say what the producer knows.** When the payload carries no key to look anything up by, an
+  outcome check is not merely unwarranted, it is impossible: `query-builder.unresolved-entry` names
+  a call site precisely because the expression that would have named the entry is the one that did
+  not fold. The loss to the recovery is still knowable, still unfalsifiable, and still what the
+  reader acts on. Change the sentence, keep the condition.
+
+*The trap in miniature.* `publishesNoType()` — a predicate named for the document, computed from one
+integration's own output, with a docblock calling itself "the one reading of it". One reading, of
+the wrong thing. It is now `typesNothing()`, which is what it actually answers.
+
+*The tests that recognise it.* `QueryBuilderUntypedFilterTest` (a filter typed by an attribute and
+by a form-request rule, against one typed by nothing, through a real build),
+`QueryBuilderUnresolvedEntryTest` (asserts the document publishes the parameter, so the old sentence
+would have been false there), `DeclaredFieldNoticesTest`, and the appends-only / eager-load-only /
+inherited-override fixtures in `EloquentTest`. Each was executed against the pre-fix code first: a
+guard nobody watched fail is a guard nobody has.
+
+*Not every one of these is a defect.* `query-builder.partial-on-enum` makes the same shape of claim
+and was deliberately left: an author who types a partial filter as an enum publishes a set NARROWER
+than the server accepts, so the nudge is still right, and standing it down on the outcome would hide
+a real under-description. A claim falsifiable only by an overlay, disclosed in the help, is a
+documented trade rather than a defect.
+
 ## A subtraction leaves no evidence
 
 An **additive** declaration that reaches nothing shows up as an absent node — you can see it missing.
