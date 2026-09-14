@@ -13,6 +13,23 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.19.0
+
+### Breaking changes
+
+- **laravel**: state the move out of the framework config, rather than performing it ([#496](https://github.com/docuccino/docuccino/pull/496))
+  - `docuccino:migrate-config` is removed. Build settings still in `config/docuccino.php` have to be written into `docuccino.yaml` by hand; `config.not-migrated` and `config.stale-php-keys` name them, and "Settings left in `config/docuccino.php`" in the configuration reference covers the four whose name or form changed. `docuccino:install` on an unmigrated application now exits `1` without writing `docuccino.yaml`, where it used to write one and exit `0`.
+
+### Features
+
+- **laravel**: say what a minted pagination component is ([#498](https://github.com/docuccino/docuccino/pull/498))
+
+### Bug fixes
+
+- **laravel**: publish what an exception class says about the error it names ([#502](https://github.com/docuccino/docuccino/pull/502))
+- **laravel**: publish a URL without the credentials it arrived with ([#501](https://github.com/docuccino/docuccino/pull/501))
+- **core**: publish the description an enum states about itself ([#499](https://github.com/docuccino/docuccino/pull/499))
+
 ## v0.18.1
 
 ### Bug fixes
