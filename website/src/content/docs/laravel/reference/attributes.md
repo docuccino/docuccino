@@ -682,7 +682,7 @@ Which `description` it sets is decided by where you write it, plus `request:`:
 |---|---|---|
 | On the action | What the endpoint does | `paths.…{method}.description` |
 | On the action, with `request: true` | How to fill this endpoint's body in | `paths.…{method}.requestBody.description` |
-| On a DTO, model or resource class | What the type is | `components.schemas.….description` |
+| On a DTO, model, resource or enum class | What the type is | `components.schemas.….description` |
 | On a property | What that field is | the field's `description` in the schema |
 
 An action may carry a plain declaration and a `request: true` one at the same time, which is why the
@@ -736,6 +736,31 @@ request body or a response `$ref`s, on both sides of the document:
 #[Description(text: 'A single retention policy, as the billing system holds it.')]
 final class RetentionPolicyData extends Data { /* … */ }
 ```
+
+**On an enum** it does the same thing, on the component that enum publishes:
+
+```php
+#[Description(text: 'Where an invoice stands in its billing lifecycle.')]
+enum InvoiceStatus: string
+{
+    #[CaseDescription('Drafted, not yet sent to the customer.')]
+    case Draft = 'draft';
+
+    #[CaseDescription('Sent and awaiting payment.')]
+    case Issued = 'issued';
+}
+```
+
+One enum is one component, so that sentence reaches every use of it at once — a typed property, a
+`Rule::enum()` on a request, a Query Builder filter. It sits beside the per-case prose
+[`#[CaseDescription]`](#casedescription) publishes: the description says what the type is, and the
+case descriptions say what each value means. Turning enum components off publishes the same body in
+place of the `$ref`, sentence included.
+
+A rule accepting only *some* of the cases (`Rule::enum(InvoiceStatus::class)->only(…)`) is the one
+place it does not appear. That field publishes its own narrower set, and both the `$ref` and this
+sentence are about the whole type — pointing either at a set the endpoint does not accept would
+describe it wrongly.
 
 The class *docblock* is deliberately not read for this. A docblock is where you explain a class to
 whoever maintains it next, so it tends to name properties, attributes and internals that the consumer
@@ -1129,7 +1154,8 @@ Targets `CLASS_CONSTANT` (enum cases).
 public function __construct(public string $description)
 ```
 
-Describes a single enum case, surfaced as `x-enumDescriptions` on the enum schema.
+Describes a single enum case, surfaced as `x-enumDescriptions` on the enum schema. For the enum
+itself, write [`#[Description]`](#description) on the class.
 
 ```php
 enum Status: string {
