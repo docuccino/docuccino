@@ -790,6 +790,54 @@ can read.
 their bodies match under one status they publish one component. Where the bodies differ the name is
 contested and retired exactly as above, each body taking a name derived from its own content.
 
+#### Say what the error is with `#[Description]`
+
+A name tells a client what to catch. `#[Description]` beside it tells them what it means, and it is
+published as the description of the schema they are handed:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	use Docuccino\Attributes\Description;
+	use Docuccino\Attributes\ErrorComponent;
+
+	#[ErrorComponent('ResourceMissing')]
+	#[Description(text: 'No record matches the identifier in the path.')]
+	final class InvoiceNotFoundException extends RuntimeException {}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	// components.schemas
+	"ResourceMissing": {
+	  "description": "No record matches the identifier in the path.",
+	  "type": "object",
+	  "properties": { "message": { "type": "string" } }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+Whoever reads it has never seen your codebase, so write what went wrong and what it means for their
+request — not which attribute to add or which class threw.
+
+**It goes on the class that carries the `#[ErrorComponent]`.** The sentence describes the error the name
+names, so the two are read together: a base that names `ApiFailure` and describes it speaks for every
+subclass inheriting both, and a subclass that renames its error to `PolicyRefused` describes it itself or
+not at all. The base's sentence is about `ApiFailure`, and publishing it on `PolicyRefused` would say
+something untrue about an error a client catches.
+
+**Two errors sharing a name have to agree.** Where classes publishing one component describe it two
+different ways, neither sentence is published — a schema states one description, and picking one would put
+one author's words on the other's error. The build reports `components.description-conflict` and quotes
+both. The name is untouched either way: what a component is called has never depended on the prose beside
+it.
+
+**Only one of `text:` and `file:`, and never `request:`.** A schema description is read from the attribute
+itself — nothing resolves an application path here, and a request body belongs to an operation rather than
+to a type — so those forms are reported and ignored, as they are anywhere else a type is described. A
+`#[Description]` on a render method is not read; name the body there and describe it on the class.
+
 #### Name the body instead, when the class can't say enough
 
 On a class the attribute says one thing per class, and a renderer that turns one family of exceptions
