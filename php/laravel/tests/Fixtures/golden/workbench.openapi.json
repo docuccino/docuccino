@@ -1841,6 +1841,7 @@
         ]
       },
       "WidgetStatus": {
+        "description": "Where a widget stands in its publication lifecycle.",
         "type": "string",
         "enum": [
           "draft",

@@ -1736,6 +1736,15 @@ when a registration path exists and the `emit()` signature settles.
       stays inline; `false` restores the byte-identical inline expression. A **nullable** enum can't
       carry `type: [x, null]` on a `$ref`, so `UnionTypeToSchema` composes `anyOf: [{$ref}, {type:
       null}]` under BOTH nullable policies (the existing not-a-simple-type branch already did this).
+      What that component publishes — values, `x-enumDescriptions`, the naming hints, and the enum's own
+      `#[Description]` as its `description` — is built in ONE place, `Schema\EnumComponent`, which states
+      why: several producers reach an enum, and the registry settles a disagreement between two of them
+      silently. An enum is a class, so the description goes through `Schema\ClassAnnotations` like any
+      other schema class's, and a `file:`/`request:` declaration is refused there on the same terms.
+      A field publishing the set INLINE asks that same class for the sentence, so the policy decides
+      where an enum's description sits and never whether it has one. The one thing that does: a rule
+      stating a SUBSET of the cases declines the `$ref` AND the sentence, both being facts about a domain
+      wider than the one it publishes.
     - **Request bodies hoist when recovered from a single source class** (spatie Data / FormRequest /
       action `rules()` class) — `RecoveredRequest` (core) references the class-derived body as a
       component named after the class, deduped so the same class across N ops is one component. An
@@ -2179,9 +2188,11 @@ to that question — own file, every parent, every trait flattened into any of t
 site that records a hierarchy-derived fact goes through it, including `ClassMetadataFactory`, which
 folds it into the `dependencyFiles` every consumer already forwards. An enum counts separately: its
 CASES are copied into the recovered type and into any rule quoting its backing values, so
-`EnumReflection::file()` joins the list wherever a case list is read. Erring upward here is deliberate —
-a file too many costs a rebuild, a file too few serves a stale schema — and it stays proportional, since
-a parent invalidates its subclasses and nothing else.
+`EnumReflection::file()` joins the list wherever a case list is read, and `EnumComponent::body()`
+records `DeclarationFiles::of()` for the enum itself — asking for a body is what keys the fragment, so a
+producer added later cannot forget it. Erring upward here is deliberate — a file too many costs a
+rebuild, a file too few serves a stale schema — and it stays proportional, since a parent invalidates
+its subclasses and nothing else.
 
 **A fragment carries the security schemes its operation names.** `components.securitySchemes` is
 document-level, but nothing rebuilds it: on a warm hit no extension runs, so a fragment that carried
