@@ -85,6 +85,10 @@ const CONFIG_REFERENCE_SECTIONS = [
     '## Diagnostics' => 'diagnostics',
     '## Engine' => 'engine',
     '## Cache' => 'cache',
+    // The seam: what happens to a build key left in the other file. Documents no key of its own — the
+    // names in it are the ones this page documents elsewhere, spelled as the file they came from spelled
+    // them.
+    '## Settings left in `config/docuccino.php`' => null,
     // The boot half: config/docuccino.php.
     '## Boot configuration' => '',
     '### `viewer`' => 'documents.*.viewer',
