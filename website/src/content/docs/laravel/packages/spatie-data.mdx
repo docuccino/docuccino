@@ -427,6 +427,7 @@ serialized, so all three are required:
 
 ```json
 "InvoiceDataPage": {
+  "description": "One page of results, with links to the pages around it and totals for the whole result set.",
   "type": "object",
   "properties": {
     "data":  { "type": "array", "items": { "$ref": "#/components/schemas/InvoiceData" } },
@@ -443,6 +444,7 @@ paginated are shared, named for the shapes they are:
 
 ```json
 "PaginationLink": {
+  "description": "One entry in a page link list: the URL of that page, the label to show for it, and whether it is the page you are on.",
   "type": "object",
   "properties": {
     "url": { "type": ["string", "null"] },
@@ -451,6 +453,7 @@ paginated are shared, named for the shapes they are:
   }
 },
 "DataPaginationMeta": {
+  "description": "Where this page sits in the result set: the page number and size, the number of the last page, the record total, the index of the first and last record on this page, the base URL its page links are built from, and a URL for the first, last, previous and next pages.",
   "type": "object",
   "properties": {
     "current_page": { "type": "integer" },
@@ -471,7 +474,8 @@ paginated are shared, named for the shapes they are:
 The cursor envelope carries the same `PaginationLink` list and its own `DataCursorPaginationMeta` —
 cursor tokens and neighbouring page URLs, with no `total`. Both are separate from the components a
 Laravel resource page uses, because the shapes are genuinely different; see
-[pagination](/laravel/documenting/responses/#pagination).
+[pagination](/laravel/documenting/responses/#pagination). None of them has a class of yours behind it,
+so Docuccino describes each one for you.
 
 A paginated collection is always wrapped by Spatie, so its wrap key simply names the envelope's items
 key — never a second layer around it.
