@@ -186,13 +186,12 @@ final class MachineDependentValue
      */
     private static function redact(string $url): string
     {
-        $parts = parse_url($url);
-        $user = is_array($parts) ? ($parts['user'] ?? null) : null;
+        $user = parse_url($url, PHP_URL_USER);
         if (! is_string($user)) {
             return $url;
         }
 
-        $password = is_array($parts) ? ($parts['pass'] ?? null) : null;
+        $password = parse_url($url, PHP_URL_PASS);
         $userinfo = $user.(is_string($password) ? ':'.$password : '');
 
         $at = strpos($url, $userinfo.'@');
