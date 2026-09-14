@@ -330,10 +330,10 @@ it('reads the codes and severities a reference page publishes, and only those', 
 
 /*
  * The residue. Each of these constructs a Diagnostic whose code argument is not a literal, so the
- * scan falls back to the constants of the file it sits in — except DocumentGenerator, which forwards
- * a code minted elsewhere and therefore contributes none of its own. Adding a site to this list is
- * fine; doing it without noticing is not, because a code that reaches one of them from another file
- * would be documented by nobody.
+ * scan falls back to the constants of the file it sits in — except DocumentGenerator and
+ * ErrorResponsesExtension, which re-site a diagnostic a shared reader already built and therefore
+ * contribute no code of their own. Adding a site to this list is fine; doing it without noticing is
+ * not, because a code that reaches one of them from another file would be documented by nobody.
  */
 it('names the construction sites whose code is not written beside it', function (): void {
     expect(diagnostic_code_sites(diagnosticSourceDirectories()))->toBe([
@@ -344,6 +344,7 @@ it('names the construction sites whose code is not written beside it', function 
         'Emit/OpenApi31DownlevelEmitter.php',
         'Extensions/BuiltIn/AttributeExamplesExtension.php',
         'Extensions/BuiltIn/AttributeOverridesExtension.php',
+        'Extensions/ErrorResponsesExtension.php',
         'Integrations/FormRequest/UnrecoveredRules.php',
         'Pipeline/DocumentGenerator.php',
         'Support/MachineDependentValue.php',

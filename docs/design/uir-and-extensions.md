@@ -776,6 +776,48 @@ status default stands, and `attribute.error-component-contested` names both clas
 had already named the body, in which case neither declaration was ever in the running and there is
 nothing for the reader to reconcile, so nothing is reported.
 
+**The `#[Description]` beside it says what the named error IS, and it comes from the same declaration the
+NAME did.** A component named for a cause and deduped by body owes its sentence to that cause or it
+describes a different error under this one's name, which is the one failure this whole area is built to
+prevent. So the sentence is read off `declaredBy` — the class that declared the winning `#[ErrorComponent]`
+— and off no other: walking for a sentence of its own would let a base's prose about `ApiFailure` describe
+the `PolicyRefused` a subclass renamed, and reading the THROWN class's would describe a name it did not
+choose. The price is a subclass that restates an inherited name and states no prose, which publishes none;
+there is deliberately no diagnostic for it, because a base describing the error IT names while subclasses
+name their own is correct and a report would fire at every throw where the author has nothing to fix.
+
+The prose goes through `ClassAnnotations::stated()`, the reader every other schema description goes
+through, so a `file:` — no application root reaches a schema mapper to resolve a path against — a
+`request:` and a both-and-neither declaration are refused on identical terms and under identical codes.
+Reading it is as TOTAL as reading the name: `ClassDeclarations` swallows a declaration PHP cannot
+construct, so `#[Description(5)]` is no declaration rather than a `TypeError` printing the machine's
+absolute paths into the emitted document. The refusals are re-sited onto the declaring file and the asking
+route and reported on that route's fragment, so a warm build says what a cold one says.
+
+It travels as `x-docuccino.facts.componentDescription`, frozen beside the name by the same
+`claimComponentName()` write and turning over with it — a producer whose claim is shadowed describes
+nothing — for the same reason the name does: the hoist runs over the finished document, so a sentence
+living anywhere else would be lost on a warm fragment-cache hit. It reaches the SHAPE and not the response:
+a Response Object's `description` is required and already settled over every arm's wording, and the schema
+is the type a generated client is written against. It reaches a shape only where the CLAIM does, so a
+response offering several representations carries it to neither.
+
+Which sentence a shared shape publishes is **the one its claimants agree on, and none where they do not**.
+Every occurrence in a bucket asked for one name, so they are all describing one type; two sentences are two
+authors disagreeing about what that type means, and awarding either would make what a consumer reads depend
+on which routes the application happens to have. `components.description-conflict` names the component and
+quotes both. That is deliberately not the plurality `spoken()` takes one bucket over — a Response Object
+must state a description and a Schema Object need not, so the honest degradation is open here and taken.
+The NAME never moves over prose, so nothing a sentence does can rename a client's type. Prose stays out of
+the dedupe key and out of the component's minted id for the same reason: a sentence added beside a shape
+describes the same shape, and an id that moved with it would make a diff read one component removed and
+another added.
+
+**The same attribute on a render method publishes no sentence yet.** `ComponentDeclaration` — what the
+engine carries out on `ReturnSite::$component` — holds a name and nothing else, and widening it is a change
+to the engine↔core analysis contract whose real-path half is only provable against real code. Until then a
+method-declared name publishes exactly the bytes it did before descriptions existed.
+
 **The action is not a third anchor, and `#[Response(errorComponent:)]` is what stands in its place.** `TARGET_METHOD`
 lets PHP accept `#[ErrorComponent]` on a controller method and `AttributeCollector` materialises it, so an
 author naming the error they want renamed on the action answering it got their old names back and nothing

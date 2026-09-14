@@ -683,6 +683,7 @@ Which `description` it sets is decided by where you write it, plus `request:`:
 | On the action | What the endpoint does | `paths.…{method}.description` |
 | On the action, with `request: true` | How to fill this endpoint's body in | `paths.…{method}.requestBody.description` |
 | On a DTO, model, resource or enum class | What the type is | `components.schemas.….description` |
+| On an exception class that carries [`#[ErrorComponent]`](#errorcomponent) | What that error is | the named error's `components.schemas.….description` |
 | On a property | What that field is | the field's `description` in the schema |
 
 An action may carry a plain declaration and a `request: true` one at the same time, which is why the
@@ -1000,6 +1001,12 @@ final class ProblemRenderer
     private function renderRejection(ApiException&HasInvalidFields $e): JsonResponse { /* … */ }
 }
 ```
+
+A [`#[Description]`](#description) on the **same class** says what that error is, and is published as the
+description of the schema the name names — read off the class that carries the `#[ErrorComponent]` and no
+other, so a base's sentence about the error it names never lands on one a subclass renamed. Classes
+publishing one component have to describe it the same way or neither sentence is published, reported as
+`components.description-conflict`. On a render method the sentence is not read.
 
 Unlike PHP's own attribute lookup, the class anchor is **inherited**: a base your API errors extend names
 them all at once, and a subclass carrying its own attribute wins over the base. The method anchor
