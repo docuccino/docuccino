@@ -64,6 +64,30 @@ examples that a reader can paste and run.
   that needs it, not in the page. Write for the reader; keep the bookkeeping out of the
   content.
 
+## Theming
+
+The site's colours and typefaces live in one file, `src/styles/brand.css`, which maps the
+Docuccino palette onto Starlight's own tokens. Nothing else sets a colour: a page that needs one
+is a page that needs a Starlight component instead.
+
+- **The palette is the marketing site's.** docuccino.app publishes the brand — ink surfaces,
+  cream text, coffee neutrals, ember accents — and the logo files in `src/assets/` are already
+  drawn in it. Dark mode is that scheme almost exactly; light mode has no counterpart over there,
+  so it is derived from the same tokens (cream page, white chrome, ink text, coffee between).
+- **Both themes ship.** The marketing site is dark-only; docs are not. Readers arrive with a
+  system preference and a toggle they expect to work, so every token is defined for both.
+- **Every pair clears WCAG AA against the surface it sits on**, and light mode uses two darker
+  ember steps for that reason: the brand ember is 3.0:1 on cream and fails as link text. Check the
+  contrast before changing a value, and check it against the right background — Starlight reuses
+  each token in places its name doesn't suggest (`gray-5` is a border *and* the inline-code
+  background).
+- **The two codebases each keep their own copy of the palette, on purpose.** They are separate
+  repositories with separate build systems, and a shared package — or a test that fetches
+  docuccino.app to compare — would be a mechanism with more failure modes than the thing it
+  guards, for a set of values that has never changed. So the rule is the guard: a brand colour
+  that changes is changed in both places, and every value in `brand.css` carries its brand name in
+  a comment (`cream-200`, `ember-400`) so the two can be read side by side.
+
 ## Information architecture
 
 Conventions the site follows — keep them when adding pages:

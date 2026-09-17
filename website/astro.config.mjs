@@ -32,11 +32,6 @@ export default defineConfig({
 	// paths stay identical to the URLs already published in every package README. A project-page
 	// deploy would need `base: '/docuccino'` and would move every URL.
 	site: 'https://docs.docuccino.app',
-	// The bundled Scalar viewer on the landing page is a large, intentional client chunk; lift the
-	// size-warning threshold so it doesn't flag on every build.
-	vite: {
-		build: { chunkSizeWarningLimit: 3000 },
-	},
 	integrations: [
 		indexMarkdownAlias,
 		starlight({
@@ -71,6 +66,14 @@ export default defineConfig({
 					exclude: ['guides/vs-*', 'uir/hosting*', 'changelog*'],
 				}),
 				starlightMdTxt(),
+			],
+			// The brand palette and the two self-hosted typefaces. Fontsource ships the @font-face
+			// rules; src/styles/brand.css maps the palette onto Starlight's own tokens.
+			customCss: [
+				'@fontsource-variable/instrument-sans',
+				'@fontsource-variable/instrument-sans/wght-italic.css',
+				'@fontsource-variable/jetbrains-mono',
+				'./src/styles/brand.css',
 			],
 			logo: {
 				// The task-specified mapping: light theme → logo-light.svg, dark theme → logo.svg.

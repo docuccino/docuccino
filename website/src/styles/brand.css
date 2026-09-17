@@ -1,0 +1,71 @@
+/*
+	The Docuccino palette, mapped onto Starlight's tokens. The values are the ones docuccino.app
+	uses — ink surfaces, cream text, coffee neutrals, ember accents — and the logo's own fills are
+	already in the coffee range, so the mark stops sitting on a borrowed theme.
+
+	Every colour here is one of the brand's own except the light-mode accents: brand ember
+	(#f25a38) is 3.0:1 on cream and fails AA as link text, so light mode uses the two darker steps
+	the brand ramp doesn't publish. Both themes ship, and every pair below clears AA against the
+	surface it sits on — check that before changing a value, because Starlight reuses each token
+	in places its name doesn't suggest (gray-5 is a border AND the inline-code background).
+
+	The marketing site keeps its own copy of these values; see website/STYLE.md for why, and for
+	what to do when one of them changes.
+*/
+
+:root,
+::backdrop {
+	/* Dark: the marketing site's scheme, near enough to be the same product. */
+	--sl-color-white: #f8f3ed; /* cream-50 — headings */
+	--sl-color-gray-1: #e8d5c4; /* cream-100 */
+	--sl-color-gray-2: #d5c3b0; /* cream-200 — body text */
+	--sl-color-gray-3: #a89c90; /* cream-300 — muted text */
+	--sl-color-gray-4: #454b54; /* ink-500 — table and file-tree borders */
+	--sl-color-gray-5: #31363d; /* ink-600 — card borders, inline code */
+	--sl-color-gray-6: #1c1f23; /* ink-800 — nav, sidebar, hairlines */
+	--sl-color-gray-7: #17191c; /* ink-850 — link cards */
+	--sl-color-black: #0c0d0f; /* ink-950 — page */
+
+	--sl-color-accent-low: #4a1208; /* ember-900 — badge fill, and text on bg-accent */
+	--sl-color-accent: #f25a38; /* ember-500 */
+	--sl-color-accent-high: #ff7a5c; /* ember-400 — link text, active sidebar fill */
+
+	/* Instrument Sans and JetBrains Mono, self-hosted by fontsource (see astro.config.mjs).
+	   Starlight appends its own system fallback and hands the mono stack to Expressive Code. */
+	--sl-font: 'Instrument Sans Variable';
+	--sl-font-mono: 'JetBrains Mono Variable';
+}
+
+:root[data-theme='light'],
+[data-theme='light'] ::backdrop {
+	/* Light has no counterpart on the marketing site, so it is derived: cream page, white chrome,
+	   ink text, coffee for everything in between. */
+	--sl-color-white: #131416; /* ink-900 — headings, and the light logo's own wordmark */
+	--sl-color-gray-1: #1c1f23; /* ink-800 */
+	--sl-color-gray-2: #31363d; /* ink-600 — body text */
+	--sl-color-gray-3: #7a6450; /* coffee-600 — muted text */
+	--sl-color-gray-4: #b0957c; /* coffee-400 */
+	--sl-color-gray-5: #c8b097; /* coffee-300 — card and table borders */
+	--sl-color-gray-6: #e8d5c4; /* cream-100 — inline code, hairlines */
+	--sl-color-gray-7: #ffffff; /* white — nav and link cards, lifted off the page */
+	--sl-color-black: #f8f3ed; /* cream-50 — page */
+
+	--sl-color-accent-low: #fbe3db; /* ember-100 — search highlight */
+	--sl-color-accent: #c03a21; /* ember-700 — link text, active sidebar fill */
+	--sl-color-accent-high: #8f2e18; /* ember-800 — badge fill */
+}
+
+/*
+	Starlight rotates a card's icon chip through five stock hues by position, which is how a
+	purple and a blue chip end up on a coffee-and-ember page. The chip carries no meaning — it is
+	decoration keyed to nth-child — so it takes the accent instead. Asides keep their stock hues on
+	purpose: there the colour IS the meaning (note, tip, caution, danger), and warming it would
+	cost the reader that signal.
+
+	Unlayered, so it beats the `@layer starlight.components` rules it overrides whatever their
+	specificity.
+*/
+.card {
+	--sl-card-border: var(--sl-color-accent);
+	--sl-card-bg: var(--sl-color-accent-low);
+}
