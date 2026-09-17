@@ -13,6 +13,12 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.19.1
+
+### Features
+
+- **website**: theme the docs site with the brand palette ([#504](https://github.com/docuccino/docuccino/pull/504))
+
 ## v0.19.0
 
 ### Breaking changes
