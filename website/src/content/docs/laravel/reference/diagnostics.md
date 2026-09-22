@@ -504,3 +504,13 @@ does. See [Postman collections](/laravel/reference/commands/#postman-collections
 | `postman.callbacks-dropped` | warning | The callbacks an operation declares have no Postman equivalent | Nothing |
 | `postman.webhooks-dropped` | warning | A collection describes requests you send, so it can't carry the webhooks your API delivers | Nothing. Export an OpenAPI format alongside for the webhook contract |
 | `postman.yaml-ignored` | warning | A Postman collection has no YAML form, so JSON was written | Give the target a `.json` path |
+
+## Arazzo workflow descriptions
+
+An Arazzo description publishes the workflows a document declares — the sequences of calls a
+consumer follows. See [Arazzo workflow descriptions](/laravel/reference/commands/#arazzo-workflow-descriptions).
+
+| Code | Severity | What it means | What to do |
+|---|---|---|---|
+| `arazzo.no-workflows` | info | A document exported as Arazzo declares no workflows — or every workflow it declares lost all of its steps — so no file was written. Arazzo requires at least one workflow and at least one source description, so there is no empty form of the document to write | Declare a workflow, or drop the `arazzo` export target |
+| `arazzo.step-unresolved` | warning | A workflow step names an operation this document doesn't publish, or publishes under no `operationId`, so the step was left out. An Arazzo step addresses its operation by `operationId`, and a runner told to call one its source description hasn't got fails at run time with nothing to say why | Check the operation is in the exported document — a `routes.include` that excludes it is the usual cause — and that it has an `operationId` |

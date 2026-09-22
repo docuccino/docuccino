@@ -238,11 +238,20 @@ rather than a format, so it applies to whichever of them you asked for:
 	php artisan docuccino:export --format=postman --out=docs/collection.json
 	```
 	</TabItem>
+	<TabItem label="Arazzo">
+	```bash
+	php artisan docuccino:export --format=arazzo --out=docs/workflows.arazzo.yaml
+	```
+	</TabItem>
 </Tabs>
 
 The [UIR](/uir/) is the document Docuccino builds before emitting: OpenAPI-shaped, but carrying a
 stable identity for every operation and schema plus the provenance of each detail. It's what
 `docuccino:diff` compares, so commit the UIR when you want the most precise diffs.
+
+The Arazzo file describes the workflows a document declares — the sequences of calls a consumer
+follows to get something done. It's written only when the document carries at least one, because
+Arazzo has no empty form.
 
 ### Several artifacts at once
 

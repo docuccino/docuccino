@@ -142,8 +142,12 @@ it('splits the formats into the ones with a published schema behind them and the
     $unchecked = array_values(array_filter(Formats::ids(), static fn (string $f): bool => ! Formats::checksEmittedArtifact($f)));
 
     expect($checked)->toBe(['openapi-3.2', 'openapi-3.1', 'openapi-3.0'])
-        // UIR answers to its own schema on every build, before any emission; a Postman collection has
-        // no published specification to be held to at all.
-        ->and($unchecked)->toBe(['uir', 'postman'])
+        // Three different reasons, and the column is worth having because they are different. UIR
+        // answers to its own schema on every build, before any emission. A Postman collection has no
+        // published specification to be held to at all. An Arazzo description HAS one and is held to it
+        // in the suite rather than at run time: the runtime check reads `OpenApiMetaSchema`, whose
+        // traversal and whose diagnostic are both OpenAPI-shaped, so saying `true` here would mean
+        // reporting an Arazzo failure as an OpenAPI one.
+        ->and($unchecked)->toBe(['uir', 'postman', 'arazzo'])
         ->and(Formats::checksEmittedArtifact('swagger-2.0'))->toBeFalse();
 });
