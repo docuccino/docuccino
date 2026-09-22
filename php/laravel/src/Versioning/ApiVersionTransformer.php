@@ -7,6 +7,7 @@ namespace Docuccino\Laravel\Versioning;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Document\DocumentGraph;
+use Docuccino\Core\Document\PathItem;
 use Docuccino\Core\Extensions\Context\DocumentContext;
 use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
 use Docuccino\Core\Extensions\Document\UirDocumentDraft;
@@ -83,6 +84,12 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
             // In the order {@see VerbOrder} settles, which is the whole of what "the author's written
             // order" comes to once an AttributeSet has answered per type.
             foreach ($change->verbs as $verb) {
+                if ($verb instanceof OperationSetVerb) {
+                    $doc = self::removeOperations($doc, $verb, $change, $context, $said);
+
+                    continue;
+                }
+
                 if ($verb instanceof OperationVerb) {
                     $doc = $this->applyToOperations($doc, $verb, $change, $context, $said);
 
@@ -224,6 +231,110 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
             }
 
             $doc = $this->fork($doc, $reaching[$index], $id, $verb, $reaches, $change, $context, $said);
+        }
+
+        return $doc;
+    }
+
+    /**
+     * Takes the operations a verb names out of the document, because the version being derived did not
+     * serve them.
+     *
+     * The selector is the VERB's rather than the change's ({@see OperationSetVerb} says why), so
+     * `#[AppliesTo]` is not consulted here at all — a change that carries both narrows its other verbs
+     * and leaves this one alone.
+     *
+     * A path item left with no operations goes with them. An empty one is not a path that publishes
+     * nothing; it is a path a client can see in the document and get nothing from, and OpenAPI's own
+     * shape for "this version did not serve it" is its absence. Components the removed operations were
+     * the last readers of are LEFT: an unreferenced component is valid, and pruning on the way out
+     * would delete a schema an overlay or a consumer's tooling still names.
+     *
+     * @param  array<string, mixed>  $doc
+     * @param  array<string, true>  $said
+     * @return array<string, mixed>
+     */
+    private static function removeOperations(array $doc, OperationSetVerb $verb, VersionChange $change, DocumentContext $context, array &$said): array
+    {
+        $sites = DocumentGraph::operationSites($doc);
+
+        $matched = [];
+        foreach ($sites as $index => $site) {
+            if (self::namesAny([$verb->selector()], [$site])) {
+                $matched[$index] = true;
+            }
+        }
+
+        if ($matched === []) {
+            self::reportOnce($context, $verb->unreached($change), $said);
+
+            return $doc;
+        }
+
+        $removed = false;
+
+        foreach (array_keys($matched) as $index) {
+            $site = $sites[$index];
+
+            // One node addressed by two paths is one operation to the document, so taking the method out
+            // would take it out for the path the change never named.
+            if (self::sharedWithExcluded($site, $sites, $matched)) {
+                self::reportOnce($context, $verb->refused(
+                    $site['signature'] ?? implode('/', $site['keys']),
+                    $change,
+                ), $said);
+
+                continue;
+            }
+
+            $doc = DocumentGraph::without($doc, $site['keys']);
+            $removed = true;
+        }
+
+        return $removed ? self::pruneEmptyItems($doc) : $doc;
+    }
+
+    /**
+     * Drops the path and webhook entries left holding no operation. Judged on the METHODS rather than on
+     * emptiness: a path item legitimately carries `summary`, `description`, `servers` and `parameters`
+     * shared by its operations, and one left holding only those describes nothing a client can call.
+     *
+     * @param  array<string, mixed>  $doc
+     * @return array<string, mixed>
+     */
+    private static function pruneEmptyItems(array $doc): array
+    {
+        foreach (['paths', 'webhooks'] as $section) {
+            $items = $doc[$section] ?? null;
+            if (! is_array($items)) {
+                continue;
+            }
+
+            foreach ($items as $name => $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+
+                // A `$ref`'d path item states no method here and is not this walk's to judge: the node it
+                // points at is a component, and whether an emptied component should go is the same
+                // question as for any other unreferenced one, answered the same way — it stays.
+                if (isset($item['$ref'])) {
+                    continue;
+                }
+
+                foreach (PathItem::METHODS as $method) {
+                    if (isset($item[$method])) {
+                        continue 2;
+                    }
+                }
+
+                unset($items[$name]);
+            }
+
+            // Written back even when it is now empty. `paths` is a REQUIRED member of the UIR document,
+            // so a version that removed every operation still publishes the member with nothing in it —
+            // which is the true statement — rather than a document that fails its own schema.
+            $doc[$section] = $items;
         }
 
         return $doc;
