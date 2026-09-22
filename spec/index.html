@@ -95,15 +95,40 @@
 					<tr>
 						<th>Version</th>
 						<th>Schema</th>
+						<th>Status</th>
 					</tr>
 				</thead>
 				<tbody>
 					<tr>
+						<td>2.0</td>
+						<td>
+							<a href="/uir/2.0/schema.json"><code>/uir/2.0/schema.json</code></a><br />
+							<a href="/uir/2.0/extension.schema.json"
+								><code>/uir/2.0/extension.schema.json</code></a
+							>
+						</td>
+						<td>Current</td>
+					</tr>
+					<tr>
+						<td>1.1</td>
+						<td><a href="/uir/1.1/schema.json"><code>/uir/1.1/schema.json</code></a></td>
+						<td>Superseded before any artifact declared it</td>
+					</tr>
+					<tr>
 						<td>1.0</td>
 						<td><a href="/uir/1.0/schema.json"><code>/uir/1.0/schema.json</code></a></td>
+						<td>Superseded</td>
 					</tr>
 				</tbody>
 			</table>
+
+			<p class="lede">
+				A document written to 2.0 is a valid OpenAPI 3.2 document carrying one reserved member,
+				<code>x-docuccino</code>. The extension schema describes that member alone, so it applies on
+				top of any OpenAPI document; the document schema is the pair together, and it embeds the
+				extension schema, so a copy of it on its own validates a document offline with nothing to
+				fetch. Every version published here keeps its URL forever.
+			</p>
 
 			<footer>
 				<p>
