@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Attributes\Versioning\AddedEnumValue;
+use Docuccino\Attributes\Versioning\AddedOperation;
 use Docuccino\Attributes\Versioning\ApiVersionChange;
 use Docuccino\Attributes\Versioning\MadeRequestFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldOptional;
@@ -224,6 +225,7 @@ it('spells no verb for the combination the wire has no honest sentence for', fun
     expect(class_exists('Docuccino\\Attributes\\Versioning\\MadeRequestFieldRequired'))->toBeFalse()
         ->and(versionChangeVocabulary())->toBe([
             AddedEnumValue::class,
+            AddedOperation::class,
             ApiVersionChange::class,
             'Docuccino\\Attributes\\Versioning\\AppliesTo',
             MadeRequestFieldOptional::class,
@@ -334,4 +336,23 @@ it('lets a removed value state nothing but itself', function (): void {
     $removed = new RemovedEnumValue(enum: 'App\\Enums\\Status', value: 'pending_review');
 
     expect($removed->name)->toBe('')->and($removed->description)->toBe('');
+});
+
+/*
+ * The one verb whose subject is an operation rather than anything inside one — and so the only one that
+ * carries a SELECTOR. It names its own rather than taking `#[AppliesTo]`'s, because what it names is the
+ * thing itself rather than where an edit should land.
+ */
+it('names the operation a version added, in the grammar a selector reads', function (): void {
+    $added = new AddedOperation('POST /api/invoices');
+
+    expect($added->operation)->toBe('POST /api/invoices')
+        ->and((new ReflectionClass(AddedOperation::class))->getConstructor()?->getNumberOfParameters())->toBe(1);
+});
+
+it('spells no verb for putting an operation back', function (): void {
+    // Re-introducing one means declaring its parameters, bodies, responses and security, none of which
+    // the code carries any more — and unlike a field there is no vague-but-true shape to degrade to,
+    // because an operation with no documented responses is not vague, it is broken.
+    expect(class_exists('Docuccino\\Attributes\\Versioning\\RemovedOperation'))->toBeFalse();
 });

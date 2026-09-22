@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 42 attributes with signatures and examples.
+description: The docuccino/attributes package — all 43 attributes with signatures and examples.
 ---
 
 
@@ -32,7 +32,7 @@ say `list<T>` or `array<string, T>` for the one you mean.
 
 ## At a glance
 
-All 42 attributes, grouped by what they do:
+All 43 attributes, grouped by what they do:
 
 | Attribute | Does |
 | --- | --- |
@@ -77,6 +77,7 @@ All 42 attributes, grouped by what they do:
 | [`#[RemovedResponseField]`](#removedresponsefield) | Declare a response field older versions published that your code no longer has. |
 | [`#[AddedEnumValue]`](#addedenumvalue) | Declare a value this version added to a published enum, which older versions never sent or accepted. |
 | [`#[RemovedEnumValue]`](#removedenumvalue) | Declare a value older versions published that your enum no longer has. |
+| [`#[AddedOperation]`](#addedoperation) | Declare an operation this version added, which older versions did not serve. |
 | [`#[AppliesTo]`](#appliesto) | Narrow a version change to the operations it names. |
 
 ## Responses
@@ -1664,6 +1665,46 @@ itself — a pure function of that value, so putting a value back never renames 
 published only when **every** value carries a description, because readers hide the values missing from
 it — so putting an undescribed value into a fully described set costs the whole set its map, and the
 build tells you which declaration did it with `versioning.enum-prose-dropped`.
+
+### `#[AddedOperation]`
+
+Targets `CLASS`, repeatable.
+
+```php
+public function __construct(
+    public string $operation,
+)
+```
+
+Declares that an operation was **added** in this change's version, so the versions before it did not
+serve it and their documents do not describe it at all.
+
+Write the operation the way the document names it — the signature `POST /api/invoices`, its
+`operationId`, or either with `*` for any run of characters. It carries its own selector rather than
+taking one from `#[AppliesTo]`, because here the operation is the *subject* rather than the place an
+edit lands; `#[AppliesTo]` on the same change narrows its other verbs and says nothing about this one.
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'Invoices can be disputed.',
+)]
+#[AddedOperation('POST /api/invoices/*/disputes')]
+final class InvoiceDisputesArrived {}
+```
+
+This is falsifiable: the older document is **narrower** than your code, so a request to that operation
+replayed with the version pinned is an exchange the older document does not describe at all.
+
+The path item goes with its last operation — an empty one is a path a client can see and get nothing
+from, and absence is OpenAPI's own way of saying the version did not serve it. Components the removed
+operation was the last reader of are **left**: an unreferenced component is valid, and pruning them
+would delete a schema an overlay or your consumers' tooling still names.
+
+There is deliberately no `#[RemovedOperation]`. Putting an operation back would mean declaring its
+parameters, bodies, responses and security, none of which your code still carries — and unlike a field
+there is no vague-but-true fallback, because an operation with no documented responses is not vague, it
+is broken.
 
 ### `#[AppliesTo]`
 

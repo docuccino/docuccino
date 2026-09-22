@@ -282,7 +282,7 @@ is what says this document is one.
 ## The verbs a change can declare
 
 A change carries one or more verbs. Most name a class and a field; one names a parameter, which belongs
-to no class, and two name a value of a published enum. There are nine:
+to no class, two name a value of a published enum, and one names a whole operation. There are ten:
 
 | Verb | Says | The older document |
 | --- | --- | --- |
@@ -295,6 +295,7 @@ to no class, and two name a value of a published enum. There are nine:
 | [`#[RemovedResponseField]`](/laravel/reference/attributes/#removedresponsefield) | this response field is gone | publishes it again, with the shape you declare |
 | [`#[AddedEnumValue]`](/laravel/reference/attributes/#addedenumvalue) | this enum gained a value | leaves the value out of the set |
 | [`#[RemovedEnumValue]`](/laravel/reference/attributes/#removedenumvalue) | this enum lost a value | lists the value again |
+| [`#[AddedOperation]`](/laravel/reference/attributes/#addedoperation) | this operation did not exist yet | does not describe it at all |
 
 Every one but the two removals names its field, parameter or value the way your code spells it
 **today** — including each rename's `to:`.
@@ -377,6 +378,9 @@ Most of them have a runtime half you must write, and one does not:
   the older document does not describe, so the assertion says whether your runtime really keeps it out.
 - `#[RemovedEnumValue]` puts a value back, which widens. Nothing can refuse it, for the same reason
   nothing can refuse `#[MadeResponseFieldRequired]`.
+- `#[AddedOperation]` takes the operation out of the older document entirely, which is the narrowest
+  any verb makes it. A request to it replayed with that version pinned is an exchange the document does
+  not describe at all.
 
 ### Putting a field back
 
@@ -447,6 +451,32 @@ declaration that did it.
 A set your application enforces without an enum class — a Query Builder filter's allow-list, a
 validation `in:` rule — is published inline with no class to name, so neither verb can reach it. There
 is no way to version one today.
+
+### Saying an operation did not exist yet
+
+An operation added in a version simply is not in the documents before it:
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'Invoices can be disputed.',
+)]
+#[AddedOperation('POST /api/invoices/*/disputes')]
+final class InvoiceDisputesArrived {}
+```
+
+The path goes with its last operation, so a version that predates a whole resource publishes no trace
+of it. Components it was the last reader of stay where they are — an unreferenced component is valid,
+and deleting one would take a schema your consumers' tooling may still name.
+
+This verb names its own operation rather than taking one from `#[AppliesTo]`, because the operation is
+what it is *about*. A change that also renames a field elsewhere scopes that rename with `#[AppliesTo]`
+as usual, and the two do not interfere: every other verb is applied first, against the document your
+code publishes, and the operation goes afterwards.
+
+There is no way to say an operation was **removed**, and that is a refusal rather than a gap. Putting
+one back means declaring its parameters, bodies, responses and security — none of which your code still
+has — and an operation documented without its responses is not a vague answer, it is a wrong one.
 
 ## Ordering: which version is older
 

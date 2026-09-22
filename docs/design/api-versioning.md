@@ -503,6 +503,39 @@ it cost was that fact rather than the edit.
   an operation-plus-parameter address invented for it: the addressing every other verb uses is a class,
   and a second addressing grammar is a decision to take on its own evidence.
 
+### The operation verb — built
+
+`#[AddedOperation]`, which removes a whole node rather than editing one, and is the cheapest verb in
+the vocabulary for the same reason it is one of the few that can be refused.
+
+- **The asymmetry is the decision.** An addition is free: an operation the version did not serve is one
+  the older document does not describe, and nothing about it needs reading on the way out. A REMOVAL is
+  refused outright — putting an operation back means declaring parameters, bodies, responses and
+  security, and there is no vague-but-true fallback the way there is for a field, because an operation
+  with no documented responses is not vague, it is broken.
+- **A third verb kind, not a third branch.** It resolves no schema identity and edits no operation in
+  place, so it is neither existing interface; `OperationSetVerb` is the third, and the transformer's
+  dispatch names the kind rather than the class.
+- **It carries its own selector.** The design rule above is that scope is the CHANGE's property, and
+  this is the case that rule does not cover: `#[AppliesTo]` says where an edit should land, and here the
+  operation is the subject. The same reading `#[RenamedParameter]` gets for carrying its own `in:` and
+  `from:`. An empty selector is refused rather than read as a `*`, which would take every operation out
+  of the document.
+- **It goes last, after even the rename.** Every other verb names a node this change may also be
+  deleting; one that ran afterwards would find its target gone and report a correct declaration as
+  rotted — a report about the change's own doing. The guard is executed: a change renaming a parameter
+  of the one operation it also removes raises no diagnostic, and reversing the order makes it raise one.
+- **What goes with it, and what does not.** A path item left holding no operation goes — judged on the
+  METHODS rather than on emptiness, because a path item legitimately carries `summary`, `servers` and
+  shared `parameters`, and one left with only those describes nothing a client can call. Components the
+  operation was the last reader of STAY: an unreferenced component is valid, and pruning would delete a
+  schema an overlay or a consumer's tooling still names. `paths` itself is written back even when empty,
+  because it is a required member of the UIR document and a version that removed everything still owes
+  a document that passes its own schema.
+- **A shared path item is refused, not half-applied.** Two paths addressing one node through a `$ref`
+  are one operation to the document, so removing the method would remove it for a path the change never
+  named — the same refusal the scoped schema edit makes, for the same reason.
+
 ### Phase 2 — the production package
 
 A Laravel package owning the imperative half, with change objects that co-locate description, target
