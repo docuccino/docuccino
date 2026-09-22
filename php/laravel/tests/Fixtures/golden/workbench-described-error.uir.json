@@ -21,7 +21,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/FormController.php",
-                "line": 32,
+                "line": 35,
                 "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
               }
             },
@@ -60,7 +60,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/FormController.php",
-                    "line": 32,
+                    "line": 35,
                     "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
                   }
                 }
@@ -86,7 +86,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/FormController.php",
-                      "line": 32,
+                      "line": 35,
                       "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
                     }
                   }
@@ -144,7 +144,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/FormController.php",
-                    "line": 32,
+                    "line": 35,
                     "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
                   }
                 }
@@ -169,7 +169,7 @@
                         ],
                         "source": {
                           "file": "workbench/app/Http/Controllers/FormController.php",
-                          "line": 32,
+                          "line": 35,
                           "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
                         }
                       }
@@ -578,12 +578,30 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "c27f8aeae4dfb0f831888c0d0a350c3a533c874e91cc7bef76c3620aa0dcc12a"
+      "contentHash": "d83636c0a895ee4b5f20bdd5be872256234ed38e6b5aea482fef485000499eba"
     },
     "generator": {
       "name": "docuccino/laravel",
       "version": "0.18.1",
       "specVersion": "1.1.0"
-    }
+    },
+    "workflows": [
+      {
+        "id": "browse-forms",
+        "steps": [
+          {
+            "id": "read",
+            "operation": "op:v1:kgfeda3prpqaw73i",
+            "parameters": [
+              {
+                "name": "form",
+                "in": "path",
+                "value": "$steps.list.outputs.formId"
+              }
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

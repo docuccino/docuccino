@@ -25,6 +25,14 @@ declare(strict_types=1);
 function allowedAssociativeJsonDecodes(): array
 {
     return [
+        // A workflow step, encoded by `DeclaredSteps::record` and decoded back here. The values reach the
+        // document — a step's parameter values and its body payload — so the `{}`-versus-`[]` question is
+        // live, and the answer is that the distinction never existed on the way in: every one of them came
+        // from a PHP array written as an attribute argument, where `[]` is the only empty there is. The
+        // round trip is therefore faithful to what the author wrote, and an object reader would have to
+        // invent a distinction PHP cannot express to do better.
+        'php/laravel/src/Workflows/DeclaredSteps.php::decode' => 'workflow step note → the array an attribute argument already was',
+
         // Reads a package manifest for its `name`. Never a document.
         'php/core/src/Extensions/ResolvedExtensions.php::composerNameFor' => 'composer.json → package name',
 

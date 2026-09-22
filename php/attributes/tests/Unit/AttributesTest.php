@@ -45,6 +45,7 @@ use Docuccino\Attributes\Versioning\RenamedParameter;
 use Docuccino\Attributes\Versioning\RenamedRequestField;
 use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Attributes\Webhook;
+use Docuccino\Attributes\WorkflowStep;
 
 /**
  * A fixture carrying repeated + stacked attributes, reflected below to prove repeatability is
@@ -103,6 +104,7 @@ function attributeCatalogue(): array
         'RuleSchema' => [RuleSchema::class, Attribute::TARGET_CLASS],
         'ErrorComponent' => [ErrorComponent::class, Attribute::TARGET_CLASS | Attribute::TARGET_METHOD],
         'Webhook' => [Webhook::class, Attribute::TARGET_CLASS],
+        'WorkflowStep' => [WorkflowStep::class, $classFn | Attribute::IS_REPEATABLE],
         'Mock' => [Mock::class, Attribute::TARGET_CLASS | Attribute::TARGET_PROPERTY | Attribute::IS_REPEATABLE],
         'Versioning\\AddedEnumValue' => [AddedEnumValue::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
         'Versioning\\AddedOperation' => [AddedOperation::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
@@ -172,6 +174,7 @@ function defaultArgs(string $class): array
         Summary::class => ['Create an invoice'],
         ApiVersionChange::class => ['2026-09-01', 'Invoices publish `title` where they used to publish `name`.'],
         AppliesTo::class, AddedOperation::class => ['GET /api/invoices'],
+        WorkflowStep::class => ['checkout', 1],
         RenamedResponseField::class, RenamedRequestField::class => ['App\\Http\\Resources\\InvoiceResource', 'name', 'title'],
         RenamedParameter::class => ['query', 'q', 'search'],
         RemovedResponseField::class => ['App\\Http\\Resources\\InvoiceResource', 'subtotal'],

@@ -71,6 +71,7 @@ const CONFIG_REFERENCE_SECTIONS = [
     '### `examples`' => 'documents.*.examples',
     '### `coverage`' => 'documents.*.coverage',
     '### `overlays`' => 'documents.*.overlays',
+    '### `workflows`' => 'documents.*.workflows',
     '### `representation`' => 'documents.*.representation',
     '### `integrations`' => 'documents.*.integrations',
     '### `export`' => 'documents.*.export',

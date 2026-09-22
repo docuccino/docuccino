@@ -505,6 +505,22 @@ does. See [Postman collections](/laravel/reference/commands/#postman-collections
 | `postman.webhooks-dropped` | warning | A collection describes requests you send, so it can't carry the webhooks your API delivers | Nothing. Export an OpenAPI format alongside for the webhook contract |
 | `postman.yaml-ignored` | warning | A Postman collection has no YAML form, so JSON was written | Give the target a `.json` path |
 
+## Workflows
+
+A workflow is assembled from the `#[WorkflowStep]` declarations on the operations that take part. See
+[`#[WorkflowStep]`](/laravel/reference/attributes/#workflowstep).
+
+| Code | Severity | What it means | What to do |
+|---|---|---|---|
+| `workflow.order-contested` | warning | Two or more steps of one workflow declare the same `order`, so which runs first isn't something the declarations settle. They were published in step-id order to keep the build deterministic — an answer nobody chose | Give each step of a workflow its own `order` |
+| `workflow.output-undocumented` | warning | A step reads an output from a `$response.body#/…` pointer its operation's response doesn't document, so the promise the workflow makes to a consumer isn't one the document keeps. Nothing is reported where the response describes no shape to contradict | Point at a member the response schema describes, or document the member |
+| `workflow.step-unreadable` | warning | A `#[WorkflowStep]`'s `parameters` or `body` holds a value JSON can't carry — a pure enum case, a non-UTF-8 string — so the step couldn't be recorded and the workflow publishes without it | Write the value the wire carries: scalars, arrays of them, and the runtime expressions. A pure enum case is the usual cause; use its backing value, or the case name as a string |
+| `workflow.output-unresolved` | warning | A step reads a `$steps.<id>.outputs.<name>` from a step this document publishes, and that step produces no such output — or produces it later — so an Arazzo runner meets it as a null. A reference to a step in *another* document is silent: splitting a workflow's steps across documents is normal | Check the output name, and that the step producing it declares that output and comes earlier in the order |
+| `workflow.parameter-undeclared` | warning | A step passes a parameter its operation doesn't declare, so nothing says where the value travels and it was left out | Name the parameter the way the operation declares it — a step supplies one the operation already has, and its location is read from there |
+| `workflow.step-id-repeated` | warning | Two steps of one workflow have the same id, so an expression naming it could only mean one of them, and the second was left out. Two steps calling the same operation mint the same id by default | Give one of them an `id:` of its own |
+| `workflow.name-unusable` | warning | A workflow id or a step id isn't a name Arazzo can carry, so it was left out of the document | Arazzo takes letters, digits, `_` and `-`. Rename it, or give the step an `id:` where the one minted from the operation is the problem |
+| `workflow.describes-nothing` | warning | `documents.*.workflows` describes a workflow no operation declares a step of, so nothing carries the description | Config enriches a workflow that `#[WorkflowStep]` declares; it doesn't create one. Check the spelling, or retire the entry |
+
 ## Arazzo workflow descriptions
 
 An Arazzo description publishes the workflows a document declares — the sequences of calls a

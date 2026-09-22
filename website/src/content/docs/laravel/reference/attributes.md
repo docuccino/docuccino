@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 43 attributes with signatures and examples.
+description: The docuccino/attributes package — all 44 attributes with signatures and examples.
 ---
 
 
@@ -32,7 +32,7 @@ say `list<T>` or `array<string, T>` for the one you mean.
 
 ## At a glance
 
-All 43 attributes, grouped by what they do:
+All 44 attributes, grouped by what they do:
 
 | Attribute | Does |
 | --- | --- |
@@ -67,6 +67,7 @@ All 43 attributes, grouped by what they do:
 | [`#[CaseDescription]`](#casedescription) | Describe an enum case (`x-enumDescriptions`). |
 | [`#[Mock]`](#mock) | Hint how a mock server should fake a property. |
 | [`#[Webhook]`](#webhook) | Publish a class as a webhook your API delivers. |
+| [`#[WorkflowStep]`](#workflowstep) | Make this operation a step of a named workflow, published as Arazzo. |
 | [`#[ApiVersionChange]`](#apiversionchange) | Register one API version change, and the sentence consumers read about it. |
 | [`#[RenamedResponseField]`](#renamedresponsefield) | Declare a response field that older versions publish under another name. |
 | [`#[RenamedRequestField]`](#renamedrequestfield) | Declare a request field that older versions accept under another name. |
@@ -1276,6 +1277,57 @@ nothing left to read it off — you declare the change once, on a class of its o
 document is derived by applying that change backwards. The classes live in
 `Docuccino\Attributes\Versioning`; the [API versioning guide](/laravel/guides/api-versioning/) walks
 the whole loop.
+
+### `#[WorkflowStep]`
+
+Targets `CLASS | METHOD | FUNCTION`, repeatable.
+
+```php
+public function __construct(
+    public string $workflow,
+    public int $order,
+    public string $id = '',
+    public string $description = '',
+    public array $parameters = [],
+    public array $body = [],
+    public string $contentType = 'application/json',
+    public array $outputs = [],
+)
+```
+
+Makes this operation a step of a named workflow — a sequence of calls a consumer follows to get
+something done — published as an [Arazzo 1.1 description](/laravel/reference/commands/#arazzo-workflow-descriptions)
+beside your API document.
+
+**The workflow needs declaring nowhere else.** Writing this on the operations that take part is the
+whole of it; `documents.*.workflows` only *enriches* one, the way `tags.definitions` enriches a tag that
+`#[Group]` created.
+
+```php
+#[WorkflowStep('checkout', order: 1, outputs: ['holdId' => '$response.body#/id'])]
+public function reserve(ReserveRequest $request) { /* … */ }
+
+#[WorkflowStep('checkout', order: 2, body: ['hold' => '$steps.reserve.outputs.holdId'])]
+public function pay(PayRequest $request) { /* … */ }
+```
+
+`order` is stated rather than taken from the order your routes happen to be registered in, because a
+sequence derived from registration order changes when an unrelated route is added. Two steps claiming
+one position is reported with `workflow.order-contested`.
+
+`id` is what later steps call this one. Leave it out and one is minted from the operation's own
+`operationId`, which is a pure function of the operation — so adding a step renames nothing.
+
+`parameters` are named the way **the operation** declares them, and where the value travels is read
+from there rather than repeated; naming one the operation doesn't declare is reported with
+`workflow.parameter-undeclared`. `parameters`, `body` and `outputs` all carry Arazzo's runtime
+expressions (`$inputs.x`, `$steps.<id>.outputs.<name>`, `$response.body#/pointer`), and a step reading
+an output no earlier step produces is reported with `workflow.output-unresolved` — the check that makes
+authoring a workflow across several controllers safe.
+
+A step whose operation a given document doesn't publish is simply not part of that document's workflow,
+with nothing reported: splitting routes across documents is normal, and a warning there would fire on
+every build.
 
 ### `#[ApiVersionChange]`
 
