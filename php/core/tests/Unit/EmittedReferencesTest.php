@@ -27,7 +27,7 @@ use Docuccino\Core\Tests\Support\EmittedReferences;
  */
 function referenceSubjects(): array
 {
-    $formats = array_values(array_filter(Formats::ids(), static fn (string $id): bool => str_starts_with($id, 'openapi-')));
+    $formats = Formats::plainOpenApi();
     sort($formats);
 
     $subjects = [];

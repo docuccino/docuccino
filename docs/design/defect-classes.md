@@ -1241,9 +1241,12 @@ behind. Not a flag: an option here would be an admission that the default comman
 its own question. What the command checks is what the application SHIPS — its configured export
 targets, not a format the command picks — so a pipeline writing 3.0 is told about the 3.0 file.
 `docuccino:cache` prints its emit report on the console and exits non-zero for an invalid payload,
-keeping the log for the request path. And a target with no published schema behind it — `uir`,
-`postman` — SAYS so per target rather than staying silent, because silence beside a checked target
-reads as the clean answer.
+keeping the log for the request path. And a target whose bytes nobody read back — `full`, `postman`,
+`arazzo` — SAYS so per target rather than staying silent, because silence beside a checked target
+reads as the clean answer. What that line says is held to being true of every row it covers: it
+reports the missing READ-BACK, never "no published schema", which is true of `postman` alone. The
+earlier wording said the latter, and a run printing it for a `full` target contradicted its own
+preceding line, which names the UIR version that artifact had just been validated against.
 
 The guard is `ArtifactSoundnessReachTest`, and it is a union table rather than a set of per-command
 tests: every entry point that can be asked whether a document is sound carries a row, including the
@@ -1355,3 +1358,53 @@ reverting the judge to string equality passed the whole suite until a member who
 spelling was added. And `workbench-deep-required.uir.json` stands in the population, because the axis
 these act on is the published document and the corpus had no route whose container's requiredness two
 producers contested.
+
+## A name read for a family it is not a member of
+
+An id is a name. A question about the thing it names — what the artifact contains, what it is held
+to, who may read it — is a fact on a table, and the table is what answers. Reading the fact off the
+SHAPE of the name works exactly while the names happen to agree with it, and it goes on working
+silently: a prefix test is deterministic, it is simply wrong, so the day a new name joins the family
+the readers do not fail, they answer confidently and differently.
+
+*Instances.* Three at once, when the full artifact was briefly named `openapi-3.2-full`. Each read
+`str_starts_with($id, 'openapi-')` for "a plain OpenAPI artifact", and that id satisfies the spelling
+while being the one artifact that is not plain — it retains `x-docuccino`, provenance and all.
+`DocumentEmitOptions::openApiBeside()` is the one that mattered: it picks what a published Arazzo
+description's `sourceDescriptions` points consumers at, so the wrong answer is a disclosure of source
+files, lines and symbols rather than a cosmetic slip. The other two chose which formats a suite held
+to a meta-schema, and would have reported a missing check as a passing one. Nothing failed, in any of
+the three.
+
+*The tell.* A string function — `str_starts_with`, `str_contains`, a `^`-anchored regex — applied to
+an id, with a literal that is a PREFIX of a real name rather than a name. Read the literal out loud:
+`'openapi-'` is not the name of anything the product has, which is the whole signal. The same tell
+covers a version string, a diagnostic code or a component name read for its family.
+
+*The fix that worked.* The question becomes a column. `Formats::TABLE` gained
+`publishesPlainOpenApi()` beside `checksEmittedArtifact()` and `serialisesYaml()`, and every reader
+asks the table; `Formats::plainOpenApi()` exists so a test that wants the set reads the column too.
+Comparing against a WHOLE id stays fine — that is using the name for what it is.
+
+*And the half that keeps the question from arising: don't mint the name.* The id that shipped is
+`full`, not `openapi-3.2-full`, so it is outside the `openapi-` family by construction and no prefix
+test can reach it. The version segment was buying nothing either: there is exactly ONE full format,
+because a downlevel emitter strips the extension by definition, so `openapi-3.1-full` names nothing
+and the segment discriminated between things that cannot both exist. A name that pins a fact it does
+not need — a version, a family — is the supply side of this class, and before the name ships is the
+cheapest place to close it.
+
+*The tests that recognise it.* The guard is kept although the collision that motivated it is gone
+from the ids: it covers `postman` and `arazzo` and whatever is added next, and the ids agreeing with
+`'openapi-'` again today is the same condition the original proxy was written under and survived on.
+`FormatIdReaderArchTest` refuses a prefix or substring test whose literal is a strict prefix of any id
+the table knows, across every package's `src/` and `tests/`, the workbench and the tooling tests — two
+of the three originals were test-side, so a scan stopping at `src/` would have caught one. It carries
+three things a scan of this kind is worth nothing without: a denominator (the matching calls it
+looked through, floored well under the measured count), the
+boundary pinned in both directions (`OpenApiMetaSchema` prefix-matches a vendored meta-schema's `$id`
+URL, which the scan must SEE and must not flag), and the scanner's own counter-source, where
+`'openapi:'` and `'document.openapi-invalid'` are the near misses that would have got the guard
+switched off. It was executed against both originals restored, and named each one's file and
+function. `FormatsTest` holds the two boolean columns to agreeing row for row, with Arazzo's coming
+divergence named — two guards over two columns say nothing about whether the columns agree.

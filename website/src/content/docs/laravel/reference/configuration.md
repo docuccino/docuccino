@@ -594,7 +594,7 @@ export:
   targets:
     - { format: 'openapi-3.2', path: 'docs/openapi.json' }
     - { format: 'openapi-3.1', path: 'docs/openapi-3.1.yaml' }
-    - { format: 'uir', path: 'docs/api.uir.json' }
+    - { format: 'full', path: 'docs/api.uir.json' }
     - { format: 'postman', path: 'docs/collection.json' }
 ```
 
@@ -616,7 +616,7 @@ Rules the command enforces before it builds anything:
   clobber the other.
 - **The extension picks the serialization.** A `.yaml` or `.yml` path emits YAML; anything else emits
   JSON. There is no `yaml` key, because the path already says it.
-- **`uir` and `postman` have no YAML form**, so a `.yaml` path on either is an error rather than a
+- **`full` and `postman` have no YAML form**, so a `.yaml` path on either is an error rather than a
   `.yaml` file holding JSON.
 
 A broken target list fails the command with a `config.export-*` error **before** the build runs, so
@@ -632,8 +632,8 @@ export:
 
 `mock_faker_key` is the member every [`#[Mock]`](/laravel/reference/attributes/#mock) faker
 expression is published under in the OpenAPI artifacts. Unset — the default — leaves them out, so a
-bare export is pure OpenAPI. The `uir` format carries the hints whichever way this is set, and
-turning it on rewrites no byte of the UIR: it shapes the projection, never the document, so
+bare export is pure OpenAPI. The `full` format carries the hints whichever way this is set, and
+turning it on rewrites no byte of the document itself: it shapes the projection, never the document, so
 `configHash` and the fragment cache are untouched.
 
 ### `versioning`

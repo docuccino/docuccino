@@ -271,7 +271,7 @@ mistake fails the build instead of landing quietly.
 ### What to commit
 
 An OpenAPI artifact is the friendliest thing to review, and it's what most tooling wants. Commit a
-UIR document instead (`--format=uir`) when you also want stable identities and provenance in the
+UIR document instead (`--format=full`) when you also want stable identities and provenance in the
 repo — a richer diff, at the cost of a noisier file. Either way, pair it with `--provenance=none` if
 you'd rather source line numbers didn't churn in your PRs.
 

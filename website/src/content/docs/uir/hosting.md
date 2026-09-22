@@ -63,7 +63,7 @@ checking an artifact someone else produced.
 Export a UIR document, then point any draft 2020-12 validator at it:
 
 ```bash
-php artisan docuccino:export --format=uir --out=docs/api.uir.json
+php artisan docuccino:export --format=full --out=docs/api.uir.json
 
 # Python — pipx install check-jsonschema
 check-jsonschema \

@@ -2618,6 +2618,148 @@ function switchReadSites(string $source): array
 }
 
 /**
+ * The string functions that answer a question about PART of a string: the ones a caller reaches for
+ * when they mean to test an id's shape rather than the id itself. {@see formatIdPrefixTests}.
+ *
+ * @return list<string>
+ */
+function prefixMatchers(): array
+{
+    return [
+        'str_starts_with', 'str_ends_with', 'str_contains', 'strpos', 'stripos', 'strrpos', 'strripos',
+        'strstr', 'stristr', 'strncmp', 'strncasecmp', 'substr_compare', 'substr_count', 'fnmatch',
+        'preg_match', 'preg_match_all', 'preg_split', 'preg_replace', 'preg_quote',
+    ];
+}
+
+/**
+ * Every prefix- or substring-matching call in one source, paired with each string literal sitting
+ * directly in its argument list — one scan, with the two projections below over it.
+ *
+ * Tokenised for the reason {@see referencesIn} tokenises: it draws the string-and-comment line for
+ * free, so `str_starts_with($id, 'openapi-')` written inside a message or a docblock is not a call. A
+ * literal nested inside an INNER call is left to that call, which the same scan reaches on its own.
+ *
+ * @return list<array{line: int, site: string, literal: string}>
+ */
+function prefixMatchCalls(string $source): array
+{
+    $tokens = significantTokens($source);
+    $total = count($tokens);
+    $matchers = prefixMatchers();
+    $found = [];
+
+    foreach ($tokens as $index => $token) {
+        $matched = false;
+        foreach ($matchers as $matcher) {
+            $matched = $matched || namesGlobalSymbol($token, $matcher);
+        }
+
+        $previous = $tokens[$index - 1] ?? null;
+        if (! $matched
+            || ($previous !== null && $previous->is([T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION]))
+            || ($tokens[$index + 1] ?? null)?->text !== '(') {
+            continue;
+        }
+
+        $depth = 0;
+        for ($i = $index + 1; $i < $total; $i++) {
+            $text = $tokens[$i]->text;
+
+            if ($text === '(' || $text === '[' || $text === '{') {
+                $depth++;
+
+                continue;
+            }
+
+            if ($text === ')' || $text === ']' || $text === '}') {
+                $depth--;
+
+                if ($depth === 0) {
+                    break;
+                }
+
+                continue;
+            }
+
+            if ($depth === 1 && $tokens[$i]->is(T_CONSTANT_ENCAPSED_STRING)) {
+                $found[] = [
+                    'line' => $token->line,
+                    'site' => enclosingFunction($tokens, $index),
+                    'literal' => stripcslashes(substr($tokens[$i]->text, 1, -1)),
+                ];
+            }
+        }
+    }
+
+    return $found;
+}
+
+/**
+ * Every place one source tests a FORMAT ID by its SHAPE — the scan behind {@see Formats}'s table
+ * columns, as the line the call opens on and the function it sits in.
+ *
+ * A format id is a name, never a family. A reader spelling a question about the ARTIFACT as a test on
+ * the id gets a confident wrong answer the day a name joins the family without the fact — which is
+ * what happened in three places at once while the full artifact was called `openapi-3.2-full`, one of
+ * them deciding what a published Arazzo description points consumers at. The question a prefix test
+ * is reaching for is a column on the table, and asking the table is the only way to get it right.
+ *
+ * So: a matching call ({@see prefixMatchCalls}) whose literal is a STRICT prefix of an id in $ids. A
+ * whole id is not one — comparing against a name is the correct thing to do — and four characters is
+ * the floor, because shorter than that the literal is likelier to be somebody else's word than a
+ * format's. The literal is read through its regex punctuation too, so `'/^openapi-/'` is the same
+ * question asked with a different tool; `'openapi:'` is not, the colon making it a YAML key.
+ *
+ * **It therefore says nothing about an id of four characters or fewer**, and `full` is one: every
+ * strict prefix of it is under the floor, and `'full'` itself is a whole id. That is a gap and not a
+ * subtlety, so `FormatIdReaderArchTest` carries a ROW per id saying what each one's reach is, with
+ * `full`'s reading zero. Lowering the floor was measured rather than argued and does not close it —
+ * the reach it would buy is `'ful'` and `'fu'`, which nobody writes; what a reader reaching for a
+ * family question about `full` writes is `str_contains($id, 'full')`, a WHOLE id, exempt here and
+ * equivalent to `===` for as long as `full` is the only id carrying that word.
+ *
+ * @param  list<string>  $ids
+ * @return list<array{line: int, site: string, literal: string}>
+ */
+function formatIdPrefixTests(string $source, array $ids): array
+{
+    return array_values(array_filter(
+        prefixMatchCalls($source),
+        static function (array $call) use ($ids): bool {
+            $needle = trim($call['literal'], '/\\^$|()[]{}*+?# \'"');
+
+            if (strlen($needle) < 4 || in_array($needle, $ids, true)) {
+                return false;
+            }
+
+            foreach ($ids as $id) {
+                if ($needle !== $id && str_starts_with($id, $needle)) {
+                    return true;
+                }
+            }
+
+            return false;
+        },
+    ));
+}
+
+/**
+ * {@see formatIdPrefixTests} over a directory, as sorted `relative/path.php::function` strings.
+ *
+ * @param  list<string>  $ids
+ * @return list<string>
+ */
+function formatIdPrefixTestsIn(string $directory, array $ids, string $relativeTo): array
+{
+    return sourceSitesIn(
+        $directory,
+        static fn (string $source): array => array_column(formatIdPrefixTests($source, $ids), 'site'),
+        $relativeTo,
+    );
+}
+
+/**
  * Every ASSOCIATIVE `json_decode` a directory of PHP sources performs, as sorted `relative/path.php::function`
  * strings — the scan behind the one-reader rule ({@see JsonValue}).
  *

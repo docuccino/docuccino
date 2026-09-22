@@ -167,12 +167,13 @@ it('404s a viewer route whose document is no longer configured', function (): vo
     $this->get('/docs/api.json')->assertNotFound();
 });
 
-it('serves source=artifact, re-emitting a UIR artifact as OpenAPI', function (): void {
+it('serves source=artifact, re-emitting the full artifact as plain OpenAPI', function (): void {
     config()->set('docuccino.documents.default.viewer.gate', 'viewApiDocs');
     config()->set('docuccino.documents.default.viewer.source', 'artifact');
     Gate::before(static fn ($user = null): bool => true);
 
-    // Write a UIR artifact (carries the `uir` field + x-docuccino provenance) to the export path.
+    // Write a `full` artifact — the one that retains `x-docuccino`, provenance and all —
+    // to the export path.
     $artifact = sys_get_temp_dir().'/docuccino-artifact-'.uniqid().'.json';
     file_put_contents($artifact, (new UirEmitter)->emit(
         UirDocument::fromArray(
@@ -186,10 +187,12 @@ it('serves source=artifact, re-emitting a UIR artifact as OpenAPI', function ():
 
     $body = $this->get('/docs/api.json')->assertOk()->getContent();
 
-    // Re-emitted through the OpenAPI emitter: it's OAS (no `uir` key) and leaks no internal x-docuccino
-    // provenance to the browser.
-    expect($body)->toContain('"openapi"')
-        ->and($body)->not->toContain('"uir"')
+    // Re-emitted through the OpenAPI emitter: OAS, and none of the extension the artifact on disk
+    // carries reaches the browser. The artifact is read back first, so the absence below is a strip
+    // that happened rather than a member no artifact has had since the extension move — which is what
+    // the retired `"uir"` root key had quietly become.
+    expect(file_get_contents($artifact))->toContain('"x-docuccino"')
+        ->and($body)->toContain('"openapi"')
         ->and($body)->not->toContain('x-docuccino');
 
     @unlink($artifact);
@@ -347,9 +350,9 @@ it('picks the best servable target whatever order the list is written in', funct
     // 3.2 is the most faithful thing the viewer can serve, so it wins regardless of list order.
     expect($this->get('/docs/api.json')->assertOk()->getContent())->toContain('served-openapi-3.2');
 })->with([
-    '3.2 first' => [['openapi-3.2', 'openapi-3.1', 'uir']],
-    '3.2 last' => [['uir', 'openapi-3.1', 'openapi-3.2']],
-    '3.2 in the middle' => [['openapi-3.1', 'openapi-3.2', 'uir']],
+    '3.2 first' => [['openapi-3.2', 'openapi-3.1', 'full']],
+    '3.2 last' => [['full', 'openapi-3.1', 'openapi-3.2']],
+    '3.2 in the middle' => [['openapi-3.1', 'openapi-3.2', 'full']],
 ]);
 
 it('skips a YAML target rather than serving YAML as application/json', function (): void {
@@ -364,7 +367,7 @@ it('skips a YAML target rather than serving YAML as application/json', function 
 
     setBuild('documents.default.export', ['targets' => [
         ['format' => 'openapi-3.2', 'path' => $dir.'/openapi.yaml'],
-        ['format' => 'uir', 'path' => $dir.'/api.uir.json'],
+        ['format' => 'full', 'path' => $dir.'/api.uir.json'],
     ]]);
 
     // The 3.2 target ranks higher but is YAML, which the browser cannot read under this content type.
