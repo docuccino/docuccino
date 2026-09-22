@@ -467,6 +467,42 @@ half of every rename in a real version history undeclarable. `#[RenamedRequestFi
   The stronger oracle (assert the exchange is the documented SUCCESS rather than merely something the
   document describes) is a real gap in the assertion API and is not a wording fix.
 
+### The value-set verbs — built
+
+`#[AddedEnumValue]` and `#[RemovedEnumValue]`, which move a member of a published enum rather than a
+member of a schema. The pair is the first in the vocabulary whose subject is a VALUE, and most of what
+it cost was that fact rather than the edit.
+
+- **The falsifiable direction is the one that narrows.** An added value dropped from the older document
+  makes that document narrower than the code, which is what a per-version contract test can refuse: pin
+  the version, replay the suite, and a response carrying the value is an exchange the older document
+  does not describe. `#[RemovedEnumValue]` widens, and a document looser than the wire always passes —
+  so the pair ships together rather than the widening half shipping alone, which is the trap issue #329
+  named about `#[AddedResponseField]`.
+- **A value is `string|int`, and that is why the foldability guard learned to read a union.** The guard
+  tested `ReflectionNamedType`, so no declaration could carry both spellings. Narrowing to `string`
+  would have made an int-backed set spell its member `"3"` where the server sends `3` — a value a
+  generated client cannot match — so the guard now accepts a union whose every member is foldable, and
+  refuses one with a `null`, an object or a closure in it. The refusal is EXECUTED against a probe
+  carrying all four, because a rule that now says yes to some unions has to be shown still saying no to
+  the rest.
+- **The decoration is positional, so the edit is to four members or to none.** `x-enum-varnames`,
+  `x-enumNames` and `x-enum-descriptions` are parallel to `enum` and applied by index; a value spliced
+  out of one while the others kept their length hands every member past it the previous one's name in
+  somebody's SDK. The edited set is therefore re-decorated through `EnumDecoration` — the same rulebook
+  that built it — rather than patched member by member here. That is also what keeps the map's own
+  contract: `x-enumDescriptions` is published only where every value carries prose, so a value put back
+  without any costs the set its map, and `versioning.enum-prose-dropped` says which declaration did it
+  rather than leaving the author to find a missing extension.
+- **A minted member name is a pure function of the value.** A re-added value with no `name:` is named
+  through `ListValueNames`, the same minting the allow-list sets use, so putting a value back never
+  renames a neighbour — the invariant that makes publishing a name at all safe.
+- **A set is addressed by its enum class, and an allow-list set is not addressable.** Query Builder
+  filters and a validation `in:` rule publish inline parameter enums with no class to name, so no verb
+  can reach one. That is the hole issue #329 recorded, and it is left as a hole rather than closed with
+  an operation-plus-parameter address invented for it: the addressing every other verb uses is a class,
+  and a second addressing grammar is a decision to take on its own evidence.
+
 ### Phase 2 — the production package
 
 A Laravel package owning the imperative half, with change objects that co-locate description, target

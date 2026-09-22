@@ -282,7 +282,7 @@ is what says this document is one.
 ## The verbs a change can declare
 
 A change carries one or more verbs. Most name a class and a field; one names a parameter, which belongs
-to no class. There are seven:
+to no class, and two name a value of a published enum. There are nine:
 
 | Verb | Says | The older document |
 | --- | --- | --- |
@@ -293,9 +293,11 @@ to no class. There are seven:
 | [`#[MadeResponseFieldOptional]`](/laravel/reference/attributes/#maderesponsefieldoptional) | this response field can now be absent | names it in `required` |
 | [`#[MadeRequestFieldOptional]`](/laravel/reference/attributes/#maderequestfieldoptional) | this request field is now optional | names it in `required`, and refuses a body without it |
 | [`#[RemovedResponseField]`](/laravel/reference/attributes/#removedresponsefield) | this response field is gone | publishes it again, with the shape you declare |
+| [`#[AddedEnumValue]`](/laravel/reference/attributes/#addedenumvalue) | this enum gained a value | leaves the value out of the set |
+| [`#[RemovedEnumValue]`](/laravel/reference/attributes/#removedenumvalue) | this enum lost a value | lists the value again |
 
-Every one but the removal names its field or parameter the way your code spells it **today** —
-including each rename's `to:`.
+Every one but the two removals names its field, parameter or value the way your code spells it
+**today** — including each rename's `to:`.
 That is the direction the whole vocabulary runs in, and it is the one thing to keep straight.
 
 The removal is the exception, and it has to be: the field is not in your code, so there is no present
@@ -370,6 +372,11 @@ Most of them have a runtime half you must write, and one does not:
   way `#[MadeResponseFieldOptional]` is — replay the suite pinned to that version and the assertion
   says whether your runtime really still sends the field. Declared without it, the older document is
   looser than the wire and nothing can refuse it.
+- `#[AddedEnumValue]` takes a value out of the older set, which makes that document **narrower** than
+  your code. Replay the suite pinned to that version and a response carrying the value is an exchange
+  the older document does not describe, so the assertion says whether your runtime really keeps it out.
+- `#[RemovedEnumValue]` puts a value back, which widens. Nothing can refuse it, for the same reason
+  nothing can refuse `#[MadeResponseFieldRequired]`.
 
 ### Putting a field back
 
@@ -401,6 +408,45 @@ One consequence of `required: true` is worth expecting: no example in your docum
 your code does not have, so an example standing where that schema governs now fails its own schema and
 is dropped, with `versioning.example-dropped` naming where it stood. A consumer copies an example and
 sends it back, so publishing none beats publishing one the document itself refuses.
+
+### Moving a value of an enum
+
+A published enum is a closed set, and a version that changed the set changed what a client may send or
+must handle. Both verbs name the enum **class** and the value as the wire carries it — the backing
+value, not the case name:
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'An invoice can now be `disputed`, and is never `provisional`.',
+)]
+#[AddedEnumValue(enum: InvoiceStatus::class, value: 'disputed')]
+#[RemovedEnumValue(
+    enum: InvoiceStatus::class,
+    value: 'provisional',
+    name: 'Provisional',
+    description: 'Drafted by an importer, and not yet reviewed.',
+)]
+final class InvoiceStatusesChanged {}
+```
+
+An int-backed enum takes a number — `value: 3`, not `value: '3'`. A member published as `"3"` where your
+server sends `3` is one a generated client cannot match.
+
+Everything published beside the set moves with the value. Member names and per-value descriptions are
+parallel to `enum` and applied by index, so they are edited together rather than left pointing one
+member out of step in your consumers' SDKs.
+
+`name:` on a removal is what older generated clients called the value; leave it out and one is minted
+from the value itself, which never renames a neighbour. `description:` is worth writing whenever the
+rest of the set has one: the `x-enumDescriptions` map is published only when **every** value carries a
+description, because readers hide the values missing from it — so an undescribed value put back into a
+fully described set costs the whole set its map, and `versioning.enum-prose-dropped` names the
+declaration that did it.
+
+A set your application enforces without an enum class — a Query Builder filter's allow-list, a
+validation `in:` rule — is published inline with no class to name, so neither verb can reach it. There
+is no way to version one today.
 
 ## Ordering: which version is older
 

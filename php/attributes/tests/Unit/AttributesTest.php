@@ -32,11 +32,13 @@ use Docuccino\Attributes\SchemaName;
 use Docuccino\Attributes\Security;
 use Docuccino\Attributes\Summary;
 use Docuccino\Attributes\Unauthenticated;
+use Docuccino\Attributes\Versioning\AddedEnumValue;
 use Docuccino\Attributes\Versioning\ApiVersionChange;
 use Docuccino\Attributes\Versioning\AppliesTo;
 use Docuccino\Attributes\Versioning\MadeRequestFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldRequired;
+use Docuccino\Attributes\Versioning\RemovedEnumValue;
 use Docuccino\Attributes\Versioning\RemovedResponseField;
 use Docuccino\Attributes\Versioning\RenamedParameter;
 use Docuccino\Attributes\Versioning\RenamedRequestField;
@@ -101,11 +103,13 @@ function attributeCatalogue(): array
         'ErrorComponent' => [ErrorComponent::class, Attribute::TARGET_CLASS | Attribute::TARGET_METHOD],
         'Webhook' => [Webhook::class, Attribute::TARGET_CLASS],
         'Mock' => [Mock::class, Attribute::TARGET_CLASS | Attribute::TARGET_PROPERTY | Attribute::IS_REPEATABLE],
+        'Versioning\\AddedEnumValue' => [AddedEnumValue::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
         'Versioning\\ApiVersionChange' => [ApiVersionChange::class, Attribute::TARGET_CLASS],
         'Versioning\\AppliesTo' => [AppliesTo::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
         'Versioning\\MadeRequestFieldOptional' => [MadeRequestFieldOptional::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
         'Versioning\\MadeResponseFieldOptional' => [MadeResponseFieldOptional::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
         'Versioning\\MadeResponseFieldRequired' => [MadeResponseFieldRequired::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
+        'Versioning\\RemovedEnumValue' => [RemovedEnumValue::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
         'Versioning\\RemovedResponseField' => [RemovedResponseField::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
         'Versioning\\RenamedParameter' => [RenamedParameter::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
         'Versioning\\RenamedRequestField' => [RenamedRequestField::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
@@ -169,6 +173,7 @@ function defaultArgs(string $class): array
         RenamedResponseField::class, RenamedRequestField::class => ['App\\Http\\Resources\\InvoiceResource', 'name', 'title'],
         RenamedParameter::class => ['query', 'q', 'search'],
         RemovedResponseField::class => ['App\\Http\\Resources\\InvoiceResource', 'subtotal'],
+        AddedEnumValue::class, RemovedEnumValue::class => ['App\\Enums\\InvoiceStatus', 'disputed'],
         MadeResponseFieldRequired::class, MadeResponseFieldOptional::class,
         MadeRequestFieldOptional::class => ['App\\Http\\Resources\\InvoiceResource', 'title'],
         default => [],

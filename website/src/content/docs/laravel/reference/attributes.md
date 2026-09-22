@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 40 attributes with signatures and examples.
+description: The docuccino/attributes package — all 42 attributes with signatures and examples.
 ---
 
 
@@ -32,7 +32,7 @@ say `list<T>` or `array<string, T>` for the one you mean.
 
 ## At a glance
 
-All 40 attributes, grouped by what they do:
+All 42 attributes, grouped by what they do:
 
 | Attribute | Does |
 | --- | --- |
@@ -75,6 +75,8 @@ All 40 attributes, grouped by what they do:
 | [`#[MadeResponseFieldOptional]`](#maderesponsefieldoptional) | Declare a response field that older versions always sent. |
 | [`#[MadeRequestFieldOptional]`](#maderequestfieldoptional) | Declare a request field that older versions demanded. |
 | [`#[RemovedResponseField]`](#removedresponsefield) | Declare a response field older versions published that your code no longer has. |
+| [`#[AddedEnumValue]`](#addedenumvalue) | Declare a value this version added to a published enum, which older versions never sent or accepted. |
+| [`#[RemovedEnumValue]`](#removedenumvalue) | Declare a value older versions published that your enum no longer has. |
 | [`#[AppliesTo]`](#appliesto) | Narrow a version change to the operations it names. |
 
 ## Responses
@@ -1584,6 +1586,84 @@ is valid.
 Where the field lands in `properties` is counted from the names already there rather than from the
 order you wrote the attributes in, so two removals on one schema come out the same way round either
 way.
+
+### `#[AddedEnumValue]`
+
+Targets `CLASS`, repeatable.
+
+```php
+public function __construct(
+    public string $enum,
+    public string|int $value,
+)
+```
+
+Declares that a value was **added** to a published enum in this change's version, so the versions before
+it never sent or accepted it and their documents leave it out.
+
+Write the value the way the wire carries it — the backing value of your backed enum, not the case name.
+A string-backed set takes `value: 'invited'`; an int-backed one takes `value: 3`, as a number, because
+an enum member published as `"3"` where your server sends `3` is one a generated client cannot match.
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'An invoice can now be `disputed`.',
+)]
+#[AddedEnumValue(enum: InvoiceStatus::class, value: 'disputed')]
+final class InvoiceGainedDisputedStatus {}
+```
+
+This is the direction that **narrows** the older document, and so the direction a per-version contract
+test can refuse: pin the version, replay your suite, and the assertion says whether your application
+really keeps the value out of a response to a caller pinned that far back. Its sibling below widens, and
+a document looser than the wire always passes.
+
+The member names and per-value descriptions published beside the set move with it. They are parallel to
+`enum` and applied by index, so the value is taken out of all of them together rather than leaving every
+member past it holding the previous one's name in your consumers' SDKs.
+
+### `#[RemovedEnumValue]`
+
+Targets `CLASS`, repeatable.
+
+```php
+public function __construct(
+    public string $enum,
+    public string|int $value,
+    public string $name = '',
+    public string $description = '',
+)
+```
+
+Declares that a value was **removed** from a published enum in this change's version, so the versions
+before it published it and their documents list it again.
+
+Like `#[RemovedResponseField]`, this names something your code no longer carries — a deleted case has no
+backing value left to read. Unlike it, there is no shape to declare: a value is its own shape, and the
+set's `type` already says what kind of value it is.
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'An invoice is never `provisional` now; it is `draft` until it is issued.',
+)]
+#[RemovedEnumValue(
+    enum: InvoiceStatus::class,
+    value: 'provisional',
+    name: 'Provisional',
+    description: 'Drafted by an importer, and not yet reviewed.',
+)]
+final class InvoiceLostProvisionalStatus {}
+```
+
+`name` is what older generated clients knew the value by. Leave it out and one is minted from the value
+itself — a pure function of that value, so putting a value back never renames a neighbour.
+
+`description` is worth writing whenever the rest of the set has one. The `x-enumDescriptions` map is
+published only when **every** value carries a description, because readers hide the values missing from
+it — so putting an undescribed value into a fully described set costs the whole set its map, and the
+build tells you which declaration did it with `versioning.enum-prose-dropped`.
 
 ### `#[AppliesTo]`
 
