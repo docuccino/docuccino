@@ -28,6 +28,9 @@ beforeEach(function (): void {
     $router->get('api/flows/spaced', [WorkflowController::class, 'spaced']);
     $router->get('api/flows/twin-one', [WorkflowController::class, 'twinOne']);
     $router->get('api/flows/twin-two', [WorkflowController::class, 'twinTwo']);
+    $router->get('api/flows/sends', [WorkflowController::class, 'sends']);
+    $router->post('api/dup/one', [WorkflowController::class, 'reserve']);
+    $router->post('api/dup/two', [WorkflowController::class, 'reserve']);
     $router->get('api/flows/first', [WorkflowController::class, 'first']);
     $router->get('api/flows/second', [WorkflowController::class, 'second']);
 });
@@ -38,7 +41,7 @@ beforeEach(function (): void {
  * @param  list<string>  $routes
  * @return array<string, array<string, mixed>>
  */
-function assembledWorkflows(array $routes = ['api/flows/*']): array
+function assembledWorkflows(array $routes = ['api/flows/reserve', 'api/flows/pay']): array
 {
     setDocuments(['default' => [
         'info' => ['title' => 'Flows API', 'version' => '1.0.0'],
@@ -121,8 +124,8 @@ it('reports a parameter the operation does not declare', function (): void {
     expect(workflowCodes(['api/flows/strays']))->toBe(['workflow.parameter-undeclared']);
 });
 
-it('reports an output no earlier step produces', function (): void {
-    expect(workflowCodes(['api/flows/reads']))->toBe(['workflow.output-unresolved']);
+it('reports an output the step it names does not produce', function (): void {
+    expect(workflowCodes(['api/flows/reserve', 'api/flows/pay', 'api/flows/reads']))->toBe(['workflow.output-unresolved']);
 });
 
 it('reports two steps claiming one position', function (): void {
@@ -174,4 +177,47 @@ it('reports a workflow whose name Arazzo cannot carry', function (): void {
 it('reports two steps of one workflow sharing a step id', function (): void {
     // Two steps calling one operation mint the same id by default, which is when this happens for real.
     expect(workflowCodes(['api/flows/twin-one', 'api/flows/twin-two']))->toBe(['workflow.step-id-repeated']);
+});
+
+/*
+ * One declaration reached by two routes is ONE declaration. Before this, an action bound twice produced
+ * "two steps are both called reserve" and "2 steps both declare order 1" from a single attribute —
+ * reports whose remedy is to edit a second declaration that does not exist. The repo's own golden had
+ * absorbed exactly that.
+ */
+it('collapses a declaration several routes reached into one step', function (): void {
+    $checkout = assembledWorkflows(['api/dup/*'])['checkout'];
+
+    expect(array_column($checkout['steps'], 'id'))->toBe(['reserve'])
+        ->and(workflowCodes(['api/dup/*']))->toBe([]);
+});
+
+it('still reports two different declarations that collide', function (): void {
+    // The control the row above needs: collapsing identical declarations must not quiet a real mistake.
+    expect(workflowCodes(['api/flows/twin-one', 'api/flows/twin-two']))->toBe(['workflow.step-id-repeated']);
+});
+
+/*
+ * A workflow whose steps live in documents that do not overlap. `pay` reads an output of `reserve`, and
+ * a document that publishes only `pay` cannot see it — which is the normal multi-document case, not a
+ * mistake, and a report there fires on every build of every application that splits its routes.
+ */
+it('says nothing about a reference to a step this document does not publish', function (): void {
+    expect(workflowCodes(['api/flows/pay']))->toBe([]);
+});
+
+it('still reports a reference to a step it does publish', function (): void {
+    // The control: the same shape, in a document that HAS the step being read, with the output name
+    // misspelled. Without it, the silence above is indistinguishable from deleting the check.
+    expect(workflowCodes(['api/flows/reserve', 'api/flows/pay', 'api/flows/reads']))->toBe(['workflow.output-unresolved']);
+});
+
+/*
+ * A declaration JSON cannot carry. The step is left out — there is nothing to publish — but a workflow
+ * that quietly published a shorter sequence would be telling a consumer that these calls get them
+ * there while omitting one, so the build says which declaration it could not read.
+ */
+it('reports a step whose declaration could not be carried', function (): void {
+    expect(workflowCodes(['api/flows/sends']))->toBe(['workflow.step-unreadable'])
+        ->and(assembledWorkflows(['api/flows/sends']))->toBe([]);
 });

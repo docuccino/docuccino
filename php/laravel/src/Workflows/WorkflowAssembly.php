@@ -118,7 +118,15 @@ final class WorkflowAssembly implements DocumentTransformer, RouteNoteCollector
         $steps = [];
         $taken = [];
 
-        foreach (self::ordered($declared) as $step) {
+        foreach ($declared as $step) {
+            $reason = $step[DeclaredSteps::UNREADABLE] ?? null;
+
+            if (is_string($reason)) {
+                $context->report(self::unreadableStep($id, is_string($step['route'] ?? null) ? $step['route'] : '', $reason));
+            }
+        }
+
+        foreach (self::ordered(self::steps($declared)) as $step) {
             $signature = is_string($step['route'] ?? null) ? $step['route'] : '';
             $site = $published[$signature] ?? null;
 
@@ -217,6 +225,61 @@ final class WorkflowAssembly implements DocumentTransformer, RouteNoteCollector
             ),
             outputs: $outputs,
         );
+    }
+
+    /**
+     * The entries that are steps, as opposed to the markers left where a declaration could not be
+     * carried at all ({@see DeclaredSteps::encode()}).
+     *
+     * @param  list<array<string, mixed>>  $declared
+     * @return list<array<string, mixed>>
+     */
+    private static function steps(array $declared): array
+    {
+        $steps = array_values(array_filter(
+            $declared,
+            static fn (array $entry): bool => ! is_string($entry[DeclaredSteps::UNREADABLE] ?? null),
+        ));
+
+        return self::perDeclaration($steps);
+    }
+
+    /**
+     * One entry per DECLARATION, not per route that reached it.
+     *
+     * An action bound to more than one route records the same `#[WorkflowStep]` once per route, and
+     * they are identical but for the route. Left as several, one attribute produces "two steps are
+     * both called read" and "2 steps both declare order 2" — reports whose remedy is to edit a second
+     * declaration that does not exist, which is the diagnostic that teaches people to stop reading the
+     * channel. So they collapse, and the survivor is chosen by route signature rather than by which
+     * route the build reached first.
+     *
+     * Two DIFFERENT declarations colliding is a real mistake and still reported: they differ somewhere,
+     * so they do not collapse.
+     *
+     * @param  list<array<string, mixed>>  $steps
+     * @return list<array<string, mixed>>
+     */
+    private static function perDeclaration(array $steps): array
+    {
+        $byDeclaration = [];
+
+        foreach ($steps as $step) {
+            $declaration = $step;
+            unset($declaration['route']);
+
+            $key = (string) json_encode($declaration);
+            $route = is_string($step['route'] ?? null) ? $step['route'] : '';
+
+            if (! isset($byDeclaration[$key]) || $route < $byDeclaration[$key]['route']) {
+                $byDeclaration[$key] = ['route' => $route, 'step' => $step];
+            }
+        }
+
+        return array_values(array_map(
+            static fn (array $held): array => $held['step'],
+            $byDeclaration,
+        ));
     }
 
     /**
@@ -390,7 +453,7 @@ final class WorkflowAssembly implements DocumentTransformer, RouteNoteCollector
     {
         $seen = [];
 
-        foreach ($declared as $step) {
+        foreach (self::steps($declared) as $step) {
             $signature = is_string($step['route'] ?? null) ? $step['route'] : '';
 
             if (! isset($published[$signature])) {
@@ -427,10 +490,25 @@ final class WorkflowAssembly implements DocumentTransformer, RouteNoteCollector
      */
     private static function reportDanglingOutputs(string $workflow, array $steps, DocumentContext $context): void
     {
+        // Only a step THIS document publishes can be judged. A reference naming one it does not is the
+        // split-document case — one workflow's steps can live in documents that do not overlap — and a
+        // report there fires on every build of every application that splits its routes, which is the
+        // population this class promises silence for. What stays reportable is the half an author can
+        // act on: a step that is here and produces no such output, or produces it later.
+        $here = [];
+
+        foreach ($steps as $step) {
+            $here[$step->id] = true;
+        }
+
         $available = [];
 
         foreach ($steps as $step) {
             foreach (self::references($step) as $reference) {
+                if (! isset($here[self::referencedStep($reference)])) {
+                    continue;
+                }
+
                 if (! isset($available[$reference])) {
                     $context->report(new Diagnostic(
                         severity: Severity::Warning,
@@ -441,7 +519,7 @@ final class WorkflowAssembly implements DocumentTransformer, RouteNoteCollector
                             $workflow,
                             $reference,
                         ),
-                        help: 'An output is readable only after the step that declares it has run. Check the step id and the output name, and that the step producing it declares that output and comes earlier in the order.',
+                        help: 'An output is readable only after the step that declares it has run. Check the output name, and that the step producing it declares that output and comes earlier in the order.',
                     ));
                 }
             }
@@ -450,6 +528,12 @@ final class WorkflowAssembly implements DocumentTransformer, RouteNoteCollector
                 $available['$steps.'.$step->id.'.outputs.'.$name] = true;
             }
         }
+    }
+
+    /** The step a `$steps.<id>.outputs.<name>` reference names. */
+    private static function referencedStep(string $reference): string
+    {
+        return explode('.', $reference)[1] ?? '';
     }
 
     /**
@@ -539,6 +623,26 @@ final class WorkflowAssembly implements DocumentTransformer, RouteNoteCollector
                 $pointer,
             ),
             help: 'Point at a member the response schema describes, or document the member — a workflow output a consumer cannot find in the response is a promise the document does not keep. Nothing is reported where the response describes no shape to contradict.',
+        );
+    }
+
+    /**
+     * A step the build could not carry from the declaration to the document. Reported rather than
+     * dropped: a workflow that quietly published a shorter sequence would be telling a consumer that
+     * these calls get them there while leaving one out.
+     */
+    private static function unreadableStep(string $workflow, string $route, string $reason): Diagnostic
+    {
+        return new Diagnostic(
+            severity: Severity::Warning,
+            code: 'workflow.step-unreadable',
+            message: sprintf(
+                'A step of the workflow "%s" declared on %s could not be read, so the workflow publishes without it (%s).',
+                $workflow,
+                $route === '' ? 'an operation' : $route,
+                $reason,
+            ),
+            help: 'A step is carried as JSON, so its `parameters` and `body` have to be values JSON can hold — scalars, arrays of them, and the runtime expressions. A pure enum case or a non-UTF-8 string is the usual cause; write the value the wire carries instead.',
         );
     }
 

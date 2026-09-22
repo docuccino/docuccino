@@ -10,6 +10,7 @@ use Docuccino\Attributes\Response;
 use Docuccino\Attributes\WorkflowStep;
 use Illuminate\Http\JsonResponse;
 use Workbench\App\Data\FormData;
+use Workbench\App\Enums\FormChannel;
 
 /**
  * The routes the workflow assembly is proved against. Registered by the tests rather than by the
@@ -84,15 +85,33 @@ final class WorkflowController
     }
 
     /**
-     * Read an output no step of the workflow produces.
+     * Read an output the step it names does not produce.
+     *
+     * `reserve` is a step of this same workflow and declares `holdId`, so the reference is judged —
+     * unlike one naming a step in another document, which this build cannot see and says nothing about.
      */
     #[Group('Checkout')]
     #[QueryParameter('hold', description: 'The hold to pay for.')]
     #[Response(status: 200, type: FormData::class, description: 'A form.')]
-    #[WorkflowStep('dangling', order: 1, id: 'reads', parameters: ['hold' => '$steps.absent.outputs.holdId'])]
+    #[WorkflowStep('checkout', order: 3, id: 'reads', parameters: ['hold' => '$steps.reserve.outputs.nope'])]
     public function reads(): JsonResponse
     {
         return response()->json(new FormData(id: 5, title: 'Form', publishedAt: null));
+    }
+
+    /**
+     * Declare a body JSON cannot carry.
+     *
+     * A pure enum case is a legal attribute argument and ordinary PHP to write; `json_encode` refuses
+     * it. The step cannot be recorded, and the build says so rather than publishing a workflow one
+     * step short in silence.
+     */
+    #[Group('Checkout')]
+    #[Response(status: 200, type: FormData::class, description: 'A form.')]
+    #[WorkflowStep('unreadable', order: 1, id: 'sends', body: ['channel' => FormChannel::Email])]
+    public function sends(): JsonResponse
+    {
+        return response()->json(new FormData(id: 11, title: 'Form', publishedAt: null));
     }
 
     /**

@@ -56,7 +56,10 @@ final class ResponsePointer
             array_slice(explode('/', $matches[1]), 1),
         );
 
-        return self::resolves($schema, $segments, $doc) ? null : $matches[1];
+        /** @var array<string, bool> $seen */
+        $seen = [];
+
+        return self::resolves($schema, $segments, $doc, $seen) ? null : $matches[1];
     }
 
     /**
@@ -100,8 +103,9 @@ final class ResponsePointer
      * @param  array<string, mixed>  $schema
      * @param  list<string>  $segments
      * @param  array<string, mixed>  $doc
+     * @param  array<string, bool>  $seen
      */
-    private static function resolves(array $schema, array $segments, array $doc, int $depth = 0): bool
+    private static function resolves(array $schema, array $segments, array $doc, array &$seen, int $depth = 0): bool
     {
         if ($depth > self::MAX_DEPTH) {
             return true;
@@ -113,46 +117,90 @@ final class ResponsePointer
             return true;
         }
 
+        // Memoised on the node and how much of the pointer is left, which is what bounds the WORK
+        // rather than merely the depth. A branch keyword recurses on the SAME segments, so a schema
+        // whose `$ref`s fan out re-enters the same subtree once per path through it — the product of
+        // the fan-outs, not their sum, and a build that never finishes on a document nothing is wrong
+        // with. Answering `true` while a node is still being answered also breaks a cycle the way the
+        // rest of this class degrades: reached again, it adds nothing, so it cannot refute.
+        $key = count($segments).':'.hash('xxh128', (string) json_encode($schema));
+
+        if (array_key_exists($key, $seen)) {
+            return $seen[$key];
+        }
+
+        $seen[$key] = true;
+        $answer = self::answer($schema, $segments, $doc, $seen, $depth);
+        $seen[$key] = $answer;
+
+        return $answer;
+    }
+
+    /**
+     * Whether this one node documents the member, with the branches it composes from tried first.
+     *
+     * A branch answering yes is enough — a value validating against that branch has the member — and a
+     * node that composes AND names properties of its own is the ordinary `allOf` + `properties` idiom,
+     * so a failed branch set falls through to them rather than deciding on its own. Only when nothing
+     * else on the node can speak does an exhausted branch set refute: there the schema really did
+     * describe its members, and none of them is this one.
+     *
+     * @param  array<string, mixed>  $schema
+     * @param  list<string>  $segments
+     * @param  array<string, mixed>  $doc
+     * @param  array<string, bool>  $seen
+     */
+    private static function answer(array $schema, array $segments, array $doc, array &$seen, int $depth): bool
+    {
         $segment = $segments[0];
         $rest = array_slice($segments, 1);
 
         // Derived from the keyword table rather than listed here, so a position added there is read by
-        // this walk the day it lands. `prefixItems` rides along with the branch keywords and costs
-        // nothing: its subschemas describe items rather than members, so a NAME segment finds nothing in
-        // one — and where it somehow did, the answer is "documented", which only ever makes this quieter.
+        // this walk the day it lands. `prefixItems` rides along and costs nothing: its subschemas
+        // describe items rather than members, so a NAME segment finds nothing in one.
+        $composed = false;
+
         foreach (SchemaKeywords::at(SchemaKeywords::POSITION_SCHEMA_LIST) as $keyword) {
             $branches = $schema[$keyword] ?? null;
 
-            if (is_array($branches) && $branches !== []) {
-                // One branch documenting it is enough: a value validating against that branch has it.
-                foreach ($branches as $branch) {
-                    if (is_array($branch) && self::resolves(self::node($branch), $segments, $doc, $depth + 1)) {
-                        return true;
-                    }
+            if (! is_array($branches)) {
+                continue;
+            }
+
+            foreach ($branches as $branch) {
+                if (! is_array($branch)) {
+                    continue;
                 }
 
-                return false;
+                $composed = true;
+
+                if (self::resolves(self::node($branch), $segments, $doc, $seen, $depth + 1)) {
+                    return true;
+                }
             }
         }
 
         // An index into a list. Where the schema states no `items`, it describes no member at that
-        // position and cannot refute one.
+        // position and cannot refute one — unless it composed, in which case it did describe them.
         if (preg_match('/^\d+$/', $segment) === 1 || $segment === '-') {
             $items = $schema['items'] ?? null;
 
-            return ! is_array($items) || self::resolves(self::node($items), $rest, $doc, $depth + 1);
+            return is_array($items)
+                ? self::resolves(self::node($items), $rest, $doc, $seen, $depth + 1)
+                : ! $composed;
         }
 
         $properties = $schema['properties'] ?? null;
 
-        if (! is_array($properties) || $properties === []) {
-            // Says nothing about its members — an unconstrained object, or a schema that is not one.
-            return true;
+        if (is_array($properties) && $properties !== []) {
+            $property = $properties[$segment] ?? null;
+
+            return is_array($property) && self::resolves(self::node($property), $rest, $doc, $seen, $depth + 1);
         }
 
-        $property = $properties[$segment] ?? null;
-
-        return is_array($property) && self::resolves(self::node($property), $rest, $doc, $depth + 1);
+        // Nothing on this node says anything about its members: silent, unless the branches already
+        // did and none of them had it.
+        return ! $composed;
     }
 
     /**
