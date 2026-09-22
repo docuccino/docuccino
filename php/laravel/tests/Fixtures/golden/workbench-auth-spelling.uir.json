@@ -21,7 +21,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/FormController.php",
-                "line": 23,
+                "line": 25,
                 "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
               }
             },
@@ -112,7 +112,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/FormController.php",
-                    "line": 23,
+                    "line": 25,
                     "symbol": "implicit:auth-middleware"
                   }
                 }
@@ -139,7 +139,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/FormController.php",
-                "line": 23,
+                "line": 25,
                 "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
               }
             },
@@ -230,7 +230,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/FormController.php",
-                    "line": 23,
+                    "line": 25,
                     "symbol": "implicit:auth-middleware"
                   }
                 }
@@ -309,12 +309,26 @@
     "document": {
       "id": "doc:spelling",
       "configHash": "d45f9ec9ecbb16025a4f461fe3930d42d91e02270892c582a516693901e6961b",
-      "contentHash": "0d3f56d3d2638be1251dbdc9cdbc56b64844ac27761dd81e665bec38bfb9a0cd"
+      "contentHash": "31f362b69654013972371c5c9cc80a44c7d74e481c28cda9ae39a6988a47fe8a"
     },
     "generator": {
       "name": "docuccino/laravel",
       "version": "0.14.1",
       "specVersion": "1.1.0"
-    }
+    },
+    "workflows": [
+      {
+        "id": "browse-forms",
+        "steps": [
+          {
+            "id": "list",
+            "operation": "op:v1:raaunoixpijptn4z",
+            "outputs": {
+              "formId": "$response.body#/data/0/id"
+            }
+          }
+        ]
+      }
+    ]
   }
 }

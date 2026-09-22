@@ -21,7 +21,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/FormController.php",
-                "line": 32,
+                "line": 35,
                 "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
               }
             },
@@ -60,7 +60,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/FormController.php",
-                    "line": 32,
+                    "line": 35,
                     "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
                   }
                 }
@@ -86,7 +86,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/FormController.php",
-                      "line": 32,
+                      "line": 35,
                       "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
                     }
                   }
@@ -142,7 +142,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/FormController.php",
-                    "line": 32,
+                    "line": 35,
                     "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
                   }
                 }
@@ -166,7 +166,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/FormController.php",
-                "line": 32,
+                "line": 35,
                 "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
               }
             },
@@ -205,7 +205,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/FormController.php",
-                    "line": 32,
+                    "line": 35,
                     "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
                   }
                 }
@@ -231,7 +231,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/FormController.php",
-                      "line": 32,
+                      "line": 35,
                       "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
                     }
                   }
@@ -287,7 +287,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/FormController.php",
-                    "line": 32,
+                    "line": 35,
                     "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
                   }
                 }
@@ -331,12 +331,30 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "6c8fc833a7272366d6ef2a2fb69868ea9f76b8b7405bc981b29200fb92994e05"
+      "contentHash": "6f261eb78c85d7350d88ca6b30994574498ac2aa08d5c8b8fbc7c4401515869b"
     },
     "generator": {
       "name": "docuccino/laravel",
       "version": "0.8.3",
       "specVersion": "1.1.0"
-    }
+    },
+    "workflows": [
+      {
+        "id": "browse-forms",
+        "steps": [
+          {
+            "id": "read",
+            "operation": "op:v1:bja57pfgyabrynk3",
+            "parameters": [
+              {
+                "name": "form",
+                "in": "path",
+                "value": "$steps.list.outputs.formId"
+              }
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

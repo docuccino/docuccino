@@ -460,6 +460,30 @@ assembly time as the `overlay(45)` precedence layer — a standards-based hand-e
 survives regeneration. See [Customizing the output](/laravel/guides/customizing-output/) for worked
 examples.
 
+### `workflows`
+
+Prose and inputs for the workflows your [`#[WorkflowStep]`](/laravel/reference/attributes/#workflowstep)
+attributes declare, keyed by workflow id.
+
+```yaml
+# workflows:
+#   checkout:
+#     summary: 'Take payment for a basket'
+#     description: 'Reserve the basket, take payment, then confirm.'
+#     inputs: {}
+```
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `<workflow id>.summary` | none | One line saying what the workflow achieves, for the consumer following it. |
+| `<workflow id>.description` | none | The longer form, CommonMark. |
+| `<workflow id>.inputs` | none | A JSON Schema describing the values the workflow is started with, published as the Arazzo workflow's `inputs`. |
+
+**Enrichment only.** Config never *creates* a workflow, the way `tags.definitions` never creates a tag —
+the attributes declare it and a document with no configuration publishes it fine. An entry naming a
+workflow no operation declares a step of is reported with `workflow.describes-nothing` rather than
+published, so a renamed workflow doesn't leave prose behind pointing at nothing.
+
 ### `representation`
 
 ```yaml
