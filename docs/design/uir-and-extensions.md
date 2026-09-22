@@ -13,8 +13,8 @@ Top level:
 
 ```json
 {
-  "$schema": "https://spec.docuccino.app/uir/1.0/schema.json",
-  "uir": "1.0.0",
+  "$schema": "https://spec.docuccino.app/uir/1.1/schema.json",
+  "uir": "1.1.0",
   "openapi": "3.2.0",
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.2/dialect/base",
   "info": {}, "servers": [], "security": [], "tags": [],
@@ -22,7 +22,7 @@ Top level:
   "components": { "schemas": {}, "responses": {}, "parameters": {}, "securitySchemes": {}, "examples": {}, "headers": {} },
   "x-docuccino": {
     "document": { "id": "doc:default", "configHash": "…", "contentHash": "…" },
-    "generator": { "name": "docuccino/laravel", "version": "…", "specVersion": "1.0.0" },
+    "generator": { "name": "docuccino/laravel", "version": "…", "specVersion": "1.1.0" },
     "content": { "pages": [] },
     "diagnostics": []
   }

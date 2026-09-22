@@ -31,7 +31,7 @@ const repoRoot = resolve(here, '..', '..');
 const specRoot = resolve(repoRoot, 'spec', 'uir');
 
 // Every UIR spec version we publish. Add a row when a new major.minor ships.
-const versions = ['1.0'];
+const versions = ['1.0', '1.1'];
 
 const check = process.argv.includes('--check');
 const published = (version) => resolve(here, '..', 'public', 'uir', version, 'schema.json');

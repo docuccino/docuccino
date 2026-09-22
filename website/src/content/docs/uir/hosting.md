@@ -6,7 +6,7 @@ description: Where the UIR JSON Schema lives, how it's versioned, and how to val
 Every UIR document declares its schema with a `$schema` URL:
 
 ```json
-"$schema": "https://spec.docuccino.app/uir/1.0/schema.json"
+"$schema": "https://spec.docuccino.app/uir/1.1/schema.json"
 ```
 
 That URL is a real, fetchable JSON Schema — a static file served at exactly the address it declares as
@@ -18,7 +18,7 @@ required.
 | | |
 | --- | --- |
 | **Dialect** | JSON Schema draft 2020-12 |
-| **`$id`** | `https://spec.docuccino.app/uir/1.0/schema.json` |
+| **`$id`** | `https://spec.docuccino.app/uir/1.1/schema.json` (current); `/uir/1.0/` is still served |
 | **Required root members** | `uir`, `openapi`, `info`, `paths` |
 | **External references** | None — every `$ref` is internal, so one file is the whole schema |
 
@@ -33,19 +33,26 @@ The UIR format is versioned independently of the Docuccino packages, and the ver
 the URL as `major.minor`:
 
 ```
-https://spec.docuccino.app/uir/1.0/schema.json
+https://spec.docuccino.app/uir/1.1/schema.json
 ```
 
-- **Additive changes** (new optional members) are a minor bump on the same URL.
-- **Structural changes** get a new major version at a new URL, so documents written against an older
-  version keep validating against the schema they were built for.
+- **Additive changes** (new optional members) are a **minor** bump, and because the URL carries the
+  minor they get a new URL of their own. Every earlier URL stays served, so a document written against
+  one keeps validating against the schema it was built for.
+- **Structural changes** get a new **major** version, likewise at its own URL.
 
-New members added in a minor revision are optional, so a document that predates them still validates.
-Because the `x-docuccino` subtree is strictly closed to undefined members, growth happens by
-versioning the schema — never by readers silently tolerating members they don't recognize.
+New members added in a minor revision are optional, so a document that predates them validates against
+the newer schema too — which is why one bundled copy can check them all. Because the `x-docuccino`
+subtree is strictly closed to undefined members, growth happens by versioning the schema — never by
+readers silently tolerating members they don't recognize.
 
-A document's `uir` member (`"1.0.0"`) is the precise format version it was written against; the URL
-carries only `major.minor`, so both `1.0.0` and a later `1.0.1` validate against `/uir/1.0/`.
+A document's `uir` member (`"1.1.0"`) is the precise format version it was written against; the URL
+carries only `major.minor`, so both `1.1.0` and a later `1.1.1` validate against `/uir/1.1/`.
+
+| Version | Added |
+| --- | --- |
+| [1.0](https://spec.docuccino.app/uir/1.0/schema.json) | The initial document |
+| [1.1](https://spec.docuccino.app/uir/1.1/schema.json) | `x-docuccino.workflows` — declared multi-step sequences over the document's own operations |
 
 ## Validating a document
 
@@ -60,7 +67,7 @@ php artisan docuccino:export --format=uir --out=docs/api.uir.json
 
 # Python — pipx install check-jsonschema
 check-jsonschema \
-  --schemafile https://spec.docuccino.app/uir/1.0/schema.json \
+  --schemafile https://spec.docuccino.app/uir/1.1/schema.json \
   docs/api.uir.json
 ```
 
@@ -68,9 +75,9 @@ For CI or an air-gapped build, vendor the schema and validate against the local 
 dialect named explicitly:
 
 ```bash
-curl -o uir-1.0.schema.json https://spec.docuccino.app/uir/1.0/schema.json
+curl -o uir-1.1.schema.json https://spec.docuccino.app/uir/1.1/schema.json
 
-npx ajv-cli validate --spec=draft2020 -s uir-1.0.schema.json -d docs/api.uir.json
+npx ajv-cli validate --spec=draft2020 -s uir-1.1.schema.json -d docs/api.uir.json
 ```
 
 The `$id` is stable, so a document validates identically whether the schema is fetched or read from
