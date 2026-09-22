@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\SpecValidation\OpenApiMetaSchema;
+use Docuccino\Core\Tests\Support\ArazzoSchema;
 use Docuccino\Core\Tests\Support\PostmanSchema;
 
 /*
@@ -10,10 +11,11 @@ use Docuccino\Core\Tests\Support\PostmanSchema;
  * oracles and for the reason that file already names: a guard derived from a subset is silent
  * outside it.
  *
- * Three guards pin schemas here. `OpenApiMetaSchemaTest` pins the three OpenAPI meta-schemas by
+ * Four guards pin schemas here. `OpenApiMetaSchemaTest` pins the three OpenAPI meta-schemas by
  * identity and by content; `PostmanSchemaPinTest` pins the Postman collection schema the same way;
- * `SchemaShippingTest` and `website/scripts/sync-schema.mjs --check` hold the three copies of our OWN
- * UIR schema byte-identical to the canonical one. Each proves its own members and is silent outside
+ * `ArazzoSchemaPinTest` pins the Arazzo workflow schema; `SchemaShippingTest` and
+ * `website/scripts/sync-schema.mjs --check` hold every copy of our OWN UIR schema byte-identical to the
+ * canonical one, for every version published. Each proves its own members and is silent outside
  * them — and side by side they left one member unpinned for as long as it has existed. The Postman
  * schema was vendored with the emitter, read as the only structural oracle over every emitted
  * collection, and answerable to nothing: a byte edited anywhere in its 55 KB, or a dialect lift that
@@ -23,6 +25,11 @@ use Docuccino\Core\Tests\Support\PostmanSchema;
  * here independently — a JSON Schema document in this repository is a vendored third-party schema,
  * which owes both pins, or it is our own UIR schema, which owes a byte-drift guard, and there is no
  * third kind — instead of asking any of those files which schemas it happened to pick up.
+ *
+ * Note the two spellings the rule needs, which are not a nicety: OUR schema is matched by prefix,
+ * because every version of it owes the same pin and that pin reads the directory. A third-party one is
+ * matched EXACTLY, because a different version or a different dated revision is a different file whose
+ * digest nobody has taken, and adopting it silently is what the pins exist to prevent.
  */
 
 /**
@@ -34,6 +41,7 @@ function schemaPinOwed(string $declaredId): string
     return match (true) {
         str_starts_with($declaredId, 'https://spec.openapis.org/oas/') => 'openapi',
         $declaredId === PostmanSchema::PUBLISHED => 'postman',
+        $declaredId === ArazzoSchema::PUBLISHED => 'arazzo',
         // By PREFIX, because every version of our own schema owes the same pin and that pin already
         // covers them all: `SchemaShippingTest` walks the authoring directory rather than a list, so a
         // version added tomorrow is drift-guarded the day it lands. An exact id here would have been
@@ -56,7 +64,7 @@ function declaredSchemaId(string $path): string
 it('leaves no schema in the tree outside a pin', function (): void {
     $documents = schemaDocuments();
 
-    $buckets = ['openapi' => [], 'postman' => [], 'uir' => [], 'unpinned' => []];
+    $buckets = ['openapi' => [], 'postman' => [], 'arazzo' => [], 'uir' => [], 'unpinned' => []];
 
     foreach ($documents as $path) {
         $buckets[schemaPinOwed(declaredSchemaId($path))][] = $path;
@@ -66,9 +74,10 @@ it('leaves no schema in the tree outside a pin', function (): void {
     // whoever reads the failure needs to know which one.
     expect($buckets['unpinned'])->toBe([])
         // A scan that matched nothing would satisfy the line above. Every bucket is non-empty and
-        // every floor is close under what the tree holds today — 3, 1 and 3.
+        // every floor is close under what the tree holds today — 3, 1, 1 and 6.
         ->and(count($buckets['openapi']))->toBeGreaterThanOrEqual(3)
         ->and(count($buckets['postman']))->toBeGreaterThanOrEqual(1)
+        ->and(count($buckets['arazzo']))->toBeGreaterThanOrEqual(1)
         ->and(count($buckets['uir']))->toBeGreaterThanOrEqual(6)
         ->and(count($documents))->toBe(array_sum(array_map(count(...), $buckets)));
 });
@@ -84,6 +93,10 @@ it('leaves no schema in the tree outside a pin', function (): void {
 it('calls a schema that owes a pin and has none unpinned', function (): void {
     expect(schemaPinOwed('https://spec.openapis.org/oas/3.2/schema/2025-09-17'))->toBe('openapi')
         ->and(schemaPinOwed(PostmanSchema::PUBLISHED))->toBe('postman')
+        ->and(schemaPinOwed(ArazzoSchema::PUBLISHED))->toBe('arazzo')
+        // A different REVISION of the same Arazzo minor is a different file and owes its own decision,
+        // because the OAI dates each one and the digest pins exactly the dated bytes.
+        ->and(schemaPinOwed('https://spec.openapis.org/arazzo/1.1/schema/2099-01-01'))->toBe('unpinned')
         ->and(schemaPinOwed('https://spec.docuccino.app/uir/1.0/schema.json'))->toBe('uir')
         // Every version of ours, including ones nobody has published yet: the pin they owe is the
         // drift guard, and that guard reads the directory rather than a list.

@@ -108,7 +108,7 @@ Generate and export API documentation from your routes.
 ```
 docuccino:export
     {document? : The configured document key (defaults to every document)}
-    {--format= : uir | openapi-3.2 | openapi-3.1 | openapi-3.0 | postman — writes this one format instead of the configured targets}
+    {--format= : uir | openapi-3.2 | openapi-3.1 | openapi-3.0 | postman | arazzo — writes this one format instead of the configured targets}
     {--out= : Output path (defaults to the matching target, else the document export path)}
     {--fail-on=none : none | error | warning | info | hint — the quietest severity that still makes the command exit non-zero}
     {--provenance=winners : none | winners | full — UIR provenance detail}
@@ -120,12 +120,12 @@ docuccino:export
 | Flag | Values / default | Effect |
 | --- | --- | --- |
 | `document` | any configured key / all documents | Which document(s) to export. Unknown key → exit 1. |
-| `--format` | `uir` \| `openapi-3.2` \| `openapi-3.1` \| `openapi-3.0` \| `postman` / all configured targets | Writes **only** this format, replacing the document's [`export.targets`](/laravel/reference/configuration/#export) for that run. `uir` → raw UIR; `openapi-3.1` and `openapi-3.0` → the downlevel emitters; `postman` → a [Postman Collection v2.1.0](#postman-collections). An invalid value errors (no silent fallback). |
+| `--format` | `uir` \| `openapi-3.2` \| `openapi-3.1` \| `openapi-3.0` \| `postman` \| `arazzo` / all configured targets | Writes **only** this format, replacing the document's [`export.targets`](/laravel/reference/configuration/#export) for that run. `uir` → raw UIR; `openapi-3.1` and `openapi-3.0` → the downlevel emitters; `postman` → a [Postman Collection v2.1.0](#postman-collections); `arazzo` → an [Arazzo 1.1 workflow description](#arazzo-workflow-descriptions). An invalid value errors (no silent fallback). |
 | `--out` | path / the matching target, else [`export.path`](/laravel/reference/configuration/#export) | Overrides the output path — resolved against `base_path()` unless already absolute, and missing directories are created. Rejected when it would have to hold several artifacts at once: more than one document configured and no `document` argument, or a document with several [`export.targets`](/laravel/reference/configuration/#export) and no `--format` — in both cases each write would clobber the last. Name a document, pass `--format`, or configure per-document targets. |
 | `--fail-on` | `none` \| `error` \| `warning` \| `info` \| `hint` / `none` | The quietest severity that still fails the run: anything reported at that severity **or louder** makes the exit code non-zero, and `none` never fails on severity. `error` catches errors only, `warning` adds warnings, `info` adds the recovery reports — an unrecoverable payload, a model with no readable columns, a validation rule that could not be read — and `hint` catches everything. The floor reads everything the run **prints**: what the build found, what an emitter reported while writing each artifact, and what reading your export configuration reported before the build started. An invalid value errors (no silent fallback) — a typo must not quietly remove the gate. Codes listed under [`diagnostics.accept`](/laravel/reference/configuration/#diagnostics) still print but never fail the run; errors are never accepted. |
 | `--provenance` | `none` \| `winners` \| `full` / `winners` | UIR provenance detail. `full` keeps every record including its `overrode` trail, `winners` keeps the records but drops the trails, `none` strips provenance entirely. An invalid value errors (no silent fallback). Only `--format=uir` carries provenance — the OpenAPI emitters always drop it. |
 | `--drop-ids` | flag / off | Omits the flat `x-docuccino-id` member. OpenAPI exports carry it **by default**: `x-docuccino` itself never survives emission (it holds provenance — source file, line, symbol — which has no business in a published spec), but the id is an opaque hash of members the document already publishes, and it is what lets [`docuccino:diff`](#docuccinodiff) pair a committed artifact by identity instead of by method + path. Drop it if you want bytes indistinguishable from a hand-written spec, accepting the weaker diff. No effect on `--format=uir`, which carries identities natively. |
-| `--yaml` | flag / off | Emit YAML instead of JSON, for the single-target `--format` override. Configured targets state it in their own path instead (`.yaml`/`.yml`). Rejected with `--format=uir` and `--format=postman`, which have no YAML form. |
+| `--yaml` | flag / off | Emit YAML instead of JSON, for the single-target `--format` override. Configured targets state it in their own path instead (`.yaml`/`.yml`). Rejected with `--format=uir` and `--format=postman`, which have no YAML form; `--format=arazzo` accepts it, and Arazzo is usually written as YAML. |
 | `--memory-limit` | php.ini value, e.g. `2G` / unset | Raises the process memory limit before inference runs — see the shared-behavior note above. |
 
 **One build, many artifacts.** With no `--format`, the command writes every target the document
@@ -179,6 +179,27 @@ build as your OpenAPI file:
 Postman cannot hold a JSON Schema, so a collection is a weaker contract than the OpenAPI file — keep
 emitting both. Where something has no Postman equivalent at all (webhooks, callbacks, `mutualTLS` and
 `openIdConnect` schemes) a `postman.*` diagnostic names it rather than letting the file go quiet.
+
+### Arazzo workflow descriptions
+
+`--format=arazzo` (or an `arazzo` export target) writes an **[Arazzo 1.1](https://spec.openapis.org/arazzo/latest.html)**
+description of the workflows a document declares — the sequences of calls that get a consumer from
+nothing to a finished outcome.
+
+- **Steps address operations by `operationId`**, resolved from the identity the workflow declared. That
+  is the whole point of declaring a workflow against your code rather than writing the Arazzo file by
+  hand: rename a route and the workflow still names the same operation, because what it stored was the
+  operation rather than its name.
+- **A success criterion is derived** from the status your operation documents, so a step is something a
+  runner can actually fail. An operation documenting more than one success gets none — picking between
+  them would fail a workflow that worked.
+- **`sourceDescriptions`** points at the OpenAPI file exported beside it, so the two travel together.
+
+A document that declares no workflows writes **no Arazzo file at all**, and says so with
+`arazzo.no-workflows`. Arazzo requires at least one workflow and at least one source description, so
+there is no empty form of the document — writing nothing beats writing a file that fails the
+specification it names. A step whose operation the document does not publish, or publishes without an
+`operationId`, is left out with `arazzo.step-unresolved` rather than emitted pointing at nothing.
 
 **Committing the output.** Docuccino's output is deterministic — identical code produces
 byte-for-byte identical output. Commit `docs/openapi.json` (or a UIR document) and diff it in CI — see

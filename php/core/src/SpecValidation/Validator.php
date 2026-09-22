@@ -6,6 +6,7 @@ namespace Docuccino\Core\SpecValidation;
 
 use Docuccino\Core\Canonical\Canonicalizer;
 use Docuccino\Core\Canonical\CanonicalJsonSerializer;
+use Docuccino\Core\Spec\UirSpec;
 use Opis\JsonSchema\Errors\ErrorFormatter;
 use Opis\JsonSchema\Validator as OpisValidator;
 use RuntimeException;
@@ -40,7 +41,7 @@ final class Validator
         // Package-relative, never monorepo-relative — the schema ships in the package's resources/
         // so this resolves the same from a vendor/docuccino/core install. `composer sync-schema`
         // copies the authoring original from spec/uir/1.1/, and SchemaShippingTest guards the drift.
-        return dirname(__DIR__, 2).'/resources/spec/uir/1.1/schema.json';
+        return dirname(__DIR__, 2).'/resources/spec/uir/'.UirSpec::minor().'/schema.json';
     }
 
     /**

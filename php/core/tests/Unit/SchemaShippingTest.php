@@ -73,6 +73,11 @@ it('resolves the schema from a simulated vendor/docuccino/core install layout', 
     @mkdir($pkgRoot.'/src/SpecValidation', 0755, true);
     @mkdir($pkgRoot.'/resources/spec/uir/'.defaultSchemaVersion(), 0755, true);
     copy(dirname(__DIR__, 2).'/src/SpecValidation/Validator.php', $pkgRoot.'/src/SpecValidation/Validator.php');
+
+    // The version it resolves the path from ships beside it, so the probe below needs it too — a
+    // package-relative path is only package-relative if everything it reads is in the package.
+    @mkdir($pkgRoot.'/src/Spec', 0755, true);
+    copy(dirname(__DIR__, 2).'/src/Spec/UirSpec.php', $pkgRoot.'/src/Spec/UirSpec.php');
     copy(Validator::defaultSchemaPath(), $pkgRoot.'/resources/spec/uir/'.defaultSchemaVersion().'/schema.json');
 
     // Load the RELOCATED class body in a subprocess (avoids redeclaring the already-autoloaded class)
@@ -81,6 +86,7 @@ it('resolves the schema from a simulated vendor/docuccino/core install layout', 
     $script = $tmp.'/probe.php';
     file_put_contents($script, <<<PHP
         <?php
+        require '{$pkgRoot}/src/Spec/UirSpec.php';
         require '{$pkgRoot}/src/SpecValidation/Validator.php';
         \$path = \\Docuccino\\Core\\SpecValidation\\Validator::defaultSchemaPath();
         echo \$path.PHP_EOL;
