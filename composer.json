@@ -1,12 +1,12 @@
 {
     "name": "docuccino/docuccino",
-    "description": "UIR-based API documentation generator for Laravel (monorepo).",
+    "description": "OpenAPI 3.2 documentation generator for Laravel, built from the real types in your code (monorepo).",
     "type": "project",
     "keywords": [
         "openapi",
         "api-documentation",
         "laravel",
-        "uir",
+        "openapi-generator",
         "swagger",
         "scramble-alternative"
     ],
