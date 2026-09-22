@@ -406,7 +406,7 @@ Folders become default nav groups; frontmatter (`title`/`slug`/`summary`/`tags` 
 `nav.{group,order,hidden,type,ref}`) overrides. `::operation{...}` / `::schema{...}` directives are
 resolved against the document; broken refs become diagnostics. `null` compiles nothing. See
 [Adding your own pages](/laravel/guides/narrative-content/) for the full workflow, or the
-[UIR content layer](/uir/#content-layer) for how it lives in the raw document.
+[content layer](/uir/#content-layer) for how it lives in the full document.
 
 ### `examples`
 
@@ -594,7 +594,7 @@ export:
   targets:
     - { format: 'openapi-3.2', path: 'docs/openapi.json' }
     - { format: 'openapi-3.1', path: 'docs/openapi-3.1.yaml' }
-    - { format: 'full', path: 'docs/api.uir.json' }
+    - { format: 'full', path: 'docs/api.full.json' }
     - { format: 'postman', path: 'docs/collection.json' }
 ```
 
@@ -633,7 +633,7 @@ export:
 `mock_faker_key` is the member every [`#[Mock]`](/laravel/reference/attributes/#mock) faker
 expression is published under in the OpenAPI artifacts. Unset — the default — leaves them out, so a
 bare export is pure OpenAPI. The `full` format carries the hints whichever way this is set, and
-turning it on rewrites no byte of the document itself: it shapes the projection, never the document, so
+turning it on rewrites no byte of the full document: it shapes the projection, never the document, so
 `configHash` and the fragment cache are untouched.
 
 ### `versioning`

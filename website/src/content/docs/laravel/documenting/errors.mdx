@@ -1,5 +1,8 @@
 ---
 title: Error responses
+head:
+  - tag: title
+    content: 'Document Laravel API Error Responses in OpenAPI | Docuccino'
 description: Document 4xx and 5xx responses automatically — read out of your real exception handling, with framework defaults behind them.
 ---
 
@@ -1016,7 +1019,7 @@ contest: both bodies keep a name derived from their own content and the build re
 Where a body lives is representation, not contract, so
 [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references on both sides: a body
 moving between inline and shared reports nothing, while a real edit to a shared body is reported against
-every operation referencing it. In the UIR document each operation also keeps its own response id and
+every operation referencing it. In the full document each operation also keeps its own response id and
 provenance in `x-docuccino` beside the `$ref`.
 
 Set [`representation.errors.components`](/laravel/reference/configuration/#representation) to `false` to

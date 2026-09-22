@@ -393,7 +393,7 @@ response body from the wrong class, a parameter that shouldn't be optional. Noth
 there is no diagnostic to read.
 
 **Cause.** Something wrote that field, and something else may have written it first and lost. Docuccino
-composes each operation from seven [precedence layers](/laravel/guides/how-it-works/#3-uir), and a
+composes each operation from seven [precedence layers](/laravel/guides/how-it-works/#3-the-document), and a
 higher rung overrides a lower one field by field — so a docblock summary can be replaced by an
 attribute, and an inferred response body by an integration's.
 
@@ -440,7 +440,7 @@ Two flags make diagnostics more useful:
    ```
 
    For the whole document at once, `--provenance=full` keeps the same records — every contribution
-   and everything it shadowed — in an exported UIR file:
+   and everything it shadowed — in an exported full document:
 
    ```bash
    php artisan docuccino:export --format=full --provenance=full

@@ -146,11 +146,11 @@ fallback  <  inference  <  integration  <  docblock  <  attribute  <  overlay  <
 
 So an integration's best guess is always something you can refine with a docblock or an
 [attribute](/laravel/reference/attributes/) — you're never fighting the tool.
-[How it works](/laravel/guides/how-it-works/#3-uir) takes the ladder a rung at a time, with what
+[How it works](/laravel/guides/how-it-works/#3-the-document) takes the ladder a rung at a time, with what
 typically arrives at each one.
 
-Every contribution is recorded with its source in the document's provenance (visible in the raw
-[UIR](/uir/)), labeled by the integration that made it — for example `integration:query-builder` or
+Every contribution is recorded with its source in the document's provenance (visible under
+[`x-docuccino`](/uir/)), labeled by the integration that made it — for example `integration:query-builder` or
 `integration:sanctum`. That's what lets tooling explain *why* a given detail is documented the way
 it is.
 

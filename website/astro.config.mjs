@@ -37,32 +37,32 @@ export default defineConfig({
 		starlight({
 			title: 'Docuccino',
 			description:
-				'UIR-based API documentation generator for Laravel: deep type inference, deterministic output, semantic diffing and a bundled API viewer.',
+				'OpenAPI 3.2 documentation for Laravel, compiled from the real types in your code: deep type inference, deterministic output, semantic diffing and a bundled API viewer.',
 			// Machine-readable copies of the docs, for readers who arrive as an AI assistant rather
 			// than in a browser: llms-txt builds the /llms*.txt digests, md-txt writes a .md twin
 			// beside every page. Both are build-time only — no runtime, no request-time work.
 			plugins: [
 				starlightLlmsTxt({
 					description:
-						'Docuccino is an open-source (MIT) API documentation generator for Laravel. It compiles an application into a UIR (Universal Intermediate Representation — an OpenAPI-3.2-shaped, deterministic, identity-carrying JSON document) and emits OpenAPI 3.2/3.1/3.0, with semantic diffing and a bundled API viewer (Scalar or Redoc).',
+						'Docuccino is an open-source (MIT) API documentation generator for Laravel. It compiles an application into OpenAPI 3.2 — deterministic, identity-carrying JSON — and also emits OpenAPI 3.1/3.0, a Postman collection and an Arazzo workflow description. What it knows beyond OpenAPI travels in one reserved member, `x-docuccino`, the Docuccino extension: a stable identity for every operation and schema, per-node provenance, guide pages and declared workflows. That is what powers semantic diffing, and the package bundles an API viewer (Scalar or Redoc).',
 					details: [
 						'## Key facts',
 						'',
 						'- Install: `composer require docuccino/laravel` plus `composer require --dev docuccino/inference-phpstan` (the analysis engine is a dev dependency; the adapter degrades to no inference without it), then `php artisan docuccino:install`.',
 						'- Requirements: PHP 8.3+, Laravel 12 or 13.',
 						'- Commands: `docuccino:install`, `docuccino:export`, `docuccino:validate`, `docuccino:diff`, `docuccino:cache`, `docuccino:clear`, `docuccino:watch`, `docuccino:coverage`, `docuccino:explain`.',
-						'- `docuccino:install` is the first-run command: it publishes `config/docuccino.php` (never overwriting an existing one without `--force`), reports how many of the application\'s routes each document actually matches and which prefixes they sit under when none do, says whether the analysis engine is installed, and offers a first export. It is idempotent and works non-interactively.',
-						'- Config lives in one published file, `config/docuccino.php`, organized around named `documents`.',
+						'- `docuccino:install` is the first-run command: it publishes both config files (never overwriting an existing one without `--force`), reports how many of the application\'s routes each document actually matches and which prefixes they sit under when none do, says whether the analysis engine is installed, and offers a first export. It is idempotent and works non-interactively.',
+						'- Config lives in two files. `docuccino.yaml` in the project root holds everything a build reads, organized around named `documents`. `config/docuccino.php` holds only what the framework reads at boot or on a viewer request: `enabled`, each document\'s `viewer` bag, and `cache.store`. A build setting left behind in the PHP file is reported, never merged.',
 						'- The document build never executes application code — it reads types with an embedded PHPStan/Larastan engine, and reads committed files for anything else. Real response payloads reach the document only as recordings your own test suite wrote.',
 						'- Output is byte-deterministic, so the exported document is meant to be committed and diffed.',
-						'- Contract testing: `Docuccino\\Laravel\\Testing\\AssertsApiContract` asserts a Laravel test suite\'s real requests and responses against the generated UIR, validates documented examples, and gates breaking changes and artifact staleness. Endpoint coverage is a post-run step instead of an assertion — the suite logs what each process exercised and `docuccino:coverage` merges those logs and gates, so it works under parallel runners and sharded CI where no single test process can see the whole suite. `ApiContract::record()` writes those responses to committed files (keyed by operation id, credentials redacted) that the build publishes as examples at the integration precedence layer.',
+						'- Contract testing: `Docuccino\\Laravel\\Testing\\AssertsApiContract` asserts a Laravel test suite\'s real requests and responses against the full generated document, validates documented examples, and gates breaking changes and artifact staleness. Endpoint coverage is a post-run step instead of an assertion — the suite logs what each process exercised and `docuccino:coverage` merges those logs and gates, so it works under parallel runners and sharded CI where no single test process can see the whole suite. `ApiContract::record()` writes those responses to committed files (keyed by operation id, credentials redacted) that the build publishes as examples at the integration precedence layer.',
 						'- Precedence, lowest to highest: fallback, inference, integration, docblock, attribute, overlay, config. Higher layers win field by field.',
 						'- `docuccino:explain <route>` reads the provenance trail back for one operation: which layer won each field, what it shadowed, the file:line it came from, and a `→` line naming what to change to override it (the specific attribute where one writes that field, else the generic truth that an overlay outranks it). It accepts a route name, an operation id or a URI (with an optional leading method), `--field=<name>` prints one field with every value in full, it lists every match when a query is ambiguous (exit 2), and it needs no export flags — it builds the document itself, where the trail is always complete.',
 					].join('\n'),
 					// Pages ordered for a reader starting from zero.
 					promote: ['index*', 'laravel/getting-started*', 'laravel/guides/how-it-works*'],
 					// The small variant is for tight context windows: keep the task-shaped pages, drop
-					// the migration/comparison material, the spec-hosting detail and the changelog.
+					// the migration/comparison material, the schema-hosting detail and the changelog.
 					exclude: ['guides/vs-*', 'uir/hosting*', 'changelog*'],
 				}),
 				starlightMdTxt(),
@@ -187,10 +187,10 @@ export default defineConfig({
 					],
 				},
 				{
-					label: 'UIR spec',
+					label: 'The Docuccino extension',
 					items: [
-						{ label: 'Format overview', slug: 'uir' },
-						{ label: 'Spec hosting', slug: 'uir/hosting' },
+						{ label: 'Overview', slug: 'uir' },
+						{ label: 'Schema hosting', slug: 'uir/hosting' },
 					],
 				},
 				// Generated from the commit history by tools/changelog.php — one page, not a section.

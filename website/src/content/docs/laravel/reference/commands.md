@@ -143,7 +143,7 @@ never costs you an analysis. A write that fails prints `Could not write <path>.`
 and the command exits non-zero.
 
 **Downlevel notes.** OpenAPI 3.1 and 3.0 are older, smaller specs, so a downlevel sometimes has to
-convert or drop something the UIR carries. Every one of those steps prints a `downlevel.*` diagnostic
+convert or drop something the full document carries. Every one of those steps prints a `downlevel.*` diagnostic
 naming the construct and the JSON pointer it sat at, right after that target's `Wrote` line — so the
 artifact never quietly ships a weaker contract than your code describes.
 
@@ -202,7 +202,7 @@ specification it names. A step whose operation the document does not publish, or
 `operationId`, is left out with `arazzo.step-unresolved` rather than emitted pointing at nothing.
 
 **Committing the output.** Docuccino's output is deterministic — identical code produces
-byte-for-byte identical output. Commit `docs/openapi.json` (or a UIR document) and diff it in CI — see
+byte-for-byte identical output. Commit `docs/openapi.json` (or the full document) and diff it in CI — see
 [`docuccino:diff`](#docuccinodiff). For the committed artifact, `--provenance=none` (or `winners`,
 accepting that source line numbers churn as code moves — churn is cosmetic and never alters
 identities or the content hash) is the recommendation.
@@ -233,7 +233,7 @@ docuccino:validate
 This is the check-before-you-commit command, so it answers about both halves of what a build
 produces.
 
-**The UIR document**, against the bundled UIR schema. A valid one prints
+**The built document**, against the bundled Docuccino schema. A valid one prints
 `<key>: valid against UIR <version>.`; an invalid one prints `<key>: N schema violation(s).` and
 lists them as `document.schema-invalid` error diagnostics grouped by route.
 
@@ -811,9 +811,9 @@ docuccino:explain
 ```
 
 Every value in the document carries a record of who put it there —
-[provenance](/laravel/guides/how-it-works/#3-uir) — and this reads it back. Point it at an endpoint
+[provenance](/laravel/guides/how-it-works/#3-the-document) — and this reads it back. Point it at an endpoint
 that looks wrong and it prints, field by field, which
-[precedence layer](/laravel/guides/how-it-works/#3-uir) won, what that value displaced, the `file:line`
+[precedence layer](/laravel/guides/how-it-works/#3-the-document) won, what that value displaced, the `file:line`
 to open next, and **what to change to override it**.
 
 It reads and prints only: nothing is written, and no cache is touched.
@@ -1152,7 +1152,7 @@ What counts as failure:
 | --- | --- |
 | `install` | disabled; a configuration file could not be written; the first export failed |
 | `export` | disabled; unknown `--format`, `--fail-on` or `--provenance` value; `--out` given while exporting multiple documents, or without `--format` against a multi-target document; unknown document key; an `export.targets` list it cannot read, or a `routes.filter` it cannot apply; an artifact it wrote is not a valid document of its own format (regardless of `--fail-on`); an unaccepted diagnostic matches `--fail-on` |
-| `validate` | disabled; unknown `--fail-on` value; unknown document key; an `export.targets` list it cannot read, or a `routes.filter` it cannot apply; **either** schema violation — the UIR document's or an artifact's (regardless of `--fail-on`, and never acceptable — it's an error); an unaccepted diagnostic matches `--fail-on` |
+| `validate` | disabled; unknown `--fail-on` value; unknown document key; an `export.targets` list it cannot read, or a `routes.filter` it cannot apply; **either** schema violation — the built document's or an artifact's (regardless of `--fail-on`, and never acceptable — it's an error); an unaccepted diagnostic matches `--fail-on` |
 | `diff` | disabled; unknown document key; `old` missing, unreadable or not valid JSON; `git show` fails; a ref or path starting with `-`; the two documents are incomparable; `--enforce` with an unsatisfied verdict |
 | `cache` | disabled; unknown document key; the payload is not a valid document of its own format — cached anyway, so the viewer still has something |
 | `clear` | unknown document key (no enabled guard) |

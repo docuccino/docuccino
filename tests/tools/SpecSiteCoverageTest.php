@@ -15,9 +15,14 @@ declare(strict_types=1);
  * current — the newest. Read off the directory, because that is the source of truth the sync tools
  * and the drift guards all read.
  *
- * The page is not the only hand-written catalogue of the family — `spec/README.md` carries the same
- * table in the split repository's front matter — so both are held to the same directory. One guard
- * over one of them would have been the defect again, one file along.
+ * The page is not the only hand-written catalogue of the family. `spec/README.md` carries the same
+ * table in the split repository's front matter, and the documentation site's schema-hosting page
+ * carries a third — so all three are held to the same directory. Two guards over two of them was the
+ * defect again, two files along: the docs page still ended at 1.1 on the day 2.0 shipped.
+ *
+ * Each spells the same fact differently — a site-relative `href`, a bare `$id`, a Markdown link — so
+ * the predicate is per-spelling and the directory read is shared. A fourth catalogue in a fourth
+ * spelling owes a row here, not a guard of its own.
  *
  * It lives in the PHP suite rather than in the website build for the reason the `schema-copies` CI
  * job exists: a guard that only runs where the site is built is a guard a standalone deploy skips.
@@ -80,9 +85,31 @@ function versionsMarkedCurrent(string $page): array
     return $current;
 }
 
+/**
+ * The same predicate for a Markdown catalogue, where a URL is spelled as a link target rather than an
+ * `href` — and as the full `$id`, since a docs page sends a reader to the host.
+ *
+ * @param  list<string>  $urls
+ * @return list<string>
+ */
+function schemaUrlsMissingFromMarkdown(string $page, array $urls): array
+{
+    return array_values(array_filter(
+        $urls,
+        static fn (string $url): bool => ! str_contains($page, '](https://spec.docuccino.app'.$url.')'),
+    ));
+}
+
 function specLandingPage(): string
 {
     return (string) file_get_contents(dirname(__DIR__, 2).'/spec/index.html');
+}
+
+function schemaHostingDocsPage(): string
+{
+    return (string) file_get_contents(
+        dirname(__DIR__, 2).'/website/src/content/docs/uir/hosting.md',
+    );
 }
 
 it('links every schema the host publishes', function (): void {
@@ -107,6 +134,13 @@ it('lists every schema the host publishes in the split repository README', funct
 
     expect(count(publishedSchemaUrls()))->toBeGreaterThanOrEqual(4)
         ->and($missing)->toBe([]);
+});
+
+it('links every schema the host publishes from the documentation site', function (): void {
+    // The page a reader reaches from the docs rather than from an `$id`, carrying the third copy of the
+    // version table. Same directory, third spelling.
+    expect(count(publishedSchemaUrls()))->toBeGreaterThanOrEqual(4)
+        ->and(schemaUrlsMissingFromMarkdown(schemaHostingDocsPage(), publishedSchemaUrls()))->toBe([]);
 });
 
 it('marks exactly one version current, and it is the newest published', function (): void {
@@ -134,6 +168,23 @@ it('calls a page that has dropped a version short', function (): void {
         // And a page missing the file a version added, not only the version itself.
         ->and(schemaUrlsMissingFrom(
             str_replace('href="/uir/2.0/extension.schema.json"', 'href="/uir/2.0/"', $page),
+            publishedSchemaUrls(),
+        ))->toBe(['/uir/2.0/extension.schema.json']);
+});
+
+it('calls a documentation page that has dropped a version short', function (): void {
+    $page = schemaHostingDocsPage();
+
+    // The exact shape the page shipped in: a version table ending one release early, with the newest
+    // version's row simply absent.
+    $short = str_replace('](https://spec.docuccino.app/uir/2.0/schema.json)', '](/uir/hosting/)', $page);
+
+    expect($short)->not->toBe($page)
+        ->and(schemaUrlsMissingFromMarkdown($short, publishedSchemaUrls()))->toBe(['/uir/2.0/schema.json'])
+        // And the second file of a version, not only the version itself — the half a reader vendoring
+        // one file would never learn about.
+        ->and(schemaUrlsMissingFromMarkdown(
+            str_replace('](https://spec.docuccino.app/uir/2.0/extension.schema.json)', '](/uir/hosting/)', $page),
             publishedSchemaUrls(),
         ))->toBe(['/uir/2.0/extension.schema.json']);
 });

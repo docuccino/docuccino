@@ -1,6 +1,6 @@
 ---
 title: How it works
-description: The Docuccino pipeline — route discovery, static analysis that never runs your code, the UIR, emitters, and the viewer — plus the precedence ladder that decides which source wins.
+description: The Docuccino pipeline — route discovery, static analysis that never runs your code, the document, emitters, and the viewer — plus the precedence ladder that decides which source wins.
 ---
 
 Docuccino turns your application into documentation in five stages. The most important thing to know
@@ -8,7 +8,7 @@ about that pipeline is what it **doesn't** do: it never runs your application to
 does.
 
 <figure>
-<svg viewBox="0 0 960 120" role="img" aria-label="Pipeline: route discovery, then static analysis, then UIR, then emitters, then viewer" style="width:100%;height:auto;font-family:inherit">
+<svg viewBox="0 0 960 120" role="img" aria-label="Pipeline: route discovery, then static analysis, then the document, then emitters, then viewer" style="width:100%;height:auto;font-family:inherit">
   <g fill="none" stroke="currentColor" stroke-width="1.5">
     <rect x="12" y="34" width="150" height="52" rx="8"/>
     <rect x="204" y="34" width="150" height="52" rx="8"/>
@@ -25,7 +25,7 @@ does.
   <g fill="currentColor" text-anchor="middle" font-size="14">
     <text x="87" y="56">Route</text><text x="87" y="72">discovery</text>
     <text x="279" y="56">Static</text><text x="279" y="72">analysis</text>
-    <text x="471" y="64">UIR</text>
+    <text x="471" y="64">Document</text>
     <text x="663" y="64">Emitters</text>
     <text x="864" y="56">Viewer &amp;</text><text x="864" y="72">export</text>
   </g>
@@ -79,10 +79,11 @@ It leaves behind a skeleton operation and an error diagnostic (or is dropped ent
 `on_route_error: 'omit'`). The [diagnostics reference](/laravel/reference/diagnostics/) covers what
 each code means and which ones are worth chasing.
 
-## 3. UIR
+## 3. The document
 
-Everything inferred is assembled into the [UIR](/uir/) — an OpenAPI-shaped document that also carries a
-stable identity for every operation and schema, and a record of where each detail came from. This is
+Everything inferred is assembled into one document: OpenAPI 3.2, plus the
+[Docuccino extension](/uir/) carrying a stable identity for every operation and schema
+and a record of where each detail came from. This is
 also where your [Overlays](/laravel/guides/customizing-output/) and your
 [Markdown content tree](/laravel/guides/narrative-content/) are folded in, and where the document's
 content hash is stamped.
@@ -147,10 +148,10 @@ which rung won it, and the `file:line` it came from.
 
 ## 4. Emitters
 
-Emitters transcode the UIR into what you ship: OpenAPI 3.2, a 3.1 or 3.0 downlevel, a Postman
-collection, or the raw UIR itself, as JSON or YAML. A build feeds as many emitters as the document configures
+Emitters transcode that document into what you ship: OpenAPI 3.2, a 3.1 or 3.0 downlevel, a Postman
+collection, or the full document itself, as JSON or YAML. A build feeds as many emitters as the document configures
 [export targets](/laravel/reference/configuration/#export), so several artifacts cost one analysis
-rather than one run each. Because the UIR is canonically ordered and free of timestamps, identical code always
+rather than one run each. Because the document is canonically ordered and free of timestamps, identical code always
 produces byte-for-byte identical output — which is what makes the
 [semantic diff](/laravel/reference/commands/#docuccinodiff) and CI version gating possible.
 

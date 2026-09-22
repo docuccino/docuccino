@@ -1,6 +1,9 @@
 ---
 title: Docuccino
-description: A UIR-based API documentation generator for Laravel — deep type inference, deterministic output, semantic diffing, and a bundled API viewer.
+head:
+  - tag: title
+    content: 'Laravel OpenAPI Documentation Generator | Docuccino'
+description: Generate OpenAPI 3.2 documentation for a Laravel API from the real types in your code — deep type inference, deterministic output, semantic diffing, and a bundled API viewer.
 template: splash
 hero:
   tagline: Beautiful, accurate OpenAPI docs for Laravel — generated from the real shape of your code. Deep type inference, byte-for-byte deterministic output, and a semantic diff you can gate CI on.
@@ -30,9 +33,11 @@ enums, and exception handling to produce an accurate OpenAPI 3.2 document — th
 built-in interactive viewer. You add annotations only where you want to say something your code
 can't.
 
-Under the hood, Docuccino builds a **UIR** (Universal Intermediate Representation): an OpenAPI-shaped
-document that also carries a stable identity for every operation and schema, and a record of where
-each detail came from. That's what powers the deterministic output and the semantic diff.
+Docuccino compiles your application into OpenAPI 3.2 — and records how it knew. That record travels
+in the document under one reserved member, `x-docuccino`, the
+[Docuccino extension](/uir/): a stable identity for every operation and schema, and the
+`file:line` each detail came from. It's what powers the deterministic output and the semantic diff,
+and the OpenAPI export drops all of it.
 
 ## A few commands
 
@@ -101,15 +106,15 @@ local environment. Nothing else to configure —
 		`docuccino:diff --enforce` compares two versions of your API and enforces a versioning policy.
 		Ship a breaking change without the right version bump and the build fails.
 	</Card>
-	<Card title="A format you can build on" icon="rocket">
-		The UIR is a documented format with a published JSON Schema. Export it with
+	<Card title="An extension you can build on" icon="rocket">
+		The extension is documented and answers to a published JSON Schema. Export the full document with
 		`docuccino:export --format=full`, validate it with `docuccino:validate`, and read every detail's
 		provenance — the same document the emitters and the diff run on.
 	</Card>
 </CardGrid>
 
-Docuccino documents Laravel applications today. Nothing in the [UIR](/uir/) it compiles to is
-Laravel-specific, so the emitters, the diff and the viewer are ready for whatever it's fed next.
+Docuccino documents Laravel applications today. Nothing in the document it compiles — OpenAPI, plus
+the [Docuccino extension](/uir/) — is Laravel-specific, so the emitters, the diff and the viewer are ready for whatever it's fed next.
 
 ## Start here
 

@@ -105,7 +105,7 @@ The [viewer guide](/laravel/guides/viewer/#source-modes) has the rest of the vie
 `artifact` reads a committed export target at request time. If the file isn't in your deployed release, the
 viewer serves an **empty document** rather than falling back to a build — no request ever re-analyzes
 under this source — and logs a warning naming the missing file, so commit the artifact, or add the
-export to your build step. A UIR artifact is fine too: it's re-emitted as OpenAPI on the way
+export to your build step. A full document is fine too: it's re-emitted as OpenAPI on the way
 out, so provenance never reaches the browser.
 </Aside>
 
@@ -158,7 +158,7 @@ upload step reads from, and add that upload after the checks below pass.
 	# 1. Regenerate; fail if anything got worse than a warning.
 	php artisan docuccino:export --fail-on=warning
 
-	# 2. Structural check: the UIR document, and each artifact you export, against their schemas.
+	# 2. Structural check: the built document, and each artifact you export, against their schemas.
 	php artisan docuccino:validate
 
 	# 3. Compare with the committed artifact and enforce the versioning policy.
@@ -270,8 +270,8 @@ mistake fails the build instead of landing quietly.
 
 ### What to commit
 
-An OpenAPI artifact is the friendliest thing to review, and it's what most tooling wants. Commit a
-UIR document instead (`--format=full`) when you also want stable identities and provenance in the
+An OpenAPI artifact is the friendliest thing to review, and it's what most tooling wants. Commit the
+full document instead (`--format=full`) when you also want stable identities and provenance in the
 repo — a richer diff, at the cost of a noisier file. Either way, pair it with `--provenance=none` if
 you'd rather source line numbers didn't churn in your PRs.
 

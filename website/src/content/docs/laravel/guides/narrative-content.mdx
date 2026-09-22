@@ -45,7 +45,7 @@ silently producing no pages.
 
 <Aside title="Where it ends up">
 Pages and the navigation tree compile into the document's `x-docuccino.content` layer, which travels
-in the [UIR](/uir/#content-layer) export. Read [what each format keeps](#what-each-format-keeps) before
+in the [full export](/uir/#content-layer). Read [what each format keeps](#what-each-format-keeps) before
 you build a publishing pipeline around it.
 </Aside>
 
@@ -110,7 +110,7 @@ Paginated results come back from ::operation{id="invoices.index"}, each item sha
 - `::schema{name="…"}` takes a component schema name, as it appears under `components.schemas`.
 
 When the build runs, each directive is checked against the real document. A directive that resolves
-gets the operation or schema's stable UIR identity appended as a `ref`, so a consumer can link to it
+gets the operation or schema's stable identity appended as a `ref`, so a consumer can link to it
 without re-resolving:
 
 ```markdown
@@ -206,24 +206,25 @@ obvious at a glance.
 
 ## What each format keeps
 
-The content layer is a first-class part of the UIR, but it's a UIR feature — plain OpenAPI has
+The content layer is the clearest example of what the Docuccino extension is for — plain OpenAPI has
 nowhere to put a page tree. What survives an export depends on the format:
 
 | Format | Guide pages & nav tree | Descriptions in standard fields |
 | --- | --- | --- |
-| **UIR** (`--format=full`) | Kept in full under `x-docuccino.content` | Kept |
+| **The full document** (`--format=full`) | Kept in full under `x-docuccino.content` | Kept |
 | **OpenAPI 3.2 / 3.1 / 3.0** | Dropped — no home in the OpenAPI object | Kept (they're standard OAS fields) |
 
-In other words: your standalone guide pages and the navigation tree live in the UIR. Exporting to
+In other words: your standalone guide pages and the navigation tree live in the extension. Exporting to
 OpenAPI drops them, because there's no standard place for them to go. Descriptions that sit in
 ordinary OpenAPI fields — `info.description`, tag descriptions, and per-operation descriptions
 (including ones set with `#[Description]`) — survive, because they were standard fields all
 along.
 
-Rendering the guide pages and their multi-page navigation is a job for a UIR consumer. The
+Rendering the guide pages and their multi-page navigation is a job for a consumer of the full
+document. The
 [bundled viewer](/laravel/guides/viewer/) serves OpenAPI, so it shows the reference — rich descriptions
 and all — but not the standalone guides; the same is true of any plain OpenAPI tool you point at the
-export. Today the content layer is for pipelines you build on the UIR: a docs site generator, a
+export. Today the content layer is for pipelines you build on the full document: a docs site generator, a
 changelog, or an agent tool catalog that wants your prose alongside your operations.
 
 <Aside title="Prose changes are visible changes">
@@ -234,6 +235,6 @@ non-breaking change. Your narrative is versioned alongside your API, not off to 
 
 <CardGrid>
 	<LinkCard title="Content configuration" href="/laravel/reference/configuration/#content" description="The content.dir key and how the tree is compiled." />
-	<LinkCard title="The UIR content layer" href="/uir/#content-layer" description="How pages, nav, and identities live in the raw document." />
+	<LinkCard title="The content layer" href="/uir/#content-layer" description="How pages, nav, and identities live in the full document." />
 	<LinkCard title="Customizing the output" href="/laravel/guides/customizing-output/" description="Correct or extend the generated reference the pages sit beside." />
 </CardGrid>

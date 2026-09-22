@@ -229,9 +229,9 @@ rather than a format, so it applies to whichever of them you asked for:
 	by tools that read JSON and nothing else, so a `.yaml` path on either is refused rather than filled
 	with JSON.
 	</TabItem>
-	<TabItem label="Raw UIR">
+	<TabItem label="The full document">
 	```bash
-	php artisan docuccino:export --format=full --out=docs/api.uir.json
+	php artisan docuccino:export --format=full --out=docs/api.full.json
 	```
 	</TabItem>
 	<TabItem label="Postman">
@@ -246,9 +246,10 @@ rather than a format, so it applies to whichever of them you asked for:
 	</TabItem>
 </Tabs>
 
-The [UIR](/uir/) is the document Docuccino builds before emitting: OpenAPI-shaped, but carrying a
-stable identity for every operation and schema plus the provenance of each detail. It's what
-`docuccino:diff` compares, so commit the UIR when you want the most precise diffs.
+The full document is what Docuccino builds before emitting: the OpenAPI it would export, plus the
+[Docuccino extension](/uir/) carrying a stable identity for every operation and schema
+and the provenance of each detail. It's what `docuccino:diff` compares, so commit it when you want
+the most precise diffs.
 
 The Arazzo file describes the workflows a document declares — the sequences of calls a consumer
 follows to get something done. It's written only when the document carries at least one, because

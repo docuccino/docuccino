@@ -99,7 +99,7 @@ src/content/docs/
 │   └── reference/            # configuration, commands, attributes
 ├── extending/                # writing an integration (framework-agnostic)
 ├── guides/                   # the comparison pages (vs Scramble, vs Scribe)
-└── uir/                      # UIR format + spec hosting
+└── uir/                      # what x-docuccino carries + schema hosting
 ```
 
 The `laravel/` scoping is deliberate and invisible to readers — framework-specific pages live under
