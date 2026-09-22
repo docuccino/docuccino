@@ -121,7 +121,7 @@ final readonly class EnumValueEdit implements VersionVerb
             VerbOutcome::Unresolved => VerbDiagnostics::schemaUnresolved($change, $this),
             VerbOutcome::Declined => $this->unchanged($change),
             VerbOutcome::Absent => $this->notASet($change),
-            VerbOutcome::Applied => $this->proseLost($change, $published),
+            VerbOutcome::Applied => $this->nameUnusable($change, $published) ?? $this->proseLost($change, $published),
         };
     }
 
@@ -129,9 +129,15 @@ final readonly class EnumValueEdit implements VersionVerb
      * The value put back, with the member name older clients knew it by and whatever prose the
      * declaration wrote for it.
      *
-     * The minted name is a pure function of the value — the same minting the allow-list sets use — so a
-     * value put back never renames a neighbour, which is the property that makes publishing a name at
-     * all safe.
+     * **The name is minted from the VALUE, and its neighbours' came from the enum's CASE NAMES.** A
+     * deleted case has no name left to read, so there is nothing else to mint from — but the two
+     * rulebooks can disagree, which is why `name:` exists and why an author who knows what older
+     * clients called the value should state it.
+     *
+     * A minted name that collides with one already in the set is the one case that cannot be published:
+     * generators apply these by index and without a dedupe, so two members would share an identifier.
+     * The set then publishes NO name hints rather than a colliding pair, and {@see nameUnusable()} says
+     * so — widening rather than guessing, and the remedy is one argument away.
      *
      * @param  list<mixed>  $values
      * @param  list<string>  $names
@@ -143,8 +149,9 @@ final readonly class EnumValueEdit implements VersionVerb
         $values[] = $this->value;
 
         if ($names !== []) {
-            $name = trim($this->name);
-            $names[] = $name === '' ? ListValueNames::names([(string) $this->value])[0] : $name;
+            $name = self::memberName($this->name, $this->value);
+
+            $names = in_array($name, $names, true) ? [] : [...$names, $name];
         }
 
         $description = trim($this->description);
@@ -326,6 +333,52 @@ final readonly class EnumValueEdit implements VersionVerb
                 $this->enum,
             ),
             help: 'Give #[RemovedEnumValue] a `description:` saying what the value meant. The map is published only where every value has one, because a reader hides the values missing from it.',
+        );
+    }
+
+    /** What older clients called the value: what the author stated, or a pure function of the value. */
+    private static function memberName(string $declared, string|int $value): string
+    {
+        $declared = trim($declared);
+
+        return $declared === '' ? ListValueNames::names([(string) $value])[0] : $declared;
+    }
+
+    /**
+     * Applied, and the set lost its member names doing it — the minted or declared name was one the set
+     * already publishes, and two members sharing an identifier is what a generated client cannot have.
+     */
+    private function nameUnusable(VersionChange $change, PublishedSchemas $published): ?Diagnostic
+    {
+        if (! $this->publishedBefore) {
+            return null;
+        }
+
+        $ref = $published->refFor($this->enum, SchemaFacet::Values);
+        $body = $ref === null ? null : $published->body($ref);
+        $names = $body === null ? null : ($body['x-enum-varnames'] ?? $body['x-enumNames'] ?? null);
+
+        if (! is_array($names)) {
+            return null;
+        }
+
+        $name = self::memberName($this->name, $this->value);
+
+        if (! in_array($name, $names, true)) {
+            return null;
+        }
+
+        return new Diagnostic(
+            severity: Severity::Warning,
+            code: 'versioning.enum-name-contested',
+            message: sprintf(
+                '%s puts the value %s back into %s under the member name "%s", which the set already publishes, so this version publishes the set without any member names.',
+                $change->class,
+                self::quoted($this->value),
+                $this->enum,
+                $name,
+            ),
+            help: 'Two members sharing a name become one identifier in a generated client. Give #[RemovedEnumValue] a `name:` that the set does not already use — the one older clients knew the value by.',
         );
     }
 

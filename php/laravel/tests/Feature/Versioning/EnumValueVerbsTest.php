@@ -157,3 +157,40 @@ it('moves nothing where a change was refused', function (): void {
     expect(versionedSet('tests/Fixtures/Versioning/EnumValueUnchanged')['enum'])->toBe(['public', 'internal', 'invited'])
         ->and(versionedSet('tests/Fixtures/Versioning/EnumValueEmpty')['enum'])->toBe(['public', 'internal', 'invited']);
 });
+
+/*
+ * The silence controls. Every refusal above asserts a code; without these the whole file would still
+ * pass if the applied path started reporting — and `proseLost`'s guard could be inverted, making a
+ * correct declaration raise `versioning.enum-prose-dropped`, with nothing going red.
+ */
+it('says nothing about a declaration that applied cleanly', function (string $dir): void {
+    expect(versionedSetCodes($dir))->toBe([]);
+})->with([
+    'a value the version added' => ['tests/Fixtures/Versioning/EnumValueAdded'],
+    'an int-backed value the version added' => ['tests/Fixtures/Versioning/EnumValueAddedInt'],
+    'a value the version took away' => ['tests/Fixtures/Versioning/EnumValueRemoved'],
+    'both directions on one set' => ['tests/Fixtures/Versioning/EnumValuePair'],
+]);
+
+it('grows the positional prose array when a value joins a partly described set', function (): void {
+    // The int-backed half of the decoration: no completeness map to lose, and the positional array has
+    // to stay full length or every member past the new one takes its neighbour's prose.
+    $set = versionedSet('tests/Fixtures/Versioning/EnumValueRemovedInt', 'WidgetPriority');
+
+    expect($set['enum'])->toBe([1, 5, 10, 20])
+        ->and($set['x-enum-descriptions'])->toBe(['Handled when idle.', '', 'Jumps the queue.', ''])
+        ->and($set['x-enum-varnames'])->toBe(['Low', 'Normal', 'High', 'Urgent'])
+        ->and(versionedSetCodes('tests/Fixtures/Versioning/EnumValueRemovedInt'))->toBe([]);
+});
+
+it('publishes no member names rather than two members sharing one', function (): void {
+    // Generators apply these by index and without a dedupe, so a colliding pair is an identifier
+    // collision in somebody's client. The set widens to no names and the build says which declaration.
+    $set = versionedSet('tests/Fixtures/Versioning/EnumValueRemovedColliding');
+
+    expect($set['enum'])->toBe(['public', 'internal', 'invited', 'internal-only'])
+        ->and($set)->not->toHaveKey('x-enum-varnames')
+        ->and($set)->not->toHaveKey('x-enumNames')
+        ->and(versionedSetCodes('tests/Fixtures/Versioning/EnumValueRemovedColliding'))
+        ->toBe(['versioning.enum-name-contested']);
+});
