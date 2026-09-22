@@ -10,7 +10,7 @@ use Docuccino\Core\Emit\EmitReport;
 use Docuccino\Core\Emit\Formats;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Inference\TypeEngine;
-use Docuccino\Core\Support\Hydrate;
+use Docuccino\Core\Spec\UirSpec;
 use Docuccino\Laravel\Config\DocumentEmitOptions;
 use Docuccino\Laravel\Config\ExportDiagnostics;
 use Docuccino\Laravel\Config\UnusableRouteFilterException;
@@ -62,7 +62,10 @@ final class ValidateCommand extends Command
             $schemaErrors = $this->schemaErrors($diagnostics);
 
             if ($schemaErrors === []) {
-                $this->info(sprintf('%s: valid against UIR %s.', $key, $this->uirVersion($result->document->toArray())));
+                // The version this build validated AGAINST, which is the bundled schema's and nothing
+                // the document says: `Validator` resolves one schema, so a sentence reading the
+                // version off the subject could name a version the check never used.
+                $this->info(sprintf('%s: valid against UIR %s.', $key, UirSpec::VERSION));
             } else {
                 $this->error(sprintf('%s: %d schema violation(s).', $key, count($schemaErrors)));
             }
@@ -189,13 +192,5 @@ final class ValidateCommand extends Command
             $diagnostics,
             static fn (Diagnostic $d): bool => $d->code === 'document.schema-invalid',
         ));
-    }
-
-    /**
-     * @param  array<string, mixed>  $document
-     */
-    private function uirVersion(array $document): string
-    {
-        return Hydrate::stringOr($document['uir'] ?? null, '1.0.0');
     }
 }

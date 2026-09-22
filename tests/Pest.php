@@ -760,9 +760,12 @@ function loadFixture(string $name): array
  * an oracle without anyone remembering it exists: five recorded UIR goldens sat outside both globs
  * with the whole suite green.
  *
- * A UIR document is one carrying `uir` and `info`. Recursive and per package, so a fixture directory
- * that grows a subdirectory, or a package that grows a fixture tree, is inside the domain the moment
- * it exists rather than the moment somebody widens a glob.
+ * A UIR document is an OpenAPI document carrying the Docuccino extension at its root: `openapi`,
+ * `info` and `x-docuccino` together. The extension member is what names it, because from UIR 2.0 on
+ * everything else about it IS an OpenAPI document — and an artifact written before 2.0 carries the
+ * member too, so one rule covers both. Recursive and per package, so a fixture directory that grows a
+ * subdirectory, or a package that grows a fixture tree, is inside the domain the moment it exists
+ * rather than the moment somebody widens a glob.
  *
  * @return list<string>
  */
@@ -789,9 +792,131 @@ function uirDocuments(): array
 
             $decoded = json_decode((string) file_get_contents($entry->getPathname()), true);
 
-            if (is_array($decoded) && isset($decoded['uir'], $decoded['info'])) {
+            if (is_array($decoded) && isset($decoded['openapi'], $decoded['info'], $decoded['x-docuccino'])) {
                 $found[] = $entry->getPathname();
             }
+        }
+    }
+
+    sort($found);
+
+    return $found;
+}
+
+/**
+ * Every UIR version the repository publishes, read off the authoring directory rather than listed.
+ *
+ * A published `$id` is served forever, so the guards over the family have to cover the versions that
+ * are no longer newest — listing them by hand is how the second one goes unguarded the day a third
+ * ships.
+ *
+ * @return list<string>
+ */
+function publishedSchemaVersions(): array
+{
+    return array_keys(schemaVersionsUnder(dirname(__DIR__).'/spec/uir'));
+}
+
+/** The version a fresh build validates against: the newest the repository publishes. */
+function defaultSchemaVersion(): string
+{
+    $versions = publishedSchemaVersions();
+
+    return $versions[count($versions) - 1];
+}
+
+/**
+ * Every schema FILE a version publishes, keyed `<version>/<name>` and valued as a dataset row.
+ *
+ * Read off the directory for the reason the versions are: the family is two files from 2.0 on — the
+ * document schema and the extension schema it references — and a guard naming `schema.json` alone
+ * would have left the second one to drift in silence.
+ *
+ * It lives here rather than in a test file because it is the ONE statement of what counts as a
+ * published schema, and three guards plus both sync tools turn on it. It was two reads of one
+ * directory before, in two files, and they had already parted on that very question — one enumerated
+ * `.json` and the other took whatever `is_file()` said yes to, which is how a stray file left beside
+ * a schema would have shipped inside the composer package unseen.
+ *
+ * @return array<string, array{string, string}>
+ */
+function publishedSchemaFiles(): array
+{
+    return schemaFilesUnder(dirname(__DIR__).'/spec/uir');
+}
+
+/**
+ * The same read against any of the three copy roots — `spec/uir`, `php/core/resources/spec/uir`,
+ * `website/public/uir` — so the drift guard can compare SETS rather than only look each canonical
+ * file up in turn. A copy holding a file the source no longer authors is drift the other way, and a
+ * one-way presence check is blind to it.
+ *
+ * @return array<string, array{string, string}>
+ */
+function schemaFilesUnder(string $root): array
+{
+    $files = [];
+
+    foreach (schemaVersionsUnder($root) as $version => $names) {
+        foreach ($names as $name) {
+            $files[$version.'/'.$name] = [$version, $name];
+        }
+    }
+
+    return $files;
+}
+
+/**
+ * The `.json` files of each version directory under a uir root, sorted both ways. `.json` is what a
+ * schema file IS, spelled here once for `tools/sync-schema.php`, `website/scripts/sync-schema.mjs`
+ * and every guard over them.
+ *
+ * @return array<string, list<string>>
+ */
+function schemaVersionsUnder(string $root): array
+{
+    if (! is_dir($root)) {
+        return [];
+    }
+
+    $versions = array_values(array_filter(
+        scandir($root) ?: [],
+        static fn (string $entry): bool => $entry !== '.' && $entry !== '..' && is_dir($root.'/'.$entry),
+    ));
+    sort($versions);
+
+    $found = [];
+    foreach ($versions as $version) {
+        $names = array_values(array_filter(
+            scandir($root.'/'.$version) ?: [],
+            static fn (string $entry): bool => str_ends_with($entry, '.json') && is_file($root.'/'.$version.'/'.$entry),
+        ));
+        sort($names);
+
+        $found[$version] = $names;
+    }
+
+    return $found;
+}
+
+/**
+ * Every file under a copy root, `.json` or not, as `<version>/<name>` — what a packaged directory
+ * ACTUALLY holds. The drift guard needs this beside {@see schemaFilesUnder()} because the two answer
+ * different questions: one says which schemas are there, the other says whether anything else is.
+ *
+ * @return list<string>
+ */
+function everyFileUnder(string $root): array
+{
+    if (! is_dir($root)) {
+        return [];
+    }
+
+    $found = [];
+
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS)) as $entry) {
+        if ($entry instanceof SplFileInfo && $entry->isFile()) {
+            $found[] = substr($entry->getPathname(), strlen(rtrim($root, '/')) + 1);
         }
     }
 
@@ -1098,7 +1223,6 @@ function kitchenSink(): array
 function emptyCollectionPositions(): array
 {
     return [
-        'uir' => '1.0.0',
         'openapi' => '3.2.0',
         'info' => ['title' => 'Empty collection positions', 'version' => '1.0.0'],
         'servers' => [['url' => 'https://example.com', 'variables' => []]],
@@ -1344,7 +1468,6 @@ function regenerateGolden(string $actual, ?string $recorded): string
 function diffBase(): array
 {
     return [
-        'uir' => '1.0.0',
         'openapi' => '3.2.0',
         'info' => ['title' => 'Forms API', 'version' => '1.0.0'],
         'paths' => [
@@ -1407,8 +1530,10 @@ function diffBase(): array
 }
 
 /**
- * Recursively strips every `x-docuccino` member and the UIR-only top-level `$schema`/`uir`, so the
- * remainder is exactly what a lossless OAS 3.2 transcode must equal.
+ * Recursively strips every `x-docuccino` member, so the remainder is exactly what a lossless OAS 3.2
+ * transcode must equal. That is the whole of it from UIR 2.0 on: the root `$schema`/`uir` pair the
+ * emitter also drops is carried by no document this version builds, and a subject that has one is
+ * written for the test that needs it rather than reached through here.
  *
  * @param  array<string, mixed>  $node
  * @return array<string, mixed>

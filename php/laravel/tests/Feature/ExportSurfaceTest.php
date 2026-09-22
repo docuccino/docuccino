@@ -67,7 +67,7 @@ it('errors on an unknown --provenance instead of coercing it to winners', functi
 });
 
 it('accepts every provenance level', function (string $level): void {
-    expect(exportTo(['--format' => 'uir', '--provenance' => $level]))->toContain('"uir"');
+    expect(exportTo(['--format' => 'uir', '--provenance' => $level]))->toContain('"x-docuccino"');
 })->with(['none', 'winners', 'full']);
 
 it('keeps node identities by default, and drops them with --drop-ids', function (): void {

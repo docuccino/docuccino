@@ -57,7 +57,8 @@ build is caught before it can reach `main`.
 ## UIR schema hosting
 
 The UIR JSON Schemas are served as static files at their exact `$id` URLs (e.g.
-`https://spec.docuccino.app/uir/1.0/schema.json`).
+`https://spec.docuccino.app/uir/2.0/schema.json`, and the extension half beside it at
+`https://spec.docuccino.app/uir/2.0/extension.schema.json`).
 
 > **`spec.docuccino.app` is not served by this site's deploy.** A GitHub Pages site carries exactly
 > one custom domain, which is `docs.docuccino.app`. The schemas are served from their own Pages site
@@ -66,12 +67,12 @@ The UIR JSON Schemas are served as static files at their exact `$id` URLs (e.g.
 >
 > `public/uir/` here is a second copy of the same bytes, kept because the drift guard below and
 > ci.yml's `schema-copies` job compare against it. It also means the schema stays reachable at
-> `https://docs.docuccino.app/uir/1.0/schema.json`.
+> `https://docs.docuccino.app/uir/2.0/schema.json`.
 
 Keep the published copy in sync with the source of truth:
 
 ```bash
-npm run sync-schema   # copy spec/uir/<ver>/schema.json -> public/uir/<ver>/schema.json
+npm run sync-schema   # copy every spec/uir/<ver>/*.json -> public/uir/<ver>/
 ```
 
 ## Branding

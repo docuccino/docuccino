@@ -74,11 +74,12 @@ it('leaves no schema in the tree outside a pin', function (): void {
     // whoever reads the failure needs to know which one.
     expect($buckets['unpinned'])->toBe([])
         // A scan that matched nothing would satisfy the line above. Every bucket is non-empty and
-        // every floor is close under what the tree holds today — 3, 1, 1 and 6.
+        // every floor is close under what the tree holds today — 3, 1, 1 and 12 (three UIR versions,
+        // each in spec/, php/core/resources/ and website/public/, and 2.0 is two files).
         ->and(count($buckets['openapi']))->toBeGreaterThanOrEqual(3)
         ->and(count($buckets['postman']))->toBeGreaterThanOrEqual(1)
         ->and(count($buckets['arazzo']))->toBeGreaterThanOrEqual(1)
-        ->and(count($buckets['uir']))->toBeGreaterThanOrEqual(6)
+        ->and(count($buckets['uir']))->toBeGreaterThanOrEqual(12)
         ->and(count($documents))->toBe(array_sum(array_map(count(...), $buckets)));
 });
 
@@ -102,6 +103,9 @@ it('calls a schema that owes a pin and has none unpinned', function (): void {
         // drift guard, and that guard reads the directory rather than a list.
         ->and(schemaPinOwed('https://spec.docuccino.app/uir/1.1/schema.json'))->toBe('uir')
         ->and(schemaPinOwed('https://spec.docuccino.app/uir/2.0/schema.json'))->toBe('uir')
+        // And every FILE of a version, not just the one named `schema.json`: the family is two files
+        // from 2.0 on, and the drift guard reads the directory rather than a filename.
+        ->and(schemaPinOwed('https://spec.docuccino.app/uir/2.0/extension.schema.json'))->toBe('uir')
         // The shapes that have to fail.
         ->and(schemaPinOwed('https://schema.getpostman.com/json/collection/v2.0.0/'))->toBe('unpinned')
         ->and(schemaPinOwed('https://asyncapi.com/definitions/3.0.0/asyncapi.json'))->toBe('unpinned')

@@ -44,7 +44,6 @@ function specCheckFormats(): array
 function specCheckDocument(array $overrides = []): UirDocument
 {
     return UirDocument::fromArray([
-        'uir' => '1.0.0',
         'openapi' => '3.2.0',
         'info' => ['title' => 'API', 'version' => '1.0.0'],
         'paths' => ['/things' => ['get' => [

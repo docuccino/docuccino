@@ -6,15 +6,14 @@ See the README for scope; this doc carries implementation-level detail.
 
 ## 1. UIR document
 
-OAS 3.2-shaped JSON with one reserved key `x-docuccino` allowed on every node. Schemas are
-JSON Schema 2020-12 (`jsonSchemaDialect: https://spec.openapis.org/oas/3.2/dialect/base`).
+A **valid OpenAPI 3.2 document** with one reserved key `x-docuccino` allowed on every node — nothing
+more. Schemas are JSON Schema 2020-12 (`jsonSchemaDialect:
+https://spec.openapis.org/oas/3.2/dialect/base`).
 
 Top level:
 
 ```json
 {
-  "$schema": "https://spec.docuccino.app/uir/1.1/schema.json",
-  "uir": "1.1.0",
   "openapi": "3.2.0",
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.2/dialect/base",
   "info": {}, "servers": [], "security": [], "tags": [],
@@ -22,20 +21,35 @@ Top level:
   "components": { "schemas": {}, "responses": {}, "parameters": {}, "securitySchemes": {}, "examples": {}, "headers": {} },
   "x-docuccino": {
     "document": { "id": "doc:default", "configHash": "…", "contentHash": "…" },
-    "generator": { "name": "docuccino/laravel", "version": "…", "specVersion": "1.1.0" },
+    "generator": {
+      "name": "docuccino/laravel", "version": "…",
+      "specVersion": "2.0.0", "schema": "https://spec.docuccino.app/uir/2.0/schema.json"
+    },
     "content": { "pages": [] },
     "diagnostics": []
   }
 }
 ```
 
+- The document root carries **no member OpenAPI does not define**. The spec version and the schema
+  URL are facts about the TOOL, so they ride under `generator`, which the content hash already
+  excludes: a spec release can never dirty a committed diff, and a strict OpenAPI validator accepts
+  the artifact as it stands.
 - `contentHash` = SHA-256 over canonical serialization EXCLUDING `x-docuccino.generator` and
   `x-docuccino.diagnostics` (tool upgrades don't dirty CI diffs).
 - No timestamps anywhere — banned by the UIR schema itself.
 - `x-docuccino.diagnostics` embedded only with `--embed-diagnostics` (CLI is the primary channel).
-- UIR spec semver is independent of PHP packages; `$schema` URL embeds major.minor.
+- The schema is published in two halves: the **extension schema**
+  (`…/2.0/extension.schema.json`), which describes `x-docuccino` alone and so applies on top of any
+  OpenAPI document, and the **document schema** (`…/2.0/schema.json`), which is an OpenAPI 3.2
+  document that additionally satisfies it. The document schema EMBEDS the extension as a draft
+  2020-12 schema resource rather than referencing it across files, so a vendored copy validates
+  offline with nothing beside it — a published schema that reaches the network to resolve itself puts
+  that fetch in every consumer's CI run. `composer sync-schema` generates the embedded copy from the
+  standalone file, and `SchemaSelfContainmentTest` holds the two equal and the references inside.
+- UIR spec semver is independent of PHP packages; both schema URLs embed major.minor.
   Consumers MUST ignore unknown `x-docuccino` members (additive = minor; shape/identity change =
-  major + new `$schema` URL).
+  major + new schema URLs).
 
 ### The empty-object invariant: the JSON values a PHP array cannot spell
 

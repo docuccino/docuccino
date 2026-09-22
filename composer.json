@@ -99,6 +99,7 @@
         "analyse": "phpstan analyse --no-progress --memory-limit=2G",
         "lint": "pint --test",
         "fix": "pint",
-        "sync-schema": "@php tools/sync-schema.php"
+        "sync-schema": "@php tools/sync-schema.php",
+        "sync-schema:check": "@php tools/sync-schema.php --check"
     }
 }

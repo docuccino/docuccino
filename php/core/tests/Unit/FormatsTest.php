@@ -32,7 +32,7 @@ function formatRows(): array
         'openapi-3.2' => ['openapi-3.2', true, true, '"openapi": "3.2.0"', 'worked-example.json'],
         'openapi-3.1' => ['openapi-3.1', true, true, '"openapi": "3.1.1"', 'worked-example.json'],
         'openapi-3.0' => ['openapi-3.0', true, true, '"openapi": "3.0.4"', 'worked-example.json'],
-        'uir' => ['uir', false, true, '"uir":', 'worked-example.json'],
+        'uir' => ['uir', false, true, '"x-docuccino":', 'worked-example.json'],
         'postman' => ['postman', false, false, 'schema.getpostman.com', 'worked-example.json'],
         'arazzo' => ['arazzo', true, false, '"arazzo": "1.1.0"', 'workflows.uir.json'],
     ];
