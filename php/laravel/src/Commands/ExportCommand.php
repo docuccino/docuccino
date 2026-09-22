@@ -275,6 +275,21 @@ final class ExportCommand extends Command
         $result = Formats::emit($target->format, $document, $this->emitOptions($target, $config));
 
         $path = Paths::absolute($this->stringOption('out') ?? $target->path, base_path());
+
+        // An emitter that produced nothing is one whose format has no empty form — an Arazzo
+        // description must carry a workflow, and a document that declares none has nothing to say in
+        // it. Writing the zero bytes would TRUNCATE a committed artifact and report success, so the
+        // file is left exactly as it was and the emitter's own report says why.
+        //
+        // Judged on the bytes rather than on the format: any emitter that can legitimately produce
+        // nothing inherits this, which is the half a per-format check would have missed.
+        if ($result->output === '') {
+            $this->line(sprintf('<fg=gray>Wrote nothing for %s (%s) — see below.</>', $path, $target->format));
+            $this->renderDiagnostics($target->format, $this->withAcceptanceNotes($result->report->diagnostics));
+
+            return ! $result->report->hasError();
+        }
+
         $directory = dirname($path);
         if (! Directory::ensure($directory)) {
             $this->error(sprintf('Could not create %s.', $directory));

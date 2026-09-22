@@ -8,6 +8,7 @@ use Docuccino\Core\Emit\Arazzo\ArazzoEmitter;
 use Docuccino\Core\Emit\EmitOptions;
 use Docuccino\Core\Tests\Support\ArazzoSchema;
 use Opis\JsonSchema\Helper;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * The Arazzo emitter, held to the published Arazzo 1.1 schema rather than to a golden alone.
@@ -208,11 +209,37 @@ it('takes its own title and version from the document it describes', function ()
         ->and($description['info'])->toBe(['title' => 'Baskets API', 'version' => '2026-09-01']);
 });
 
-it('emits YAML on request', function (): void {
+/*
+ * The YAML serialisation is a shipped artifact of its own — `Formats::serialisesYaml('arazzo')` is true,
+ * so a `.yaml` target writes these bytes — and an assertion that it starts with `arazzo:` would survive
+ * a writer that dropped every member below. It answers to the same schema the JSON does, read back with
+ * map and sequence kinds preserved: the defect this guards is a map written as a sequence, which is
+ * exactly what shipped once in the OpenAPI YAML writer.
+ */
+it('emits YAML that answers to the published Arazzo schema', function (): void {
     $result = (new ArazzoEmitter)->emitWithReport(workflowDocument(), (new EmitOptions)->withYaml());
 
+    $parsed = Yaml::parse($result->output, Yaml::PARSE_OBJECT_FOR_MAP);
+
+    $validation = ArazzoSchema::validator()->validate($parsed, ArazzoSchema::PUBLISHED);
+    $problem = $validation->error() === null
+        ? null
+        : $validation->error()->message().' at '.implode('/', $validation->error()->data()->path());
+
     expect($result->output)->toStartWith('arazzo: 1.1.0')
-        ->and($result->output)->toContain('workflowId: checkout');
+        ->and($problem)->toBeNull()
+        ->and($validation->isValid())->toBeTrue();
+});
+
+it('says the same thing in YAML as it does in JSON', function (): void {
+    // The other half: valid YAML that lost a member is still valid YAML. Both carriers decode to the
+    // same graph or one of the two writers is dropping something.
+    $document = workflowDocument();
+
+    $yaml = (new ArazzoEmitter)->emit($document, (new EmitOptions)->withYaml());
+    $json = (new ArazzoEmitter)->emit($document);
+
+    expect(Yaml::parse($yaml, Yaml::PARSE_OBJECT_FOR_MAP))->toEqual(json_decode($json, flags: JSON_THROW_ON_ERROR));
 });
 
 /*
@@ -262,3 +289,62 @@ it('refuses a description that does not answer to the Arazzo schema', function (
         return $d;
     }],
 ]);
+
+/*
+ * Names, and the reason this is the emitter's job rather than the schema's. Arazzo types `workflowId`
+ * and `stepId` as plain strings — the character set lives in the specification's prose and nowhere in
+ * the JSON Schema — and it constrains an `outputs` key with `patternProperties` and NO
+ * `additionalProperties: false`, so an unmatched key is silently accepted. Each row below therefore
+ * asserts BOTH halves: that the vendored oracle would have let the name through, and that the emitter
+ * does not. Without the first half the next reader deletes the check as redundant with the schema.
+ */
+it('leaves out a name Arazzo cannot carry, which its own schema would have accepted', function (string $case, callable $break, string $absent): void {
+    [$description, $codes] = emitArazzo($break);
+
+    expect($codes)->toContain('arazzo.name-unusable')
+        ->and(json_encode($description))->not->toContain($absent)
+        ->and($case)->not->toBe('');
+})->with([
+    'a workflow id with a space' => ['a workflow id with a space', function (array $d): array {
+        $d['x-docuccino']['workflows'][0]['id'] = 'check out';
+
+        return $d;
+    }, 'check out'],
+    'a step id with a dot' => ['a step id with a dot', function (array $d): array {
+        $d['x-docuccino']['workflows'][0]['steps'][0]['id'] = 'reserve.first';
+
+        return $d;
+    }, 'reserve.first'],
+    'an output name with a space' => ['an output name with a space', function (array $d): array {
+        $d['x-docuccino']['workflows'][0]['steps'][0]['outputs'] = ['hold id' => '$response.body#/id'];
+
+        return $d;
+    }, 'hold id'],
+]);
+
+it('shows the schema accepting the names the emitter refuses', function (): void {
+    // The other half, executed: a description carrying all three bad names validates clean against the
+    // published Arazzo schema. That is why the check above cannot be replaced by the oracle.
+    [$description] = emitArazzo();
+
+    $description['workflows'][0]['workflowId'] = 'check out';
+    $description['workflows'][0]['steps'][0]['stepId'] = 'reserve.first';
+    $description['workflows'][0]['steps'][0]['outputs'] = ['hold id' => '$response.body#/id'];
+
+    $result = ArazzoSchema::validator()->validate(Helper::toJSON($description), ArazzoSchema::PUBLISHED);
+
+    expect($result->isValid())->toBeTrue();
+});
+
+it('keeps an output name Arazzo does allow a dot in', function (): void {
+    // The control: `.` is legal in an output name and illegal in an id, so a rule that used one set for
+    // both would drop this.
+    [$description, $codes] = emitArazzo(function (array $d): array {
+        $d['x-docuccino']['workflows'][0]['steps'][0]['outputs'] = ['hold.id' => '$response.body#/id'];
+
+        return $d;
+    });
+
+    expect($codes)->toBe([])
+        ->and($description['workflows'][0]['steps'][0]['outputs'])->toBe(['hold.id' => '$response.body#/id']);
+});

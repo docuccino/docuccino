@@ -143,6 +143,12 @@ final readonly class ArazzoEmitter implements ReportingEmitter
      */
     private function workflow(Workflow $workflow, OperationIndex $index, array &$diagnostics): ?array
     {
+        if (! ArazzoNames::isId($workflow->id)) {
+            $diagnostics[] = self::unusableName('workflow', $workflow->id, $workflow->id);
+
+            return null;
+        }
+
         $steps = [];
         foreach ($workflow->steps as $step) {
             $emitted = $this->step($step, $workflow, $index, $diagnostics);
@@ -172,8 +178,14 @@ final readonly class ArazzoEmitter implements ReportingEmitter
 
         $out['steps'] = $steps;
 
-        if ($workflow->outputs !== []) {
-            $out['outputs'] = $workflow->outputs;
+        [$outputs, $refused] = ArazzoNames::usableOutputs($workflow->outputs);
+
+        foreach ($refused as $name) {
+            $diagnostics[] = self::unusableName('output', $name, $workflow->id);
+        }
+
+        if ($outputs !== []) {
+            $out['outputs'] = $outputs;
         }
 
         return $out;
@@ -201,6 +213,12 @@ final readonly class ArazzoEmitter implements ReportingEmitter
                 ),
                 help: 'An Arazzo step addresses its operation by operationId, so the operation has to be in the exported description and has to have one.',
             );
+
+            return null;
+        }
+
+        if (! ArazzoNames::isId($step->id)) {
+            $diagnostics[] = self::unusableName('step', $step->id, $workflow->id);
 
             return null;
         }
@@ -238,10 +256,38 @@ final readonly class ArazzoEmitter implements ReportingEmitter
             $out['successCriteria'] = [['condition' => '$statusCode == '.$success]];
         }
 
-        if ($step->outputs !== []) {
-            $out['outputs'] = $step->outputs;
+        [$outputs, $refused] = ArazzoNames::usableOutputs($step->outputs);
+
+        foreach ($refused as $name) {
+            $diagnostics[] = self::unusableName('output', $name, $workflow->id);
+        }
+
+        if ($outputs !== []) {
+            $out['outputs'] = $outputs;
         }
 
         return $out;
+    }
+
+    /**
+     * A name Arazzo cannot carry, left out rather than published.
+     *
+     * Worth its own report because nothing else can make it: the published Arazzo schema types an id as
+     * a plain string and accepts an unmatched `outputs` key silently, so the file would pass every
+     * check we have and fail in the runner it was written for.
+     */
+    private static function unusableName(string $kind, string $name, string $workflow): Diagnostic
+    {
+        return new Diagnostic(
+            severity: Severity::Warning,
+            code: 'arazzo.name-unusable',
+            message: sprintf(
+                'The %s name "%s" in the workflow "%s" is not one Arazzo can carry, so it was left out of the description.',
+                $kind,
+                $name,
+                $workflow,
+            ),
+            help: 'Arazzo takes letters, digits, `_` and `-` in a workflowId and a stepId, and those plus `.` in an output name.',
+        );
     }
 }
