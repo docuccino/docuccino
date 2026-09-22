@@ -34,7 +34,12 @@ function schemaPinOwed(string $declaredId): string
     return match (true) {
         str_starts_with($declaredId, 'https://spec.openapis.org/oas/') => 'openapi',
         $declaredId === PostmanSchema::PUBLISHED => 'postman',
-        $declaredId === 'https://spec.docuccino.app/uir/1.0/schema.json' => 'uir',
+        // By PREFIX, because every version of our own schema owes the same pin and that pin already
+        // covers them all: `SchemaShippingTest` walks the authoring directory rather than a list, so a
+        // version added tomorrow is drift-guarded the day it lands. An exact id here would have been
+        // the hand-maintained full set this file exists to argue against — the second UIR version
+        // would have read as somebody else's schema, in a bucket asserted to be empty.
+        str_starts_with($declaredId, 'https://spec.docuccino.app/uir/') => 'uir',
         default => 'unpinned',
     };
 }
@@ -64,7 +69,7 @@ it('leaves no schema in the tree outside a pin', function (): void {
         // every floor is close under what the tree holds today — 3, 1 and 3.
         ->and(count($buckets['openapi']))->toBeGreaterThanOrEqual(3)
         ->and(count($buckets['postman']))->toBeGreaterThanOrEqual(1)
-        ->and(count($buckets['uir']))->toBeGreaterThanOrEqual(3)
+        ->and(count($buckets['uir']))->toBeGreaterThanOrEqual(6)
         ->and(count($documents))->toBe(array_sum(array_map(count(...), $buckets)));
 });
 
@@ -80,10 +85,15 @@ it('calls a schema that owes a pin and has none unpinned', function (): void {
     expect(schemaPinOwed('https://spec.openapis.org/oas/3.2/schema/2025-09-17'))->toBe('openapi')
         ->and(schemaPinOwed(PostmanSchema::PUBLISHED))->toBe('postman')
         ->and(schemaPinOwed('https://spec.docuccino.app/uir/1.0/schema.json'))->toBe('uir')
+        // Every version of ours, including ones nobody has published yet: the pin they owe is the
+        // drift guard, and that guard reads the directory rather than a list.
+        ->and(schemaPinOwed('https://spec.docuccino.app/uir/1.1/schema.json'))->toBe('uir')
+        ->and(schemaPinOwed('https://spec.docuccino.app/uir/2.0/schema.json'))->toBe('uir')
         // The shapes that have to fail.
         ->and(schemaPinOwed('https://schema.getpostman.com/json/collection/v2.0.0/'))->toBe('unpinned')
         ->and(schemaPinOwed('https://asyncapi.com/definitions/3.0.0/asyncapi.json'))->toBe('unpinned')
-        ->and(schemaPinOwed('https://spec.docuccino.app/uir/2.0/schema.json'))->toBe('unpinned')
+        // A host one character away from ours is somebody else's.
+        ->and(schemaPinOwed('https://spec.docuccino.app.example/uir/1.0/schema.json'))->toBe('unpinned')
         ->and(schemaPinOwed(''))->toBe('unpinned');
 });
 

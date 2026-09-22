@@ -1,6 +1,6 @@
 {
-  "$schema": "https://spec.docuccino.app/uir/1.0/schema.json",
-  "uir": "1.0.0",
+  "$schema": "https://spec.docuccino.app/uir/1.1/schema.json",
+  "uir": "1.1.0",
   "openapi": "3.2.0",
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.2/dialect/base",
   "info": {
@@ -823,12 +823,12 @@
     "document": {
       "id": "doc:wave-d-auth",
       "configHash": "8547b39dbe461c3bd22293a7d4d22e89f6281fe06c7f02efb8f7fd1ef40c8c60",
-      "contentHash": "91b37401f3dc73f6a7ba0eef2c22ba13eb9363b75ce51763a50e668939b26b8d"
+      "contentHash": "e16a868d593fe5c37550dc12682e9603e66d1c5e04d37dd04e316d06c73131f3"
     },
     "generator": {
       "name": "docuccino/laravel",
       "version": "0.8.3",
-      "specVersion": "1.0.0"
+      "specVersion": "1.1.0"
     }
   }
 }

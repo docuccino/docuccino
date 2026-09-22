@@ -9,6 +9,7 @@ Each schema is served as a static file at its exact `$id` URL:
 | Version | `$id` |
 | ------- | ----- |
 | 1.0     | <https://spec.docuccino.app/uir/1.0/schema.json> |
+| 1.1     | <https://spec.docuccino.app/uir/1.1/schema.json> |
 
 ## This repository is read-only
 
@@ -18,7 +19,7 @@ serve `spec.docuccino.app`. Commits pushed here are overwritten on the next rele
 
 Open issues and pull requests on the monorepo. The schema's authoring copy lives at
 `spec/uir/<version>/schema.json` there, and `php/core` ships a byte-identical package-relative
-copy so `Validator` resolves it from a `vendor/` install rather than over the network — the `$id`
+copy of each so `Validator` resolves it from a `vendor/` install rather than over the network — the `$id`
 above is an identifier, not a runtime fetch.
 
 Documentation: <https://docs.docuccino.app>

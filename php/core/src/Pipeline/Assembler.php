@@ -39,9 +39,9 @@ use Throwable;
  */
 final class Assembler
 {
-    private const SCHEMA_URL = 'https://spec.docuccino.app/uir/1.0/schema.json';
+    private const SCHEMA_URL = 'https://spec.docuccino.app/uir/1.1/schema.json';
 
-    private const UIR_VERSION = '1.0.0';
+    private const UIR_VERSION = '1.1.0';
 
     private const OPENAPI_VERSION = '3.2.0';
 
