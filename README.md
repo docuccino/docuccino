@@ -108,6 +108,8 @@ Full documentation is at **[docs.docuccino.app](https://docs.docuccino.app)**:
   [vs Scribe](https://docs.docuccino.app/guides/vs-scribe/)
 - [The Docuccino extension](https://docs.docuccino.app/uir/)
 
+Upgrading between releases: [`UPGRADING.md`](UPGRADING.md).
+
 The docs site source lives in [`website/`](website/README.md) (Astro + Starlight).
 
 ## Contributing
