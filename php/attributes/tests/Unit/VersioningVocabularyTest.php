@@ -2,10 +2,12 @@
 
 declare(strict_types=1);
 
+use Docuccino\Attributes\Versioning\AddedEnumValue;
 use Docuccino\Attributes\Versioning\ApiVersionChange;
 use Docuccino\Attributes\Versioning\MadeRequestFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldRequired;
+use Docuccino\Attributes\Versioning\RemovedEnumValue;
 use Docuccino\Attributes\Versioning\RemovedResponseField;
 use Docuccino\Attributes\Versioning\RenamedParameter;
 use Docuccino\Attributes\Versioning\RenamedRequestField;
@@ -30,6 +32,7 @@ final readonly class UnfoldableChangeProbe
         public Closure $transform,
         public object $target,
         public ?string $note,
+        public string|Closure $either,
     ) {}
 }
 
@@ -74,20 +77,49 @@ function versionChangeVocabulary(): array
  */
 function unfoldableChangeParameters(array $classes): array
 {
-    $foldable = ['string', 'int', 'float', 'bool', 'array'];
-
     $offenders = [];
     foreach ($classes as $class) {
         foreach ((new ReflectionClass($class))->getConstructor()?->getParameters() ?? [] as $parameter) {
             $type = $parameter->getType();
 
-            if (! $type instanceof ReflectionNamedType || $type->allowsNull() || ! in_array($type->getName(), $foldable, true)) {
+            if (! foldableChangeParameter($type)) {
                 $offenders[] = $class.'::$'.$parameter->getName().': '.($type === null ? 'untyped' : (string) $type);
             }
         }
     }
 
     return $offenders;
+}
+
+/**
+ * Whether a build could read a value of this type off a declaration, which is the whole of what
+ * foldable means: a non-nullable scalar, an array of them, or a UNION whose every member is one.
+ *
+ * A union is foldable for exactly the reason a single type is — PHP has already constructed every
+ * branch of it by the time the attribute is instantiated, and none of them is an object to build or a
+ * null to interpret. The vocabulary needs one because a backed enum's value is `string|int` on the
+ * wire: narrowing the declaration to either half would make the other spell its value as the type it
+ * is not, and an enum member published as `"3"` where the server sends `3` is a value a generated
+ * client cannot match.
+ */
+function foldableChangeParameter(?ReflectionType $type): bool
+{
+    if ($type instanceof ReflectionNamedType) {
+        return ! $type->allowsNull() && in_array($type->getName(), ['string', 'int', 'float', 'bool', 'array'], true);
+    }
+
+    // An intersection is of objects by construction, and anything else unnamed says nothing at all.
+    if (! $type instanceof ReflectionUnionType) {
+        return false;
+    }
+
+    foreach ($type->getTypes() as $member) {
+        if (! foldableChangeParameter($member)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 /** How many constructor parameters the vocabulary declares in total. */
@@ -109,12 +141,15 @@ it('keeps every version-change declaration readable without running the applicat
 });
 
 it('refuses a parameter no declaration could carry', function (): void {
-    // The guard EXECUTED rather than asserted: a verb reaching for a closure, an object or a null is the
-    // failure it has to produce, and each of the three is named.
+    // The guard EXECUTED rather than asserted: a verb reaching for a closure, an object, a null or a
+    // union with any of them in it is the failure it has to produce, and each of the four is named. The
+    // union is here because the guard learned to accept one: a rule that now says yes to some unions
+    // has to be shown still saying no to the rest, or accepting `string|int` quietly accepted anything.
     expect(unfoldableChangeParameters([UnfoldableChangeProbe::class]))->toBe([
         UnfoldableChangeProbe::class.'::$transform: Closure',
         UnfoldableChangeProbe::class.'::$target: object',
         UnfoldableChangeProbe::class.'::$note: ?string',
+        UnfoldableChangeProbe::class.'::$either: Closure|string',
     ]);
 });
 
@@ -188,11 +223,13 @@ it('spells no verb for the combination the wire has no honest sentence for', fun
     // grid is deliberately empty rather than merely unbuilt.
     expect(class_exists('Docuccino\\Attributes\\Versioning\\MadeRequestFieldRequired'))->toBeFalse()
         ->and(versionChangeVocabulary())->toBe([
+            AddedEnumValue::class,
             ApiVersionChange::class,
             'Docuccino\\Attributes\\Versioning\\AppliesTo',
             MadeRequestFieldOptional::class,
             MadeResponseFieldOptional::class,
             MadeResponseFieldRequired::class,
+            RemovedEnumValue::class,
             RemovedResponseField::class,
             RenamedParameter::class,
             RenamedRequestField::class,
@@ -255,3 +292,46 @@ it('stacks a change and its renames on one class', function (): void {
 #[RenamedResponseField(schema: 'App\\Http\\Resources\\InvoiceResource', from: 'name', to: 'title')]
 #[RenamedResponseField(schema: 'App\\Http\\Resources\\InvoiceResource', from: 'total', to: 'amount_in_cents')]
 final class RenamedInvoiceFieldsFixture {}
+
+/*
+ * The value-set pair, which is the first verb in the vocabulary to carry a value rather than a name —
+ * and so the first whose declaration has to spell what the wire carries. `string|int` is the whole
+ * reason the foldability guard above learned to read a union.
+ */
+it('names the value a version added to a published set', function (): void {
+    $added = new AddedEnumValue(enum: 'App\\Enums\\Status', value: 'archived');
+
+    expect($added->enum)->toBe('App\\Enums\\Status')
+        ->and($added->value)->toBe('archived')
+        ->and((new ReflectionClass(AddedEnumValue::class))->getConstructor()?->getNumberOfParameters())->toBe(2);
+});
+
+it('carries an int-backed value as an int rather than as its spelling', function (): void {
+    // The half a `string`-only declaration would have got wrong: a set typed `integer` publishes `3`,
+    // and a declaration that could only say `'3'` would name no member of it.
+    $added = new AddedEnumValue(enum: 'App\\Enums\\Priority', value: 3);
+
+    expect($added->value)->toBe(3)->and($added->value)->not->toBe('3');
+});
+
+it('names the value a version took away, and what older clients called it', function (): void {
+    $removed = new RemovedEnumValue(
+        enum: 'App\\Enums\\Status',
+        value: 'pending_review',
+        name: 'PendingReview',
+        description: 'Waiting for an editor to approve it.',
+    );
+
+    expect($removed->enum)->toBe('App\\Enums\\Status')
+        ->and($removed->value)->toBe('pending_review')
+        ->and($removed->name)->toBe('PendingReview')
+        ->and($removed->description)->toBe('Waiting for an editor to approve it.');
+});
+
+it('lets a removed value state nothing but itself', function (): void {
+    // The shortest honest form: the member name is minted from the value, which is a pure function of
+    // it, and the set publishes no prose for a value nobody wrote any for.
+    $removed = new RemovedEnumValue(enum: 'App\\Enums\\Status', value: 'pending_review');
+
+    expect($removed->name)->toBe('')->and($removed->description)->toBe('');
+});
