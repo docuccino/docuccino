@@ -139,6 +139,7 @@ export default defineConfig({
 						{ label: 'Authentication', slug: 'laravel/documenting/authentication' },
 						{ label: 'Rate limiting', slug: 'laravel/documenting/rate-limiting' },
 						{ label: 'Webhooks', slug: 'laravel/documenting/webhooks' },
+						{ label: 'Workflows', slug: 'laravel/documenting/workflows' },
 					],
 				},
 				{
