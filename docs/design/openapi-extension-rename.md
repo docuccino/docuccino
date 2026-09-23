@@ -167,22 +167,49 @@ six rows — the Arazzo emitter added `arazzo` — of which one changes:
 ```
 
 Post-rename the two artifacts differ only by whether `x-docuccino` is retained, so the honest id names
-that: **`openapi-3.2-full`** against `openapi-3.2`. Three further touch points move with it —
+that: **`full`** against `openapi-3.2`. Three further touch points move with it —
 `CONTRACT_PREFERENCE` (where `uir` leads, correctly, because provenance survives nowhere else),
 `viewerPreference`, and the comment in `php/laravel/config/docuccino.yaml` that lists the valid ids
 inside the `export.targets` block, which `tools/config-reference-sync.php` holds against the website's
 configuration reference in both directions.
 
-The fourth column — "held to a published schema" — currently reads `false` for `uir`. After §8 it can
-read `true`. That is a real quality gain, not bookkeeping: see §9.
+The fourth column — "held to a published schema" — reads `false` for the full format. §9 expected the
+schema split to flip it to `true`.
+
+**Decided (2026-09-23): it does not flip with the rename.** The split landed and the schema is
+published and self-contained, so the stated blocker is gone — but the column asks whether the emitter
+reads its OWN OUTPUT back, and `UirEmitter` calls no check at all. Flipping it was executed: eight
+tests fail, among them the one that emits a document with a dangling `$ref` and reads the diagnostic
+back, because nothing raises one for `full`. `EmittedSpecCheck` also routes through
+`OpenApiMetaSchema`, which has no row for a non-OpenAPI format and throws for one. So the column is
+not a fact waiting to be recorded; making it true is the work §9 describes — emit-time validation of
+the full artifact against the OpenAPI 3.2 meta-schema and of its `x-docuccino` against the standalone
+extension schema — and that is a feature of its own, not a line in a rename.
+
+What the rename owed instead was to stop the command LYING while the column stays false.
+`docuccino:validate` printed "*`<key>`: full has no published schema to hold an artifact to; not
+checked*", which a run contradicts two lines earlier by printing the UIR version that same artifact
+was just validated against. `arazzo` had the same defect and `postman` did not, so the line now
+reports the one thing true of all three — that the bytes were not read back — and says nothing about
+whether a schema exists. See §9.
 
 **Decided (2026-09-22): no alias.** `uir` does not survive as a deprecated format id. A table alias is
 a few lines, but it is also a knob, and the project's bar for a knob is high; the release is already
 breaking and pre-1.0, so a clean break is in-contract. What the break owes instead is a **message that
 names the replacement**: `Formats::emit` already throws "expected one of", and an unknown-format
-error reading *"`uir` is now `openapi-3.2-full`"* costs nothing and beats an alias that must later be
+error reading *"`uir` is now `full`"* costs nothing and beats an alias that must later be
 removed. That sentence is part of the change, not a nicety — `--format=uir` is baked into users' CI
 pipelines and the failure is the first thing they meet on upgrade. It owes a test that executes it.
+
+**Decided (2026-09-23): `full`, not `openapi-3.2-full`.** The first draft of this section carried the
+OAS version in the id. Three things are wrong with that. It pins a version that will churn: the full
+artifact is whatever version the document is natively built at, so moving to 3.3 would force a second
+breaking rename for one concept. The version discriminates between things that cannot both exist —
+the downlevel emitters strip `x-docuccino` by definition, so there is no `openapi-3.1-full` and the
+segment names a distinction with no members. And an `openapi-` prefix puts the one artifact that is
+NOT plain OpenAPI inside the `openapi-` family, which is the defect three readers had already hit
+(see `docs/design/defect-classes.md`, "A name read for a family it is not a member of"); `full` closes
+it by construction rather than by guard.
 
 ## 7. Pages and the content layer
 
@@ -273,10 +300,17 @@ The whole project has one binary, provable pass condition:
 > The full artifact validates against the **official OpenAPI 3.2 meta-schema**, and its `x-docuccino`
 > member validates against the standalone extension schema.
 
-That is exactly the claim the rename makes in public, so it is the claim the suite must hold. It also
-flips `Formats::TABLE`'s fourth column for the full format from `false` to `true` — the column that
-tells a caller asking "is this artifact sound" whether anybody can say. Today, for our own primary
-artifact, nobody can.
+That is exactly the claim the rename makes in public, so it is the claim the suite must hold. Holding
+it at EMIT time is also what flips `Formats::TABLE`'s fourth column for the full format from `false`
+to `true` — the column that tells a caller asking "is this artifact sound" whether anybody can say.
+Today, for our own primary artifact, nobody can.
+
+**Amended (2026-09-23).** The flip is a deliverable of THIS section and not of the rename; see §6 for
+the measurement. Until it lands, `checksEmittedArtifact()` stays `false` for `full` and the column's
+readers may say only that the bytes were not read back — never that the format has no published
+schema, which stopped being true when §8 published one. `arazzo` is in the same position for a
+different reason (its schema is exercised in the suite, not at emission) and `postman` is the only
+row with no specification at all.
 
 Per the coverage standards, write the guard so it **executes** the refusal: feed it a document with a
 stray root member and confirm the meta-schema rejects it. A claimed guard is asserted; a real one is
@@ -394,7 +428,7 @@ Content §7.2/7.3 is **not** in this release. It is a separate design once the r
 
 Short, because the blast radius genuinely is:
 
-- `--format=uir` → `--format=openapi-3.2-full`, and the same id in `export.targets`.
+- `--format=uir` → `--format=full`, and the same id in `export.targets`.
 - Anything reading `$schema` or `uir` at the document root reads `x-docuccino.generator.schema` and
   `x-docuccino.generator.specVersion`.
 - **`contentHash` does not move.** An earlier draft of this section said every hash moved once; that

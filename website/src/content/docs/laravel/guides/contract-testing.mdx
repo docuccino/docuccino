@@ -18,7 +18,7 @@ almost always where the fix is.
 
 <Steps>
 
-1. **Export the document as UIR.** Add a `uir` target beside whatever you already write, in
+1. **Export the document as UIR.** Add a `full` target beside whatever you already write, in
    `docuccino.yaml`:
 
    ```yaml
@@ -27,14 +27,14 @@ almost always where the fix is.
        export:
          targets:
            - { format: 'openapi-3.2', path: 'docs/openapi.json' }
-           - { format: 'uir', path: 'docs/api.uir.json' }
+           - { format: 'full', path: 'docs/api.uir.json' }
    ```
 
    ```bash
    php artisan docuccino:export
    ```
 
-   The assertions find that file on their own — they read the document's own `uir` target, so there is
+   The assertions find that file on their own — they read the document's own `full` target, so there is
    nothing else to configure. Commit the artifact; it is deterministic, and the freshness and
    breaking-change assertions below both compare against it.
 

@@ -108,10 +108,10 @@ Generate and export API documentation from your routes.
 ```
 docuccino:export
     {document? : The configured document key (defaults to every document)}
-    {--format= : uir | openapi-3.2 | openapi-3.1 | openapi-3.0 | postman | arazzo — writes this one format instead of the configured targets}
+    {--format= : openapi-3.2 | openapi-3.1 | openapi-3.0 | full | postman | arazzo — writes this one format instead of the configured targets}
     {--out= : Output path (defaults to the matching target, else the document export path)}
     {--fail-on=none : none | error | warning | info | hint — the quietest severity that still makes the command exit non-zero}
-    {--provenance=winners : none | winners | full — UIR provenance detail}
+    {--provenance=winners : none | winners | full — how much provenance a --format=full artifact keeps}
     {--drop-ids : Omit the flat x-docuccino-id member OpenAPI output carries by default (the artifact then diffs by method + path)}
     {--yaml : Emit YAML instead of JSON}
     {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}
@@ -120,12 +120,12 @@ docuccino:export
 | Flag | Values / default | Effect |
 | --- | --- | --- |
 | `document` | any configured key / all documents | Which document(s) to export. Unknown key → exit 1. |
-| `--format` | `uir` \| `openapi-3.2` \| `openapi-3.1` \| `openapi-3.0` \| `postman` \| `arazzo` / all configured targets | Writes **only** this format, replacing the document's [`export.targets`](/laravel/reference/configuration/#export) for that run. `uir` → raw UIR; `openapi-3.1` and `openapi-3.0` → the downlevel emitters; `postman` → a [Postman Collection v2.1.0](#postman-collections); `arazzo` → an [Arazzo 1.1 workflow description](#arazzo-workflow-descriptions). An invalid value errors (no silent fallback). |
+| `--format` | `openapi-3.2` \| `openapi-3.1` \| `openapi-3.0` \| `full` \| `postman` \| `arazzo` / all configured targets | Writes **only** this format, replacing the document's [`export.targets`](/laravel/reference/configuration/#export) for that run. `full` → OpenAPI 3.2 with the `x-docuccino` extension retained rather than stripped; `openapi-3.1` and `openapi-3.0` → the downlevel emitters; `postman` → a [Postman Collection v2.1.0](#postman-collections); `arazzo` → an [Arazzo 1.1 workflow description](#arazzo-workflow-descriptions). An invalid value errors (no silent fallback). |
 | `--out` | path / the matching target, else [`export.path`](/laravel/reference/configuration/#export) | Overrides the output path — resolved against `base_path()` unless already absolute, and missing directories are created. Rejected when it would have to hold several artifacts at once: more than one document configured and no `document` argument, or a document with several [`export.targets`](/laravel/reference/configuration/#export) and no `--format` — in both cases each write would clobber the last. Name a document, pass `--format`, or configure per-document targets. |
 | `--fail-on` | `none` \| `error` \| `warning` \| `info` \| `hint` / `none` | The quietest severity that still fails the run: anything reported at that severity **or louder** makes the exit code non-zero, and `none` never fails on severity. `error` catches errors only, `warning` adds warnings, `info` adds the recovery reports — an unrecoverable payload, a model with no readable columns, a validation rule that could not be read — and `hint` catches everything. The floor reads everything the run **prints**: what the build found, what an emitter reported while writing each artifact, and what reading your export configuration reported before the build started. An invalid value errors (no silent fallback) — a typo must not quietly remove the gate. Codes listed under [`diagnostics.accept`](/laravel/reference/configuration/#diagnostics) still print but never fail the run; errors are never accepted. |
-| `--provenance` | `none` \| `winners` \| `full` / `winners` | UIR provenance detail. `full` keeps every record including its `overrode` trail, `winners` keeps the records but drops the trails, `none` strips provenance entirely. An invalid value errors (no silent fallback). Only `--format=uir` carries provenance — the OpenAPI emitters always drop it. |
-| `--drop-ids` | flag / off | Omits the flat `x-docuccino-id` member. OpenAPI exports carry it **by default**: `x-docuccino` itself never survives emission (it holds provenance — source file, line, symbol — which has no business in a published spec), but the id is an opaque hash of members the document already publishes, and it is what lets [`docuccino:diff`](#docuccinodiff) pair a committed artifact by identity instead of by method + path. Drop it if you want bytes indistinguishable from a hand-written spec, accepting the weaker diff. No effect on `--format=uir`, which carries identities natively. |
-| `--yaml` | flag / off | Emit YAML instead of JSON, for the single-target `--format` override. Configured targets state it in their own path instead (`.yaml`/`.yml`). Rejected with `--format=uir` and `--format=postman`, which have no YAML form; `--format=arazzo` accepts it, and Arazzo is usually written as YAML. |
+| `--provenance` | `none` \| `winners` \| `full` / `winners` | How much provenance survives in the artifact `--format=full` writes. At `--provenance=full` every record is kept, including its `overrode` trail; at `winners` the records are kept but the trails dropped; at `none` provenance is stripped entirely. (The two are separate settings that happen to share a word: one names the artifact, the other how much trail is left in it.) An invalid value errors (no silent fallback). Only `--format=full` carries provenance at all — the OpenAPI emitters always drop it. |
+| `--drop-ids` | flag / off | Omits the flat `x-docuccino-id` member. OpenAPI exports carry it **by default**: `x-docuccino` itself never survives emission (it holds provenance — source file, line, symbol — which has no business in a published spec), but the id is an opaque hash of members the document already publishes, and it is what lets [`docuccino:diff`](#docuccinodiff) pair a committed artifact by identity instead of by method + path. Drop it if you want bytes indistinguishable from a hand-written spec, accepting the weaker diff. No effect on `--format=full`, which carries identities natively. |
+| `--yaml` | flag / off | Emit YAML instead of JSON, for the single-target `--format` override. Configured targets state it in their own path instead (`.yaml`/`.yml`). Rejected with `--format=full` and `--format=postman`, which have no YAML form; `--format=arazzo` accepts it, and Arazzo is usually written as YAML. |
 | `--memory-limit` | php.ini value, e.g. `2G` / unset | Raises the process memory limit before inference runs — see the shared-behavior note above. |
 
 **One build, many artifacts.** With no `--format`, the command writes every target the document
@@ -138,7 +138,7 @@ that target's path is used — looked up by format, so which file you get never 
 happens to be ordered.
 
 A target list the command cannot honor — an unknown format, two targets writing one file, a `.yaml`
-path on `uir` — fails with a `config.export-*` error **before** the build starts, so a wrong filename
+path on `full` — fails with a `config.export-*` error **before** the build starts, so a wrong filename
 never costs you an analysis. A write that fails prints `Could not write <path>.` instead of `Wrote`,
 and the command exits non-zero.
 
@@ -241,9 +241,11 @@ lists them as `document.schema-invalid` error diagnostics grouped by route.
 artifact claims — the same check [`docuccino:export`](#docuccinoexport) runs as it writes each file.
 Every format in [`export.targets`](/laravel/reference/configuration/#export) is emitted in memory and
 read back; nothing is written, and no file on disk changes. You get one line per target:
-`<key>: openapi-3.2 artifact valid against its published schema.` A `uir` or `postman` target says
-`has no published schema to hold an artifact to; not checked` instead — UIR answers to its own schema
-in the first half, above, and a Postman collection has no specification to be held to.
+`<key>: openapi-3.2 artifact valid against its published schema.` A `full`, `postman` or `arazzo`
+target says `artifact not read back against a published schema; not checked` instead. The reason
+differs by format: a `full` artifact was already validated against the UIR schema in the first half,
+above; an Arazzo description answers to the Arazzo schema, but not as it is written; and a Postman
+collection has no published specification at all.
 
 Validating what you export rather than a fixed format is the point: if your pipeline ships
 `openapi-3.0`, this tells you about the 3.0 file. That also means the `downlevel.*` reports a
@@ -264,7 +266,7 @@ Diff a committed API artifact against the current document — semantic, id-base
 
 ```
 docuccino:diff
-    {old : Path to the committed UIR/OpenAPI artifact to diff against}
+    {old : Path to the committed artifact to diff against, in any format it was exported in}
     {document? : The configured document key to generate as the new side (defaults to "default")}
     {--against= : Read `old` from this git ref (git show <ref>:<old>) instead of the working tree}
     {--enforce : Enforce the document's versioning policy; exit non-zero on a violation}
@@ -273,8 +275,8 @@ docuccino:diff
 ```
 
 The diff is computed over stable `x-docuccino.id`s, so a path-param rename reads as "no change"
-while a URI change reads as remove + add. Prefer a UIR artifact for `old` — it carries the
-identities natively, and an OpenAPI artifact carries them unless it was exported with
+while a URI change reads as remove + add. Prefer a `full` artifact for `old` — it
+carries the identities natively, and an OpenAPI artifact carries them unless it was exported with
 [`--drop-ids`](#docuccinoexport).
 
 When either side has no identities the diff pairs nodes by method + path on **both** sides, like any
@@ -1040,7 +1042,7 @@ build.
 
 ```
 docuccino:version-changes
-    {old : Path to the committed UIR artifact of the version this one diverges from}
+    {old : Path to the committed artifact of the version this one diverges from}
     {document? : The configured document key to build as the new side (defaults to "default")}
     {--against= : Read `old` from this git ref (git show <ref>:<old>) instead of the working tree}
     {--since= : The version the scaffolded changes shipped in (defaults to the document's info.version)}

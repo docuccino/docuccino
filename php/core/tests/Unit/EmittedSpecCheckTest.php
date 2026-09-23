@@ -20,13 +20,17 @@ use Docuccino\Core\SpecValidation\OpenApiMetaSchema;
  * format against a different meta-schema, and the 3.0 downlevel reaches its own.
  */
 
-/** The three OpenAPI formats, as a dataset — read off the emitter table, never listed here. */
+/**
+ * The formats that hold their own output to a published meta-schema, as a dataset — read off the
+ * emitter table, never listed here. Selected by the table column rather than by the shape of the id:
+ * `full` is an OpenAPI description too, and is not one of them.
+ */
 function specCheckFormats(): array
 {
     $formats = [];
 
     foreach (Formats::ids() as $id) {
-        if (str_starts_with($id, 'openapi-')) {
+        if (Formats::checksEmittedArtifact($id)) {
             $formats[$id] = [$id];
         }
     }

@@ -58,6 +58,7 @@ function allowedSwitchReads(): array
         'php/core/src/Document/DocumentGraph.php::componentsReaching' => [1, 'own reachability set membership'],
         'php/core/src/Document/DocumentGraph.php::nodeReaches' => [1, 'own reachability set membership'],
         'php/core/src/Emit/Formats.php::checksEmittedArtifact' => [1, 'own format table column'],
+        'php/core/src/Emit/Formats.php::publishesPlainOpenApi' => [1, 'own format table column'],
         'php/core/src/Emit/Formats.php::serialisesYaml' => [1, 'own format table column'],
         'php/laravel/src/Versioning/ApiVersionTransformer.php::rewrite' => [1, 'own reachability set membership'],
 

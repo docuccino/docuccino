@@ -225,12 +225,13 @@ rather than a format, so it applies to whichever of them you asked for:
 	php artisan docuccino:export --format=openapi-3.0 --yaml --out=docs/openapi-3.0.yaml
 	```
 
-	Available on the three OpenAPI formats. UIR and Postman are parsed by tools that read JSON and
-	nothing else, so a `.yaml` path on either is refused rather than filled with JSON.
+	Available on the three plain OpenAPI formats and on `arazzo`. `full` and `postman` are parsed
+	by tools that read JSON and nothing else, so a `.yaml` path on either is refused rather than filled
+	with JSON.
 	</TabItem>
 	<TabItem label="Raw UIR">
 	```bash
-	php artisan docuccino:export --format=uir --out=docs/api.uir.json
+	php artisan docuccino:export --format=full --out=docs/api.uir.json
 	```
 	</TabItem>
 	<TabItem label="Postman">

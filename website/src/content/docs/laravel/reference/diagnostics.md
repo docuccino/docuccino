@@ -423,7 +423,7 @@ whichever version you ship.
 A `downlevel.*` code is raised **once per emitted format that raises it**, by the emitter doing the
 rewriting — nothing dedupes across formats. `downlevel.empty-responses` comes from the 3.0 emitter only,
 so it appears once in a build exporting 3.0 and not at all in one exporting 3.2, 3.1 or Postman. A 3.0
-export chains through the 3.1 emitter, so it also carries every code the 3.1 target raises. `--format=uir`
+export chains through the 3.1 emitter, so it also carries every code the 3.1 target raises. `--format=full`
 emits no report of this kind at all.
 
 [`docuccino:validate`](/laravel/reference/commands/#docuccinovalidate) raises them too. It emits every
@@ -478,7 +478,7 @@ counting towards the exit code, and the artifacts are byte-identical either way.
 Facts about the [`servers`](/laravel/reference/configuration/#servers) a document publishes. Every
 emitter that writes a URL resolves them for itself, so a code here is raised **once per emitted
 format** — a build exporting OpenAPI 3.2, 3.1, 3.0 and a Postman collection reports the same variable
-four times, once against each. `--format=uir` publishes the variables as configured and reports
+four times, once against each. `--format=full` publishes the variables as configured and reports
 nothing, since nothing has resolved a URL yet.
 
 | Code | Severity | What it means | What to do |

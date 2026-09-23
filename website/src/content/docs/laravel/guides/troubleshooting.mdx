@@ -443,7 +443,7 @@ Two flags make diagnostics more useful:
    and everything it shadowed — in an exported UIR file:
 
    ```bash
-   php artisan docuccino:export --format=uir --provenance=full
+   php artisan docuccino:export --format=full --provenance=full
    ```
 
 2. **Make CI care.** `--fail-on` turns diagnostics into a non-zero exit, so a regression in

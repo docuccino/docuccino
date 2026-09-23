@@ -13,6 +13,13 @@ namespace Docuccino\Core\Spec;
  *
  * The `$id` carries major.minor and `x-docuccino.generator.specVersion` carries the patch too, so both
  * URLs are derived from the version rather than written beside it.
+ *
+ * **UIR is the name of the SPEC, and no longer the name of an artifact.** What a build emits is
+ * OpenAPI — `full` retains the extension, `openapi-3.2` strips it — and nothing published
+ * calls either of them a UIR. The spec those documents answer to is still UIR, served at the URLs
+ * above and declared at `generator.specVersion`, so a sentence naming the version a document is valid
+ * against says UIR and is right to. A sweep that renames those too makes the CLI disagree with the
+ * schema host a reader is about to fetch from.
  */
 final class UirSpec
 {
