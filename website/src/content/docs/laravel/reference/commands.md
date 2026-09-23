@@ -356,9 +356,9 @@ A **schema** pointer is the exception, because JSON Schema 2020-12 keeps every k
 in force: the schema at such a position is the *intersection* of the pointer and its neighbours, and
 neither one states it. So only a *bare* pointer is read through — `$ref` alone, or with annotation
 keywords, which are read through and override the component's. A pointer with anything beside it that
-constrains the value is compared as written rather than flattened into a shape neither side declares.
-Docuccino spells a hoisted shape as the pointer alone, so this arises only against a hand-written or
-third-party artifact.
+constrains the value is compared as written rather than flattened into a shape neither side declares —
+at the position, or at whichever hop of a chain first states one. Docuccino spells a hoisted shape as
+the pointer alone, so this arises only against a hand-written or third-party artifact.
 
 A pointer the diff cannot follow — a name the document does not declare, a chain, a cycle, a pointer into
 another file — is a comparison it cannot make, and it says so rather than guessing. Where a path item or a
@@ -376,12 +376,19 @@ than the document being wrong — the endpoint may be whole where it lives — a
 Repairing a broken pointer is not a breaking change either, and where both sides carry the same pointer
 for the same reason the document did not change there and nothing is reported.
 
-A **schema** pointer names no separate entry, because a schema position always has a comparison to make:
-one the resolver will not follow — a name the document does not declare, or a pointer whose own target is
-another pointer — compares as the keywords written at the position, which against an inline shape on the
-other side reads as that shape's keywords leaving. A pointer that reaches *itself*, directly or around a
-loop, is the case the resolver does handle: the pair being resolved is held open for the descent beneath
-it, so a recursive schema compares to its depth and stops.
+A **schema** pointer names no separate entry, because a schema position always has a comparison to make.
+A *chain* is followed: a component whose whole body is a pointer at another component resolves to the
+shape at the end of it, however many names lie between, and the names along the way are reported moving
+like any other. What compares as the keywords written at the position is a pointer the resolver reaches
+no shape through at all — a name the document does not declare, a pointer into another file, or a chain
+that comes back to a name already being resolved. Against an inline shape on the other side that reads
+as that shape's keywords leaving, which is the degraded direction on purpose: a position whose pointer
+leads nowhere describes no value, and over-reporting costs a look where under-reporting would let a
+narrowing past as safe.
+
+A schema reaching *itself*, directly or around a loop, is bounded rather than trusted: the pointer pair
+being resolved is held open for the descent beneath it, so a recursive schema compares to its depth and
+stops — and a chain rides on that same bound rather than counting hops of its own.
 
 An operation's parameters are its own plus the ones its path item declares for every operation under it,
 minus any the operation restates for the same `name` and `in` — the override OpenAPI specifies. Docuccino
