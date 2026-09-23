@@ -129,7 +129,11 @@ What lives where:
   under `php/core/resources/spec/` (so `Validator` resolves the schema from a vendor install,
   not from a monorepo-relative path). Edit the canonical copy under `spec/`, then run
   `composer sync-schema` to refresh the package copy; a byte-equality drift guard (`SchemaShippingTest`)
-  fails CI if they diverge.
+  fails CI if they diverge. Part of the canonical copy is itself **generated**: from 2.0 the document
+  schema embeds the extension schema under `$defs/extension`, and `composer sync-schema` writes that
+  block. Edit `extension.schema.json` and re-run the tool rather than the embedded copy, and leave
+  `$defs` in the order the tool wrote it — `composer sync-schema:check` runs in CI and fails when the
+  committed bytes are not what a run would write.
 - `website/` — the Astro + Starlight docs site (a Node project, not a Composer package).
 
 ## Local development

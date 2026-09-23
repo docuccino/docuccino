@@ -196,7 +196,6 @@ function booleanSchemaSlotPublished(string $format, array $document, array $poin
 function booleanSchemaSlotDocument(callable $build, mixed $value): array
 {
     return [
-        'uir' => '1.0.0',
         'openapi' => '3.2.0',
         'info' => ['title' => 'API', 'version' => '1.0.0'],
         'paths' => [],

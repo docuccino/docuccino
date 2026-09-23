@@ -46,7 +46,7 @@ it('writes every configured target from a single build', function (): void {
         // The extension picked the serialisation: this one is YAML, with no flag anywhere.
         ->and(file_get_contents($dir.'/openapi-3.1.yaml'))->toContain('openapi: 3.1.1')
         ->and(str_starts_with(trim((string) file_get_contents($dir.'/openapi-3.1.yaml')), '{'))->toBeFalse()
-        ->and(file_get_contents($dir.'/api.uir.json'))->toContain('"uir":');
+        ->and(file_get_contents($dir.'/api.uir.json'))->toContain('"x-docuccino":');
 });
 
 it('writes a Postman collection alongside the OpenAPI document', function (): void {
@@ -297,7 +297,7 @@ it('takes --out with --format against a multi-target document', function (): voi
     // Naming the format says which of the three artifacts --out is for, so the run is unambiguous.
     $this->artisan('docuccino:export', ['--format' => 'uir', '--out' => $dir.'/picked.json'])->assertSuccessful();
 
-    expect(file_get_contents($dir.'/picked.json'))->toContain('"uir":')
+    expect(file_get_contents($dir.'/picked.json'))->toContain('"x-docuccino":')
         ->and(glob($dir.'/*'))->toBe([$dir.'/picked.json']);
 });
 

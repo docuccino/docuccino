@@ -59,7 +59,8 @@ Full documentation is at **[docs.docuccino.app](https://docs.docuccino.app)**. S
 [UIR format overview](https://docs.docuccino.app/uir/),
 [spec hosting](https://docs.docuccino.app/uir/hosting/) and
 [writing an extension](https://docs.docuccino.app/extending/extension-authoring/). The versioned UIR
-JSON Schema is served at <https://spec.docuccino.app/uir/1.0/schema.json>.
+JSON Schema is served at <https://spec.docuccino.app/uir/2.0/schema.json>, with the extension half at
+<https://spec.docuccino.app/uir/2.0/extension.schema.json>.
 
 ## Issues and contributing
 

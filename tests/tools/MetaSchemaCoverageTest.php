@@ -68,11 +68,13 @@ it('discovers UIR documents and nothing else', function (): void {
     foreach ($documents as $path) {
         $decoded = json_decode((string) file_get_contents($path), true);
 
-        expect(is_array($decoded) && isset($decoded['uir'], $decoded['info']))->toBeTrue($path);
+        expect(is_array($decoded) && isset($decoded['openapi'], $decoded['info'], $decoded['x-docuccino']))->toBeTrue($path);
     }
 
-    // The JSON in these trees that is NOT a UIR document — a Postman schema, an emitted artifact —
-    // must stay out, or the halves above are counting the wrong population.
+    // The JSON in these trees that is NOT a UIR document — a Postman schema, an OpenAPI export that
+    // has had the extension stripped — must stay out, or the halves above are counting the wrong
+    // population. The second is the one the rule now turns on: it carries `openapi` and `info` too,
+    // and only the missing `x-docuccino` tells the two apart.
     expect($documents)->not->toContain(dirname(__DIR__, 2).'/php/core/tests/Fixtures/postman-collection-v2.1.0.schema.json')
         ->and($documents)->not->toContain(dirname(__DIR__, 2).'/php/laravel/tests/Fixtures/golden/workbench.openapi.json');
 });
