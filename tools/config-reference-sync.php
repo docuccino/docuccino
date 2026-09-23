@@ -118,6 +118,10 @@ const CONFIG_REFERENCE_OPAQUE = [
     'documents.*.security.document',
     // Raw tag => display tag, both halves yours.
     'documents.*.tags.map',
+    // A JSON Schema for what a workflow is started with — the spec's vocabulary, so the page owes it
+    // no rows. The workflow ID above it is a keyed map rather than an opaque one, so `summary`,
+    // `description` and `inputs` stay checked and the page still documents each.
+    'documents.*.workflows.*.inputs',
     // Token => label heuristics, both halves yours.
     'lint.leakage.patterns',
     // Filter kind => your own sentence. The kinds are a closed set Docuccino owns, so a typo there is
