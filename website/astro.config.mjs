@@ -83,6 +83,24 @@ export default defineConfig({
 				alt: 'Docuccino',
 			},
 			favicon: '/icon.svg',
+			// The social card. Starlight already sends `twitter:card: summary_large_image` on every
+			// page, which promises an image whether or not one exists — without these four the
+			// promise is unkept and a shared link renders as a bare text stub. Absolute URLs,
+			// because a crawler resolves them outside any page's context. One static card, not one
+			// per page: the artwork is art/og.svg, rasterised to public/og.png.
+			head: [
+				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://docs.docuccino.app/og.png' } },
+				{ tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
+				{ tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
+				{
+					tag: 'meta',
+					attrs: {
+						property: 'og:image:alt',
+						content: 'Docuccino — OpenAPI 3.2 for Laravel, compiled from your code.',
+					},
+				},
+				{ tag: 'meta', attrs: { name: 'twitter:image', content: 'https://docs.docuccino.app/og.png' } },
+			],
 			social: [
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/docuccino/docuccino' },
 			],
