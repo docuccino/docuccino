@@ -520,11 +520,13 @@ from "API changed".
 | `pagination.components` | `true` \| `false` | `true` | Whether a [paginated envelope](/laravel/documenting/responses/#pagination) hoists to one `#/components/schemas` entry per item type and paginator kind — `ArticleResourcePage`, `ArticleResourceCursorPage` — that every paginated operation `$ref`s, and its `links`/`meta` to one entry per shape (`PaginationLinks`, `PaginationMeta`) that the pages `$ref` in turn (`true`); or the whole envelope is restated on each operation (`false`). Hoisting means an SDK generator mints one page type per item type instead of one per endpoint, over one set of envelope members instead of one per page. An envelope whose item type could not be identified, or whose item schema is not itself a component, keeps the envelope on the operation either way — but still points at the member components, whose shapes never depended on the item type. |
 
 The hoist is narrow — 4xx/5xx only, only bodies that repeat, only responses with `content`, never one
-already a `$ref`. [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves a response
-reference on both sides, so moving a whole response between inline and `components.responses` is not a
-change; a schema `$ref` it compares by the string it points at, so the commit that first lifts a body
-shape into `components.schemas` does appear in the changeset. Worked output and the exact rules:
-[repeated bodies become shared components](/laravel/documenting/errors/#repeated-bodies-become-shared-components).
+already a `$ref`. [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) reads a reference as
+the thing it names on both sides, a schema pointer included, so turning this key on is not itself a
+change: neither the response moving into `components.responses` nor the body shape moving into
+`components.schemas` is reported at the operations it left. A hoist that also edits the shape still
+is, because the component is compared against what the inline copy said. Worked output and the exact
+rules: [repeated bodies become shared
+components](/laravel/documenting/errors/#repeated-bodies-become-shared-components).
 
 ### `integrations`
 

@@ -1016,15 +1016,16 @@ Two render methods naming *the same* component for bodies that differ is settled
 contest: both bodies keep a name derived from their own content and the build reports
 `components.name-collision`.
 
-Where a response lives is representation, not contract, so
-[`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references on both sides: a
-response moving between inline and `components.responses` reports nothing, while a real edit to a
-shared response is reported against every operation referencing it. A schema `$ref` is the one it
-compares opaquely, by the string it points at, so the commit that first lifts a body *shape* into
-`components.schemas` does show up — once, on that commit, as the inline shape leaving each response
-and the component arriving. [Diffing your API](/laravel/guides/diffing/) has what to expect. In the
-full document each operation also keeps its own response id and provenance in `x-docuccino` beside
-the `$ref`.
+Where a response or a shape lives is representation, not contract, so
+[`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) reads a `$ref` as the thing it names on
+both sides. The hoist itself is not a change: a response moving between inline and
+`components.responses`, and a body shape moving between inline and `components.schemas`, each report
+nothing at the operations they left, and the changeset carries only the component arriving. What is
+still reported is a hoist that also *edits* the shape — the component is compared against what the
+inline copy said — and an edit to the shared body afterwards, which is reported once, at the
+component, rather than under every operation pointing at it. [Diffing your
+API](/laravel/guides/diffing/) has what to expect. In the full document each operation also keeps its
+own response id and provenance in `x-docuccino` beside the `$ref`.
 
 Set [`representation.errors.components`](/laravel/reference/configuration/#representation) to `false` to
 keep every copy inline.

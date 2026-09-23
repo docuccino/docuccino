@@ -296,12 +296,20 @@ quiet when either side carries a single identity of that kind, where one node re
 the same thing and is far likelier.
 
 Every node OpenAPI lets a Reference Object stand in for — a path item, a request body, a response, a
-parameter, a security scheme — is read through `components` on **both** sides, so one that moved between
-inline and [shared](/laravel/documenting/errors/#repeated-bodies-become-shared-components) is not itself
-a change, while an edit to a shared one is reported against every operation that `$ref`s it. A parameter
-written as a bare `{"$ref": …}` states no `name` and no `in` — the pair that tells one parameter from
-another — so resolving it is also what lets the diff tell an operation's `$ref`ed parameters apart at
-all. Where a pointer resolves to nothing, the pointer itself does that job.
+parameter, a security scheme, a schema — is read through `components` on **both** sides, so one that
+moved between inline and [shared](/laravel/documenting/errors/#repeated-bodies-become-shared-components)
+is not itself a change, while an edit to a shared one is reported against every operation that `$ref`s
+it. A parameter written as a bare `{"$ref": …}` states no `name` and no `in` — the pair that tells one
+parameter from another — so resolving it is also what lets the diff tell an operation's `$ref`ed
+parameters apart at all. Where a pointer resolves to nothing, the pointer itself does that job.
+
+A **schema** follows the same principle, with one deliberate exception: where both sides spell the *same*
+pointer the position is compared opaquely, by that pointer. That is what keeps the component's own edits
+reported once, at `components.schemas.<Name>`, instead of once under every operation reaching it. Where
+the sides differ — inline against a pointer, or one component against another — the shapes are compared.
+A pointer that moved between component names keeps `schema.ref-changed`, non-breaking on its own because
+the name is published rather than the contract, and the two bodies are compared beside it, so a
+repointing that also narrows is reported as a narrowing.
 
 A `components.schemas` entry that nothing in either document references is a schema no operation can reach,
 so no edit to it can change a request or a response. Its changes are still reported — a component name
@@ -344,6 +352,14 @@ A `summary` or a `description` beside the pointer still wins — OpenAPI gives a
 members of its own and says every other sibling is ignored — so a `style`, an `explode` or an `x-`
 extension written there describes nothing and the component's answer stands.
 
+A **schema** pointer is the exception, because JSON Schema 2020-12 keeps every keyword beside a `$ref`
+in force: the schema at such a position is the *intersection* of the pointer and its neighbours, and
+neither one states it. So only a *bare* pointer is read through — `$ref` alone, or with annotation
+keywords, which are read through and override the component's. A pointer with anything beside it that
+constrains the value is compared as written rather than flattened into a shape neither side declares.
+Docuccino spells a hoisted shape as the pointer alone, so this arises only against a hand-written or
+third-party artifact.
+
 A pointer the diff cannot follow — a name the document does not declare, a chain, a cycle, a pointer into
 another file — is a comparison it cannot make, and it says so rather than guessing. Where a path item or a
 request body is spelled that way on one side only, that endpoint or that body drops out of the comparison
@@ -359,6 +375,13 @@ still names leaves behind. A pointer into another file, a chain or a cycle is th
 than the document being wrong — the endpoint may be whole where it lives — and stays non-breaking.
 Repairing a broken pointer is not a breaking change either, and where both sides carry the same pointer
 for the same reason the document did not change there and nothing is reported.
+
+A **schema** pointer names no separate entry, because a schema position always has a comparison to make:
+one the resolver will not follow — a name the document does not declare, or a pointer whose own target is
+another pointer — compares as the keywords written at the position, which against an inline shape on the
+other side reads as that shape's keywords leaving. A pointer that reaches *itself*, directly or around a
+loop, is the case the resolver does handle: the pair being resolved is held open for the descent beneath
+it, so a recursive schema compares to its depth and stops.
 
 An operation's parameters are its own plus the ones its path item declares for every operation under it,
 minus any the operation restates for the same `name` and `in` — the override OpenAPI specifies. Docuccino

@@ -108,33 +108,51 @@ placeholder your API uses everywhere — `{user}` to `{user_id}`, say — and st
 every endpoint under it removed and re-added, while identity pairing reports one parameter per
 operation and nothing else.
 
-The same property covers moves that are not renames at all — but only as far as the resolution goes,
-and it is worth knowing where that stops.
+The same property covers moves that are not renames at all — a shape that changed where it lives
+rather than what it says.
 
 Every node OpenAPI lets a Reference Object stand in for — a path item, a request body, a response, a
-parameter, a security scheme — is resolved on both sides before comparison. So a whole `404` response
+parameter, a security scheme, a schema — is read as the thing it names on both sides before anything
+is compared. So a whole `404` response
 [hoisted into `components.responses`](/laravel/documenting/errors/#repeated-bodies-become-shared-components)
-reports nothing at all, and a later edit to that shared response is reported against every operation
-that points at it.
-
-A **schema** `$ref` is not resolved: it is compared opaquely, by the string it points at. So the one
-commit that first lifts a body *shape* into `components.schemas` does appear in the changeset — the
-inline keywords leave every response that now points at the component, and the component arrives. It is a one-time entry on the commit that introduces the shape, not a recurring
-cost, and reading it is the same work as reading any other move: check the component says what the
-inline copy said.
-
-Two operations sharing one `404` is the smallest version of it:
+reports nothing at all, and neither does the body *shape* lifted into `components.schemas` beneath it.
+Two operations that start sharing one `404` is the smallest version of it, and the whole of what that
+commit says is that a component arrived:
 
 ```
-7 changes (4 breaking)
+1 change (0 breaking)
+
+NON-BREAKING
+  + [schema] components.schemas.NotFound  (schema.added)
+```
+
+Where a shape lives is representation, not contract. But *resolved* is not the same as *invisible*,
+and each case below follows from that one rule.
+
+**Two positions spelling the same pointer stay opaque, on purpose.** Once both sides point at
+`NotFound`, editing `NotFound` is reported once — at the component — rather than repeated under every
+operation that reaches it. Adding a `code` property to the shared body, with two operations pointing
+at it, is two lines and not four:
+
+```
+2 changes (0 breaking)
+
+NON-BREAKING
+  + [schema] components.schemas.NotFound.properties.code  (schema.property-added)
+  ~ [schema] components.schemas.NotFound.required  (schema.required-added)
+      required: ["message"] -> ["message","code"]
+```
+
+**A hoist that also changes the shape is still a change to the shape.** The comparison is between
+what the inline copy said and what the component says, so a commit that moves a body and quietly drops
+a property is reported as dropping a property — at both the operations that lost it:
+
+```
+5 changes (2 breaking)
 
 BREAKING
   - [schema] GET /api/v1/customers/{customer} responses 404 application/json schema.properties.message  (schema.property-removed)
-  ~ [schema] GET /api/v1/customers/{customer} responses 404 application/json schema.type  (schema.type-removed)
-      type: object -> (none)
   - [schema] GET /api/v1/invoices/{invoice} responses 404 application/json schema.properties.message  (schema.property-removed)
-  ~ [schema] GET /api/v1/invoices/{invoice} responses 404 application/json schema.type  (schema.type-removed)
-      type: object -> (none)
 
 NON-BREAKING
   ~ [schema] GET /api/v1/customers/{customer} responses 404 application/json schema.required  (schema.required-removed)
@@ -144,10 +162,32 @@ NON-BREAKING
   + [schema] components.schemas.NotFound  (schema.added)
 ```
 
-<Aside type="caution">
-That first hoist is classed **breaking**, because on each response the comparison sees a typed object
-becoming an opaque pointer. Expect it on the commit that turns a repeated body into a shared one, and
-read the component beside it before you wave it through.
+**Repointing reports the name *and* the shape.** A component name is published — it becomes a type in
+the client your consumers generate — so a position that moves from one component to another keeps
+`schema.ref-changed`, which is not breaking by itself. What the new component *says* is compared
+beside it, and that can be:
+
+```
+4 changes (1 breaking)
+
+BREAKING
+  - [schema] GET /api/v1/customers/{customer} responses 404 application/json schema.properties.code  (schema.property-removed)
+
+NON-BREAKING
+  ~ [schema] GET /api/v1/customers/{customer} responses 404 application/json schema.$ref  (schema.ref-changed)
+      $ref: #/components/schemas/NotFound -> #/components/schemas/ProblemDetails
+  - [schema] components.schemas.NotFound  (schema.removed)
+  + [schema] components.schemas.ProblemDetails  (schema.added)
+```
+
+<Aside type="note">
+One schema pointer is left as written: a `$ref` with a keyword beside it that constrains the value.
+Under JSON Schema 2020-12 both still apply, so the position is the *intersection* of the pointer and
+its neighbours and neither one states it — reading through would be a guess. Such a position compares
+as the keywords written there, so against an inline shape on the other side it reads as that shape's
+keywords leaving. A `title`, a `description` or an `example` beside the pointer is not a constraint,
+so those *are* read through, and override the component's. Docuccino writes a hoisted shape as the
+pointer alone, so this comes up only against a hand-written or third-party artifact.
 </Aside>
 
 ## Breaking depends on which way the data flows
