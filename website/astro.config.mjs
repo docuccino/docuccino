@@ -143,12 +143,13 @@ export default defineConfig({
 				},
 				{
 					// Ordered by when a reader needs them: fix the output, look at it, split it, add
-					// prose, check it, hold it to your tests, version it, ship it, make it fast, and
-					// — when it goes wrong — troubleshoot. Linting precedes contract testing because
-					// it checks the document alone, before the running application is involved.
-					// Versioning follows contract testing because the per-version check is built out
-					// of those assertions. Build speed follows production because its CI recipe
-					// extends the job that page builds.
+					// prose, check it, hold it to your tests, compare it, version it, ship it, make
+					// it fast, and — when it goes wrong — troubleshoot. Linting precedes contract
+					// testing because it checks the document alone, before the running application
+					// is involved. Diffing follows contract testing because the assertion that
+					// gates breaking changes runs the same engine, and precedes versioning because
+					// the changeset is what a version cut gets decided from. Build speed follows
+					// production because its CI recipe extends the job that page builds.
 					label: 'Guides',
 					items: [
 						{ label: 'Customizing the output', slug: 'laravel/guides/customizing-output' },
@@ -157,6 +158,7 @@ export default defineConfig({
 						{ label: 'Adding your own pages', slug: 'laravel/guides/narrative-content' },
 						{ label: 'Linting the document', slug: 'laravel/guides/linting' },
 						{ label: 'Contract testing', slug: 'laravel/guides/contract-testing' },
+						{ label: 'Diffing your API', slug: 'laravel/guides/diffing' },
 						{ label: 'API versioning', slug: 'laravel/guides/api-versioning' },
 						{ label: 'Deploying to production', slug: 'laravel/guides/production' },
 						{ label: 'Speeding up builds', slug: 'laravel/guides/speeding-up-builds' },

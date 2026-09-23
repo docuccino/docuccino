@@ -147,7 +147,9 @@ serving or generating anything.
 Regenerate whenever the code that shapes your API changes — new routes, changed validation, new
 resources or error handling. The natural home for that is a pull-request job: export, then diff the
 fresh document against the committed one and hold the changeset to your
-[`versioning`](/laravel/reference/configuration/#versioning) policy.
+[`versioning`](/laravel/reference/configuration/#versioning) policy. How that comparison works — what
+it calls breaking, and why it pairs nodes by identity rather than by position — is
+[Diffing your API](/laravel/guides/diffing/).
 
 It's the same job when your docs live on an external host: export with `--out=` to wherever your
 upload step reads from, and add that upload after the checks below pass.
@@ -161,8 +163,8 @@ upload step reads from, and add that upload after the checks below pass.
 	# 2. Structural check: the built document, and each artifact you export, against their schemas.
 	php artisan docuccino:validate
 
-	# 3. Compare with the committed artifact and enforce the versioning policy.
-	php artisan docuccino:diff docs/openapi.json --against=HEAD --enforce
+	# 3. Compare with the artifact on the base branch and enforce the versioning policy.
+	php artisan docuccino:diff docs/openapi.json --against=origin/main --enforce
 	```
 	</TabItem>
 	<TabItem label="GitHub Actions">
@@ -176,6 +178,8 @@ upload step reads from, and add that upload after the checks below pass.
 	    runs-on: ubuntu-latest
 	    steps:
 	      - uses: actions/checkout@v4
+	        with:
+	          fetch-depth: 0 # --against reads the base branch out of the clone.
 	      - uses: shivammathur/setup-php@v2
 	        with:
 	          php-version: '8.4'
@@ -184,8 +188,8 @@ upload step reads from, and add that upload after the checks below pass.
 	      - run: composer install --no-interaction --prefer-dist
 	      - run: cp .env.example .env && php artisan key:generate
 
-	      # Diff BEFORE overwriting: --against=HEAD reads the committed artifact from git.
-	      - run: php artisan docuccino:diff docs/openapi.json --against=HEAD --enforce
+	      # Diff BEFORE overwriting: --against reads the old side out of git.
+	      - run: php artisan docuccino:diff docs/openapi.json --against=origin/${{ github.base_ref }} --enforce
 	      - run: php artisan docuccino:export --fail-on=warning
 	      - run: php artisan docuccino:validate
 
@@ -195,10 +199,14 @@ upload step reads from, and add that upload after the checks below pass.
 	</TabItem>
 </Tabs>
 
-`--against=HEAD` reads the *old* side out of git (`git show HEAD:docs/openapi.json`), so the job works
-on a clean checkout without a second build. The final `git diff --exit-code` is the step that keeps
-contributors honest: because identical code produces identical bytes, a stale committed spec fails
-the build.
+`--against` reads the *old* side out of git (`git show origin/main:docs/openapi.json`), so the job
+works on a clean checkout without a second build. Point it at the **base branch**, not at `HEAD`:
+against `HEAD` the old side is the pull request's own committed artifact, so a contributor who
+regenerated it — which the last step below requires — leaves the two sides identical and the gate
+with nothing to say. Against the base branch the changeset is exactly what the pull request does.
+
+The final `git diff --exit-code` is the step that keeps contributors honest: because identical code
+produces identical bytes, a stale committed spec fails the build.
 
 That step is also how a Docuccino upgrade announces itself. Your code hasn't changed, so any byte
 that moves came from the new release — regenerate, read the diff, and commit it as its own change.
