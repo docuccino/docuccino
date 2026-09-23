@@ -1,6 +1,6 @@
 {
     "name": "docuccino/attributes",
-    "description": "Dependency-free PHP attributes for documenting an HTTP API with Docuccino.",
+    "description": "Dependency-free PHP attributes for the OpenAPI details Docuccino cannot infer: summaries, parameters, responses and security.",
     "type": "library",
     "keywords": [
         "openapi",
@@ -8,7 +8,7 @@
         "annotations",
         "attributes",
         "php-attributes",
-        "uir",
+        "openapi-attributes",
         "swagger",
         "scramble-alternative"
     ],
