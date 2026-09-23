@@ -101,6 +101,11 @@ export default defineConfig({
 				},
 				{ tag: 'meta', attrs: { name: 'twitter:image', content: 'https://docs.docuccino.app/og.png' } },
 			],
+			components: {
+				// The only override: the header's right-hand slot gains a link to the product site,
+				// because the docs are a subdomain and nothing else on the page leads back to it.
+				SocialIcons: './src/components/SocialIcons.astro',
+			},
 			social: [
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/docuccino/docuccino' },
 			],
