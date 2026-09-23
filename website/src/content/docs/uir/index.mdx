@@ -1,32 +1,52 @@
 ---
-title: UIR format overview
-description: The Universal Intermediate Representation — stable identities, deterministic ordering, provenance, and narrative content.
+title: The Docuccino extension
+description: What Docuccino records inside its OpenAPI output — stable identities, provenance, guide pages and workflows — and how to read it.
 ---
 
 import { Aside, Card, CardGrid } from '@astrojs/starlight/components';
 
-The **UIR** (Universal Intermediate Representation) is the document Docuccino builds internally and
-can export directly (`--format=full`). It's an OpenAPI-shaped JSON document with a little extra: a
-stable identity for every operation and schema, a record of where each detail came from, and a
-guarantee that identical code always produces identical bytes.
+Docuccino compiles your application into OpenAPI 3.2 — and records how it knew. That record travels
+inside the document, under one reserved member: `x-docuccino`, the **Docuccino extension**.
 
-You never *have* to look at the UIR — the OpenAPI export is what you'll usually ship. But it's the
-foundation for Docuccino's deterministic output and semantic diff, and it's a clean input for richer
-tooling (changelogs, mock servers, AI agent tool schemas) that wants more than plain OpenAPI offers.
+You never *have* to look at it. The OpenAPI export drops the whole member, and what's left is the
+document you'd ship anywhere. But everything Docuccino does that a generator usually can't is in
+there, and all of it is readable:
+
+<CardGrid>
+	<Card title="Semantic diff" icon="right-arrow">
+		Every operation, parameter and schema carries a stable id, so
+		[`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) pairs by meaning. Rename a
+		controller and nothing moves; change a URL and the diff says exactly that.
+	</Card>
+	<Card title="Provenance" icon="magnifier">
+		Each contribution records what produced it, which precedence layer it won at, and the
+		`file:line` it came from — so *why is this documented this way?* has an answer you can read.
+	</Card>
+	<Card title="Guides that can't go stale" icon="document">
+		Your Markdown pages compile into the document with every reference resolved to a real
+		operation. A guide pointing at something you deleted is a build diagnostic, not a broken link
+		your readers find first.
+	</Card>
+	<Card title="Publishable workflows" icon="list-format">
+		Multi-step sequences, declared on the operations that take part in them and emitted as an
+		[Arazzo description](/laravel/reference/commands/#arazzo-workflow-descriptions).
+	</Card>
+</CardGrid>
 
 <Aside type="note">
-A UIR document is an OpenAPI document — the same objects in the same places — plus one reserved
-member, `x-docuccino`, allowed on any node, and two root members of its own: `$schema` and `uir`.
-Exporting OpenAPI drops all three. Everything that has a home in OpenAPI survives that trip;
-what doesn't (provenance, identities, the page tree) is UIR-only by design.
+`x-docuccino` is an ordinary OpenAPI extension member: the specification reserves the `x-` prefix for
+exactly this, and a tool that doesn't recognize one ignores it. Docuccino puts it on the document
+root and on individual nodes — an operation, a parameter, a schema — so a fact stays attached to the
+thing it describes. Nothing else sits at the root: the spec version and the schema URL travel inside
+the extension, under `generator`, so the document is a valid OpenAPI 3.2 description exactly as built.
+Exporting OpenAPI drops the extension: everything with a home in OpenAPI survives that trip, and what
+doesn't is why the extension exists.
 </Aside>
 
 ## Shape
 
 ```json
 {
-  "$schema": "https://spec.docuccino.app/uir/1.1/schema.json",
-  "uir": "1.1.0",
   "openapi": "3.2.0",
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.2/dialect/base",
   "info": { "title": "Billing API", "version": "2.1.0" },
@@ -39,7 +59,10 @@ what doesn't (provenance, identities, the page tree) is UIR-only by design.
       "configHash": "f7ea3a4314fc0a4e…",
       "contentHash": "7f6b185b0fd29b96…"
     },
-    "generator": { "name": "docuccino/laravel", "version": "1.0.0", "specVersion": "1.1.0" },
+    "generator": {
+      "name": "docuccino/laravel", "version": "1.0.0",
+      "specVersion": "2.0.0", "schema": "https://spec.docuccino.app/uir/2.0/schema.json"
+    },
     "content": { "pages": [], "nav": [] }
   }
 }
@@ -50,8 +73,9 @@ and one with no [content directory](/laravel/guides/narrative-content/) has no `
 
 There are **no timestamps anywhere** — they'd break determinism, so the format forbids them. The
 `x-docuccino` subtree is **strictly defined and closed to undefined members** — a determinism
-guarantee, since nothing non-deterministic can slip in. The format grows through versioned, additive
-schema revisions rather than by readers tolerating unknown members (see [spec hosting](/uir/hosting/)).
+guarantee, since nothing non-deterministic can slip in. It grows through versioned, additive schema
+revisions rather than by readers tolerating unknown members (see
+[schema hosting](/uir/hosting/)).
 
 ## Stable identities
 
@@ -77,7 +101,7 @@ and the diff shows exactly that operation removed and added.
 
 ## Deterministic output
 
-The format specifies a canonical ordering and serialization: fixed member order per object type, map
+Docuccino specifies a canonical ordering and serialization: fixed member order per object type, map
 keys sorted by code point, a fixed order of HTTP methods, parameters sorted by location then name,
 2-space indentation, LF endings, and a trailing newline. The result:
 
@@ -135,7 +159,7 @@ Choose how much of that to emit with `docuccino:export --provenance`:
 | `winners` (default) | Every record, without the `overrode` trails. |
 | `none` | No provenance at all — smallest document, and immune to line-number churn. |
 
-Provenance only exists in the UIR: the OpenAPI emitters always drop it.
+Provenance survives only where the extension does: the OpenAPI emitters always drop it.
 
 ## Mock hints
 
@@ -150,7 +174,7 @@ property, and `seedGroup`, a name shared by properties whose values should corre
 ```
 
 Nothing here is a value: the document records the expression and never evaluates it, so a mock hint
-costs the format none of its determinism. Hints come from
+costs none of the determinism. Hints come from
 [`#[Mock]`](/laravel/reference/attributes/#mock) in the source; the OpenAPI emitters drop them unless
 you name a member to project the `faker` half onto, conventionally `x-faker`.
 
@@ -170,7 +194,22 @@ operation without re-resolving anything. A directive that points at something th
 becomes a diagnostic — so your guides can't silently drift from your API. And because narrative lives
 in the document, prose changes show up in the diff and changelog too, not just API changes.
 
-The content layer is UIR-only: plain OpenAPI has nowhere to put a page tree, so the OpenAPI export
-drops it. See [Adding your own pages](/laravel/guides/narrative-content/) for the authoring side.
+This is the clearest example of what the extension is *for*: plain OpenAPI has nowhere to put a page
+tree, so the OpenAPI export drops it. See
+[Adding your own pages](/laravel/guides/narrative-content/) for the authoring side.
 
-Continue to [spec hosting](/uir/hosting/) for where the JSON Schema lives and how it's versioned.
+## Workflows
+
+An API is rarely one call. `x-docuccino.workflows` carries the sequences your application actually
+supports — reserve a basket, take payment, confirm — declared with
+[`#[WorkflowStep]`](/laravel/reference/attributes/#workflowstep) on the operations that take part in
+them, so a step can never name an operation that isn't there.
+
+Each workflow records its steps in order, the operation each one calls, and how a value from one step
+reaches the next. `docuccino:export --format=arazzo` publishes them as an
+[Arazzo 1.1](/laravel/reference/commands/#arazzo-workflow-descriptions) description — an OpenAPI
+Initiative specification for exactly this — so a consumer's tooling can follow the sequence without
+being told anything about Docuccino.
+
+Continue to [schema hosting](/uir/hosting/) for where the JSON Schema lives and how it's
+versioned.

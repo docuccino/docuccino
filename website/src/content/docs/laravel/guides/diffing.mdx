@@ -1,0 +1,424 @@
+---
+title: Diffing your API
+head:
+  - tag: title
+    content: 'Detect Breaking API Changes in CI | Laravel OpenAPI Diff | Docuccino'
+description: Compare a committed OpenAPI artifact against the document your code produces today — paired by stable identity rather than by position — and fail the build when the contract breaks without the version bump your policy requires.
+---
+
+import { Tabs, TabItem, Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+`docuccino:diff` compares two descriptions of the same API: the artifact you committed, and the
+document your code produces right now. It prints what moved, marks each change breaking or not, and —
+with `--enforce` — exits non-zero when a change needs a version bump it did not get.
+
+That is two jobs in one command. In review it answers *what does this pull request do to the
+contract?* In CI it is the gate that stops the contract breaking by accident.
+
+```bash
+php artisan docuccino:diff docs/openapi.json
+```
+
+```
+2 changes (2 breaking)
+
+BREAKING
+  ~ [parameter] GET /api/v1/invoices/{invoice} parameters query:status  (parameter.became-required)
+      required: false -> true
+  - [schema] GET /api/v1/invoices/{invoice} responses 200 application/json schema.properties.reference  (schema.property-removed)
+```
+
+No color and no timestamps, so the output is safe to paste into a pull-request comment or snapshot in
+a test. The same run against an unchanged API prints `No API changes.`
+
+In CI you rarely have the old artifact on disk — the checkout already has the new one. Read it out of
+git instead:
+
+```bash
+php artisan docuccino:diff docs/openapi.json --against=origin/main
+```
+
+That runs `git show origin/main:docs/openapi.json`, so the path is repo-relative and the job needs no
+second build.
+
+A second argument names which configured document to build as the new side. Most commands run over
+every document when you omit it; this one is the exception, and diffs the `default` document only —
+so with several configured, say which:
+
+```bash
+php artisan docuccino:diff docs/partners.json partners --against=origin/main
+```
+
+## Paired by identity, not by position
+
+This is the part that makes the output worth reading.
+
+Every operation, parameter, response and component schema in a Docuccino document carries a stable
+id, and an id is a function of the *thing* rather than of where it sits in the file. An operation's is
+computed from its method and its path template with the placeholder names normalized away, so
+`/invoices/{invoice}` and `/invoices/{invoice_id}` mint the same one. A parameter's is computed from
+that operation's id plus its `in` and its `name`.
+
+So rename the placeholder in a route:
+
+```diff lang="php"
+-Route::get('/invoices/{invoice}', [InvoiceController::class, 'show']);
++Route::get('/invoices/{invoice_id}', [InvoiceController::class, 'show']);
+```
+
+<Tabs>
+	<TabItem label="Paired by identity">
+	```
+	2 changes (2 breaking)
+
+	BREAKING
+	  + [parameter] GET /api/v1/invoices/{invoice_id} parameters path:invoice_id  (parameter.added-required)
+	  - [parameter] GET /api/v1/invoices/{invoice_id} parameters path:invoice  (parameter.removed)
+	```
+
+	The operation is the same operation. Its responses, its query parameters and its request body all
+	pair and are compared. What changed is one path parameter, and that is what you are told about.
+	</TabItem>
+	<TabItem label="Paired by position">
+	```
+	Note: an artifact carries no Docuccino identities, so nodes were paired by method + path.
+	A renamed path parameter will read as a removal plus an addition. Re-export the artifact to pair by identity.
+
+	2 changes (1 breaking)
+
+	BREAKING
+	  - [operation] GET /api/v1/invoices/{invoice}  (operation.removed)
+
+	NON-BREAKING
+	  + [operation] GET /api/v1/invoices/{invoice_id}  (operation.added)
+	```
+
+	Keyed on method and path, the endpoint at the old URL is gone and an unrelated one has appeared —
+	and everything underneath it goes with them. Nothing compares the two, so a response that really
+	did lose a field on the same commit is invisible here.
+
+	This is what every other OpenAPI differ sees, and the only way to get it out of `docuccino:diff`
+	is to hand it an artifact carrying no identities — which is why the two-line note is there. It is
+	printed on every structural run, never as a silent downgrade.
+	</TabItem>
+</Tabs>
+
+On one endpoint that is a review you can read against a review you have to redo by hand. Rename a
+placeholder your API uses everywhere — `{user}` to `{user_id}`, say — and structural pairing reports
+every endpoint under it removed and re-added, while identity pairing reports one parameter per
+operation and nothing else.
+
+The same property covers moves that are not renames at all — but only as far as the resolution goes,
+and it is worth knowing where that stops.
+
+Every node OpenAPI lets a Reference Object stand in for — a path item, a request body, a response, a
+parameter, a security scheme — is resolved on both sides before comparison. So a whole `404` response
+[hoisted into `components.responses`](/laravel/documenting/errors/#repeated-bodies-become-shared-components)
+reports nothing at all, and a later edit to that shared response is reported against every operation
+that points at it.
+
+A **schema** `$ref` is not resolved: it is compared opaquely, by the string it points at. So the one
+commit that first lifts a body *shape* into `components.schemas` does appear in the changeset — the
+inline keywords leave every response that now points at the component, and the component arrives. It is a one-time entry on the commit that introduces the shape, not a recurring
+cost, and reading it is the same work as reading any other move: check the component says what the
+inline copy said.
+
+Two operations sharing one `404` is the smallest version of it:
+
+```
+7 changes (4 breaking)
+
+BREAKING
+  - [schema] GET /api/v1/customers/{customer} responses 404 application/json schema.properties.message  (schema.property-removed)
+  ~ [schema] GET /api/v1/customers/{customer} responses 404 application/json schema.type  (schema.type-removed)
+      type: object -> (none)
+  - [schema] GET /api/v1/invoices/{invoice} responses 404 application/json schema.properties.message  (schema.property-removed)
+  ~ [schema] GET /api/v1/invoices/{invoice} responses 404 application/json schema.type  (schema.type-removed)
+      type: object -> (none)
+
+NON-BREAKING
+  ~ [schema] GET /api/v1/customers/{customer} responses 404 application/json schema.required  (schema.required-removed)
+      required: ["message"] -> []
+  ~ [schema] GET /api/v1/invoices/{invoice} responses 404 application/json schema.required  (schema.required-removed)
+      required: ["message"] -> []
+  + [schema] components.schemas.NotFound  (schema.added)
+```
+
+<Aside type="caution">
+That first hoist is classed **breaking**, because on each response the comparison sees a typed object
+becoming an opaque pointer. Expect it on the commit that turns a repeated body into a shared one, and
+read the component beside it before you wave it through.
+</Aside>
+
+## Breaking depends on which way the data flows
+
+A schema serves one side of the wire or the other, and the same edit is not worth the same thing on
+each. Widen a request and every client that worked still works. Widen a response and a client with a
+`switch` over the old set meets a value it has no case for.
+
+The diff reads that difference. Add one value to an enum published on both a query parameter and a
+response property, on one commit:
+
+```
+2 changes (1 breaking)
+
+BREAKING
+  ~ [schema] GET /api/v1/invoices/{invoice} responses 200 application/json schema.properties.state.enum  (schema.enum-value-added)
+      enum: ["draft","sent"] -> ["draft","sent","void"]
+
+NON-BREAKING
+  ~ [schema] GET /api/v1/invoices/{invoice} parameters query:status schema.enum  (schema.enum-value-added)
+      enum: ["draft","sent"] -> ["draft","sent","void"]
+```
+
+One edit, one classification code, two verdicts. Which one a shared component gets is decided by
+where the document actually reaches it: a schema reached only from request positions is request-only,
+and anything the walk cannot place counts as read — ambiguity widens the cautious set, never the
+permissive one.
+
+The rest of the classification follows the same instinct.
+
+- **Narrowing gates both sides.** A request starts rejecting a body somebody was sending; a response
+  starts promising less than it did.
+- **An obligation on the writer gates the request.** A parameter or field that became required, a
+  `format` that arrived: breaking on a request, reported on a response.
+- **A field a consumer reads gates the response.** A property added is safe; a property removed is
+  not.
+- **Gone is gone.** A removed operation, parameter, response or status code — and a security scheme
+  that changed or disappeared while a `security` requirement still names it.
+- **Prose is never breaking.** A description or a summary, an operation's `deprecated`, a security
+  scheme's, and every annotation keyword on a schema are reported — a reviewer asking what moved
+  deserves the answer — and gate nothing. Four keywords beside them are not reported at all:
+  `default`, `readOnly`, `writeOnly` and a **schema's** own `deprecated` are outside the comparison
+  today, so changing one produces no entry.
+- **A change nothing can order is treated as breaking.** Two regexes, two `const` values: no
+  decision procedure orders them, so the change is reported and gates, because a false alarm costs
+  you one look while a false "safe" costs your consumers a broken client. A keyword that is no part
+  of the schema language at all is neither — it is data the document carries, and the comparison
+  walks past it.
+
+The full classification, code by code, is in the
+[`docuccino:diff` reference](/laravel/reference/commands/#docuccinodiff).
+
+## Make it a gate
+
+On its own the diff is informational: it exits `0` however large the changeset. `--enforce` is what
+turns it into a gate. It applies the document's
+[`versioning`](/laravel/reference/configuration/#versioning) policy to the changeset and both
+documents' `info.version`, and exits non-zero on a violation.
+
+```bash
+php artisan docuccino:diff docs/openapi.json --against=origin/main --enforce
+```
+
+```
+2 changes (2 breaking)
+
+BREAKING
+  ~ [parameter] GET /api/v1/invoices/{invoice} parameters query:status  (parameter.became-required)
+      required: false -> true
+  - [schema] GET /api/v1/invoices/{invoice} responses 200 application/json schema.properties.reference  (schema.property-removed)
+
+Versioning policy "semver" violated: Breaking changes require a major bump (1.4.0 → 1.5.0). (require ≥ 2.0.0)
+```
+
+The changeset above it is the same plain text as ever; the verdict line is the one part the command
+styles, so it arrives red in a terminal that takes color and unadorned in a log that does not.
+
+The policy is a property of the document, not a flag, so every run of the gate answers to the same
+rule:
+
+| `versioning` | A breaking changeset passes when… |
+| --- | --- |
+| `none` (the default) | Never. No version bump rescues it — the contract is declared unbreakable. |
+| `semver` | The major version went up. Still at `0.y.z`, a minor bump is enough. |
+| `date` | The new `YYYY-MM-DD` version is strictly later than the old one. |
+
+A non-breaking changeset passes `none` on any versions at all, because `none` never reads them. Under
+`semver` and `date` it passes only if both versions parse: an `info.version` either side cannot read
+is a violation on its own terms, changeset or no changeset, so CI never green-lights a malformed
+version. `semver` wants semver — `v1.4.0` is not it — and `date` wants a leading `YYYY-MM-DD`.
+
+`semver` is also the one policy that says what would have satisfied it. A violation under it carries
+the lowest acceptable version, printed as the `(require ≥ 2.0.0)` above and given as `requiredVersion`
+in the JSON payload, so the failure tells you the number to write. `date` and `none` state the rule
+and leave the number to you — there is no next date to compute, and no version rescues a breaking
+change under `none`.
+
+<Aside type="caution">
+`none` is the default, so a first `--enforce` run rejects every breaking change outright. That is
+usually right for an internal API with one consumer. Set `versioning` to `semver` or `date` when you
+are ready to ship breaking changes behind a version bump.
+</Aside>
+
+### Exit codes
+
+`docuccino:diff` exits `0` or `1`. It never exits non-zero for finding changes — only `--enforce`
+turns a changeset into a failure — so a `1` is one of two kinds of thing, and the message says which.
+
+**The gate doing its job:** the versioning policy was violated under `--enforce`.
+
+**The run could not produce an answer**, which it reports and stops rather than guessing past:
+
+| What happened | What to do |
+| --- | --- |
+| The artifact is missing, unreadable, not JSON, or JSON that is not an object | Check the path; it resolves against the project root |
+| `git show <ref>:<path>` failed | The ref must exist in the clone and the path must be repo-relative |
+| The document key is not one you configured | Name a document from `docuccino.yaml` |
+| The two documents were built by different identity algorithms | They cannot be paired safely; re-export the old side |
+| `docuccino.yaml` could not be read — missing, unreadable, or not a map of settings | The build would run on defaults rather than your configuration, so it refuses first |
+| Docuccino is disabled (`docuccino.enabled` is `false`) | Every command but `docuccino:clear` stops here |
+
+Without `--enforce`, only the second kind can happen.
+
+### In a pull-request job
+
+```yaml
+# .github/workflows/api-contract.yml
+name: API contract
+on: pull_request
+
+jobs:
+  diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # --against needs the base branch in the clone.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+
+      # Dev dependencies included, deliberately: the analysis engine is one of them.
+      - run: composer install --no-interaction --prefer-dist
+      - run: cp .env.example .env && php artisan key:generate
+
+      - run: php artisan docuccino:diff docs/openapi.json --against=origin/${{ github.base_ref }} --enforce
+```
+
+The old side comes out of git and the new side is built from the branch, so the job reports exactly
+what the pull request does — nothing about what happened before it. The
+[production guide](/laravel/guides/production/#catching-breaking-changes-in-ci) puts this step in the
+full docs pipeline, beside the export, the schema check and the staleness check that keeps the
+committed artifact honest.
+
+## The machine-readable changeset
+
+Run `docuccino:diff --format=json` and you get one object instead, for a gate that wants to do more
+than pass or fail — post a comment, label the pull request, count what changed.
+
+```bash
+php artisan docuccino:diff docs/openapi.json --against=origin/main --enforce --format=json
+```
+
+```json
+{
+    "document": "default",
+    "breaking": true,
+    "pairing": "identity",
+    "disjointIdentities": [],
+    "unreferencedComponents": [],
+    "counts": {
+        "total": 2,
+        "breaking": 2
+    },
+    "changes": [
+        {
+            "kind": "changed",
+            "target": "parameter",
+            "id": "par:v1:vbixr7narfsty4y3",
+            "path": "GET /api/v1/invoices/{invoice} parameters query:status",
+            "breaking": true,
+            "code": "parameter.became-required",
+            "fields": [
+                {
+                    "field": "required",
+                    "old": false,
+                    "new": true
+                }
+            ]
+        },
+        {
+            "kind": "removed",
+            "target": "schema",
+            "id": "res:v1:avz5vozhiusudzoa",
+            "path": "GET /api/v1/invoices/{invoice} responses 200 application/json schema.properties.reference",
+            "breaking": true,
+            "code": "schema.property-removed"
+        }
+    ],
+    "policy": {
+        "satisfied": false,
+        "policy": "semver",
+        "code": "major-bump-required",
+        "message": "Breaking changes require a major bump (1.4.0 \u2192 1.5.0).",
+        "requiredVersion": "2.0.0"
+    }
+}
+```
+
+`breaking` and `counts` are the summary. `code` is a stable classification you can route on —
+`parameter.became-required` is the same string next year as it is today. `policy` appears only under
+`--enforce`. And `pairing` is the one to read before you trust any of it, which is the next section.
+
+## When the artifact carries no identities
+
+Identity pairing needs identities on **both** sides. A spec written by hand, one produced by another
+tool, or one Docuccino exported with [`--drop-ids`](/laravel/reference/commands/#docuccinoexport) has
+none — so the diff pairs nodes by method and path on both sides instead, and says so before it says
+anything else:
+
+```
+Note: an artifact carries no Docuccino identities, so nodes were paired by method + path.
+A renamed path parameter will read as a removal plus an addition. Re-export the artifact to pair by identity.
+```
+
+The diff still runs, and still finds everything that structural pairing can find — a parameter that
+became required is caught either way. What is lost is rename detection, exactly as shown above. What
+you never get is a guess: the differ will not pair one side's identities against the other side's
+paths, because the two key spaces do not overlap and every operation would read as removed *and*
+re-added.
+
+Getting identities back is usually nothing at all. An OpenAPI export carries a flat `x-docuccino-id`
+on every node it mints one for **by default**, so an ordinary committed `docs/openapi.json` pairs by
+identity already. The `full` artifact carries the whole
+[Docuccino extension](/uir/) natively, including the guide pages OpenAPI has nowhere to put:
+
+```bash
+php artisan docuccino:export --format=full --out=docs/api.full.json
+```
+
+There is a second, quieter failure the diff warns about. When both sides carry several ids for a kind
+of node and share not one of them, every one of those nodes reads as removed *and* re-added, and the
+breaking count describes nothing real:
+
+```
+Warning: both sides carry Docuccino identities, but no parameter id appears on both.
+Every one of those reads below as removed AND re-added, which is usually a pairing failure rather
+than an API change. Check the artifact is this document's own, and re-export it if it predates a
+change to how ids are minted.
+```
+
+It is worded as a question because it is one — a wholesale rewrite of every node of that kind looks
+identical. Check that the artifact belongs to this document, re-export it if it predates a change to
+how ids are minted, and read the changeset again. The warning is advisory: `--enforce` never reads
+it.
+
+## What it does not compare
+
+The diff reads two documents and nothing else, which bounds it usefully.
+
+It compares modelled fields and schema structure, so a provenance-only difference — the same API
+described by a build that learned a field from a different layer — yields an empty changeset. It
+never asks whether an example is *valid*; every published example is held to the schema beside it on
+[every build](/laravel/documenting/examples/) instead. And it cannot know whether your application
+still behaves the way either document claims: that is what
+[contract testing](/laravel/guides/contract-testing/) is for, and
+`assertNoBreakingChanges()` runs this same engine from inside your test suite.
+
+<CardGrid>
+	<LinkCard title="docuccino:diff reference" href="/laravel/reference/commands/#docuccinodiff" description="Every flag, every classification code, and the rule for each schema keyword." />
+	<LinkCard title="Contract testing" href="/laravel/guides/contract-testing/" description="Run the same semantic diff from your test suite, beside the requests it already makes." />
+	<LinkCard title="API versioning" href="/laravel/guides/api-versioning/" description="Scaffold the version-change classes from the changeset the diff just printed." />
+	<LinkCard title="Deploying to production" href="/laravel/guides/production/" description="The full docs pipeline this gate belongs to — export, validate, diff, staleness." />
+</CardGrid>

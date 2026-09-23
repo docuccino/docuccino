@@ -18,12 +18,13 @@
 # Docuccino
 
 **API documentation for Laravel that documents change and provenance, not just endpoints.**
-Docuccino compiles your application into a **UIR** — a Universal Intermediate Representation: an
-OpenAPI 3.2-shaped, deterministic, identity-carrying JSON document — and emits OpenAPI 3.2/3.1 from
-it. Because every operation, schema, and parameter carries a stable identity and per-node
-provenance, and because output is byte-deterministic, the UIR answers *what changed* and *why is it
-documented this way* — not merely *what are the endpoints*. That makes it a clean input for tooling
-you build on top: changelogs, mock servers, and agent-facing tool schemas.
+Docuccino compiles your application into OpenAPI 3.2 — and records how it knew. That record travels
+in the document under one reserved member, `x-docuccino`, the **Docuccino extension**: a stable
+identity for every operation, schema and parameter, and the `file:line` behind every detail. Because
+those identities are computed from meaning and the output is byte-deterministic, the document answers
+*what changed* and *why is it documented this way* — not merely *what are the endpoints*. That makes
+it a clean input for tooling you build on top: changelogs, mock servers, and agent-facing tool
+schemas. Export plain OpenAPI 3.2, 3.1 or 3.0 and the whole extension is dropped on the way out.
 
 ## Quickstart
 
@@ -72,8 +73,8 @@ replaces one you already have. Full walkthrough:
   drift unnoticed.
 - **Real static analysis, no bespoke type system** — PHPStan + Larastan embedded behind a `TypeEngine`
   boundary; your own PHPStan extensions improve your docs with zero Docuccino-specific API.
-- **MCP-ready UIR** — a JSON-Schema-defined document (published at `spec.docuccino.app`) carrying the
-  provenance and identities downstream tooling needs.
+- **An extension you can build on** — one reserved member, held to a JSON Schema published at
+  `spec.docuccino.app`, carrying the provenance and identities downstream tooling needs.
 
 **Already using another generator?** [Docuccino vs Scramble](https://docs.docuccino.app/guides/vs-scramble/)
 and [Docuccino vs Scribe](https://docs.docuccino.app/guides/vs-scribe/) compare the tools fairly and
@@ -86,11 +87,11 @@ This is a monorepo, subtree-split into individual packages on release.
 | Package | Directory | Role |
 | --- | --- | --- |
 | `docuccino/laravel` | [`php/laravel`](php/laravel/README.md) | The Laravel adapter: provider, config, commands, viewer, integrations. |
-| `docuccino/core` | [`php/core`](php/core/README.md) | Framework-agnostic UIR model, canonicalizer, identities, emitters, diff, contracts. |
+| `docuccino/core` | [`php/core`](php/core/README.md) | Framework-agnostic document model, canonicalizer, identities, emitters, diff, contracts. |
 | `docuccino/inference-phpstan` | [`php/inference-phpstan`](php/inference-phpstan/README.md) | PHPStan + Larastan embedded behind core's `TypeEngine`. Install as a **dev** dependency. |
 | `docuccino/attributes` | [`php/attributes`](php/attributes/README.md) | Dependency-free PHP attribute classes. |
 
-The versioned UIR JSON Schema lives in [`spec/uir/`](spec/uir/) and is served at its `$id` URLs from
+The versioned JSON Schema lives in [`spec/uir/`](spec/uir/) and is served at its `$id` URLs from
 `spec.docuccino.app`.
 
 ## Documentation
@@ -105,7 +106,9 @@ Full documentation is at **[docs.docuccino.app](https://docs.docuccino.app)**:
 - [Extension authoring](https://docs.docuccino.app/extending/extension-authoring/)
 - Comparisons: [vs Scramble](https://docs.docuccino.app/guides/vs-scramble/) ·
   [vs Scribe](https://docs.docuccino.app/guides/vs-scribe/)
-- [UIR spec](https://docs.docuccino.app/uir/)
+- [The Docuccino extension](https://docs.docuccino.app/uir/)
+
+Upgrading between releases: [`UPGRADING.md`](UPGRADING.md).
 
 The docs site source lives in [`website/`](website/README.md) (Astro + Starlight).
 

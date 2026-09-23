@@ -357,7 +357,7 @@ that separately, as machine-facing metadata a mock server reads — never as pro
 	}
 	```
 	</TabItem>
-	<TabItem label="Generated UIR">
+	<TabItem label="Generated document">
 	```json
 	"CustomerData": {
 	  "type": "object",
@@ -396,11 +396,11 @@ that separately, as machine-facing metadata a mock server reads — never as pro
 belong together, so the `email` and `fullName` above describe one imaginary customer rather than two.
 Either parameter alone is a complete hint.
 
-The UIR always carries them, under `x-docuccino.mock`. The OpenAPI tab above is what
+The full document always carries them, under `x-docuccino.mock`. The OpenAPI tab above is what
 [`export.mock_faker_key`](/laravel/reference/configuration/#export) produces when you name a member to
 publish under — `x-faker` is the convention most mock servers read — and leaving the key out keeps the
 exported artifacts pure OpenAPI. Only the expression projects: `seedGroup` is a relationship *between*
-properties, which a single member on one of them can't carry, so it stays in the UIR.
+properties, which a single member on one of them can't carry, so it stays in the extension.
 
 Columns, `toArray()` keys and validated fields have no PHP property to annotate, so on a class the
 attribute names the member instead and repeats as needed:

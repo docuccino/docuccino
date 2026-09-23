@@ -1,5 +1,8 @@
 ---
 title: Error responses
+head:
+  - tag: title
+    content: 'Document Laravel API Error Responses in OpenAPI | Docuccino'
 description: Document 4xx and 5xx responses automatically — read out of your real exception handling, with framework defaults behind them.
 ---
 
@@ -1013,11 +1016,15 @@ Two render methods naming *the same* component for bodies that differ is settled
 contest: both bodies keep a name derived from their own content and the build reports
 `components.name-collision`.
 
-Where a body lives is representation, not contract, so
-[`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references on both sides: a body
-moving between inline and shared reports nothing, while a real edit to a shared body is reported against
-every operation referencing it. In the UIR document each operation also keeps its own response id and
-provenance in `x-docuccino` beside the `$ref`.
+Where a response lives is representation, not contract, so
+[`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references on both sides: a
+response moving between inline and `components.responses` reports nothing, while a real edit to a
+shared response is reported against every operation referencing it. A schema `$ref` is the one it
+compares opaquely, by the string it points at, so the commit that first lifts a body *shape* into
+`components.schemas` does show up — once, on that commit, as the inline shape leaving each response
+and the component arriving. [Diffing your API](/laravel/guides/diffing/) has what to expect. In the
+full document each operation also keeps its own response id and provenance in `x-docuccino` beside
+the `$ref`.
 
 Set [`representation.errors.components`](/laravel/reference/configuration/#representation) to `false` to
 keep every copy inline.

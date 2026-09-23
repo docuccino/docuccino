@@ -1220,7 +1220,7 @@ whoever consumes the hint defines its grammar — so nothing checks that a forma
 empty one is refused, with an `attribute.mock-invalid` warning. An attribute naming a property the
 schema does not publish is dropped with `attribute.mock-unknown-property`.
 
-The UIR always carries the hints. OpenAPI artifacts drop them unless
+The full document always carries the hints. OpenAPI artifacts drop them unless
 [`export.mock_faker_key`](/laravel/reference/configuration/#export) names the member to publish them
 under — conventionally `x-faker`. See
 [Mock data hints](/laravel/documenting/schemas/#mock-data-hints).

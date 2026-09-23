@@ -406,7 +406,7 @@ Folders become default nav groups; frontmatter (`title`/`slug`/`summary`/`tags` 
 `nav.{group,order,hidden,type,ref}`) overrides. `::operation{...}` / `::schema{...}` directives are
 resolved against the document; broken refs become diagnostics. `null` compiles nothing. See
 [Adding your own pages](/laravel/guides/narrative-content/) for the full workflow, or the
-[UIR content layer](/uir/#content-layer) for how it lives in the raw document.
+[content layer](/uir/#content-layer) for how it lives in the full document.
 
 ### `examples`
 
@@ -520,9 +520,11 @@ from "API changed".
 | `pagination.components` | `true` \| `false` | `true` | Whether a [paginated envelope](/laravel/documenting/responses/#pagination) hoists to one `#/components/schemas` entry per item type and paginator kind — `ArticleResourcePage`, `ArticleResourceCursorPage` — that every paginated operation `$ref`s, and its `links`/`meta` to one entry per shape (`PaginationLinks`, `PaginationMeta`) that the pages `$ref` in turn (`true`); or the whole envelope is restated on each operation (`false`). Hoisting means an SDK generator mints one page type per item type instead of one per endpoint, over one set of envelope members instead of one per page. An envelope whose item type could not be identified, or whose item schema is not itself a component, keeps the envelope on the operation either way — but still points at the member components, whose shapes never depended on the item type. |
 
 The hoist is narrow — 4xx/5xx only, only bodies that repeat, only responses with `content`, never one
-already a `$ref` — and [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references
-on both sides, so moving a body between inline and shared is not a change. Worked output and the exact
-rules: [repeated bodies become shared components](/laravel/documenting/errors/#repeated-bodies-become-shared-components).
+already a `$ref`. [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves a response
+reference on both sides, so moving a whole response between inline and `components.responses` is not a
+change; a schema `$ref` it compares by the string it points at, so the commit that first lifts a body
+shape into `components.schemas` does appear in the changeset. Worked output and the exact rules:
+[repeated bodies become shared components](/laravel/documenting/errors/#repeated-bodies-become-shared-components).
 
 ### `integrations`
 
@@ -594,7 +596,7 @@ export:
   targets:
     - { format: 'openapi-3.2', path: 'docs/openapi.json' }
     - { format: 'openapi-3.1', path: 'docs/openapi-3.1.yaml' }
-    - { format: 'full', path: 'docs/api.uir.json' }
+    - { format: 'full', path: 'docs/api.full.json' }
     - { format: 'postman', path: 'docs/collection.json' }
 ```
 
@@ -633,7 +635,7 @@ export:
 `mock_faker_key` is the member every [`#[Mock]`](/laravel/reference/attributes/#mock) faker
 expression is published under in the OpenAPI artifacts. Unset — the default — leaves them out, so a
 bare export is pure OpenAPI. The `full` format carries the hints whichever way this is set, and
-turning it on rewrites no byte of the document itself: it shapes the projection, never the document, so
+turning it on rewrites no byte of the full document: it shapes the projection, never the document, so
 `configHash` and the fragment cache are untouched.
 
 ### `versioning`
