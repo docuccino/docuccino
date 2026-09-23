@@ -13,6 +13,16 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.20.1
+
+### Features
+
+- **website**: lead a docs reader back to the product ([#526](https://github.com/docuccino/docuccino/pull/526))
+
+### Bug fixes
+
+- **laravel**: read a workflow id as a name the application chose ([#528](https://github.com/docuccino/docuccino/pull/528))
+
 ## v0.20.0
 
 ### Breaking changes
