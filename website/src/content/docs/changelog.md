@@ -13,6 +13,12 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.20.2
+
+### Bug fixes
+
+- **core**: read a JSON object's members as unordered when diffing values ([#529](https://github.com/docuccino/docuccino/pull/529))
+
 ## v0.20.1
 
 ### Features
