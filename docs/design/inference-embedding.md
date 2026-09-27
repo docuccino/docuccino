@@ -318,6 +318,21 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    A status that will not fold refuses the chain rather than guessing; a header link that will not read
    reports its media type UNKNOWN instead, which drops whatever the receiver carried but keeps the status,
    because a header is the one thing that cannot have touched it.
+   A Responsable asked to render itself (`$resource->response()`, `->toResponse($request)`) is not an
+   opaque vendor call: the router sends ANY returned Responsable through its `toResponse()`, and
+   `JsonResource::response()` is that call on the current request, so whoever WROTE `toResponse()` answers.
+   The framework's own resource rendering is the receiver itself — it sends exactly what returning the
+   resource bare sends — and is emitted as `JsonResponse<TheResource, PayloadStatusT>`: the status is KNOWN,
+   it is the payload's to decide as it is for the bare return (the created-model 201, a Data class's
+   `calculateResponseStatus()`), and a header stamped afterwards changes nothing about it; a chain's
+   `->setStatusCode()` still overrides it. An application-written `toResponse()` is read with that object as
+   `$this` — not memoised, since an inherited override answers for whichever object it renders — whether it
+   is reached directly, through the framework's `response()`, or by returning the object bare; inside it,
+   `parent::toResponse()` is the framework rendering that object. EVERY return of the override is a response
+   (`ResponseShapeRefiner::refineArms()`): a guard arm answering 410 beside `parent::toResponse()` is two,
+   and if any arm cannot be read the whole widens to the declared class rather than publishing a subset.
+   Whoever answers, the answer holds only until a closer override is written, so every project file of the
+   object's hierarchy joins the dependencies.
 2. **Value-flow / status provenance.** A callee's recovered shape is CALL-INDEPENDENT: a status that is
    not a literal is recorded as the `ParamAccessor` it reads from (the parameter itself, `->value`,
    `->name`, or a no-arg `->method()`), and each body member's provenance is recorded the same way. The

@@ -227,11 +227,24 @@ final class PhpStanTypeEngine implements TypeEngine
             $returnNode = $statement->getReturnNode();
             $location = new SourceLocation($file, $returnNode->getStartLine());
             $scope = $this->fileAnalyzer->stableScope($statement->getScope());
-            $shape = $this->siteShape($returnNode->expr, $scope);
-            $returns[] = new ReturnSite($shape['type'], $location, $shape['component']);
+            // One return statement can be several responses: an application's `toResponse()` answering a
+            // guard arm beside the framework's rendering ({@see ResponseShapeRefiner::refineArms()}).
+            foreach ($this->siteShapes($returnNode->expr, $scope) as $shape) {
+                $returns[] = new ReturnSite($shape['type'], $location, $shape['component']);
+            }
         }
 
         return $returns;
+    }
+
+    /**
+     * The first of {@see siteShapes()} — the one shape a narrowed renderer site can carry.
+     *
+     * @return array{type: DType, component: ComponentDeclaration|null}
+     */
+    private function siteShape(?Node\Expr $expr, Scope $scope): array
+    {
+        return $this->siteShapes($expr, $scope)[0];
     }
 
     /**
@@ -240,17 +253,24 @@ final class PhpStanTypeEngine implements TypeEngine
      * component the recovery walked through is carried beside the type rather than inside it: it says
      * which method answered, not what the value is.
      *
-     * @return array{type: DType, component: ComponentDeclaration|null}
+     * @return non-empty-list<array{type: DType, component: ComponentDeclaration|null}>
      */
-    private function siteShape(?Node\Expr $expr, Scope $scope): array
+    private function siteShapes(?Node\Expr $expr, Scope $scope): array
     {
         if ($expr === null) {
-            return ['type' => new VoidT, 'component' => null];
+            return [['type' => new VoidT, 'component' => null]];
         }
 
         $type = $this->translator->translate($scope->getType($expr));
-        if (! $type instanceof ClassT || ! ResponseShapeRefiner::isResponseFqcn($type->fqcn)) {
-            return ['type' => $type, 'component' => null];
+        if (! $type instanceof ClassT) {
+            return [['type' => $type, 'component' => null]];
+        }
+        if (! ResponseShapeRefiner::isResponseFqcn($type->fqcn)) {
+            // The router sends a returned Responsable as its `toResponse()`, so an application-written one
+            // answers for the object rather than the class's own shape.
+            $rendered = $this->refiner()->renderedByOverride($expr, $scope) ?? [$type];
+
+            return array_map(static fn (DType $each): array => ['type' => $each, 'component' => null], $rendered);
         }
 
         // Already rich (our extension typed `response()->json()`/`noContent()`) — authoritative, keep it,
@@ -258,21 +278,10 @@ final class PhpStanTypeEngine implements TypeEngine
         // ({@see ResponseShapeRefiner::outranksResolvedType()}): a `new JsonResponse(...)`, or a fluent
         // chain whose `->setStatusCode()` the erased generic carried straight past.
         if ($type->typeArgs !== [] && ! $this->refiner()->outranksResolvedType($expr, $scope)) {
-            return ['type' => $type, 'component' => null];
+            return [['type' => $type, 'component' => null]];
         }
 
-        $refined = $this->refiner()->refine($expr, $scope);
-        if ($refined === null) {
-            return ['type' => $type, 'component' => null];
-        }
-        if ($refined->delegates) {
-            return ['type' => new VoidT, 'component' => null];
-        }
-
-        return [
-            'type' => $refined->toClassT(ResponseShapeRefiner::CANONICAL_RESPONSE) ?? $type,
-            'component' => $refined->component,
-        ];
+        return ResponseArms::sites($this->refiner()->refineArms($expr, $scope), $type, ResponseShapeRefiner::CANONICAL_RESPONSE);
     }
 
     /**

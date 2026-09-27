@@ -285,11 +285,9 @@ you passed — the `JsonResponse` wrapper itself is never rendered as a generic 
 paths with distinct statuses become distinct responses on the same operation:
 
 ```php
-public function store(StoreInvoiceRequest $request): JsonResponse
+public function accept(Invoice $invoice): JsonResponse
 {
-    $invoice = Invoice::create($request->validated());
-
-    return response()->json(new InvoiceResource($invoice), 201); // → 201 with the resource body
+    return response()->json(['status' => 'accepted', 'id' => $invoice->id], 202); // → 202 with that body
 }
 ```
 
@@ -341,14 +339,43 @@ A status computed at runtime (not a literal) falls back to `200`; pin it with
 
 Returning a resource wrapped directly around a freshly created model — `new InvoiceResource(Invoice::create(...))`,
 `InvoiceResource::make(Invoice::create(...))`, or the same around `Invoice::forceCreate(...)` — is
-documented as `201 Created` automatically, matching Laravel's own behavior: those factory methods set
+documented as `201 Created` automatically, whether you return the resource or its `->response()`. This
+matches Laravel's own behavior: those factory methods set
 `wasRecentlyCreated`, so `ResourceResponse::calculateStatus()` answers `201`. Only that direct
 create-wrap is detected; create into a variable first, or use `#[Response]`, when you need the code to be
 explicit. An explicit `201` always wins.
 
+### A resource's own response
+
+Laravel's way to send a resource with a status of your choosing is to ask the resource for its response
+and set the status on that. Docuccino documents the resource body either way: `->response()`,
+`->toResponse($request)`, and anything you chain onto them publish exactly what returning the resource
+bare publishes, including its `data` wrapper and the members its `with()` adds.
+
+```php
+public function store(StoreInvoiceRequest $request): JsonResponse
+{
+    $invoice = $this->invoices->issue($request->validated());
+
+    return (new InvoiceResource($invoice))->response()->setStatusCode(201); // → 201 with the resource body
+}
+```
+
+The status is the one the server sends. A `->setStatusCode()` you chain is the status. Without one, the
+resource decides as it does for a bare return, so `(new InvoiceResource(Invoice::create(...)))->response()`
+is still an [automatic `201`](#automatic-201-created). A collection works the same way:
+`InvoiceResource::collection($invoices->paginate())->response()` gets the pagination envelope.
+
+A resource that overrides `toResponse()` has written its own response, and the router sends that override
+even when you return the resource bare. So Docuccino documents the body and status the override builds,
+not the resource's `toArray()` shape. Each `return` in the override is its own response. A guard that
+answers `410` and otherwise returns `parent::toResponse($request)` is documented as both the `410` and
+the resource envelope.
+
 ### Spatie Data success status
 
 A [Spatie Data](/laravel/packages/spatie-data/) class returned from a `POST` documents **`201 Created`**,
+returned bare or through `$data->toResponse($request)`,
 from Spatie's own `ResponsableData` default; any other verb documents `200`. A class that **overrides**
 `calculateResponseStatus()` documents that instead — `return 201;`, a class constant like
 `Response::HTTP_CREATED`, or a conditional whose arms are *all* constants
