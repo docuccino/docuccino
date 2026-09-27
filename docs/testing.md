@@ -276,7 +276,7 @@ Consequences:
   unit tests for its pure classes (translators, registries, config objects) — not more
   subprocess fixture tests.
 
-## Measured coverage (2026-09-23)
+## Measured coverage (2026-09-27)
 
 Line coverage (statements) over the suite excluding the `fixture` group. These are the numbers the
 floors are set from — measure, then set the floor to the measured integer, unless the measured integer
@@ -284,11 +284,11 @@ would sit too close to the figure for an ordinary change to survive it (see `lar
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **97.47%** | 97    | fully in-process-measurable; 0.47pp above it, ~67 statements |
-| `laravel`           | **97.05%** | 96    | ratcheted 95 → 96; 97 declined at 7.75 statements, see below; 1.05pp above it, ~148 statements |
-| `inference-phpstan` | **49.98%** | 49    | real path is subprocess-only → `fixture`-proven; ratcheted 48 → 49; 0.98pp, ~26 statements |
+| `core`              | **97.49%** | 97    | fully in-process-measurable; 0.49pp above it, ~70 statements |
+| `laravel`           | **97.04%** | 96    | ratcheted 95 → 96; 97 declined at 6.27 statements, see below; 1.04pp above it, ~149 statements |
+| `inference-phpstan` | **52.14%** | 51    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51, 52 declined at 3.88 statements; 1.14pp, ~32 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 93.26%     | —     | informational only; no longer a gate             |
+| Overall             | 93.21%     | —     | informational only; no longer a gate             |
 
 Every figure here is one `composer test:coverage` run of the whole set, so the three read off the same
 clover report and the floors file quotes the same numerators. A record that disagrees with itself is the
@@ -432,7 +432,7 @@ for its pure/parent-process classes, never more subprocess fixture tests.
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **97**, `laravel` **96**, `inference-phpstan` **49**.
+  an aspiration. Current floors: `core` **97**, `laravel` **96**, `inference-phpstan` **51**.
 - The same run **checks the record**: each entry carries the `measured` figure its floor was set from,
   and a run more than ten statements away from it reports `STALE` and fails, naming the three places to
   re-record. Honest floors are only honest against a measurement somebody took recently, and until this

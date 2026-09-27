@@ -68,6 +68,8 @@ use Docuccino\Laravel\Config\DeclaredSettings;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Config\ViewerConfig;
 use Docuccino\Laravel\Extensions\AttributeParametersExtension;
+use Docuccino\Laravel\Integrations\InferredHandler\HandlerReflector;
+use Docuccino\Laravel\Integrations\InferredHandler\ReceivedException;
 use Docuccino\Laravel\Integrations\QueryBuilder\ListValueDescriber;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\SpatieData\WrapResolver;
@@ -92,6 +94,7 @@ use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Http\Kernel as HttpKernelContract;
 use Illuminate\Foundation\Configuration\ApplicationBuilder;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Foundation\Exceptions\Handler;
 use Illuminate\Foundation\Http\Kernel as HttpKernel;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -3416,7 +3419,8 @@ function assertWarmEqualsCold(callable $before, callable $after, ?callable $engi
 
 /**
  * Register a render callback on the booted exception handler and return the `CallableRef::symbol()` the
- * inferred-handler tier will analyse it under, so a stub engine can be scripted for exactly that key.
+ * inferred-handler tier will analyse it under for a throw of `$exceptionType`, so a stub engine can be
+ * scripted for exactly that key.
  */
 function registerRenderCallback(Closure $callback, string $exceptionType): string
 {
@@ -3432,8 +3436,21 @@ function registerRenderCallback(Closure $callback, string $exceptionType): strin
         null,
         $function->getStartLine(),
         $function->getParameters()[0]->getName(),
-        $exceptionType,
+        ReceivedException::byRenderCallbacks($exceptionType),
     ))->symbol();
+}
+
+/**
+ * Register a `respond()` callback on the booted exception handler and return the `CallableRef::symbol()` the
+ * finalizer analyses it under for `$exceptionType`, so a stub engine can be scripted for exactly that key.
+ */
+function registerRespondCallback(callable $callback, string $exceptionType): string
+{
+    /** @var Handler $handler */
+    $handler = app(ExceptionHandler::class);
+    $handler->respondUsing($callback);
+
+    return (new HandlerReflector($handler))->respondCallback()?->ref($exceptionType)->symbol() ?? '';
 }
 
 /**

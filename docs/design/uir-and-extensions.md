@@ -1227,6 +1227,36 @@ interface ExceptionToResponse {
 //      (422 {message,errors}, 401/403/404 {message}), maintained per Laravel version.
 //   3. DefaultExceptionToResponse — the terminal fallback: {message} under the status.
 //      User extensions slot in by order; attributes/config override anything.
+
+interface ErrorResponseFinalizer {
+    public function finalization(ThrownException $e, ResponseDraft $rendered, RouteContext $ctx): Finalization;
+    /** @return list<ResponseDraft> */
+    public function responses(ThrownException $e, ResponseDraft $rendered, RouteContext $ctx, ComponentRegistry $components): array;
+    public function producer(): string;
+}
+// Every response the chain above renders passes through the finalizers in order, inside
+// RouteContext::mapThrow() — the one place a throw becomes a response — because a framework's
+// post-processing hook (Laravel's `$exceptions->respond()`) sees every rendered error whichever tier
+// rendered it. Keeps / Replaces / Extends. Replaces withdraws what rendering registered (components,
+// route notes; deps stay) BEFORE responses() writes, which is why the contract is two questions and not
+// one. Extends publishes alternatives: ResponseDraft::eitherOf() keeps each media type one part sends
+// and widens one several send to an empty schema, since merging two bodies' keywords describes neither.
+// The Laravel implementation (InferredHandler\RespondCallbackFinalizer) analyses the callback with
+// CallableRef::$narrowToEvery: every reachable return, the parameter a return hands back unchanged, and
+// the literal-argument parameter calls PHPStan proves at each return (CallCondition), which the adapter
+// settles per route for `is()`, `routeIs()` (Support\RoutePredicates, shared with every other reader of
+// a route predicate) and the rendered `getStatusCode()` — a stand-in status is no reading of one.
+// Each reachable return is one of three things. The rendered response handed back unchanged keeps what
+// the tiers before published. A JsonResponse is built exactly as a render callback's is, filed at the
+// status it states, else at the rendered one. Anything else is unread: beside a hand-back it leaves the
+// rendered answer standing, alone it leaves the body unsaid, and either way inferred-handler.too-dynamic.
+// Rewrites at different statuses, or away from a rendered response still sent, keep the rendered one and
+// say why. What a callback is HANDED is not what was thrown: Handler::render() runs prepareException()
+// first (a missing model becomes a NotFoundHttpException, a denial an AccessDeniedHttpException, …), so
+// both the render-callback tier and this one narrow to InferredHandler\ReceivedException's answer, held
+// to the installed prepareException() by a source-reading guard. The render-callback tier also tries the
+// renderers in Handler::render()'s order: the exception's own render() (looked past where it only returns
+// null), a Responsable's toResponse(), then the first render callback the prepared exception satisfies.
 ```
 
 ### The inferred-handler tier, and the four facts it answers for

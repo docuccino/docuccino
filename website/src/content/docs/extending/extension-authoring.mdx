@@ -261,6 +261,7 @@ And these cover the rest of the surface:
 | `RouteBindingKeyResolver` | Name the column a route-model-bound path parameter is matched on, so the parameter can say so to a consumer who cannot see your models. Return `null` for anything your resolver cannot settle from a declaration — a short description costs nothing, a wrong one sends clients to look records up by the wrong attribute. | `keyNameFor(string $modelFqcn): ?string` |
 | `EnvironmentDigestContributor` | Fold booted-app state your extension reads (guards, global config) into the cache key. | `digest(): string` |
 | `RouteNoteCollector` | Aggregate a finding many routes make into one your `DocumentTransformer` reports. | `channel(): string`, `forget(): void`, `collect(string $key, array $values): void` |
+| `ErrorResponseFinalizer` | Reshape every error response after the `ExceptionToResponse` chain has answered, the way a framework hook that rewrites all rendered errors does. Each finalizer is applied in order. | `finalization(ThrownException $exception, ResponseDraft $rendered, RouteContext $context): Finalization`, `responses(ThrownException $exception, ResponseDraft $rendered, RouteContext $context, ComponentRegistry $components): array`, `producer(): string` |
 | `TagMapper` | Customize how raw tags map to display tags. | `map(string $tag): string` |
 | `Viewer` | Render the docs page yourself, selected by name through `viewer.driver`. See [the viewer guide](/laravel/guides/viewer/#writing-your-own-driver). | `name(): string`, `render(ViewerContext $context): mixed` |
 | `ViewerAssets` | Ship a script with your viewer and serve it from the gated asset route instead of a CDN. | `assets(): array` |
@@ -300,6 +301,14 @@ Notes ride the route's cached fragment, and Docuccino replays them into the coll
 matches on every build, warm or cold. Your `DocumentTransformer` then reads the collector and reports
 once. `forget()` is called before each document's first route, so an export of several documents never
 reports one document's findings against another's.
+
+An `ErrorResponseFinalizer` sees the response the chain rendered for each thrown exception, and says
+what happens to it. `Finalization::Keeps` sends it as rendered. `Finalization::Replaces` sends what
+your `responses()` builds instead, and Docuccino first takes back everything that rendering the
+original registered, so no component is left behind for a body nobody is sent. `Finalization::Extends`
+publishes what you build beside it, for a response that is sent on some requests and not others.
+`finalization()` is always asked first and `responses()` only when the answer is not `Keeps`, so both
+must reach the same answer from the same inputs.
 
 `OperationExtension`s run in phases, so you can act at the right moment:
 
