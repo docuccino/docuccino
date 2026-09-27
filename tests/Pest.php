@@ -81,6 +81,7 @@ use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
 use Docuccino\Laravel\Testing\ApiContract;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Almanac;
+use Docuccino\Laravel\Tests\Fixtures\ExcludedFields\StorePaymentRequest;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\NestedWrapItemData;
 use Docuccino\Laravel\Tests\Support\BuildSettings;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
@@ -102,6 +103,7 @@ use Illuminate\Routing\MiddlewareNameResolver;
 use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\Router;
 use Illuminate\Testing\TestResponse;
+use Opis\JsonSchema\Validator;
 use PhpParser\Node;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\FindingVisitor;
@@ -4594,4 +4596,25 @@ function packageOwnedExtension(string $package): DocumentTransformer
 
     /** @var DocumentTransformer */
     return new $class;
+}
+
+/**
+ * Two verdicts on one body for the excluded-fields fixture: whether Laravel's validator accepts it under
+ * the FormRequest's own rules, and whether the published request schema does.
+ *
+ * @param  array<string, mixed>  $body
+ * @param  callable(Router): void  $routes
+ * @param  callable(): TypeEngine  $engine
+ * @return array{0: bool, 1: bool}
+ */
+function excludedFieldsVerdicts(array $body, callable $routes, callable $engine): array
+{
+    $rules = StorePaymentRequest::create('/api/zz-payments', 'POST', $body)->rules();
+    $accepted = Illuminate\Support\Facades\Validator::make($body, $rules)->passes();
+
+    // Decoded as objects: an unconstrained `{}` property decoded to an array would stop being a schema.
+    $document = json_decode((new UirEmitter)->emit(localityBuild($routes, $engine)->document), flags: JSON_THROW_ON_ERROR);
+    $documented = (new Validator)->validate(json_decode((string) json_encode($body)), $document->components->schemas->StorePaymentRequest)->isValid();
+
+    return [$accepted, $documented];
 }

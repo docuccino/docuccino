@@ -805,6 +805,38 @@ uploads](#file-uploads) below. Anything not listed leaves the property permissiv
 | `filled` | Recognized; no effect on the documented shape. |
 | `required_if`, `required_unless`, `required_with`, `required_with_all`, `required_without`, `required_without_all` | A description note ("Required when `status` is `paid`.") — a conditional requirement has no JSON Schema keyword. |
 
+### Exclude rules
+
+Laravel runs a field's rules in the order you write them, and once an `exclude` rule fires it runs
+none of the rest. So where an exclude rule sits decides what the `required` beside it means:
+
+```php
+'payment.card_number' => ['exclude_unless:payment.method,card', 'required', 'string'],
+'reference' => ['required', 'exclude_if:payment.method,transfer', 'string'],
+```
+
+`card_number` is only required when `payment.method` is `card`, so it stays out of `required` and
+gets the note "Required when payment.method is card." `reference` is checked before its exclude rule
+runs, so it's required on every request.
+
+| Rule ahead of `required` | Documented as |
+| --- | --- |
+| `exclude_unless:field,value` | Optional, "Required when `field` is `value`." |
+| `exclude_if:field,value` | Optional, "Required unless `field` is `value`." |
+| `exclude_without:a,b` | Optional, "Required when `a`, `b` are all present." |
+| `exclude` | Optional, and unconstrained: none of the rules after it ever run. |
+| `exclude_with:field`, `Rule::excludeIf(…)`, `Rule::excludeUnless(…)`, or two exclude rules | Optional, with no note: no single "Required when" sentence says exactly when Laravel requires it. |
+
+A `present` after an exclude rule leaves the field optional with no note, since `present` accepts an
+empty value that "required" would rule out. A `prohibited` after `exclude_if` / `exclude_unless`
+becomes the matching `prohibited_unless` / `prohibited_if`; after any other exclude rule it's dropped.
+Either way the field stays documented, because the API accepts it whenever the exclude rule fires.
+
+The rules after an exclude rule still document the field's type and constraints, because that's the
+value the API reads whenever it keeps the field. When the field is excluded, the API accepts any value
+there and discards it, so a request sending a wrong-typed value in that case is accepted even though
+the schema rejects it.
+
 ### Types and formats
 
 | Rule | Documented as |
@@ -894,9 +926,9 @@ every other rule, and they're applied last, so they see the finished property.
 
 ### Recognized with no schema effect
 
-`bail`, `exclude`, `exclude_if`, `exclude_unless`, `exclude_with`, `exclude_without`,
-`current_password`. These are consumed deliberately — they're valid rules that say nothing about the
-wire shape, so they never raise an unhandled-rule diagnostic.
+`bail` and `current_password`. These are consumed deliberately — they're valid rules that say nothing
+about the wire shape, so they never raise an unhandled-rule diagnostic. The exclude rules raise none
+either; what they change is covered under [Exclude rules](#exclude-rules).
 
 ## File uploads
 
