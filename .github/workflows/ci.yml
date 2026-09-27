@@ -278,8 +278,9 @@ jobs:
           set -euo pipefail
           composer create-project laravel/laravel tests/fixture-app/app "${{ matrix.laravel }}" --no-interaction --no-progress
           composer require --working-dir=tests/fixture-app/app --dev larastan/larastan --no-interaction --no-progress
-          # The fixture app's own phpstan is what the real engine actually loads, so pin it per leg.
-          composer require --working-dir=tests/fixture-app/app --dev -W "phpstan/phpstan:${{ matrix.phpstan }}" --no-interaction --no-progress
+          # The fixture app's own phpstan is what the real engine actually loads, so pin it per leg. Larastan
+          # is named beside it so an older pin can move it back to a release that still accepts that phpstan.
+          composer require --working-dir=tests/fixture-app/app --dev -W "phpstan/phpstan:${{ matrix.phpstan }}" larastan/larastan --no-interaction --no-progress
           composer require --working-dir=tests/fixture-app/app spatie/laravel-query-builder spatie/laravel-data --no-interaction --no-progress
           # Integration packages (JSON:API + laravel-actions real-engine tests):
           composer require --working-dir=tests/fixture-app/app -W "timacdonald/json-api:^1.0@beta" "spatie/laravel-json-api-paginate:^2.0" "lorisleiva/laravel-actions:^2.0" --no-interaction --no-progress

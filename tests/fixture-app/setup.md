@@ -29,8 +29,8 @@ composer require --working-dir=tests/fixture-app/app --dev larastan/larastan --n
 #     real engine loads, so whatever lands here is the only version the fixture group proves.
 #     2.2.0 and the newest 2.2.x resolve NodeScopeResolver differently — the floor hands out
 #     fiber-driven scopes, the newest hands out plain ones — so CI runs both. To reproduce the
-#     fiber leg locally:
-#     composer require --working-dir=tests/fixture-app/app --dev -W phpstan/phpstan:2.2.0 --no-interaction
+#     fiber leg locally (larastan is named too, so it can move back to a release accepting that phpstan):
+#     composer require --working-dir=tests/fixture-app/app --dev -W phpstan/phpstan:2.2.0 larastan/larastan --no-interaction
 
 # 3. Spatie packages (Query Builder trace + Data class recovery).
 composer require --working-dir=tests/fixture-app/app \
