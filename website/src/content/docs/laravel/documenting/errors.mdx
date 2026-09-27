@@ -641,7 +641,7 @@ errors:
 | Status | When it's added | How to opt out |
 | --- | --- | --- |
 | `401` | The route has authentication middleware (matching `security.auth_middleware`). | Mark the route [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) — or `#[IgnoreResponse(401)]`. |
-| `422` | A validated request body was recovered (Spatie Data, a form request, or an action's `rules()`). | `#[IgnoreResponse(422)]`. |
+| `422` | Validation rules were recovered (Spatie Data, a form request, an inline `validate()`, or an action's `rules()`), whether they document the body or, on a read route, the query parameters. | `#[IgnoreResponse(422)]`. |
 | `404` | The route binds a model to a path parameter (implicit binding). One `404` per operation. | `#[IgnoreResponse(404)]`. |
 | `403` | The route has `can:` / `signed` / `verified` middleware, or a form request `authorize()` gate that isn't a literal `return true`. | `#[IgnoreResponse(403)]`. |
 
@@ -781,7 +781,7 @@ and can say which:
 | `403` | `Forbidden` | `AuthorizationException`, `AccessDeniedHttpException`, `InvalidSignatureException`, `can:` / `signed` / `verified` middleware, a form request `authorize()` gate |
 | `404` | `NotFound` | `ModelNotFoundException`, `RecordsNotFoundException`, `NotFoundHttpException`, and route–model binding |
 | `413` | `ContentTooLarge` | `PostTooLargeException` |
-| `422` | `UnprocessableEntity` | `ValidationException`, `UnprocessableEntityHttpException`, and any recovered request body |
+| `422` | `UnprocessableEntity` | `ValidationException`, `UnprocessableEntityHttpException`, and any recovered validation rules |
 | `429` | `TooManyRequests` | `ThrottleRequestsException`, `TooManyRequestsHttpException`, and [`throttle`](/laravel/documenting/rate-limiting/) middleware |
 | `500` | `InternalServerError` | An exception carrying no status anything could read |
 | `405`, `406`, `409`, `410`, `411`, `412`, `415`, `423`, `428`, `503` | `MethodNotAllowed`, `NotAcceptable`, `Conflict`, `Gone`, `LengthRequired`, `PreconditionFailed`, `UnsupportedMediaType`, `Locked`, `PreconditionRequired`, `ServiceUnavailable` | Symfony's `HttpException` subclass for that status — `MethodNotAllowedHttpException`, `ConflictHttpException` and the rest — or an unrecognized exception resolving to it |
