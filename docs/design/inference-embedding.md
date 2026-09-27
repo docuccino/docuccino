@@ -315,9 +315,17 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    `withStatus()` is deliberately absent (PSR-7's setter; no response class here declares it), and so are
    SUBCLASSES of the four — a strict receiver check is what keeps `(new StreamedResponse(…))->setStatusCode(202)`
    out, since everything recovered here is emitted as a `JsonResponse` and a streamed body is not one.
-   A status that will not fold refuses the chain rather than guessing; a header link that will not read
-   reports its media type UNKNOWN instead, which drops whatever the receiver carried but keeps the status,
-   because a header is the one thing that cannot have touched it.
+   A link that will not read is reported UNKNOWN in the one fact it could have set, never refused: a header
+   link drops whatever media type the receiver carried but keeps the status, and a `->setStatusCode()` that
+   will not fold drops the receiver's status but keeps the body — each is the one thing the other cannot
+   have touched. A status is read as EVERY constant it can be (`$ok ? 200 : 503`, `ScalarFold::ints()`), and
+   so is one passed to the constructor or forwarded to a helper's status parameter; the adapter publishes one
+   response per code, and a status stated but unreadable under `default` rather than under a code the
+   endpoint may never send. An inferred range (`int<200, 299>`) is not a constant and folds to nothing.
+   A helper handing its status parameter to `response()->json($d, $code)` records the accessor exactly as
+   `new JsonResponse($d, $code)` does (`ResponseFactoryCall` is the one reader of those arguments, shared
+   with the return-type extension), and a call site that passes nothing binds the parameter's DEFAULT —
+   `$this->ok($d)` is the 200 its signature says, not a status nothing read.
    A Responsable asked to render itself (`$resource->response()`, `->toResponse($request)`) is not an
    opaque vendor call: the router sends ANY returned Responsable through its `toResponse()`, and
    `JsonResource::response()` is that call on the current request, so whoever WROTE `toResponse()` answers.

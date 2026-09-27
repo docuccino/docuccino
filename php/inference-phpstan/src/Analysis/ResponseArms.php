@@ -8,6 +8,7 @@ use Docuccino\Core\Inference\ComponentDeclaration;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\VoidT;
 use PhpParser\Node;
 
@@ -17,7 +18,7 @@ use PhpParser\Node;
  * from the scope-driven walk so they read (and test) without an analyser. The invariant: a subset of the
  * responses is never published as the whole, so one arm nothing could read loses them all.
  *
- * @phpstan-type Chain array{receiver: Node\Expr, status: LiteralT|null, contentType: string|null, contentTypeUnknown: bool}
+ * @phpstan-type Chain array{receiver: Node\Expr, status: LiteralT|UnionT|null, statusUnknown: bool, contentType: string|null, contentTypeUnknown: bool}
  *
  * @internal
  */
@@ -37,6 +38,9 @@ final class ResponseArms
         }
         if ($chain['status'] !== null) {
             $refined = $refined->withBoundStatus($chain['status']);
+        } elseif ($chain['statusUnknown']) {
+            // Stated and unread: it replaced whatever the receiver carried, so neither can stand.
+            $refined = $refined->withUnreadStatus();
         }
 
         return $refined->isDocumentable() ? $refined : null;
