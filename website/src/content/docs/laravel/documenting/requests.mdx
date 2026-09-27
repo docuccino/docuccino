@@ -319,6 +319,34 @@ Any of those covers a whole document from one class, which is the answer wheneve
 real but a helper's body hides them.
 </Aside>
 
+### Signed URLs
+
+A route behind Laravel's `signed` middleware refuses any request that doesn't carry the link's
+signature, so the two query parameters the middleware reads are documented on it — no annotation
+needed:
+
+| Parameter | Required | Schema | Why |
+| --- | --- | --- | --- |
+| `signature` | yes | `string` | The middleware rejects a request without one. |
+| `expires` | no | `integer` | Checked only when present — `URL::signedRoute()` links carry none, `URL::temporarySignedRoute()` links do. |
+
+Every way of writing the middleware counts: `signed`, `signed:relative`, `ValidateSignature::relative()`
+or `::absolute()`, your own subclass of `ValidateSignature`, an alias you register for either, and any
+of those inherited from a middleware group. If you point the `signed` alias at a different middleware,
+Docuccino follows it too. The same routes get the [implicit `403`](/laravel/documenting/errors/) the middleware returns.
+Parameters you exclude from the signature change nothing here, since a client may add them but never
+has to.
+
+If every link to a route expires, tighten `expires` with an attribute, which wins over what Docuccino
+infers:
+
+```php
+#[QueryParameter('expires', required: true)]
+public function __invoke(User $user, string $hash): Response
+```
+
+To leave a parameter out of the document, use `#[IgnoreParam('expires', in: 'query')]`.
+
 ## Request bodies
 
 A form request's `rules()` — or an inline `$request->validate([...])` / `Validator::make(...)` in the
