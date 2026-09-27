@@ -432,6 +432,11 @@ in the file being walked, and an array return is no type the trace follows:
   file+line. `pair()` beside it returns TWO closures written on one line, which is all reflection can say
   about either: the boundary where the tier documents nothing rather than one callback's response for the
   other's exception.
+- `app/Exceptions/ExceptionMappers.php` — methods returning the mappers an application hands
+  `$exceptions->map()`, analysed by file+line with every reachable return read as the exception it builds:
+  a literal status, a construction one assignment back, a class's own static factory, a framework class
+  pinning its status in vendor, a status read at run time, two translations chosen at run time, a
+  translation for one subclass beside the parameter handed back, and a return naming no class at all.
 - `app/Exceptions/InvokableProblemRenderer.php` — a catch-all `__invoke(Throwable $e): JsonResponse`
   with sequential `instanceof` branches (409/401 + a 500 default) emitting a distinct
   `application/problem+json`-style body (a `type`/`title`/`status`/`instance` shape). Registered as an
