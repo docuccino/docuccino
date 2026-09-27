@@ -635,7 +635,8 @@ morphMap(), true)`, which takes the first alias for a class. Both mirror the fra
 were keyed by a digest that sorted its records first, so two registration orders produced one digest and
 a warm build replayed a fragment computed under the other resolution — and the morph half reached
 published bytes while the alias was a discriminator mapping key. (A model union is no longer
-discriminated by its morph map, so nothing published reads the map and its digest contributor is gone.)
+discriminated by its morph map; the map now reaches published bytes through a `morphTo`'s type-column
+enum, and its digest hashes each model's first alias taken in registration order, before sorting.)
 The third is core's own: `ResolvedExtensions::cacheSignature()` sorted one entry per resolved instance while every chain reading
 those instances is first-match-wins (`RouteContext`'s six resolvers, `SchemaConverter`'s mappers) or
 sequential mutation (`OperationPipeline`). Its docblock had already closed identity and multiplicity

@@ -167,6 +167,47 @@ than the snake-cased key it serializes as, which is the name Eloquent matches to
 body, so no field of the payload names the variant for a client to read. A model whose body does fix
 such a field is discriminated like any [tagged union](#tagged-unions).
 
+**Polymorphic type columns.** The `*_type` column beside a `morphTo` holds what `getMorphClass()` writes
+for the related model: its alias in your morph map, or its class name when it has none. Where that makes
+the column's values a closed set, it is documented as an `enum`, so a generated client can name every
+related type and tell which one a row points at:
+
+```php
+Relation::enforceMorphMap([
+    'post' => Post::class,
+    'video' => Video::class,
+    'user' => User::class,
+]);
+
+/**
+ * @property string $commentable_type
+ */
+class Comment extends Model
+{
+    /** @return MorphTo<Post|Video, $this> */
+    public function commentable(): MorphTo
+    {
+        return $this->morphTo();
+    }
+}
+```
+
+Here `commentable_type` is documented as `enum: [post, video]` — the aliases of the models the
+relation's generic names, not the whole map. The set is closed when:
+
+- the map is **enforced**, since an unmapped model cannot be written at all. A relation typed
+  `MorphTo<Model, $this>` names no models, so every mapped alias is documented;
+- or the map is not enforced but every model the generic names is `final`, so each one writes its alias
+  or, unmapped, its class name, and no subclass can write a third value.
+
+Anywhere else the column keeps its declared type: an unenforced map with a relation that names no models
+or names one open to subclasses, a related model that overrides `getMorphClass()`, an accessor over the
+column, or a `morphTo()` whose relation name is computed at runtime. A nullable type column
+(`@property string|null`) documents `null` beside the set.
+
+The enum describes what your application writes under its current morph map. Rows stored before you
+introduced an alias still hold the class name that was written then, so migrate them when you add a map.
+
 **Dates.** Eloquent hands every date attribute — a date cast, a `$dates` entry, the framework
 timestamps, a soft-delete column — to `serializeDate()` before it goes out, so the column is documented
 as the string that writes: `string`, `format: date-time`. That holds whatever typed the name, which

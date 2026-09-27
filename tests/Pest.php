@@ -37,6 +37,7 @@ use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassMetadata;
+use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
@@ -57,9 +58,11 @@ use Docuccino\Core\Pipeline\FragmentCache;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Pipeline\OperationFragment;
 use Docuccino\Core\Support\ConfiguredFlag;
+use Docuccino\Core\Support\Fqcn;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Core\Support\JsonValue;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
+use Docuccino\Inference\PhpStan\Metadata\ClassMetadataFactory;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureEdit;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 use Docuccino\Laravel\Commands\WatchCommand;
@@ -68,6 +71,7 @@ use Docuccino\Laravel\Config\DeclaredSettings;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Config\ViewerConfig;
 use Docuccino\Laravel\Extensions\AttributeParametersExtension;
+use Docuccino\Laravel\Integrations\Eloquent\ModelSchema;
 use Docuccino\Laravel\Integrations\InferredHandler\HandlerReflector;
 use Docuccino\Laravel\Integrations\InferredHandler\ReceivedException;
 use Docuccino\Laravel\Integrations\QueryBuilder\ListValueDescriber;
@@ -4617,4 +4621,20 @@ function excludedFieldsVerdicts(array $body, callable $routes, callable $engine)
     $documented = (new Validator)->validate(json_decode((string) json_encode($body)), $document->components->schemas->StorePaymentRequest)->isValid();
 
     return [$accepted, $documented];
+}
+
+/**
+ * The property schemas an Eloquent model publishes, its columns read by the engine's own reflection of
+ * the class — the `@property` tags a stub would only restate.
+ *
+ * @return array<string, mixed>
+ */
+function modelProperties(string $model): array
+{
+    $components = new ComponentRegistry;
+    $engine = new StubTypeEngine(classes: [$model => (new ClassMetadataFactory)->forClass(new ClassRef($model))]);
+    (new SchemaConverter([new ModelSchema, ...DefaultTypeMappers::all()], $engine, $components))->toSchema(new ClassT($model));
+
+    /** @var array<string, mixed> */
+    return $components->schemas()[Fqcn::short($model)]['properties'] ?? [];
 }

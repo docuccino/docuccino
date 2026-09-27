@@ -240,7 +240,8 @@ Where every member publishes a property that at least two pin but the set falls 
 it open, or two share a value — `components.union-undiscriminated` names it; an untagged union reports
 nothing. There is deliberately no second emitter: a union of Eloquent models (a `MorphTo`) goes through
 the same rule, and is not discriminated by its morph map, because the alias lives in the parent's
-`*_type` column and no member's payload carries it.
+`*_type` column and no member's payload carries it. That column is where the map reaches the document —
+see [Morph type columns](#morph-type-columns).
 
 The value a member pins comes from the engine (`Metadata\FixedPropertyValues`), which types a property
 as the literal every instance holds only where PHP guarantees it: a `readonly`, non-promoted property
@@ -254,6 +255,29 @@ access — the class's body, an ancestor's (readonly is implicitly `protected(se
 clone-with may re-initialise from anywhere. Each of those leaves the declared type. The read is of the
 hierarchy's source, so what it cannot see is not covered: a closure bound into the class's scope from
 elsewhere, and `unserialize()`, which restores whatever the payload holds.
+
+### Morph type columns
+
+A `morphTo`'s type column holds what `Model::getMorphClass()` answers for the related model: its FIRST
+alias in the morph map, else its class name — except under `Relation::enforceMorphMap()`, where an
+unmapped model throws instead of being written. `MorphTypeValues` publishes the column as the enum of
+those answers wherever the set is closed, and otherwise leaves the declared type alone:
+
+- **Enforced:** the map bounds the set. The values are the aliases of every mapped, instantiable model
+  that is one of the relation's targets (a subclass of an abstract target included), or of every mapped
+  model where the relation names none (`MorphTo<Model, $this>`).
+- **Not enforced:** an unmapped model writes its class name, so the targets must be known and none may
+  have a subclass the build cannot see. `final` is the only proof of that PHP gives.
+- **Open either way:** a target that overrides `getMorphClass()` writes what its own code says; an
+  accessor over the column decides what is serialised; a `morphTo()` whose column cannot be read might
+  own any column on the model; and a set that comes out empty is a misreading, not a column.
+
+The targets come from the relation method's declared `@return` generic (`DeclaredReturnType`), because
+the engine types the body `$this->morphTo()` as the framework's `MorphTo<Model, $this>`. The values
+describe what is written under the booted map; rows stored before an alias was introduced may still hold
+the class name. The map keys the environment digest by the enforcement flag and each model's resolved
+alias, taken in registration order before sorting, and every class the answer read is a fragment
+dependency.
 
 ### Diff polarity: what a change under a subschema position is worth
 
