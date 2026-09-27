@@ -61,6 +61,10 @@ by a conditional merge are optional; keys from a plain `merge()` are not.
 every branch merged into one schema, rather than the first branch winning and the others' keys
 vanishing.
 
+**Nothing to send.** When a `toArray()` can return no key at all — a branch returning `[]`, or every
+key conditional — Laravel sends an empty JSON array, `[]`, not `{}`. The component is documented as
+the object or that empty array, so a client doesn't reject the response.
+
 **Naming.** A component takes the resource's short class name by default. Override the published name
 with [`#[SchemaName]`](/laravel/reference/attributes/#schemaname), and pin the identity the diff engine
 tracks — so a class rename isn't reported as a removal plus an addition — with
