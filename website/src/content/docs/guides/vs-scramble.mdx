@@ -96,7 +96,6 @@ string beside a validated field.
 | JSON:API resources (`timacdonald/json-api`) | ✓ | — | ✓ |
 | …with the `include` and `fields` query parameters | ✓ | — | — |
 | Spatie JSON API Paginate parameters | ✓ | — | ✓ |
-| Polymorphic `MorphTo` → discriminated `oneOf` | ✓ | — | — |
 
 Two of those rows are about matching what the router and HTTP already decided. Where a route declares
 `{token}` and the controller receives it as `$jwt`, the documented parameter is `{token}` — the name a
@@ -173,7 +172,7 @@ against:
   rules over the same bracketed key merge onto the parameter the allow-list named.
 - **Responses** — API Resources (including conditional and closure fields), Eloquent model schemas
   from casts and `@property` docblocks, Data objects, backed enums with case descriptions, pagination
-  envelopes, JSON:API resources, and polymorphic `MorphTo` returns as a discriminated `oneOf`. Beyond
+  envelopes, JSON:API resources, and unions of classes told apart by a fixed tag as a discriminated `oneOf`. Beyond
   JSON: rendered views as `text/html`, file downloads and streams as a binary body under the media type
   the call names, and `eventStream()` as `text/event-stream`.
 - **Reusable components** — DTOs, models, resources, request bodies and enums hoisted to

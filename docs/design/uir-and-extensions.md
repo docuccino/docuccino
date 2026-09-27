@@ -204,6 +204,57 @@ the canonicalizer, one in the structural hash. `DeclaredShapeTest` therefore fai
 anywhere in the packages naming three or more positioned keywords unless it is one of the four
 sanctioned lists, each stated for a reason that is not "which keywords carry subschemas".
 
+### Discriminated unions
+
+A union of components is published as `anyOf` by whichever producer built it (`SchemaUnion`), and one
+reader decides afterwards whether it is owed `oneOf` + `discriminator`: `Schema\DiscriminatedUnion`, run
+by the assembler over the finished document, before overlays. The rule is read off the component
+BODIES, never the classes behind them, so it holds whichever mapper built a member and never claims a
+hidden or renamed property:
+
+- every non-null member is a pure `$ref` to a component (an inline member has no name for a `mapping`
+  to point at);
+- every member's body REQUIRES one property and pins it to a string — `const`, or a one-value `enum` —
+  that no other member shares. Distinct pinned values are what make the members mutually exclusive,
+  which is the one thing `oneOf` asserts over `anyOf`, so a union that earns no discriminator is not
+  given `oneOf` either. Where two properties qualify, the first by name wins; a value PHP would read
+  back as an integer key is left out, since a mapping keyed by it would publish as a JSON list.
+
+Deciding over the FINISHED document is what makes the answer a function of the classes alone. Decided
+while converting, a union met while one of its members was still being expanded — any hierarchy that
+refers back to itself: a tree, a thread of replies — had no body to read for that member, and since the
+registry keeps the first body registered per identity, the published parent depended on which route a
+build met first. It also makes cold equal warm without the diagnostic riding on a fragment: the
+assembler re-reads the same components either way. The walk reads members by `Document\DocumentMembers`,
+so a union under a property or response named `default`, `enum` or `x-…` is read like any other, and
+one written inside an example is data.
+
+A `null` member carries no tag, and a discriminator dispatches on a property every option of its
+`oneOf` carries, so a nullable tagged union is spelled `anyOf: [{oneOf, discriminator}, {type: null}]`
+— never `null` inside the `oneOf`, which a generator building a tagged union from the discriminator
+has no member for. The 3.0 downlevel folds the null branch into `nullable: true` beside the `oneOf`,
+and raises `downlevel.nullable-composition`: 3.0.3's `nullable` adds null only beside a `type`, so a 3.0
+reader may take the fold as the `oneOf` alone. It is the closest 3.0 spelling, not an exact one.
+
+Where every member publishes a property that at least two pin but the set falls short — a member leaves
+it open, or two share a value — `components.union-undiscriminated` names it; an untagged union reports
+nothing. There is deliberately no second emitter: a union of Eloquent models (a `MorphTo`) goes through
+the same rule, and is not discriminated by its morph map, because the alias lives in the parent's
+`*_type` column and no member's payload carries it.
+
+The value a member pins comes from the engine (`Metadata\FixedPropertyValues`), which types a property
+as the literal every instance holds only where PHP guarantees it: a `readonly`, non-promoted property
+of a `final` class, assigned by the class's own constructor as a top-level statement (nothing that could
+`return` or `goto` before it), from a string or int literal, a backed enum case, or a class constant
+holding one, whose declared type holds it without coercion. Readonly makes that one assignment the
+answer — any other write throws — except where PHP re-initialises a readonly property on a copy: a
+`__clone` (its own or inherited), a `clone($object, [...])` with properties (8.5) anywhere with set
+access — the class's body, an ancestor's (readonly is implicitly `protected(set)`, and a parent's
+`with(array $changes)` is the idiom), or a trait any of them uses — and a `public(set)` property, which
+clone-with may re-initialise from anywhere. Each of those leaves the declared type. The read is of the
+hierarchy's source, so what it cannot see is not covered: a closure bound into the class's scope from
+elsewhere, and `unserialize()`, which restores whatever the payload holds.
+
 ### Diff polarity: what a change under a subschema position is worth
 
 The position table says where a subschema hangs. It does not say what an edit down there means, and it

@@ -115,6 +115,9 @@ them.
   returns `[]` on one branch.
 - `app/Http/Resources/CompactableResource.php` — a ternary `toArray` (one return site, two shapes)
   and a `with()` whose other branch returns request input.
+- `app/Timeline/` — a `@phpstan-sealed` interface (`TimelineEntry`) over two final readonly classes
+  whose constructors fix a backed-enum `type`, and `app/Http/Controllers/TimelineController.php`
+  answering with a `list<TimelineEntry>` payload and a union of the two classes.
 
 ### QueryBuilder deep-chain trace (the Scramble-Pro-beater)
 
