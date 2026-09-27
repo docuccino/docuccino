@@ -34,4 +34,16 @@ class RenderCallbacks
     {
         return [function (OutOfStockException $e): JsonResponse { return response()->json(['error' => 'out_of_stock'], 409); }, function (OrderConflictException $e): JsonResponse { return response()->json(['error' => 'conflict'], 423); }];
     }
+
+    /** The same renderer written as an arrow function, whose one implicit return is its body. */
+    public function outOfStockArrow(): callable
+    {
+        return fn (OutOfStockException $e): JsonResponse => response()->json(['error' => 'out_of_stock'], 409);
+    }
+
+    /** A catch-all spelling its two answers as a ternary on the exception. */
+    public function conflictTernary(): callable
+    {
+        return fn (\Throwable $e): ?JsonResponse => $e instanceof OrderConflictException ? response()->json(['error' => 'conflict'], 423) : null;
+    }
 }

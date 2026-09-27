@@ -391,7 +391,37 @@ takes its guard from PHPStan's per-return flow narrowing. A
 `return match (true) { $e instanceof X => …, default => … }` renderer collapses to a SINGLE return
 whose scope leaves `$e` un-narrowed, so its arms are decomposed off the AST instead, reading each arm's
 own `instanceof` conditions (walking `&&`/`||`, so a compound condition contributes every class named).
-Selection is source-order-first-match either way — the runtime semantics of both shapes.
+Selection is source-order-first-match either way — the runtime semantics of both shapes. A returned
+ternary is the same conditional inline and expands the same way, one site per branch, each typed in the
+scope `filterByTruthyValue()`/`filterByFalseyValue()` leaves: collapsed, two responses are the supertype
+that says neither.
+
+A response POST-PROCESSOR (`$exceptions->respond()`) is read with `CallableRef::$narrowToEvery`, where
+nothing is chosen: every site the narrowed type reaches comes back, and PHPStan's own type for the
+parameter at each non-`match` site decides reachability too, since after `if ($e instanceof A) return …;`
+it says "anything but an A", which no guard of required classes spells. Each site also carries the
+parameter it returns unchanged (`ReturnSite::$returnsParameter`) and the literal-argument parameter calls
+whose value the site's scope proves (`CallCondition`; PHPStan remembers `$request->is('api/*')` narrowed
+inside the branch that tested it). What a call MEANS stays the adapter's.
+
+`ParameterUse` judges "unchanged" off the AST, over every use of the parameter that can run before the
+return. A use is a TOUCH unless it is the receiver of a reader (`get*`/`is*`/`has*` other than
+`isNotModified()`, which rewrites a response whose validators match into a 304 — the prefix rule is held to
+every such method of the framework's response classes by calling each; a header-bag reader; or a header
+write naming a literal header other than `Content-Type`), an `instanceof` operand, or the value itself
+handed out by a `return` through ternary/`match` branches. Everything else — reassignment, a write through
+it, any other call on it, and ANY other appearance (an argument to a function, static or method call, a
+constructor, an alias, a closure capture, `extract()`) — is a touch, because an object is a handle and code
+the analyser does not read may write through it; so is any reach into the scope that never names it (a
+variable variable, `func_get_args()`, `func_get_arg()`, `compact()`, `get_defined_vars()`,
+`debug_backtrace()` — PHP refuses to call these dynamically, so a call by name is every spelling). The
+rewritten answer is then read as unread, which keeps the rendered answer beside it and says so. A touch
+does not count where it cannot run first: in a branch exclusive of the return's (the other arm of an
+`if`/ternary/`match`), after a `return`, `throw` or `exit` that leaves first — unless a `try` with a catch
+encloses the touch, since whatever the touch throws lands in the catch, which may go on to the return (all
+but where the return sits in that same block with no loop around) — or written after the return, unless a
+loop encloses both or it sits in a `finally`. One escape is not read: a callee handed nothing reaching up the call stack for its caller's
+arguments (`debug_backtrace()` inside the helper), which no expression in the callback shows.
 
 Two honesty rules ride on top:
 
@@ -665,10 +695,11 @@ them for both — so the three layers are re-run over its throw points and the s
 it is written. Bounded to what the body itself writes: a closure at the argument, or one assignment behind
 it, against descent's own depth budget and cycle guard. The one caller with no offset to ask with is the
 handler tier, which locates a render callback from `ReflectionFunction`'s file+line
-(`FileAnalyzer::closureAtLine()`); a line carrying two callbacks is one reflection cannot tell apart, so
-it answers neither. An ARROW function is the boundary — PHPStan models it with `InArrowFunctionNode`,
-which carries no statement result, so there are no throw points to read and the exception is not surfaced
-at all (pinned as a fixture row rather than described).
+(`FileAnalyzer::callableAtLine()`, closures and arrow functions alike — an arrow function's one return is
+its body expression in the scope `InArrowFunctionNode` is walked with); a line carrying two callbacks is
+one reflection cannot tell apart, so it answers neither. For THROWS an arrow function is the boundary —
+`InArrowFunctionNode` carries no statement result, so there are no throw points to read and the exception
+is not surfaced at all (pinned as a fixture row rather than described).
 
 The callee's OWN signature decides what is left to read after it, and it is a function of the version the
 app resolved. `Connection::transaction()` returns `mixed` up to Laravel 12 and is generic over its callback

@@ -510,7 +510,7 @@ doesn't:
 	public function __invoke(Throwable $e, Request $request): ?JsonResponse
 	{
 	    return match (true) {
-	        $e instanceof ModelNotFoundException => ProblemDocumentData::notFound($e)->toProblemResponse($request),
+	        $e instanceof NotFoundHttpException => ProblemDocumentData::notFound($e)->toProblemResponse($request),
 	        default => null,
 	    };
 	}
