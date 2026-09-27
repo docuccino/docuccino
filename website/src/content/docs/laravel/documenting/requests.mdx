@@ -3,7 +3,7 @@ title: Requests
 head:
   - tag: title
     content: 'OpenAPI from Laravel Form Requests and Validation | Docuccino'
-description: Document path, query, header and cookie parameters, request bodies, and file uploads — read statically from your routes and validation rules.
+description: Document path, query, header and cookie parameters, request bodies, and file uploads — read statically from your routes, validation rules and request reads.
 ---
 
 import { Card, CardGrid, Tabs, TabItem, Aside } from '@astrojs/starlight/components';
@@ -1007,15 +1007,63 @@ An explicit `file`/`image` rule or attribute is honored as before and never doub
 
 ## Headers and cookies
 
-Headers and cookies aren't inferable — nothing in a route or a rules array names them — so declare
-them where they matter. [`#[HeaderParameter]`](/laravel/reference/attributes/#headerparameter) and
-[`#[CookieParameter]`](/laravel/reference/attributes/#cookieparameter) are repeatable and take the same
-shape:
+A header your code reads by name is documented for you. `$request->header('Idempotency-Key')`,
+`$request->hasHeader(…)`, `$request->headers->get(…)`, `request()->header(…)` and the `Request` facade
+all count — in the action, in anything it calls, and in the FormRequest, including the methods Laravel
+runs while resolving it such as `authorize()` and `prepareForValidation()`:
 
 <Tabs>
 	<TabItem label="Your code">
 	```php
-	#[HeaderParameter(name: 'X-Idempotency-Key', type: 'string', required: true, description: 'Replay guard for retries')]
+	class StoreOrderRequest extends FormRequest
+	{
+	    public function idempotencyKey(): ?string
+	    {
+	        return $this->header('Idempotency-Key');
+	    }
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"parameters": [
+	  { "name": "Idempotency-Key", "in": "header", "required": false, "schema": { "type": "string" } }
+	]
+	```
+	</TabItem>
+</Tabs>
+
+A read proves the server looks at the header, not that it insists on it, so the parameter is optional.
+One header read under several spellings is one parameter. Some reads are never published this way:
+
+- `Accept`, `Content-Type` and `Authorization` — OpenAPI states them through the request body, the
+  responses and the security scheme.
+- A header an `apiKey` security scheme or the [API version](/laravel/guides/api-versioning/) already
+  carries.
+- A header only the FormRequest's `authorize()` reads. That is a gate: without the header the request is
+  refused, so it is not an optional input, and its name is often one you never meant to publish.
+- Headers the transport or a proxy sets rather than your clients: `Host`, `Cookie`, `Content-Length`,
+  `Connection`, `Transfer-Encoding`, `Forwarded`, `X-Forwarded-*`, `X-Real-IP` and `CF-Connecting-IP`.
+- A name built at runtime, `$request->header($name)`, which Docuccino cannot know.
+
+A header your code reads anywhere else is published, so check what your document says about any header
+you use for access control outside `authorize()`. To keep one out, name it — as the document spells it —
+in [`#[IgnoreParam]`](/laravel/reference/attributes/#ignoreparam):
+
+```php
+#[IgnoreParam(name: 'X-Internal-Trace', in: 'header')]
+public function show(Order $order): OrderResource { /* … */ }
+```
+
+To say more — that a header is required, its format, what it is for — declare it.
+[`#[HeaderParameter]`](/laravel/reference/attributes/#headerparameter) and
+[`#[CookieParameter]`](/laravel/reference/attributes/#cookieparameter) are repeatable, take the same
+shape, and win over what was read:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	#[HeaderParameter(name: 'Idempotency-Key', type: 'string', format: 'uuid', required: true, description: 'Replay guard for retries')]
 	#[CookieParameter(name: 'invoice_preview', type: 'string', description: 'Signed preview token')]
 	public function store(StoreInvoiceRequest $request): InvoiceResource { /* … */ }
 	```
@@ -1023,14 +1071,17 @@ shape:
 	<TabItem label="Generated OpenAPI">
 	```json
 	"parameters": [
-	  { "name": "X-Idempotency-Key", "in": "header", "description": "Replay guard for retries",
-	    "required": true, "schema": { "type": "string" } },
+	  { "name": "Idempotency-Key", "in": "header", "description": "Replay guard for retries",
+	    "required": true, "schema": { "type": "string", "format": "uuid" } },
 	  { "name": "invoice_preview", "in": "cookie", "description": "Signed preview token",
 	    "required": false, "schema": { "type": "string" } }
 	]
 	```
 	</TabItem>
 </Tabs>
+
+Cookies are declared only: Laravel encrypts the cookies it sets, so a client cannot send one it was
+not given, and a cookie read is not an input a generated client could supply.
 
 Parameters are emitted in a fixed order — path, then query, then header, then cookie, each group sorted
 by name — so adding one never reshuffles the rest of the list.
