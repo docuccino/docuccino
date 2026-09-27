@@ -10,6 +10,7 @@ use Docuccino\Core\Extensions\Contracts\Finalization;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\RouteBindingFieldSchemaResolver;
 use Docuccino\Core\Extensions\Contracts\RouteBindingKeyResolver;
+use Docuccino\Core\Extensions\Contracts\SchemaContext;
 use Docuccino\Core\Extensions\Contracts\TypeSchemaConverter;
 use Docuccino\Core\Extensions\Contracts\ValidationRulesToSchema;
 use Docuccino\Core\Extensions\ResolvedExtensions;
@@ -47,6 +48,8 @@ final class RouteContext
     private ?ActionAnalysis $analysis = null;
 
     private ?TypeSchemaConverter $converter = null;
+
+    private ?TypeSchemaConverter $requestConverter = null;
 
     private ?RepresentationPolicy $representation = null;
 
@@ -441,6 +444,16 @@ final class RouteContext
         // The converter gets this route's dependency bag so mappers recording files via
         // SchemaContext::dependsOn() widen the fragment cache key — see dependencies().
         return $this->converter ??= new SchemaConverter($this->extensions->typeToSchema, $this->engine, $this->components, $this->representation(), $this->dependencies);
+    }
+
+    /**
+     * The same converter for what a client SENDS — a declared request body field or parameter — so a
+     * class whose request shape differs from its response shape is published as its own request
+     * component ({@see SchemaContext::describesRequest()}).
+     */
+    public function requestConverter(): TypeSchemaConverter
+    {
+        return $this->requestConverter ??= new SchemaConverter($this->extensions->typeToSchema, $this->engine, $this->components, $this->representation(), $this->dependencies, request: true);
     }
 
     /** The document's representation policy, resolved once. */

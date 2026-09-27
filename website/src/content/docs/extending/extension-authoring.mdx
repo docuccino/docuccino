@@ -141,6 +141,7 @@ schema:
 | `engine(): TypeEngine` | The inference engine, for `classMetadata()` class expansion. |
 | `atRoot(): bool` | Whether what you're building occupies the response or parameter root. Read it when your output depends on being at the root — a top-level wrapping key, say. A union branch is at the root when its union is, so never spell this as `depth() === 1`. |
 | `depth(): int` | Recursion depth of the running conversion — `1` at a response or parameter root, deeper for each conversion nested inside it, composite members included. For root-ness use `atRoot()`. |
+| `describesRequest(): bool` | Whether the conversion describes what a client sends — a declared request body field or parameter — rather than what the server writes. Read it when a class's shape differs between the two, such as a key a default fills in, which a request may leave out; publish that shape under its own identity so the two never dedupe into one. |
 | `representation(): RepresentationPolicy` | The document's representation policy (enum naming, how nullability is expressed, and so on). |
 
 `convert()` never returns `null` — an unresolvable type comes back as `{}`, so you can always nest it
