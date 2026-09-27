@@ -154,6 +154,56 @@ to make readable.
 
 An empty schema hoists nowhere, so nothing is minted into `components` for a shape nobody read.
 
+### Exceptions translated by `map()`
+
+Laravel swaps an exception you register with `$exceptions->map()` for its translation before anything
+renders it, so the exception's own `render()`, your render callbacks and `respond()` all see the
+translation and never the class thrown. Docuccino documents the error the same way: as the exception your
+map translates it to.
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// bootstrap/app.php
+	->withExceptions(function (Exceptions $exceptions): void {
+	    $exceptions->map(PaymentDeclined::class, fn (PaymentDeclined $e) => new HttpException(402, $e->getMessage()));
+	    $exceptions->map(InvoiceMissing::class, AuthorizationException::class);
+	})
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"402": {
+	  "description": "Error",
+	  "content": {
+	    "application/json": {
+	      "schema": {
+	        "type": "object",
+	        "properties": {
+	          "message": { "type": "string" }
+	        }
+	      }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+A route that throws `PaymentDeclined` is documented with the `402` your closure builds, and one that
+throws `InvoiceMissing` with the `403` an authorization denial renders to. Every form `map()` accepts is
+read: a class-string target, a closure beside the class it translates, and a single closure keyed on its
+parameter type. An entry keyed on a parent class translates every subclass thrown, and where several
+entries match, the first one registered wins, as it does in Laravel. Errors the framework raises for you,
+like a route binding's missing model or a failed validation, are translated too.
+
+The status is read from what the closure returns, the same way it is read from a `throw`: a literal
+argument, a local assigned once, or a class that fixes its own status. When the class reads and the status
+does not, the error is documented as that class under the [stand-in status](#when-a-500-is-a-stand-in).
+When the closure's return can't be named at all, or it returns different exceptions on different branches,
+the error stays documented as the exception thrown. Either way the `inferred-handler.too-dynamic`
+diagnostic names the map entry, so you know which one to make readable.
+
 ### Errors reshaped in `respond()`
 
 Laravel passes every rendered error through the callback you give `$exceptions->respond()`, and

@@ -3460,6 +3460,21 @@ function registerRespondCallback(callable $callback, string $exceptionType): str
 }
 
 /**
+ * Register an exception-map entry on the booted exception handler — `map($from, $to)` exactly as an
+ * application writes it — and return the `CallableRef::symbol()` the translator analyses its mapper under
+ * for a throw of `$thrown`, so a stub engine can be scripted for exactly that key. Empty for an entry with
+ * nothing to analyse: a class-string target, or a mapper with no source.
+ */
+function registerExceptionMap(Closure|string $from, Closure|string|null $to, string $thrown): string
+{
+    /** @var Handler $handler */
+    $handler = app(ExceptionHandler::class);
+    $handler->map($from, $to);
+
+    return (new HandlerReflector($handler))->mappingFor($thrown)?->ref($thrown)?->symbol() ?? '';
+}
+
+/**
  * Run one document lint over a raw document array and hand back what it reported. The completeness
  * lints share it rather than each re-rolling the draft → context wiring.
  *

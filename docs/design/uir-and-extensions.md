@@ -1303,6 +1303,25 @@ interface ExceptionToResponse {
 //   3. DefaultExceptionToResponse — the terminal fallback: {message} under the status.
 //      User extensions slot in by order; attributes/config override anything.
 
+interface ExceptionTranslator {
+    public function translate(ThrownException $e, RouteContext $ctx): ?ThrownException;
+}
+// Asked in order inside RouteContext::mapThrow() BEFORE the chain above, and the first answer is the
+// exception every mapper renders and every finalizer is handed — a framework that swaps an exception
+// before rendering it (Laravel's `$exceptions->map()`, applied at the top of Handler::render()) sends the
+// swap's response, never the thrown class's. Nothing re-translates an answer, as mapException() maps once.
+// The answer keeps the throw's call chain, confidence and disposition; only class and status move, and
+// MappedResponse::$translated carries it so a class-level #[ErrorComponent] names the body from the class
+// that RENDERED it. The Laravel implementation (InferredHandler\ExceptionMapTranslator) reads the booted
+// handler's `$exceptionMap` in registration order with mapException()'s `is_a()` on the THROWN class —
+// before prepareException(), so an entry keyed on ModelNotFoundException matches, and whatever it returns
+// is then prepared as usual. A class-string target is read off the closure map() wraps it in; a closure
+// is analysed with CallableRef::$returnsExceptions. A translation is taken only where it is the whole
+// answer — one exception every reachable return agrees on; a return naming no class, several exceptions,
+// or a translation beside the throw handed back keeps the thrown answer with inferred-handler.too-dynamic
+// (HandlerDeferralLog::recordMapping()), and so does a translation whose status nothing read, though that one is
+// still taken. The map joins the environment digest beside the render and respond callbacks.
+
 interface ErrorResponseFinalizer {
     public function finalization(ThrownException $e, ResponseDraft $rendered, RouteContext $ctx): Finalization;
     /** @return list<ResponseDraft> */
