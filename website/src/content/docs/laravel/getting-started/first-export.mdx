@@ -307,6 +307,7 @@ as its own losses. The first group below is what 3.1 already gives up; the rest 
 | --- | --- |
 | `type: [string, null]` | `type: string` with `nullable: true` |
 | `anyOf: [{$ref}, {type: null}]` | `allOf: [{$ref}]` with `nullable: true` |
+| `anyOf: [{enum: [a, b]}, {type: null}]` | `enum: [a, b, null]` with `nullable: true` — 3.0's `nullable` widens only the type, so the enum lists null itself |
 | `type: [string, integer]` | An `anyOf` of single-type branches |
 | `const: "draft"` | `enum: ["draft"]` |
 | A subschema of `true` or `false` | `{}` or `{"not": {}}` — the same constraint, in the only spelling 3.0 has for it |
