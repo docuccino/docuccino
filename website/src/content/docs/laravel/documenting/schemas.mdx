@@ -162,25 +162,10 @@ related models stay a graph of references, never an infinite inline expansion. A
 left out, under the name it's loaded by — `$hidden = ['latestPost']`, the relation's own name, rather
 than the snake-cased key it serializes as, which is the name Eloquent matches too.
 
-**Polymorphic relations.** A `morphTo` becomes a `oneOf` of the possible models, with a
-`discriminator` when every variant is registered in a morph map — so clients can tell the variants
-apart reliably:
-
-```json
-"schema": {
-  "oneOf": [
-    { "$ref": "#/components/schemas/Invoice" },
-    { "$ref": "#/components/schemas/Subscription" }
-  ],
-  "discriminator": {
-    "propertyName": "type",
-    "mapping": {
-      "invoice": "#/components/schemas/Invoice",
-      "subscription": "#/components/schemas/Subscription"
-    }
-  }
-}
-```
+**Polymorphic relations.** A `morphTo` becomes an `anyOf` of the possible models. There is no
+`discriminator`: the morph alias lives in the parent's `*_type` column, not in the related model's own
+body, so no field of the payload names the variant for a client to read. A model whose body does fix
+such a field is discriminated like any [tagged union](#tagged-unions).
 
 **Dates.** Eloquent hands every date attribute — a date cast, a `$dates` entry, the framework
 timestamps, a soft-delete column — to `serializeDate()` before it goes out, so the column is documented
@@ -317,6 +302,89 @@ recovers the element type, and nothing else — a tag can't swap the class or ma
 class names resolve through that file's `use` statements, and an accessor's `@return list<string>`
 types its property the same way. The `@phpstan-`/`@psalm-` prefixed forms of each tag are read too,
 and win over the plain one where both are present.
+
+## Tagged unions
+
+A payload that can be one of several classes usually carries a field saying which — a `type`, a
+`kind`. When each class fixes that field itself, the response is published as a `oneOf` with a
+`discriminator`, so a generated client gets a union it can narrow on the field instead of a bag of
+optional properties:
+
+```php
+enum AttachmentKind: string
+{
+    case Image = 'image';
+    case Link = 'link';
+}
+
+final readonly class ImageAttachment
+{
+    public AttachmentKind $kind;
+
+    public function __construct(public string $url, public int $width, public int $height)
+    {
+        $this->kind = AttachmentKind::Image;
+    }
+}
+
+// LinkAttachment likewise, with AttachmentKind::Link
+
+public function show(Attachment $attachment): ImageAttachment|LinkAttachment
+```
+
+```json
+"schema": {
+  "oneOf": [
+    { "$ref": "#/components/schemas/ImageAttachment" },
+    { "$ref": "#/components/schemas/LinkAttachment" }
+  ],
+  "discriminator": {
+    "propertyName": "kind",
+    "mapping": {
+      "image": "#/components/schemas/ImageAttachment",
+      "link": "#/components/schemas/LinkAttachment"
+    }
+  }
+}
+```
+
+Each class publishes its tag as the one value it can hold — `"kind": { "type": "string", "const":
+"image" }`, and required — which is what makes the members mutually exclusive. A property counts as
+fixed when it is `readonly`, the class is `final`, and the class's own constructor assigns it once, as
+a plain statement, from a string or integer literal, a backed enum case, or a class constant holding
+one. Anything looser — a value passed in, chosen by an `if`, or on a class a subclass could construct
+differently — could hold another member's value, so the union stays an `anyOf` with the property typed
+as declared. So does a class that can re-tag a copy of itself — a `clone($this, ['kind' => …])` in its
+own body, a parent class, or a trait either uses, or a `public(set)` property anyone may re-initialise
+that way. Where the
+members all publish the field and some of them fix it, an info diagnostic names the member that doesn't.
+
+A union that may also be `null` keeps the null outside the tagged members, since it carries no tag to
+dispatch on: `anyOf: [{ oneOf: [...], discriminator: {...} }, { type: "null" }]`. The same rule holds
+for any union of components — models, resources, data objects — whichever produced the members, and a
+member that refers back to the union (a tree, a thread of replies) is read like any other.
+
+**Interfaces and base classes.** A value typed by an interface could be any class that implements it,
+and nothing stops the next class from joining — so an interface on its own is documented as an open
+object. Seal it with the tag PHPStan and Psalm already enforce, and it's documented as exactly the
+classes it lists, under its own name:
+
+```php
+/**
+ * @phpstan-sealed ImageAttachment|LinkAttachment
+ */
+interface Attachment {}
+
+/** @return list<Attachment> */
+public function index(): array
+```
+
+`Attachment` becomes a component holding the `oneOf` and its `discriminator`, and the response is an
+array of `$ref`s to it. An abstract class sealed the same way — or with `@psalm-inheritors` — works
+alike. When exporting OpenAPI 3.0, which has no `const`, each tag goes out as a one-value `enum` and the
+`discriminator` is kept; a nullable union becomes the tagged `oneOf` with `nullable: true` beside it.
+OpenAPI 3.0.3 lets `nullable` add `null` only beside a `type`, so some 3.0 tools read that as the
+`oneOf` alone — the `downlevel.nullable-composition` info says so, and the 3.1 export has no such gap.
 
 ## Describing a schema
 

@@ -633,9 +633,10 @@ taking the FIRST match, or by mutating through it in sequence, order is not nois
 registration whose subject the model is a subclass of; morph aliasing ends in `array_search($fqcn,
 morphMap(), true)`, which takes the first alias for a class. Both mirror the framework correctly, both
 were keyed by a digest that sorted its records first, so two registration orders produced one digest and
-a warm build replayed a fragment computed under the other resolution — and the morph half reaches
-published bytes, since the alias it resolves to is a discriminator mapping key. The third is core's own:
-`ResolvedExtensions::cacheSignature()` sorted one entry per resolved instance while every chain reading
+a warm build replayed a fragment computed under the other resolution — and the morph half reached
+published bytes while the alias was a discriminator mapping key. (A model union is no longer
+discriminated by its morph map, so nothing published reads the map and its digest contributor is gone.)
+The third is core's own: `ResolvedExtensions::cacheSignature()` sorted one entry per resolved instance while every chain reading
 those instances is first-match-wins (`RouteContext`'s six resolvers, `SchemaConverter`'s mappers) or
 sequential mutation (`OperationPipeline`). Its docblock had already closed identity and multiplicity
 deliberately; order was the property left open, and `ExtensionSorter` decides it from the registration
@@ -1408,3 +1409,36 @@ URL, which the scan must SEE and must not flag), and the scanner's own counter-s
 switched off. It was executed against both originals restored, and named each one's file and
 function. `FormatsTest` holds the two boolean columns to agreeing row for row, with Arazzo's coming
 divergence named — two guards over two columns say nothing about whether the columns agree.
+
+## A name read as a keyword because of how it is spelled
+
+A document mixes two kinds of key. At a keyword position a key is the vocabulary — `default`, `enum`,
+`example`, `x-…` — and says what its value is. Inside a map of NAMES — `properties`, `responses`,
+`headers`, `components.schemas` — a key is whatever the application called the thing, and says nothing
+about it. A walk that decides by the key's spelling alone treats a property called `default` as a
+literal and a header called `x-request-id` as an extension, so what it does to a node depends on the name
+of the key holding it.
+
+*Instances.* Seven walks, found by one. The union settler left a union `anyOf` under `responses.default`
+or a property named `enum`, while the same union under `responses.200` was discriminated. The
+vacuous-union lint said nothing about the same shapes. The leakage lint scanned a property named
+`example` as a published value, reporting its schema's `description` and its example twice. The 3.2
+emitter left `x-docuccino` provenance, which is internal, on any node named `x-…`. Both downlevel
+emitters passed an `x-…`-named header, media type or component through unconverted, so the 3.0 and 3.1
+artifacts failed their own meta-schemas. And the emitted-reference check walked into a Responses
+Object's own extensions, and into an Example Object's `dataValue`, as if they were document.
+
+*The tell.* A skip list of keyword names, or `str_starts_with($key, 'x-')`, applied without asking
+whether the node is a map of names. The other tell is the opposite mistake: an `x-` key IS an extension
+in the two maps whose Object admits one (`paths`, `responses`), so "every key in a map is a name" is
+wrong as well.
+
+*The fix that worked.* One grammar, `Document\DocumentMembers`: whether a member holds data, and whether
+it opens a map of names. The whole-document walks read it. The two downlevel emitters already know every
+position exactly, so each gained the one fact they lacked: which of their maps admit extensions.
+
+*The tests that recognise it.* `DocumentMembersTest` has a row for every entry, and checks the OpenAPI
+half against the vendored 3.0, 3.1 and 3.2 meta-schemas, with a floor on how many maps it finds. The
+guard was run with `links` and the `responses` extensibility removed, and it failed on both. Each walk
+has rows for a name spelled like a keyword and for data in the same place. No scan refuses a new walk
+that skips by spelling. The skip-list tell is the review question.
