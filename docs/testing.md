@@ -285,7 +285,7 @@ would sit too close to the figure for an ordinary change to survive it (see `lar
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
 | `core`              | **97.49%** | 97    | fully in-process-measurable; 0.49pp above it, ~70 statements |
-| `laravel`           | **97.04%** | 96    | ratcheted 95 → 96; 97 declined at 6.27 statements, see below; 1.04pp above it, ~149 statements |
+| `laravel`           | **97.03%** | 96    | ratcheted 95 → 96; 97 declined at 3.88 statements, see below; 1.03pp above it, ~148 statements |
 | `inference-phpstan` | **52.14%** | 51    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51, 52 declined at 3.88 statements; 1.14pp, ~32 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
 | Overall             | 93.21%     | —     | informational only; no longer a gate             |

@@ -110,6 +110,11 @@ them.
   `response()->json([...])` constant-array payloads, `AnonymousResourceCollection`, and a
   union return with distinct per-line types.
 - `app/Http/Resources/UserResource.php` — a minimal `JsonResource` (`@mixin User`).
+- `app/Http/Resources/EnvelopedResource.php`, `ReleaseResource.php`, `TracedResource.php` — a base
+  resource whose `with()` adds top-level members its subclass inherits, and one whose `with()`
+  returns `[]` on one branch.
+- `app/Http/Resources/CompactableResource.php` — a ternary `toArray` (one return site, two shapes)
+  and a `with()` whose other branch returns request input.
 
 ### QueryBuilder deep-chain trace (the Scramble-Pro-beater)
 
