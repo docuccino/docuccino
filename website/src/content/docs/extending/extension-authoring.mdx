@@ -262,6 +262,7 @@ And these cover the rest of the surface:
 | `RouteBindingKeyResolver` | Name the column a route-model-bound path parameter is matched on, so the parameter can say so to a consumer who cannot see your models. Return `null` for anything your resolver cannot settle from a declaration — a short description costs nothing, a wrong one sends clients to look records up by the wrong attribute. | `keyNameFor(string $modelFqcn): ?string` |
 | `EnvironmentDigestContributor` | Fold booted-app state your extension reads (guards, global config) into the cache key. | `digest(): string` |
 | `RouteNoteCollector` | Aggregate a finding many routes make into one your `DocumentTransformer` reports. | `channel(): string`, `forget(): void`, `collect(string $key, array $values): void` |
+| `ExceptionTranslator` | Swap a thrown exception for the one your framework actually renders, before any `ExceptionToResponse` sees it — the way an exception map translates one class into another. The first translator to answer wins. | `translate(ThrownException $exception, RouteContext $context): ?ThrownException` |
 | `ErrorResponseFinalizer` | Reshape every error response after the `ExceptionToResponse` chain has answered, the way a framework hook that rewrites all rendered errors does. Each finalizer is applied in order. | `finalization(ThrownException $exception, ResponseDraft $rendered, RouteContext $context): Finalization`, `responses(ThrownException $exception, ResponseDraft $rendered, RouteContext $context, ComponentRegistry $components): array`, `producer(): string` |
 | `TagMapper` | Customize how raw tags map to display tags. | `map(string $tag): string` |
 | `Viewer` | Render the docs page yourself, selected by name through `viewer.driver`. See [the viewer guide](/laravel/guides/viewer/#writing-your-own-driver). | `name(): string`, `render(ViewerContext $context): mixed` |
@@ -310,6 +311,12 @@ original registered, so no component is left behind for a body nobody is sent. `
 publishes what you build beside it, for a response that is sent on some requests and not others.
 `finalization()` is always asked first and `responses()` only when the answer is not `Keeps`, so both
 must reach the same answer from the same inputs.
+
+An `ExceptionTranslator` runs one step earlier. It is asked about each thrown exception before anything
+renders it, and whatever it returns is what every `ExceptionToResponse` renders and every finalizer is
+handed. Return `null` to leave the throw as it is. Keep the thrown exception's call chain, confidence and
+disposition on the one you return, since the error is still raised where it was. Only the class and the
+status change.
 
 `OperationExtension`s run in phases, so you can act at the right moment:
 
