@@ -404,6 +404,17 @@ parameter it returns unchanged (`ReturnSite::$returnsParameter`) and the literal
 whose value the site's scope proves (`CallCondition`; PHPStan remembers `$request->is('api/*')` narrowed
 inside the branch that tested it). What a call MEANS stays the adapter's.
 
+An exception MAPPER (`$exceptions->map()`) is read with `CallableRef::$returnsExceptions`: the sites are
+harvested exactly as for a post-processor, and each one that does not hand the parameter back is also read
+into `ActionAnalysis::$throws` as the throw of what it builds — `ThrowAnalyzer::returned()` wraps the
+returned expression in the `throw` it stands for and asks `statusForType()`, so a literal constructor
+argument, a local assigned once, a class's own static factory and a pinned status read exactly as they
+read at a `throw`, and one grammar decides both. Only an instantiable `Throwable` counts as a class; a
+return naming none (a declared interface, an abstract base, a `mixed`) comes back typed `UnknownT` rather
+than as its declared type, so the adapter can tell an incomplete answer from a whole one without reading a
+diagnostic code. What a translation MEANS — which entry matches, what several answers amount to — stays
+the adapter's (`InferredHandler\ExceptionMapTranslator`).
+
 `ParameterUse` judges "unchanged" off the AST, over every use of the parameter that can run before the
 return. A use is a TOUCH unless it is the receiver of a reader (`get*`/`is*`/`has*` other than
 `isNotModified()`, which rewrites a response whose validators match into a 304 — the prefix rule is held to

@@ -260,8 +260,11 @@ final class FixtureRunner
         string $param = '',
         string $narrowType = '',
         bool $every = false,
+        bool $returnsExceptions = false,
     ): array {
-        return self::invoke('analyze-callable', self::path($relPath), $class, $method, (string) $line, $param, $narrowType, $every ? 'every' : '');
+        $mode = $returnsExceptions ? 'exceptions' : ($every ? 'every' : '');
+
+        return self::invoke('analyze-callable', self::path($relPath), $class, $method, (string) $line, $param, $narrowType, $mode);
     }
 
     /**
