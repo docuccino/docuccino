@@ -499,6 +499,15 @@ importantly, NOT followed where the key only chose between sizes.
   Query-Builder terminal handing the request to the clamp, and a resource collection doing the same with no
   Query Builder anywhere.
 
+### Request headers
+
+- `app/Http/Requests/PlaceOrderRequest.php` + `app/Http/Controllers/RequestHeaderController.php` — headers
+  read by name through each receiver the framework offers: a FormRequest's `$this` in a method only the
+  action calls and in `prepareForValidation()`, which only the framework does; an injected request; the
+  `request()` helper under an `_` spelling; the facade and its global `\Request` alias. Beside them, the
+  reads that publish nothing: a credential only `authorize()` reads, a proxy's `X-Forwarded-For`, and a
+  response header SET through a method of the same name, which is no read at all.
+
 ### JSON:API + laravel-actions recovery
 
 - `app/Http/Resources/ArticleJsonApiResource.php` — a real `timacdonald/json-api` resource; the
