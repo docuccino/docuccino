@@ -300,7 +300,7 @@ the same worker files. No id and no count changes, so every report reads what it
 Raising the limit would have bought time, not room: the payload is tests × lines each test executes,
 and more processes only spread the same total over more files.
 
-## Measured coverage (2026-09-27)
+## Measured coverage (2026-09-28)
 
 Line coverage (statements) over the suite excluding the `fixture` group. These are the numbers the
 floors are set from — measure, then set the floor to the measured integer, unless the measured integer
@@ -308,14 +308,15 @@ would sit too close to the figure for an ordinary change to survive it (see `lar
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **97.51%** | 97    | fully in-process-measurable; 0.51pp above it, ~73 statements |
-| `laravel`           | **97.04%** | 96    | ratcheted 95 → 96; 97 declined at 5.51 statements, see below; 1.04pp above it, ~149 statements |
-| `inference-phpstan` | **53.55%** | 53    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51 → 53; 0.55pp, ~16 statements |
+| `core`              | **97.59%** | 97    | fully in-process-measurable; 0.59pp above it, ~85 statements |
+| `laravel`           | **97.07%** | 96    | ratcheted 95 → 96; 97 declined at 10.07 statements (0.069pp), see below; 1.07pp above it, ~157 statements |
+| `inference-phpstan` | **53.36%** | 53    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51 → 53; 0.36pp, ~11 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 93.22%     | —     | informational only; no longer a gate             |
+| Overall             | 93.25%     | —     | informational only; no longer a gate             |
 
-Every figure here is one `composer test:coverage` run of the whole set, so the three read off the same
-clover report and the floors file quotes the same numerators. A record that disagrees with itself is the
+Every figure here is one `composer test:coverage` run of the whole set — CI's coverage job on PHP 8.4,
+which is what the record describes — so the three read off the same clover report and the floors file
+quotes the same numerators. A record that disagrees with itself is the
 one artifact the ratchet policy has nothing else to check against, and it drifts a hundredth at a time:
 update all three in the same change or none of them.
 
@@ -361,6 +362,8 @@ is stated with it: a floor of 96 leaves 148 statements of room, and a regression
 the floor in silence. What answers that is the record check above, which fires at ten — the floor is no
 longer the only thing watching the number, which is what makes keeping its margin affordable. Ratchet to
 97 when the figure clears **97.20%**, about 28 statements, the order of margin the other two floors carry.
+Re-recorded at 97.07% (14,239/14,669) it has not: a floor of 97 would carry 10.07 statements, so the
+decline stands.
 
 **A floor drop is only ever a documented denominator change**, and there have been two.
 

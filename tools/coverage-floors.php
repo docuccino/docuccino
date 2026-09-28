@@ -36,26 +36,27 @@ declare(strict_types=1);
  */
 const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
-    // phpdoc type grammar, the contract checker. Measured 97.51% (14149/14511) — the floor sits at the
-    // measured integer, with 0.51pp above it: seventy-three statements. It was ratcheted 96 → 97 back when
+    // phpdoc type grammar, the contract checker. Measured 97.59% (14264/14617) — the floor sits at the
+    // measured integer, with 0.59pp above it: 85.51 statements (97% of the denominator is 14178.49), and 98
+    // is out of reach. It was ratcheted 96 → 97 back when
     // the figure was 97.51% over a denominator 1189 statements smaller, dipped to 97.39% as core absorbed
     // work at slightly under its own average, and has come back up without the floor needing to move
     // either time — the ordinary shape for a package this size, and why 97 is where it stays.
-    'core' => ['floor' => 97, 'measured' => 97.51],
+    'core' => ['floor' => 97, 'measured' => 97.59],
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/, the
-    // contract-testing assertions. Measured 97.04% (13893/14317), and the floor stays at 96 rather than
+    // contract-testing assertions. Measured 97.07% (14239/14669), and the floor stays at 96 rather than
     // ratcheting to the measured integer. The arithmetic, on the record as the policy asks: 97% of this
-    // denominator is 13887.49 statements against the 13893 covered, so a floor of 97 would carry 5.51
-    // statements — 0.038pp, an order of magnitude under the 0.51pp `core` carries and the 0.55pp the
-    // engine floor below carries. The cost of declining is real and is the other half of the decision: 96
-    // leaves 149 statements of room, so a genuine regression smaller than that passes the FLOOR in
+    // denominator is 14228.93 statements against the 14239 covered, so a floor of 97 would carry 10.07
+    // statements — 0.069pp, an order of magnitude under the 0.59pp `core` carries and still well under the
+    // 0.36pp the engine floor below carries. The cost of declining is real and is the other half of the
+    // decision: 96 leaves 157 statements of room, so a genuine regression smaller than that passes the FLOOR in
     // silence. What answers that is the record check further down, which fires at ten — the floor is no
     // longer the only thing watching this number, which is why it can afford to keep its margin. The
     // margin is worth keeping because the failure this package is exposed to is a denominator change, not
     // a lost proof: deleting 259 fully covered adapter statements drops the ratio under 97 with no change
     // in test quality at all, and deletions of that size have happened here twice. Ratchet to 97 when the
     // figure clears 97.20% — about 28 statements, the order of margin the other two floors carry.
-    'laravel' => ['floor' => 96, 'measured' => 97.04],
+    'laravel' => ['floor' => 96, 'measured' => 97.07],
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
     // which pcov cannot instrument either way. Its behavioural proof is the `fixture` group, not this
@@ -91,12 +92,12 @@ const FLOORS = [
     // question per call, so it came out into `ParameterUse` and unit-tests in process; 52 was declined
     // there at 3.88 statements of margin. It RATCHETED again 51 → 53 when reading which properties a class
     // fixes to one value landed in the measurable half the same way — native reflection plus php-parser
-    // over the constructor (`FixedPropertyValues`), unit-tested over real probes. Measured 53.55%
-    // (1576/2943): 53% of that denominator is 1559.79 statements against the 1576 covered, sixteen of
-    // margin. The record leaves out the rows that only run on the newest PHP (clone-with), which the
+    // over the constructor (`FixedPropertyValues`), unit-tested over real probes, at 53.55% (1576/2943).
+    // Measured 53.36% (1596/2991): 53% of that denominator is 1585.23 statements against the 1596 covered,
+    // 10.77 of margin, and 54 is out of reach, so the floor holds. The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads a few statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 53, 'measured' => 53.55],
+    'inference-phpstan' => ['floor' => 53, 'measured' => 53.36],
 ];
 
 /*
