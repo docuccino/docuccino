@@ -10,37 +10,18 @@ use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
 use Docuccino\Core\Extensions\Validation\ValidationField;
 use Docuccino\Core\Extensions\Validation\ValidationRule;
+use Docuccino\Core\Support\PortablePattern;
 
 /**
- * `regex:/…/` → a string schema with the body as its ECMA-262 `pattern`, but only when the body means
- * the same thing there as it does to PHP. A modifier changing what matches (`i`, `m`, `s`, `x`), a body
- * outside the portable subset, or a regex PHP cannot compile publishes no pattern: a plain string is
- * wider than the server, and true.
+ * `regex:/…/` → a string schema whose `pattern` is the body read as {@see PortablePattern} reads it: exact,
+ * or wider where PHP's `u` makes a class escape match every script or its `$` without `D` takes a final `\n`.
+ * A modifier changing what matches (`i`, `m`, `s`, `x`), a body no pattern states truly, or a regex PHP
+ * cannot compile publishes no pattern.
  */
 final class RegexRuleTransformer implements RuleTransformer
 {
     /** The PCRE modifiers that change which strings match; dropping any other (`u`, `A`, `D`, `U`, …) never narrows it. */
     private const MATCH_CHANGING = ['i', 'm', 's', 'x'];
-
-    /**
-     * The subset ECMA-262 reads exactly as PCRE does, with or without either engine's `u`: printable ASCII
-     * literals, escaped syntax characters, positive bracket classes, `(…)`/`(?:…)`, `|`, `^`/`$` and the
-     * greedy or lazy quantifiers. Every atom matches ASCII alone, so a count means the same in bytes, code
-     * points and UTF-16 units. `%s` is the class escapes, which are ASCII only while PHP's `u` is off.
-     */
-    private const PORTABLE = <<<'REGEX'
-        /\A(?:
-            (?:
-                [\x20-\x23\x25-\x27\x2C\x2D\x2F-\x3E\x40-\x5A\x5F-\x7A\x7E]
-              | \\[\^$\\.*+?()[\]{}|\/]
-              %1$s
-              | \[(?!\^)(?:[\x20-\x5A\x5E-\x7E] | \\[\^$\\.*+?()[\]{}|\/-] %1$s)+\]
-              | \)
-            )(?:(?:[*+?]|\{[0-9]+(?:,[0-9]*)?\})\??)?
-          | \((?:\?:)?
-          | [|^$]
-        )*\z/x
-        REGEX;
 
     public function supports(ValidationRule $rule): bool
     {
@@ -79,8 +60,13 @@ final class RegexRuleTransformer implements RuleTransformer
             return;
         }
 
-        if (@preg_match($regex, '') !== false && $this->portable($body, str_contains($modifiers, 'u'))) {
-            $field->set('pattern', $body);
+        // Laravel runs the regex as written, a search anchored only where the author anchored it.
+        $pattern = @preg_match($regex, '') === false
+            ? null
+            : PortablePattern::translate($body, unicode: str_contains($modifiers, 'u'), anchors: true, endOnly: str_contains($modifiers, 'D'));
+
+        if ($pattern !== null) {
+            $field->set('pattern', $pattern);
 
             return;
         }
@@ -92,15 +78,11 @@ final class RegexRuleTransformer implements RuleTransformer
                 'The regex on field "%s" reads differently as a JSON Schema pattern, so no pattern is published.',
                 $field->path(),
             ),
-            help: 'Spell it with ASCII literals, escaped syntax characters, bracket classes such as `[0-9]`, `^` and `$`, groups, '
-                .'alternation and quantifiers, and it is published. Under `/u`, `\d`, `\w` and `\s` match every script, which '
-                .'a pattern cannot say; `\A`, `\z`, inline flags and lookarounds are PHP-only.',
+            help: 'Spell it with ASCII literals, escaped syntax characters, bracket classes such as `[0-9]`, anchors, groups, '
+                .'alternation and quantifiers, and it is published. PHP and a JSON Schema validator part on `.`, on `\s` and `\b` '
+                .'under `/u`, on `\\B` without it, on a count such as `{4}` over a negated class or a class escape, and on PHP-only syntax: inline '
+                .'flags, lookarounds, possessive quantifiers.',
         ));
-    }
-
-    private function portable(string $body, bool $unicode): bool
-    {
-        return preg_match(sprintf(self::PORTABLE, $unicode ? '' : '| \\\\[dws]'), $body) === 1;
     }
 
     /**
