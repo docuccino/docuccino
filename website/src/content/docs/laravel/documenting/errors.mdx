@@ -86,7 +86,7 @@ directly from the code:
 	<TabItem label="Generated OpenAPI">
 	```json
 	"402": {
-	  "description": "Error",
+	  "description": "Payment Required",
 	  "content": {
 	    "application/json": {
 	      "schema": {
@@ -104,8 +104,9 @@ directly from the code:
 </Tabs>
 
 Throw this from an action and a `402` response with that body shape is documented. The description is
-the RFC 9110 reason phrase for the status (`401` is `Unauthorized`, `422` is `Unprocessable Entity`, and
-so on); a status without a standard phrase — like `402` here — is documented with a generic `Error`. If a
+the status's registered reason phrase (`401` is `Unauthorized`, `402` is `Payment Required`, `422` is
+`Unprocessable Entity`, and so on); a status the IANA registry does not name, like Laravel's `419`, is
+described by its class, `Client Error` or `Server Error`. If a
 handler is too dynamic to read statically, Docuccino records a diagnostic and publishes what it *did* read;
 where it read nothing at all the response falls to the next tier, which answers with the status alone
 wherever it can see a renderer of yours returning a response for that exception.
@@ -174,14 +175,15 @@ map translates it to.
 	<TabItem label="Generated OpenAPI">
 	```json
 	"402": {
-	  "description": "Error",
+	  "description": "Payment Required",
 	  "content": {
 	    "application/json": {
 	      "schema": {
 	        "type": "object",
 	        "properties": {
 	          "message": { "type": "string" }
-	        }
+	        },
+	        "required": ["message"]
 	      }
 	    }
 	  }
@@ -547,7 +549,9 @@ no analyser can read it — Docuccino knows the number the way you do, from the 
 look up.
 
 Anything outside that table still gets documented if its status is known: the final fallback tier emits
-`{ "message": string }` under the exception's status, or `500` when no status could be determined. Set
+the same `{ "message": string }` body, `message` required, under the exception's status, or `500` when no
+status could be determined. It is the body Laravel's renderer sends for any exception it renders, so an
+`HttpException` subclass of your own that fixes a `501` is documented exactly as the framework's `404` is. Set
 `error_responses` to `none` to emit no error responses at all.
 
 ### When a `500` is a stand-in
@@ -793,6 +797,11 @@ operation documents a `410`. A subclass of your own inherits the status the same
 so the one that falls through to `500` is the bare `HttpException`, whose status is an argument rather
 than a fact about the class.
 
+The same goes for any other status the IANA registry names, when the fallback tier documents it. An
+`HttpException` of your own that fixes a `501` publishes `NotImplemented`, a `502` `BadGateway`, a `504`
+`GatewayTimeout`, and so on for every registered code. A status the registry leaves unnamed, like Laravel's
+`419`, has only its class to go on, and every unnamed code shares that, so it publishes as `Error419`.
+
 An error nothing claims a name for still falls back to `Error<status>`, the statuses in that table
 included — the reason phrases belong to the tier documenting those errors, never to the status. A `402`
 your handler renders, a `404` it renders in the framework's place, or a body an
@@ -905,9 +914,9 @@ final class InvoiceNotFoundException extends ApiException {}
 final class PolicyDeniedException extends ApiException {}
 ```
 
-**It names a status that has no name of its own.** A `410` is `Error410` by default, because nothing in
-the table above speaks for it. The attribute is the only way that body gets called something a client
-can read.
+**It names a status that has no name of its own.** A `419` is `Error419` by default, because the IANA
+registry gives it no name to publish. The attribute is the only way that body gets called something a
+client can read.
 
 **Two exceptions may share one name.** Different classes raising the same error is normal, and where
 their bodies match under one status they publish one component. Where the bodies differ the name is
