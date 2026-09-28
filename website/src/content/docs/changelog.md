@@ -13,6 +13,31 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.20.3
+
+### Features
+
+- **laravel**: publish the request headers an action reads by name ([#558](https://github.com/docuccino/docuccino/pull/558))
+- **laravel**: publish the signature and expires query parameters a signed route requires ([#557](https://github.com/docuccino/docuccino/pull/557))
+- **inference-phpstan**: read an exception mapper's returns as the exceptions they build ([#554](https://github.com/docuccino/docuccino/pull/554))
+- **core**: let an extension translate a thrown exception before it is rendered ([#553](https://github.com/docuccino/docuccino/pull/553))
+- **laravel**: publish a morphTo's type column as the enum its morph map closes ([#552](https://github.com/docuccino/docuccino/pull/552))
+- **core**: publish a union of classes told apart by a fixed tag as a discriminated oneOf ([#544](https://github.com/docuccino/docuccino/pull/544))
+
+### Bug fixes
+
+- **laravel**: publish every status a choice of constant codes can send ([#561](https://github.com/docuccino/docuccino/pull/561))
+- **core**: describe a response by its own status, and let a declared status retire an unread one ([#560](https://github.com/docuccino/docuccino/pull/560))
+- **laravel**: publish a resource sent through ->response() as the resource ([#559](https://github.com/docuccino/docuccino/pull/559))
+- **laravel**: publish the 422 a read route's validated query can answer ([#556](https://github.com/docuccino/docuccino/pull/556))
+- **laravel**: document an exception as the class the exception map translates it to ([#555](https://github.com/docuccino/docuccino/pull/555))
+- **core**: let a nullable enum or const admit the null it is published beside ([#551](https://github.com/docuccino/docuccino/pull/551))
+- **laravel**: publish a field required after an exclude rule as required only while it is kept ([#550](https://github.com/docuccino/docuccino/pull/550))
+- **core**: require a plain object's nullable keys that json_encode always writes ([#549](https://github.com/docuccino/docuccino/pull/549))
+- **laravel**: publish the top-level members a root resource's with() adds ([#543](https://github.com/docuccino/docuccino/pull/543))
+- **laravel**: document every error as the respond() callback sends it ([#542](https://github.com/docuccino/docuccino/pull/542))
+- **ci**: let the pinned-phpstan fixture leg move larastan back with it ([#546](https://github.com/docuccino/docuccino/pull/546))
+
 ## v0.20.2
 
 ### Bug fixes
