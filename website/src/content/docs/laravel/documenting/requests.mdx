@@ -1094,6 +1094,64 @@ in [`#[IgnoreParam]`](/laravel/reference/attributes/#ignoreparam):
 public function show(Order $order): OrderResource { /* … */ }
 ```
 
+### Validating a header with your rules
+
+The Laravel way to validate a header — or a query value, or a route parameter — with ordinary rules is to
+copy it into the input in `prepareForValidation()`. Docuccino follows the copy: the rules for that key
+describe the header, and the key leaves the request body, because `merge()` writes over whatever the
+body sent:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	class StoreOrderRequest extends FormRequest
+	{
+	    protected function prepareForValidation(): void
+	    {
+	        $this->merge([
+	            'idempotency_key' => $this->header('Idempotency-Key'),
+	            'per_page' => $this->query('per_page'),
+	        ]);
+	    }
+
+	    public function rules(): array
+	    {
+	        return [
+	            'sku' => ['required', 'string'],
+	            'idempotency_key' => ['required', 'uuid'],
+	            'per_page' => ['nullable', 'integer', 'max:100'],
+	        ];
+	    }
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"parameters": [
+	  { "name": "per_page", "in": "query", "required": false,
+	    "schema": { "type": "integer", "maximum": 100 } },
+	  { "name": "Idempotency-Key", "in": "header", "required": true,
+	    "schema": { "type": "string", "format": "uuid" } }
+	]
+	```
+	The request body documents `sku` alone.
+	</TabItem>
+</Tabs>
+
+A header that was not sent is copied as `null`, and the key is there either way, so `sometimes` never
+skips its rules. The parameter is required unless the rules let a `null` through: `nullable` does, and
+so does a rule that only bounds a value, such as `max:36` on its own. Which rules refuse one is asked of
+the Laravel you have installed, because that moves between versions: 13 refuses a `null` for `ascii`,
+and 12 lets it through. A rule that reads another field, a database or the network is never asked, so
+it never makes the parameter required. A route parameter is already required and typed by the route, so
+its copy only leaves the body. A `#[HeaderParameter]` still wins over what the rules say.
+
+Only a copy Docuccino can be certain of counts: an unconditional `$this->merge([...])` with a literal key
+and a value read by a literal name — `$this->header('…')`, `$this->headers->get('…')`,
+`$this->query('…')` or `$this->route('…')`. A copy inside an `if`, a key written twice, a computed value
+such as `Str::slug($this->input('title'))`, or a hook that also calls your own methods, hands `$this` to
+other code, `replace()`s the input or returns early is documented as if the copy were not there.
+
 To say more — that a header is required, its format, what it is for — declare it.
 [`#[HeaderParameter]`](/laravel/reference/attributes/#headerparameter) and
 [`#[CookieParameter]`](/laravel/reference/attributes/#cookieparameter) are repeatable, take the same
