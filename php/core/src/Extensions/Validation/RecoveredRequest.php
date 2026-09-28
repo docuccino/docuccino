@@ -149,7 +149,7 @@ final class RecoveredRequest
         [$schema, $declaredRequired, $fieldDiagnostics] = $this->fields->apply(
             $schema,
             self::declaredOn($sourceClass, $context),
-            $context->converter(),
+            $context->requestConverter(),
             ClassNames::publishable($sourceClass),
         );
 

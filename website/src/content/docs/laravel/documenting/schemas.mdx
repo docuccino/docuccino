@@ -213,6 +213,34 @@ one place an annotation reaches: name it in a
 [`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) with a `format:`. Either way the
 notice keeps naming what could not state the format.
 
+## Plain PHP objects
+
+A class that is none of the above — a value object nested in a resource's `toArray()`, or returned in a
+`response()->json()` body — is documented from its public properties and hoisted to a component named
+after the class. PHP's `json_encode` writes every public property that has a value, `null` included, so
+a property is **required** whenever it always has one: it's promoted in the constructor, has a default,
+or is untyped. A nullable property like that is required with a `null`-admitting type, because the key
+is always there:
+
+```php
+final readonly class InvoiceLine
+{
+    public function __construct(
+        public string $sku,
+        public int $quantity,
+        public ?string $note, // required, as `string | null`
+    ) {}
+}
+```
+
+A typed property with no default that isn't promoted might never be assigned, and `json_encode` leaves
+out a property that has no value, so a nullable one of those is optional. A class that implements
+`JsonSerializable` decides its own keys, so its nullable properties stay optional too.
+
+Named as a request body type — `#[BodyParameter(type: InvoiceLine::class)]` — the same class is published
+as its own `InvoiceLineRequest` component, because what a client may send differs from what the server
+writes: a property with a default can be left out, so it's optional there, nullable or not.
+
 ## Enums
 
 A backed enum is documented as an `enum` schema from its cases (integer- or string-typed to match
