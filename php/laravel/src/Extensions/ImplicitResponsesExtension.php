@@ -24,7 +24,7 @@ use Docuccino\Laravel\Support\CanGate;
 use Docuccino\Laravel\Support\GateBody;
 use Docuccino\Laravel\Support\GateDenial;
 use Docuccino\Laravel\Support\IgnoredResponses;
-use Docuccino\Laravel\Support\MiddlewareName;
+use Docuccino\Laravel\Support\MiddlewareClasses;
 use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
 use Illuminate\Routing\Middleware\ValidateSignature;
 use ReflectionClass;
@@ -70,6 +70,7 @@ final class ImplicitResponsesExtension implements OperationExtension
 
     public function __construct(
         private readonly GateDenial $gates,
+        private readonly MiddlewareClasses $middleware,
         private readonly ResponseDraftApplier $applier = new ResponseDraftApplier,
     ) {}
 
@@ -134,7 +135,7 @@ final class ImplicitResponsesExtension implements OperationExtension
                 // ability, which {@see CanGate::matches()} answers to and which denies every request
                 // that meets it because no policy stands behind it. Returning on the second is also
                 // what leaves the report below at least one finding to name.
-                if (self::middlewareSignal($middleware) !== null) {
+                if ($this->middlewareSignal($context, $middleware) !== null) {
                     return;
                 }
 
@@ -215,7 +216,7 @@ final class ImplicitResponsesExtension implements OperationExtension
     private function authorizationSignal(RouteContext $context): ?string
     {
         foreach ($context->route->middleware as $middleware) {
-            $signal = self::middlewareSignal($middleware);
+            $signal = $this->middlewareSignal($context, $middleware);
             if ($signal !== null) {
                 return $signal;
             }
@@ -229,20 +230,17 @@ final class ImplicitResponsesExtension implements OperationExtension
      * above takes the first answer in route order, while the reachability check needs to know whether
      * anything OTHER than a `can:` gate is also holding the 403 up.
      */
-    private static function middlewareSignal(string $middleware): ?string
+    private function middlewareSignal(RouteContext $context, string $middleware): ?string
     {
         if (CanGate::matches($middleware)) {
             return 'can-middleware';
         }
-        // Each of these has the same two spellings the authorization middleware does, and the
-        // class-name one is what the framework's own static constructors write —
-        // `ValidateSignature::relative()` and `EnsureEmailIsVerified::redirectTo($route)`. Reading only
-        // the alias missed a middleware that really does produce the 403, which is worse than a missed
-        // signal: the reachability check then reports a route whose 403 the signature genuinely denies.
-        if (MiddlewareName::matches($middleware, 'signed', ValidateSignature::class)) {
+        // Asked by class, through the build's alias map: an application's own alias or subclass of either
+        // middleware produces the 403 too, and an alias re-pointed elsewhere does not.
+        if ($this->middleware->runs($context, $middleware, ValidateSignature::class)) {
             return 'signed-middleware';
         }
-        if (MiddlewareName::matches($middleware, 'verified', EnsureEmailIsVerified::class)) {
+        if ($this->middleware->runs($context, $middleware, EnsureEmailIsVerified::class)) {
             return 'verified-middleware';
         }
 

@@ -35,6 +35,7 @@ use Docuccino\Laravel\Tests\Fixtures\FormRequest\PlainRequest;
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
 use Illuminate\Routing\Middleware\ValidateSignature;
+use Workbench\App\Http\Middleware\ValidateLinkSignature;
 
 /**
  * The implicit-response matrix: 401/422/404/403 synthesized from statically visible middleware, binding
@@ -206,6 +207,8 @@ it('synthesizes a 403 for authorization middleware', function (string $middlewar
     'Authorize::using()' => [Authorize::using('update', 'post')],
     'ValidateSignature::relative()' => [ValidateSignature::relative()],
     'ValidateSignature::absolute()' => [ValidateSignature::absolute()],
+    // What the older skeleton's own subclass renders from the same constructor.
+    "an application's ValidateSignature subclass" => [ValidateLinkSignature::relative()],
     'EnsureEmailIsVerified::redirectTo()' => [EnsureEmailIsVerified::redirectTo('verification.notice')],
 ]);
 

@@ -34,6 +34,7 @@ use Docuccino\Laravel\Extensions\PathParametersExtension;
 use Docuccino\Laravel\Extensions\RecordedExamplesExtension;
 use Docuccino\Laravel\Extensions\RouteServersExtension;
 use Docuccino\Laravel\Extensions\SecurityExtension;
+use Docuccino\Laravel\Extensions\SignedRouteParametersExtension;
 use Docuccino\Laravel\Extensions\UnmatchedIgnoredResponsesExtension;
 use Docuccino\Laravel\Extensions\ViewMediaType;
 use Docuccino\Laravel\Extensions\ViewTypeToSchema;
@@ -76,6 +77,7 @@ final class DefaultExtensions
         return [
             LaravelRouteResolver::class,
             PathParametersExtension::class,
+            SignedRouteParametersExtension::class,
             AttributeParametersExtension::class,
             AttributeRequestBodyExtension::class,
             InferredResponsesExtension::class,

@@ -60,6 +60,7 @@
             "Docuccino\\Core\\Tests\\": "php/core/tests/",
             "Docuccino\\Inference\\PhpStan\\Tests\\": "php/inference-phpstan/tests/",
             "Docuccino\\Laravel\\Tests\\": "php/laravel/tests/",
+            "Docuccino\\Tools\\PhpUnit\\": "tools/phpunit/",
             "Workbench\\App\\": "php/laravel/workbench/app/"
         }
     },

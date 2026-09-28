@@ -353,6 +353,26 @@ function registerAppMiddlewareGroup(string $name, array $middleware): void
 }
 
 /**
+ * Register middleware aliases the way an application's own `bootstrap/app.php` does — on the
+ * `Middleware` configuration object applied when the HTTP kernel resolves, laid over the framework's
+ * defaults. The same population {@see registerAppMiddlewareGroup()} stands in for, for the alias map.
+ *
+ * @param  array<string, string>  $aliases
+ */
+function registerAppMiddlewareAliases(array $aliases): void
+{
+    app()->afterResolving(
+        HttpKernelContract::class,
+        static function (HttpKernel $kernel) use ($aliases): void {
+            $configuration = new Middleware;
+            $configuration->alias($aliases);
+
+            $kernel->setMiddlewareAliases($configuration->getMiddlewareAliases());
+        },
+    );
+}
+
+/**
  * `[the GET /api/forms responses, the whole document, the diagnostics it raised, the whole result]` for
  * one stubbed action return type. The framework-response suites pin a status, a header and — above all
  * — an ABSENT component, so they need the whole response rather than one schema, and the whole document
