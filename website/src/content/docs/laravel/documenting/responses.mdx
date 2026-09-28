@@ -332,8 +332,18 @@ Literal values in the payload survive as JSON Schema `const`s, so `'accepted'` i
 only value that status returns. Two return paths that share a status contribute one response whose
 schema is the union of their shapes.
 
-A status computed at runtime (not a literal) falls back to `200`; pin it with
-[`#[Response]`](/laravel/reference/attributes/#response) when you need an exact code.
+A status that chooses between codes gets a response for each of them, the same as two return paths:
+
+```php
+return response()->json(['ok' => $healthy], $healthy ? 200 : 503); // → 200 and 503, same body
+```
+
+A status Docuccino can't read at all, such as `->setStatusCode($upstream->status())`, is not documented
+under a code the endpoint may never send. Its body goes under `default` ("any status") and an
+`inferred-response.status-unread` info diagnostic names the action. Name the codes it sends with
+[`#[Response(status: …)]`](/laravel/reference/attributes/#response): each status you name below `400` takes
+the inferred body, and `default` goes away. A helper that takes the status as a parameter
+(`$this->ok($data, 201)`) is read at each call, and a call that passes none sends the parameter's default.
 
 ### Automatic `201 Created`
 

@@ -368,3 +368,19 @@ it('leaves the status of a self-rendering payload to the payload until something
         'a payload whose status did not fold' => [new RefinedResponse($resource), [$resource, new UnknownT('status not folded')]],
     ];
 });
+
+it('claims no status where the code replaced one it could not read', function (): void {
+    // `->setStatusCode($request->integer('code'))` over `response()->json($b)`: the receiver's 200 is gone,
+    // and nothing is put in its place. That is worth publishing even over a receiver nothing else was read
+    // from — the bare type would bring back the framework's 200.
+    $read = (new RefinedResponse(new ArrayShapeT([]), new LiteralT(200)))->withUnreadStatus();
+    $bare = (new RefinedResponse)->withUnreadStatus();
+
+    expect($read->toClassT(ResponseShapeRefiner::CANONICAL_RESPONSE)?->typeArgs[1])->toEqual(new UnknownT('status not folded'))
+        ->and($bare->isDocumentable())->toBeTrue()
+        ->and($bare->toClassT(ResponseShapeRefiner::CANONICAL_RESPONSE)?->typeArgs)->toEqual([new UnknownT('payload not folded'), new UnknownT('status not folded')])
+        // A later link stating a code settles it again.
+        ->and($read->withBoundStatus(new LiteralT(503))->statusUnread)->toBeFalse()
+        // The payload's own status cannot stand either: the code replaced it.
+        ->and(RefinedResponse::renderedBy(new ClassT('App\\Http\\Resources\\WidgetResource'))->withUnreadStatus()->toClassT(ResponseShapeRefiner::CANONICAL_RESPONSE)?->typeArgs)->toHaveCount(2);
+});

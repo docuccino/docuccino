@@ -14,12 +14,15 @@ use Docuccino\Core\Inference\DType\NeverT;
 use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\PayloadStatusT;
 use Docuccino\Core\Inference\DType\StatusMarkerT;
+use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
+use Docuccino\Core\Inference\StatusCodes;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
 use Docuccino\Inference\PhpStan\Support\ContentTypeHeader;
 use Docuccino\Inference\PhpStan\Support\OmissionSentinel;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
+use Docuccino\Inference\PhpStan\Support\ResponseFactoryCall;
 use Docuccino\Inference\PhpStan\Support\ScalarFold;
 use Docuccino\Inference\PhpStan\Trace\Callee;
 use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
@@ -27,6 +30,7 @@ use Docuccino\Inference\PhpStan\Translation\TypeTranslator;
 use PhpParser\Node;
 use PHPStan\Analyser\Scope;
 use PHPStan\Reflection\ReflectionProvider;
+use PHPStan\Type\ObjectType;
 use PHPStan\Type\Type;
 
 /**
@@ -214,7 +218,9 @@ final class ResponseShapeRefiner
         // 2. Type system already carries the shape (`response()->json([...], 422)`, via our extension).
         $type = $this->translator->translate($scope->getType($expr));
         if ($type instanceof ClassT && self::isResponseFqcn($type->fqcn) && $type->typeArgs !== []) {
-            return $this->fromTypeArgs($type);
+            $refined = $this->fromTypeArgs($type);
+
+            return $expr instanceof Node\Expr\MethodCall ? $this->factoryAccessors($refined, $expr, $scope, $paramNames) : $refined;
         }
 
         // 3. A response built into a local and then returned (`$r = Problem::make(…); …; return $r;`) — the
@@ -545,7 +551,7 @@ final class ResponseShapeRefiner
         $payloadArg = $type->typeArgs[0] ?? null;
         $payload = $payloadArg instanceof UnknownT ? null : $payloadArg;
         $statusArg = $type->typeArgs[1] ?? null;
-        $status = $statusArg instanceof LiteralT && is_int($statusArg->value) ? $statusArg : null;
+        $status = self::statusArg($statusArg);
         $ctArg = $type->typeArgs[2] ?? null;
         $contentType = $ctArg instanceof LiteralT && is_string($ctArg->value) ? $ctArg->value : null;
 
@@ -554,6 +560,46 @@ final class ResponseShapeRefiner
         // own status ({@see RefinedResponse::renderedBy()}) keeps that through a chain unless the chain
         // states a status of its own.
         return new RefinedResponse($payload, $status, null, $contentType, statusOfPayload: $payload !== null && $statusArg instanceof PayloadStatusT);
+    }
+
+    /**
+     * `response()->json($body, $code)` with a status its type could not fold, read the way the constructor
+     * fold reads `new JsonResponse($body, $code)` ({@see foldConstructor()}): a status that is one of the
+     * enclosing helper's parameters is recorded as the accessor a call site binds, and a body member echoing
+     * it as the status marker — so `$this->ok($data, 201)` is a 201 and `$this->ok($data)` the parameter's
+     * default, rather than a status nothing read.
+     *
+     * @param  list<string>  $paramNames
+     */
+    private function factoryAccessors(RefinedResponse $refined, Node\Expr\MethodCall $call, Scope $scope, array $paramNames): RefinedResponse
+    {
+        $arguments = $refined->status === null && ! $refined->statusOfPayload ? ResponseFactoryCall::arguments($call) : null;
+        if ($arguments === null
+            || $arguments['status'] === null
+            || ! (new ObjectType(ResponseFactoryCall::CONTRACT))->isSuperTypeOf($scope->getType($call->var))->yes()
+        ) {
+            return $refined;
+        }
+
+        $source = $this->resolveStatus($arguments['status'], $scope, $paramNames)[1];
+        if ($source === null) {
+            return $refined;
+        }
+
+        $provenance = $arguments['body'] === null ? [] : $this->payloadProvenance($arguments['body'], $scope, $paramNames);
+
+        return RefinedResponse::fromConstructor($refined->payload, null, $source, $refined->contentType, $provenance);
+    }
+
+    /**
+     * A status argument as the refiner carries it: one int literal, or a union of nothing but int literals
+     * (`response()->json($b, $ok ? 200 : 503)` types its status as both) — the grammar
+     * {@see ScalarFold::ints()} folds, read back off a translated type by the reader the adapter uses too
+     * ({@see StatusCodes}). Null for anything else.
+     */
+    private static function statusArg(?DType $arg): LiteralT|UnionT|null
+    {
+        return ($arg instanceof LiteralT || $arg instanceof UnionT) && StatusCodes::of($arg) !== null ? $arg : null;
     }
 
     /**
@@ -865,9 +911,19 @@ final class ResponseShapeRefiner
             return $child;
         }
 
-        [$argExpr] = $this->argumentFor($callee, $source->param, $call);
+        [$argExpr, $known] = $this->argumentFor($callee, $source->param, $call);
         if ($argExpr === null) {
-            return $child->withStatusSource(null);
+            // Provably not passed: the parameter took its default, which is the status sent.
+            $default = ScalarFold::statusOf($known && $source->kind === AccessorKind::Identity ? $this->parameterDefault($callee, $source->param) : null);
+
+            return $default === null ? $child->withStatusSource(null) : $child->withBoundStatus($default);
+        }
+
+        // A forwarded code folds to every constant it can be (`$this->respond($b, $ok ? 200 : 503)`); an
+        // accessor read off it folds only from one known case.
+        $codes = ScalarFold::statusOf($source->kind === AccessorKind::Identity && SensitiveConstant::label($argExpr) === null ? $scope->getType($argExpr) : null);
+        if ($codes !== null) {
+            return $child->withBoundStatus($codes);
         }
 
         $literal = $this->foldAccessorArgument($argExpr, $source, $scope);
@@ -990,28 +1046,21 @@ final class ResponseShapeRefiner
     }
 
     /**
-     * A status expression as either a call-independent literal int, the {@see ParamAccessor} it reads from
-     * (a parameter, or an accessor on an enum parameter like `$problem->status()`), or neither.
+     * A status expression as either the call-independent code(s) it folds to — one literal, or each constant
+     * of `$ok ? 200 : 503` — the {@see ParamAccessor} it reads from (a parameter, or an accessor on an enum
+     * parameter like `$problem->status()`), or neither.
      *
      * @param  list<string>  $paramNames
-     * @return array{?LiteralT, ?ParamAccessor}
+     * @return array{LiteralT|UnionT|null, ?ParamAccessor}
      */
     private function resolveStatus(Node\Expr $expr, Scope $scope, array $paramNames): array
     {
-        $literal = $this->intLiteralOf($expr, $scope);
-        if ($literal !== null) {
-            return [new LiteralT($literal), null];
+        $codes = ScalarFold::statusOf($scope->getType($expr));
+        if ($codes !== null) {
+            return [$codes, null];
         }
 
         return [null, AccessorExtractor::fromExpr($expr, $paramNames)];
-    }
-
-    /** The int-only specialisation of {@see ScalarFold}. */
-    private function intLiteralOf(Node\Expr $expr, Scope $scope): ?int
-    {
-        $folded = ScalarFold::of($scope->getType($expr));
-
-        return $folded !== null && is_int($folded[0]) ? $folded[0] : null;
     }
 
     /**
@@ -1071,6 +1120,26 @@ final class ResponseShapeRefiner
         $key = $index === false ? $paramName : $index;
 
         return [$slots->at($key), $slots->knows($key)];
+    }
+
+    /** The default a callee's parameter takes when a call passes nothing for it, or null when it has none. */
+    private function parameterDefault(Callee $callee, string $param): ?Type
+    {
+        if (! $this->reflectionProvider->hasClass($callee->class)) {
+            return null;
+        }
+        $class = $this->reflectionProvider->getClass($callee->class);
+        if (! $class->hasNativeMethod($callee->method)) {
+            return null;
+        }
+
+        foreach ($class->getNativeMethod($callee->method)->getVariants()[0]->getParameters() as $parameter) {
+            if ($parameter->getName() === $param) {
+                return $parameter->getDefaultValue();
+            }
+        }
+
+        return null;
     }
 
     /**

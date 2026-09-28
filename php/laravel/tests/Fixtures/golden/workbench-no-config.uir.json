@@ -3536,7 +3536,7 @@
                   "overrode": [
                     {
                       "field": "description",
-                      "value": "OK",
+                      "value": "Created",
                       "producer": "fallback"
                     }
                   ]
@@ -4191,7 +4191,7 @@
                   "overrode": [
                     {
                       "field": "description",
-                      "value": "OK",
+                      "value": "Created",
                       "producer": "fallback"
                     }
                   ]
@@ -4974,7 +4974,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "48ddc5d56508900ed302561994befac297bb8402be944adaef6f2752f3f24c42",
-      "contentHash": "74b26adcfbad0c5f704d966b2ec88f3dcba54eb7c2b7331ae4a8457203a8885f"
+      "contentHash": "d3bb5575ca615b695f98a08317f4fae561a73b6557b800a9cd51b51dbdf9ad76"
     },
     "generator": {
       "name": "docuccino/laravel",

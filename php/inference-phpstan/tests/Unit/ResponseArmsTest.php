@@ -18,11 +18,12 @@ use PhpParser\ParserFactory;
  * whole of what the server can send for it, so a response set is either every arm or nothing at all: a
  * subset published as the whole marks the missing arm as a response the endpoint never sends.
  */
-function armChain(?int $status = null, ?string $contentType = null, bool $unknown = false): array
+function armChain(?int $status = null, ?string $contentType = null, bool $unknown = false, bool $statusUnknown = false): array
 {
     return [
         'receiver' => new Node\Expr\Variable('response'),
         'status' => $status === null ? null : new LiteralT($status),
+        'statusUnknown' => $statusUnknown,
         'contentType' => $contentType,
         'contentTypeUnknown' => $unknown,
     ];
@@ -53,6 +54,11 @@ it('lays a chain over every arm, and loses them all when it leaves one saying no
     $stamped = ResponseArms::allLaid([$gone, $resource], armChain(202));
     expect(array_map(static fn (RefinedResponse $r): ?LiteralT => $r->status instanceof LiteralT ? $r->status : null, $stamped ?? []))
         ->toEqual([new LiteralT(202), new LiteralT(202)]);
+
+    // A status stated and unread replaces the receiver's — the payload's own included — with nothing.
+    $unread = ResponseArms::allLaid([$gone, $resource], armChain(statusUnknown: true));
+    expect(array_map(static fn (RefinedResponse $r): bool => $r->statusUnread && $r->status === null && ! $r->statusOfPayload, $unread ?? []))
+        ->toBe([true, true]);
 
     // A header over nothing the receiver recovered says nothing about the response.
     expect(ResponseArms::allLaid([new RefinedResponse], armChain()))->toBeNull()
