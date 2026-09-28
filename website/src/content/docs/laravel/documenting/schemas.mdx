@@ -274,9 +274,36 @@ final readonly class InvoiceLine
 }
 ```
 
-A typed property with no default that isn't promoted might never be assigned, and `json_encode` leaves
-out a property that has no value, so a nullable one of those is optional. A class that implements
-`JsonSerializable` decides its own keys, so its nullable properties stay optional too.
+A typed property with no default that isn't promoted has a value only if something assigns it, and
+`json_encode` leaves out a property that has no value. So Docuccino reads the constructor. A property it
+assigns on every path is required, even if the value can be `null`. One it assigns on only some paths is
+optional, and doesn't become nullable:
+
+```php
+final class ProblemDetails
+{
+    public string $title;   // required
+    public string $detail;  // optional: sent only when there is something to say
+
+    public function __construct(string $title, ?string $detail = null)
+    {
+        $this->title = $title;
+
+        if ($detail !== null) {
+            $this->detail = $detail;
+        }
+    }
+}
+```
+
+A path that throws doesn't count, because it builds no object, and `readonly` properties work the same
+way. A `$this->method()` the constructor calls counts as part of it, when the class (or one of its traits)
+declares that method. Where the constructor can't answer, a non-nullable property is required and a
+nullable one is optional. That happens when there's no constructor, when the property belongs to a parent
+class and a subclass's own constructor runs, and when something else may assign the property: the parent
+constructor, a method that assigns `$this->{$name}` or passes `$this` on, or the named constructor of a
+class whose constructor is private. A class that implements `JsonSerializable` decides its own keys, so its nullable properties
+stay optional too.
 
 Named as a request body type — `#[BodyParameter(type: InvoiceLine::class)]` — the same class is published
 as its own `InvoiceLineRequest` component, because what a client may send differs from what the server

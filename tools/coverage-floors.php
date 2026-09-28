@@ -38,7 +38,7 @@ const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
     // phpdoc type grammar, the contract checker. The floor sits at the measured integer and 98 is out of
     // reach:
-    // Measured 97.64% (14613/14966): 97% of it is 14517.02 statements, 95.98 of margin (0.64pp).
+    // Measured 97.64% (14619/14972): 97% of it is 14522.84 statements, 96.16 of margin (0.64pp).
     // It was ratcheted 96 → 97 back when
     // the figure was 97.51% over a denominator 1189 statements smaller, dipped to 97.39% as core absorbed
     // work at slightly under its own average, and has come back up without the floor needing to move
@@ -93,11 +93,14 @@ const FLOORS = [
     // there at 3.88 statements of margin. It RATCHETED again 51 → 53 when reading which properties a class
     // fixes to one value landed in the measurable half the same way — native reflection plus php-parser
     // over the constructor (`FixedPropertyValues`), unit-tested over real probes, at 53.55% (1576/2943).
-    // Measured 53.88% (1777/3298): 53% of it is 1747.94 statements, 29.06 of margin; 54 would need 1780.92.
-    // So the floor holds. The record leaves out the rows that only run on the newest PHP (clone-with), which the
+    // It RATCHETED 53 → 54 when reading whether a constructor path that skips a property proves anything
+    // landed in the measurable half too — php-parser over the constructor and the one level of helpers the
+    // analyser follows (`ConstructionEscape`), unit-tested over real probes:
+    // Measured 54.48% (1854/3403): 54% of it is 1837.62 statements, 16.38 of margin; 55 would need 1871.65.
+    // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads a few statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 53, 'measured' => 53.88],
+    'inference-phpstan' => ['floor' => 54, 'measured' => 54.48],
 ];
 
 /*
