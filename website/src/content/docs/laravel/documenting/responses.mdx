@@ -107,6 +107,11 @@ endpoint that returns a subclass:
 	</TabItem>
 </Tabs>
 
+An `(object)` cast is documented as the object it builds, here and anywhere else in a response:
+`(object) []` as an empty object, just like `new stdClass`, and `(object) ['self' => $url]` with its
+`self` member. Laravel never filters inside an object, so an empty one is always sent as `{}`, never
+as the `[]` an emptied array becomes.
+
 A member is required when every branch of `with()` returns it, and optional when a branch returns
 less — including a branch that returns `[]`, or one whose keys can't be read, like
 `$request->only([...])`. Unlike `toArray()`, Laravel never filters what `with()` returns, so a

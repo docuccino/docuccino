@@ -123,6 +123,9 @@ them.
 - `app/Http/Controllers/StatusChoiceController.php` — a status chosen between constants
   (`$ok ? 200 : 503`) through `setStatusCode()`, `response()->json()`, the constructor, a rendered resource and
   `noContent()`, beside the two-return form; a status read off the request; and `abort()` choosing between two.
+- `app/Http/Resources/CastEnvelopeResource.php` — objects built inline with `(object)` casts: an empty one
+  in the body, and in `with()` an empty one, a keyed one, a cast nested in a cast, and one whose keys depend
+  on the request.
 - `app/Http/Resources/CompactableResource.php` — a ternary `toArray` (one return site, two shapes)
   and a `with()` whose other branch returns request input.
 - `app/Timeline/` — a `@phpstan-sealed` interface (`TimelineEntry`) over two final readonly classes
