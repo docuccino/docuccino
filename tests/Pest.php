@@ -33,6 +33,8 @@ use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
 use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
 use Docuccino\Core\Extensions\Validation\RuleSet;
+use Docuccino\Core\Extensions\Validation\TaggedVariants;
+use Docuccino\Core\Extensions\Validation\ValidationRule;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\CallableRef;
@@ -78,8 +80,10 @@ use Docuccino\Laravel\Integrations\QueryBuilder\ListValueDescriber;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\SpatieData\WrapResolver;
 use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
+use Docuccino\Laravel\Integrations\Support\RuleParsing;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
+use Docuccino\Laravel\Integrations\Validation\TaggedRules;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
@@ -100,6 +104,7 @@ use Illuminate\Contracts\Http\Kernel as HttpKernelContract;
 use Illuminate\Foundation\Configuration\ApplicationBuilder;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Foundation\Exceptions\Handler;
+use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Foundation\Http\Kernel as HttpKernel;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -4638,8 +4643,138 @@ function packageOwnedExtension(string $package): DocumentTransformer
 }
 
 /**
- * Two verdicts on one body for the excluded-fields fixture: whether Laravel's validator accepts it under
- * the FormRequest's own rules, and whether the published request schema does.
+ * The `payment` object {@see TaggedBranches} splits in its tests: tagged by `method`, one member only `card`
+ * keeps, one on every branch, and the annotations and bounds that stay on the object.
+ *
+ * @return array<string, mixed>
+ */
+function taggedObject(): array
+{
+    return [
+        'type' => 'object',
+        'description' => 'How the order is paid.',
+        'minProperties' => 1,
+        'properties' => [
+            'method' => ['type' => 'string', 'enum' => ['card', 'transfer'], 'description' => 'Which way.', 'x-enum-varnames' => ['Card', 'Transfer']],
+            'number' => ['type' => 'string'],
+            'note' => ['type' => 'string'],
+        ],
+        'required' => ['note'],
+    ];
+}
+
+/**
+ * A request body holding `$payment`.
+ *
+ * @param  array<string, mixed>  $payment
+ * @return array<string, mixed>
+ */
+function taggedBody(array $payment): array
+{
+    return ['type' => 'object', 'properties' => ['payment' => $payment, 'total' => ['type' => 'integer']], 'required' => ['payment']];
+}
+
+/** The partition of {@see taggedObject()}. */
+function paymentVariants(bool $admitsEmpty = false): TaggedVariants
+{
+    return new TaggedVariants('payment', 'method', ['number'], [
+        ['value' => 'card', 'name' => 'PaymentCard', 'members' => ['number'], 'required' => ['number']],
+        ['value' => 'transfer', 'name' => 'PaymentTransfer', 'members' => [], 'required' => []],
+    ], $admitsEmpty);
+}
+
+/** The body's partition in {@see taggedSet()}: `t` switches `x` on. */
+function taggedSetVariants(): TaggedVariants
+{
+    return new TaggedVariants('', 't', ['x'], [
+        ['value' => 'a', 'name' => 'A', 'members' => ['x'], 'required' => ['x']],
+        ['value' => 'b', 'name' => 'B', 'members' => [], 'required' => []],
+    ]);
+}
+
+/**
+ * A rule set with two tagged objects, the body by `t` and `o` by `k`, their presence rules moved onto the
+ * partitions and the rules as written kept beside as the merged reading.
+ */
+function taggedSet(): RuleSet
+{
+    $rules = static fn (string ...$names): array => array_map(static fn (string $name): ValidationRule => ValidationRule::of($name), $names);
+
+    return new RuleSet(
+        ['t' => $rules('in'), 'x' => $rules('string'), 'o' => $rules('array'), 'o.k' => $rules('in'), 'o.y' => $rules(), 'note' => $rules('string')],
+        [taggedSetVariants(), new TaggedVariants('o', 'k', ['y'], [
+            ['value' => 'c', 'name' => 'OC', 'members' => ['y'], 'required' => ['y']],
+            ['value' => 'd', 'name' => 'OD', 'members' => [], 'required' => []],
+        ])],
+        ['t' => $rules('required', 'in'), 'x' => $rules('required_if', 'string'), 'o' => $rules('array'), 'o.k' => $rules('required', 'in'), 'o.y' => $rules('required_if'), 'note' => $rules('string')],
+    );
+}
+
+/**
+ * One field's rule names, pipe-joined, for a dataset to read at a glance.
+ *
+ * @param  list<ValidationRule>  $rules
+ */
+function taggedSetNames(array $rules): string
+{
+    return implode('|', array_map(static fn (ValidationRule $rule): string => $rule->name, $rules));
+}
+
+/**
+ * A rule set written as Laravel pipe strings, as {@see TaggedRules} splits it.
+ *
+ * @param  array<string, string>  $fields
+ */
+function taggedRules(array $fields): RuleSet
+{
+    return TaggedRules::split(new RuleSet(array_map(RuleParsing::tokens(...), $fields)));
+}
+
+/**
+ * The branches a split recorded, one line each — `value: members | required` — for a dataset to read at a
+ * glance.
+ *
+ * @return list<string>
+ */
+function taggedBranchLines(TaggedVariants $variants): array
+{
+    return array_map(
+        static fn (array $branch): string => sprintf('%s: %s | %s', $branch['value'], implode(',', $branch['members']), implode(',', $branch['required'])),
+        $variants->branches,
+    );
+}
+
+/**
+ * Two verdicts on one body: whether Laravel's validator accepts it under the FormRequest's own rules, and
+ * whether the request component the build published for that FormRequest does — `$ref`s into the rest of the
+ * document resolved, so a body published as a union of components is judged as the union.
+ *
+ * @param  class-string<FormRequest>  $request
+ * @param  array<string, mixed>  $body
+ * @param  callable(Router): void  $routes
+ * @param  callable(): TypeEngine  $engine
+ * @return array{0: bool, 1: bool}
+ */
+function requestRuleVerdicts(string $request, array $body, callable $routes, callable $engine): array
+{
+    // A JSON `{}` reaches Laravel as an empty array, so an empty object is written as one and read as the other.
+    /** @var array<string, mixed> $data */
+    $data = json_decode((string) json_encode($body), true, flags: JSON_THROW_ON_ERROR);
+    $rules = $request::create('/', 'POST', $data)->rules();
+    $accepted = Illuminate\Support\Facades\Validator::make($data, $rules)->passes();
+
+    // Decoded as objects: an unconstrained `{}` property decoded to an array would stop being a schema.
+    $document = json_decode((new UirEmitter)->emit(localityBuild($routes, $engine)->document), flags: JSON_THROW_ON_ERROR);
+    $validator = new Validator;
+    $validator->resolver()?->registerRaw($document, 'https://docuccino.test/document.json');
+    $component = (object) ['$ref' => 'https://docuccino.test/document.json#/components/schemas/'.Fqcn::short($request)];
+    $documented = $validator->validate(json_decode((string) json_encode($body)), $component)->isValid();
+
+    return [$accepted, $documented];
+}
+
+/**
+ * {@see requestRuleVerdicts()} for the excluded-fields fixture.
  *
  * @param  array<string, mixed>  $body
  * @param  callable(Router): void  $routes
@@ -4648,14 +4783,7 @@ function packageOwnedExtension(string $package): DocumentTransformer
  */
 function excludedFieldsVerdicts(array $body, callable $routes, callable $engine): array
 {
-    $rules = StorePaymentRequest::create('/api/zz-payments', 'POST', $body)->rules();
-    $accepted = Illuminate\Support\Facades\Validator::make($body, $rules)->passes();
-
-    // Decoded as objects: an unconstrained `{}` property decoded to an array would stop being a schema.
-    $document = json_decode((new UirEmitter)->emit(localityBuild($routes, $engine)->document), flags: JSON_THROW_ON_ERROR);
-    $documented = (new Validator)->validate(json_decode((string) json_encode($body)), $document->components->schemas->StorePaymentRequest)->isValid();
-
-    return [$accepted, $documented];
+    return requestRuleVerdicts(StorePaymentRequest::class, $body, $routes, $engine);
 }
 
 /**

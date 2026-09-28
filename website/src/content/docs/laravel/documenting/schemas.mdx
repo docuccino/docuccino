@@ -482,6 +482,10 @@ alike. When exporting OpenAPI 3.0, which has no `const`, each tag goes out as a 
 OpenAPI 3.0.3 lets `nullable` add `null` only beside a `type`, so some 3.0 tools read that as the
 `oneOf` alone — the `downlevel.nullable-composition` info says so, and the 3.1 export has no such gap.
 
+A request body gets the same union from its validation rules when one field's value decides which of
+the others it carries — see [Tagged unions](/laravel/documenting/requests/#tagged-unions) on the
+requests page.
+
 ## Describing a schema
 
 A component says what its fields are; `#[Description]` on the class says what the thing *is*, once, for

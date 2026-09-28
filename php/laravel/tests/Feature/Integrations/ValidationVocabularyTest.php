@@ -510,6 +510,11 @@ it('describes conditional-required rules and leaves the field optional', functio
     'required_with_all' => [['required_with_all', ['first', 'last']], 'Required when first, last are all present.'],
     'required_without' => [['required_without', ['first', 'last']], 'Required when any of first, last is absent.'],
     'required_without_all' => [['required_without_all', ['first', 'last']], 'Required when first, last are all absent.'],
+    // One field is not a set, so "any of" and "all of" say nothing: each reads as the one sentence it is.
+    'required_with, one field' => [['required_with', ['address']], 'Required when address is present.'],
+    'required_with_all, one field' => [['required_with_all', ['address']], 'Required when address is present.'],
+    'required_without, one field' => [['required_without', ['address']], 'Required when address is absent.'],
+    'required_without_all, one field' => [['required_without_all', ['address']], 'Required when address is absent.'],
 ]);
 
 it('documents the confirmed partner and switches file rules to multipart', function (): void {

@@ -81,6 +81,10 @@ function publicExtensionSurface(): array
         'Docuccino\Core\Extensions\Validation\RecoveredRequest',
         'Docuccino\Core\Extensions\Validation\ResponseDraftApplier',
         'Docuccino\Core\Extensions\Validation\RuleSet',
+        // The value a rule set carries beside its fields: which object a recovery proved is partitioned by
+        // a tag. RuleSet's own constructor takes it, so it is already on the surface RuleSet is on; the
+        // vocabulary that proves one stays in the recovering integration.
+        'Docuccino\Core\Extensions\Validation\TaggedVariants',
         'Docuccino\Core\Extensions\Validation\ValidationField',
         'Docuccino\Core\Extensions\Validation\ValidationRule',
         'Docuccino\Core\Extensions\Context',

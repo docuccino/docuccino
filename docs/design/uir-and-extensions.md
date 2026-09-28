@@ -234,7 +234,10 @@ A `null` member carries no tag, and a discriminator dispatches on a property eve
 — never `null` inside the `oneOf`, which a generator building a tagged union from the discriminator
 has no member for. The 3.0 downlevel folds the null branch into `nullable: true` beside the `oneOf`,
 and raises `downlevel.nullable-composition`: 3.0.3's `nullable` adds null only beside a `type`, so a 3.0
-reader may take the fold as the `oneOf` alone. It is the closest 3.0 spelling, not an exact one.
+reader may take the fold as the `oneOf` alone. It is the closest 3.0 spelling, not an exact one. The
+empty object (`{type: object, maxProperties: 0}`) stays outside the `oneOf` on the same argument: every
+tagged member requires its tag, so none admits `{}`, and a tagged request object whose tag is only
+`required_with` the object accepts exactly that (see below).
 
 Where every member publishes a property that at least two pin but the set falls short — a member leaves
 it open, or two share a value — `components.union-undiscriminated` names it; an untagged union reports
@@ -255,6 +258,62 @@ access — the class's body, an ancestor's (readonly is implicitly `protected(se
 clone-with may re-initialise from anywhere. Each of those leaves the declared type. The read is of the
 hierarchy's source, so what it cannot see is not covered: a closure bound into the class's scope from
 elsewhere, and `unserialize()`, which restores whatever the payload holds.
+
+### Tagged request objects
+
+The request side of the same union, recovered from validation rules rather than classes. An object whose
+conditional members are all switched by exclude rules on ONE of its own members — the tag — is accepted
+by Laravel in exactly one shape per tag value, so the body publishes one component per value and an
+`anyOf` of them, which the reader above discriminates. `Laravel\Integrations\Validation\TaggedRules`
+proves the partition (vocabulary, adapter); `Core\Extensions\Validation\TaggedBranches` writes it onto
+the finished body, after the source class's declarations, so a member's docblock reaches every branch.
+
+What the proof rests on, all checked against `Validator::passes()` and `ValidatesAttributes`:
+
+- A field's rules run in the order written and stop at the first exclude rule that fires. So a member is
+  gated only if the exclude rule is its FIRST rule; a rule ahead of it runs on every request. Keys under
+  a member run in key order too, so one written before its gated parent has already run by the time the
+  parent is excluded — that fails the proof.
+- `exclude_unless:tag,v…` keeps the member iff the tag's value is listed; `exclude_if:tag,v…` excludes it
+  iff it is listed (any of them). Both compare with a loose `in_array`, which is exact between two strings
+  unless both are numeric — so the tag's values must not be numeric.
+- The tag must be `required`, or `required_with` the object itself, and limited by `in:` or `Rule::enum()`
+  with nothing that could refuse a listed value. Then every non-empty accepted object carries a listed
+  tag, and a listed value the enum refuses never reaches an exclude rule, so it names no branch. A case
+  no exclude rule names still gets a branch.
+- `required_with:<object>` is satisfied by an empty object (`validateRequired` fails on an empty array),
+  so such a tag admits `{}` — unless some member is required outright, or an `exclude_if` member requires
+  itself: `exclude_if` keeps a member whose tag was never sent (`! Arr::has(...)` returns true). The
+  object's OWN rules run on `{}` too: `required` and `filled` refuse it, a size rule reads its count of 0,
+  and `array`, `nullable`, `present`, `sometimes` pass it. A rule on the object outside that list leaves
+  the answer open, and the proof fails rather than guess either way. On a tagged branch the object is
+  non-empty, so `required_with:<object>` reads as `required`.
+- `present` and `required` both put the key in a branch's `required`. An excluded member is left out of
+  the branches that exclude it; the branches stay open objects, so a value sent there is accepted, as the
+  server accepts and discards it.
+
+Any other conditional rule among the members (`required_if`, `prohibited_*`, `missing*`, a second exclude
+rule, an unread condition), a second tag, or a tag outside that grammar leaves the merged object and its
+prose exactly as before — the partial answer is today's answer, not a guessed union.
+
+A proved partition moves the tag's and the gated members' presence rules off the fields, so giving one up
+LATER has to put them back. `TaggedRules::split()` keeps the rules as written beside the fields as the set's
+merged reading (`RuleSet::$merged`), which every rewrite carries — the normalizer and the ordering rewrite
+both halves, and a key leaving the body (a copy from a header, query value or route parameter) releases
+every partition it is the tag or a gated member of, reading that object's members as merged again, before
+it goes. The converter publishes the merged reading's schema beside the split one, the source class's
+declarations are written onto both, and `TaggedBranches` puts an object it cannot split back as the merged
+schema has it, taking any partition inside it along and registering nothing for them. Wherever a partition
+is given up, the object reads byte-for-byte as it does where none was proved.
+
+A branch is minted as `<request stem><path word><value word>` — the request's own first-rung name
+(`ComponentNames::stem()`), the object's path without `*`, and the value's enum case name (else its
+minted member name) — identified as `<request id>/<path>.<tag>=<value>`. An identity with a `/` in its
+facet contributes no facet of its own: its base already starts from the request's. Both are functions of
+the rules alone. Branches exist only where a component can be named after a class: a body verb, a source
+class, and no operation-level `#[BodyParameter]` patching the body inline. A Spatie Data body is left
+alone: the order a property's rules reach the validator in is assembled by the package, not written, and
+the proof is about that order.
 
 ### Morph type columns
 

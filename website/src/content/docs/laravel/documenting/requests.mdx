@@ -901,7 +901,50 @@ Either way the field stays documented, because the API accepts it whenever the e
 The rules after an exclude rule still document the field's type and constraints, because that's the
 value the API reads whenever it keeps the field. When the field is excluded, the API accepts any value
 there and discards it, so a request sending a wrong-typed value in that case is accepted even though
-the schema rejects it.
+the schema rejects it — unless the object is a tagged union, below, where each shape leaves out the
+fields it excludes.
+
+### Tagged unions
+
+When every conditional field of an object is switched on or off by the **same** field of that object,
+the object is a tagged union: the API accepts exactly one shape per value of that field. Docuccino
+documents it that way — one schema per value, told apart by the field — so a generated client gets a
+type per shape instead of one object with the rules in prose:
+
+```php
+'payment' => ['required', 'array'],
+'payment.method' => ['required', Rule::enum(PaymentMethod::class)],
+'payment.card_number' => ['exclude_unless:payment.method,card', 'required', 'string'],
+'payment.iban' => ['exclude_unless:payment.method,transfer', 'required', 'string'],
+'payment.reference' => ['required', 'string', 'max:40'],
+```
+
+`payment` publishes as a `oneOf` of `StoreOrderRequestPaymentCard` and
+`StoreOrderRequestPaymentTransfer`, with a `discriminator` on `method`. Each shape pins `method` to its
+value, carries the fields that value keeps with their rules, and requires what that value requires —
+`card_number` in one, `iban` in the other, `reference` in both. A `present` field counts as required in
+the shapes that keep it, since the key has to be sent.
+
+An enum case no exclude rule names still gets a shape, with just the fields every value keeps. The
+shapes are named after the request, the object's path and the value's enum case, so they stay the same
+however your routes change. If the object is nullable, `null` is allowed beside the union. If its tag is
+`required_with` the object itself, an empty object is allowed beside it too, because that's what
+Laravel accepts — unless the object's own rules refuse one, as `required`, `filled` or a `min:1` do.
+
+The object stays a single schema with "Required when …" notes whenever the rules don't prove one shape
+per value:
+
+- fields gated on two different fields, or a `required_if`, `prohibited_if`, `missing_with` or other
+  conditional rule in the mix;
+- an exclude rule that isn't the field's first rule, or whose condition isn't a literal list of values;
+- a tag that isn't required, or isn't limited to plain string values by `in:` or `Rule::enum()`;
+- a tag `required_with` the object, where the object carries a rule other than `array`, `nullable`,
+  `present`, `sometimes`, `required`, `filled` or a size bound, so whether it accepts an empty object
+  isn't known;
+- a tag, or a field it switches, that `prepareForValidation()` copies from a header, query value or route
+  parameter, so it isn't the body's to send;
+- a request with no class to name the shapes after (an inline `validate()`), an action carrying its own
+  `#[BodyParameter]`, or rules that become query parameters.
 
 ### Types and formats
 
