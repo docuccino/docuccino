@@ -758,3 +758,19 @@ it('carries a declared sentence across the merge into the operation it applies t
         'componentDescription' => 'Nothing is stored under that identifier.',
     ]);
 });
+
+it('holds that an operation validates its input as a draft fact that freezes into nothing', function (): void {
+    // What the fact CAUSES — a 422 — is frozen by whoever reads it; the fact itself is no part of the
+    // document, so declaring it must leave the frozen operation byte-for-byte as it was.
+    $plain = new OperationDraft;
+    $plain->setSummary('List widgets', Contribution::inference());
+
+    $declared = new OperationDraft;
+    $declared->setSummary('List widgets', Contribution::inference());
+    $declared->declareValidatesInput();
+    $declared->declareValidatesInput();
+
+    expect($plain->validatesInput())->toBeFalse()
+        ->and($declared->validatesInput())->toBeTrue()
+        ->and($declared->freeze()->toArray())->toBe($plain->freeze()->toArray());
+});

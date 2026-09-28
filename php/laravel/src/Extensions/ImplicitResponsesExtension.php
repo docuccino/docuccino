@@ -38,7 +38,7 @@ use ReflectionClass;
  *  | Status | Signal |
  *  |--------|--------|
  *  | 401    | auth middleware detected AND the route is not `#[Unauthenticated]` |
- *  | 422    | a validated request body was recovered (Data / FormRequest / action rules()) |
+ *  | 422    | validation rules were recovered (Data / FormRequest / inline / action rules()), body or query |
  *  | 404    | the route has ≥1 model-bound path parameter (one 404 per operation, not per param) |
  *  | 403    | `can:` / `signed` / `verified` middleware, or a FormRequest `authorize()` not `return true` |
  *
@@ -89,7 +89,7 @@ final class ImplicitResponsesExtension implements OperationExtension
             $this->synthesize($operation, $context, 401, self::AUTHENTICATION, 'auth-middleware');
         }
 
-        // 422 — a validated request body was recovered for a write verb.
+        // 422 — the route validates its input, in the body or in the query.
         if ($this->hasValidatedRequest($operation)) {
             $this->synthesize($operation, $context, 422, self::VALIDATION, 'validated-request');
         }
@@ -181,18 +181,24 @@ final class ImplicitResponsesExtension implements OperationExtension
     }
 
     /**
-     * True when a request extension recovered a validated body. Tested by layer, not by a closed
-     * producer list: an `integration:*` producer on `requestBody` means some request recoverer built
-     * the body, so third-party recoverers earn the 422 too — while a body that is only ever
-     * `#[BodyParameter]` rightly doesn't.
+     * True when the route validates its input: something declared so on the draft
+     * ({@see OperationDraft::declareValidatesInput()}), as every recovered rule set does whether it became
+     * a body or — on a read verb — query parameters. A parameter or body that is only ever declared by
+     * attribute rightly earns nothing.
      *
-     * The whole trail is read, not just the winner. `requestBody` is one field written whole, so a
+     * A body is also tested by layer, not by a closed producer list: an `integration:*` producer on
+     * `requestBody` means some request recoverer built the body, so a third-party recoverer earns the 422
+     * too. The whole trail is read, not just the winner: `requestBody` is one field written whole, so a
      * `#[BodyParameter]` patching one property of a recovered body takes the field at the attribute
-     * layer — and the route still validates. Asking the winner alone made the 422 depend on whether an
-     * unrelated attribute happened to be present.
+     * layer — and the route still validates. Query parameters get no layer test, because pagination and
+     * Query Builder write them at the integration layer without validating anything.
      */
     private function hasValidatedRequest(OperationDraft $operation): bool
     {
+        if ($operation->validatesInput()) {
+            return true;
+        }
+
         foreach ($operation->producersFor('requestBody') as $producer) {
             if (str_starts_with($producer, 'integration:')) {
                 return true;

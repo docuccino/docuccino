@@ -1583,11 +1583,15 @@ body matches the document's error style:
 | Status | Signal | Synthesized exception |
 |---|---|---|
 | 401 | auth middleware matches `security.auth_middleware`, and the route is not `#[Unauthenticated]` | `AuthenticationException` |
-| 422 | a request extension recovered a validated body (its integration producer owns `requestBody`) | `ValidationException` |
+| 422 | the draft declares it validates its input (`OperationDraft::validatesInput()`, set by `RecoveredRequest::apply()` for body or read-verb query), or an integration producer owns `requestBody` | `ValidationException` |
 
-> **Deliberate gap:** the 422 signal is body-verb only. A validated GET/HEAD applies its rules as query
-> parameters (never a `requestBody`), so a validated read endpoint is NOT documented with an implicit
-> 422 even though it can 422 at runtime. Left as-is to avoid a 422 on every validated read (review B6).
+> **Read verbs:** a validated GET/HEAD applies its rules as query parameters, never a `requestBody`,
+> and a value they refuse is the same 422 a write's body gets. So the signal is the rules being APPLIED,
+> declared on the draft (`declareValidatesInput()`), not the field they landed in; a third-party
+> validator that bypasses `RecoveredRequest` declares it the same way. A 422 on every validated
+> read is the true answer: each can refuse a request, and a published enum with no response for a value
+> outside it is a contract that contradicts itself. Query parameters get no layer test, because a
+> paginator's `page` and a Query Builder allow-list are integration-written without being validated.
 
 | 404 | the route has ≥1 model-bound path parameter — ONE 404 per operation, not per param | `ModelNotFoundException` |
 | 403 | `can:` / `signed` / `verified` middleware, or a FormRequest `authorize()` the engine proves is not a literal `return true` | `AuthorizationException` |

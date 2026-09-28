@@ -58,6 +58,8 @@ final class OperationDraft
 
     private ?string $id = null;
 
+    private bool $validatesInput = false;
+
     public function __construct()
     {
         $this->guard = new PatchGuard;
@@ -231,6 +233,23 @@ final class OperationDraft
     public function declareRequestBodyDescription(string $description): void
     {
         $this->requestDescription ??= $description;
+    }
+
+    /**
+     * Record that the server validates this operation's input against rules, so it can refuse a request
+     * with a 422 — whether the rules were documented as a body or as query parameters, or not at all.
+     * Written by whoever applied the rules and read by a later phase; it is a fact about the draft, not a
+     * field of the document, so nothing freezes it: what it causes is frozen instead.
+     */
+    public function declareValidatesInput(): void
+    {
+        $this->validatesInput = true;
+    }
+
+    /** Whether anything declared that this operation validates its input ({@see declareValidatesInput()}). */
+    public function validatesInput(): bool
+    {
+        return $this->validatesInput;
     }
 
     /** The provenance producer of the currently-winning contribution for a field, or null if unset. */

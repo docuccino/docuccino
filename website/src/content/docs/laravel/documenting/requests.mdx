@@ -1022,6 +1022,8 @@ precedence over what's inferred — you're never fighting the tool.
 ## Implicit `422`
 
 Because Docuccino recovers your request's validation rules, it also documents the `422` validation
-error that request produces — so a validated write endpoint carries its `422` automatically. A read
-route's rules become query parameters rather than a body, so it gets no implicit `422`. See
+error that request produces — so a validated endpoint carries its `422` automatically. That holds for a
+read route too: its rules become query parameters rather than a body, and a value they refuse is the
+same `422`. A query parameter you only declare with `#[QueryParameter]` has no validator behind it, so it
+adds none. See
 [implicit responses](/laravel/documenting/errors/#implicit-responses-middleware-bindings--validation).
