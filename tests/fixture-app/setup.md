@@ -113,6 +113,13 @@ them.
 - `app/Http/Resources/EnvelopedResource.php`, `ReleaseResource.php`, `TracedResource.php` — a base
   resource whose `with()` adds top-level members its subclass inherits, and one whose `with()`
   returns `[]` on one branch.
+- `app/Http/Controllers/ResourceResponseController.php` + `app/Http/Resources/SelfRespondingResource.php` — a
+  resource returned through `->response()`, `->toResponse($request)`, `->response()->setStatusCode(201)`, a
+  header chain, a named local, a collection with and without a paginator, beside the bare return; and a
+  resource whose own `toResponse()` builds a 202, reached directly, through `response()` and returned bare;
+  `GuardedResource`, `HeaderedResource`, `AcceptedResource` and `RelayingResource` override `toResponse()`
+  around `parent::toResponse()` (a guard arm, a header, a status, an unreadable relay), and
+  `InheritingRespondingResource` inherits an override.
 - `app/Http/Resources/CompactableResource.php` — a ternary `toArray` (one return site, two shapes)
   and a `with()` whose other branch returns request input.
 - `app/Timeline/` — a `@phpstan-sealed` interface (`TimelineEntry`) over two final readonly classes

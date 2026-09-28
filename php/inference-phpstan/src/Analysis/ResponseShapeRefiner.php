@@ -12,6 +12,7 @@ use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\NeverT;
 use Docuccino\Core\Inference\DType\NullT;
+use Docuccino\Core\Inference\DType\PayloadStatusT;
 use Docuccino\Core\Inference\DType\StatusMarkerT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
@@ -75,6 +76,14 @@ final class ResponseShapeRefiner
     /** Peels `->setStatusCode(…)`/`->header(…)` off a response so the shape is read where it was built. */
     private readonly FluentResponseChain $fluentChain;
 
+    /**
+     * The object whose application-written `toResponse()` is being read, and the class that wrote it: inside
+     * that body, `parent::toResponse()` is the framework rendering THIS object ({@see parentRendering()}).
+     *
+     * @var array{class: string, receiver: ClassT}|null
+     */
+    private ?array $renderingSelf = null;
+
     public function __construct(
         private readonly RuntimeAdapter $adapter,
         private readonly TypeTranslator $translator,
@@ -107,6 +116,42 @@ final class ResponseShapeRefiner
     public function refine(Node\Expr $expr, Scope $scope): ?RefinedResponse
     {
         return $this->refineExpr($expr, $scope, [], 0);
+    }
+
+    /**
+     * Every response a return site can be sent as: one, except where it reaches an application-written
+     * `toResponse()` with several returns — a guard arm answering 410 beside `parent::toResponse()` is two
+     * responses, and publishing either as the whole would state a contract the other breaks. Null when
+     * nothing better than the bare type is recoverable, which includes an override with an arm that could
+     * not be read: a subset is not the whole.
+     *
+     * @return non-empty-list<RefinedResponse>|null
+     */
+    public function refineArms(Node\Expr $expr, Scope $scope): ?array
+    {
+        return $this->armsOf($expr, $scope, 0);
+    }
+
+    /**
+     * @return non-empty-list<RefinedResponse>|null
+     */
+    private function armsOf(Node\Expr $expr, Scope $scope, int $depth): ?array
+    {
+        if ($expr instanceof Node\Expr\MethodCall) {
+            $chain = $this->fluentChain->peel($expr, $scope);
+            if ($chain !== null) {
+                return ResponseArms::allLaid($this->armsOf($chain['receiver'], $scope, $depth) ?? [new RefinedResponse], $chain);
+            }
+
+            $render = $this->rendering($expr, $scope);
+            if ($render !== null) {
+                return $this->renderArms($render, $depth);
+            }
+        }
+
+        $refined = $this->refineExpr($expr, $scope, [], $depth);
+
+        return $refined === null ? null : [$refined];
     }
 
     /**
@@ -150,11 +195,11 @@ final class ResponseShapeRefiner
     {
         // 0. A fluent tail on the response the code built (`->setStatusCode(202)`, `->header(…)`): the
         // shape belongs to the receiver and the chain only restates what it set, so refine the receiver
-        // and apply the difference ({@see applyChain()}).
+        // and apply the difference ({@see ResponseArms::laid()}).
         if ($expr instanceof Node\Expr\MethodCall) {
             $chain = $this->fluentChain->peel($expr, $scope);
             if ($chain !== null) {
-                return $this->applyChain($chain, $scope, $paramNames, $depth);
+                return ResponseArms::laid($this->refineExpr($chain['receiver'], $scope, $paramNames, $depth) ?? new RefinedResponse, $chain);
             }
         }
 
@@ -184,9 +229,23 @@ final class ResponseShapeRefiner
             return $this->refineLocal($expr->name, $scope, $paramNames, $depth);
         }
 
-        // 4. A call into project code whose declared return erased the shape — descend and substitute.
+        // 4. A call into project code whose declared return erased the shape — descend and substitute. A
+        // Responsable rendering itself (`$resource->response()`) is answered by whoever wrote its
+        // `toResponse()` ({@see rendering()}), and so is `parent::toResponse()` inside the application's
+        // own ({@see parentRendering()}). One shape only: an override with several arms is several
+        // responses, which only {@see refineArms()} can carry.
         if ($expr instanceof Node\Expr\MethodCall || $expr instanceof Node\Expr\StaticCall) {
             if ($type instanceof ClassT && self::isResponseFqcn($type->fqcn)) {
+                $render = $expr instanceof Node\Expr\MethodCall ? $this->rendering($expr, $scope) : null;
+                if ($render !== null) {
+                    return ResponseArms::single($this->renderArms($render, $depth, $paramNames));
+                }
+                if ($expr instanceof Node\Expr\StaticCall) {
+                    $self = $this->parentRendering($expr, $scope, $depth);
+                    if ($self !== false) {
+                        return $self;
+                    }
+                }
                 if (! $this->budget->withinDepth($depth + 1)) {
                     $this->budget->truncate(); // depth cutoff — the enclosing shape is truncated
 
@@ -220,29 +279,154 @@ final class ResponseShapeRefiner
     }
 
     /**
-     * The receiver's own shape with the chain's statements laid over it. A status stated on the wire beats
-     * whatever the receiver carried — it is the last thing that ran — and clears a pass-through accessor
-     * with it, since nothing a caller passes can change a status the chain pinned here.
+     * Every response a returned Responsable is sent as when the APPLICATION wrote its `toResponse()` — the
+     * router renders a returned object through that method, so the class's own shape is not what goes out.
+     * Null when the framework's `toResponse()` is what runs (the adapter renders the class itself, which is
+     * exactly what that body sends), or when the value is not one such object at all.
      *
-     * A receiver that recovers nothing still leaves a chain worth reporting: a status the code states
-     * plainly is the fact this exists to carry, and the body stays exactly as unrecovered as it was. The
-     * depth is the caller's — peeling is not a call hop, so it costs no budget.
+     * An override this cannot read in full degrades to the method's declared response class rather than to
+     * the object's own shape: vague, but a description of what is sent.
      *
-     * @param  array{receiver: Node\Expr, status: LiteralT|null, contentType: string|null, contentTypeUnknown: bool}  $chain
-     * @param  list<string>  $paramNames
+     * @return non-empty-list<DType>|null
      */
-    private function applyChain(array $chain, Scope $scope, array $paramNames, int $depth): ?RefinedResponse
+    public function renderedByOverride(Node\Expr $expr, Scope $scope): ?array
     {
-        $refined = $this->refineExpr($chain['receiver'], $scope, $paramNames, $depth) ?? new RefinedResponse;
-
-        if ($chain['contentType'] !== null || $chain['contentTypeUnknown']) {
-            $refined = $refined->withContentType($chain['contentType']);
-        }
-        if ($chain['status'] !== null) {
-            $refined = $refined->withBoundStatus($chain['status']);
+        $render = $this->rendering(new Node\Expr\MethodCall($expr, new Node\Identifier(ResponsableRendering::TO_RESPONSE)), $scope);
+        if ($render === null || $render['callee'] === null) {
+            return null;
         }
 
-        return $refined->isDocumentable() ? $refined : null;
+        return ResponseArms::types($this->renderArms($render, 0), self::CANONICAL_RESPONSE);
+    }
+
+    /**
+     * Who answers for a Responsable asked to render itself — `$resource->response()`, or `->toResponse($r)`
+     * on any Responsable ({@see ResponsableRendering}): the object as the receiver's type, plus the
+     * application's `toResponse()` to read when it wrote one (null when the framework's is what runs). Null
+     * for anything else, and for a union receiver, which has no one body.
+     *
+     * Either answer holds only while no CLOSER override is written, and one can be added to any project file
+     * of the object's hierarchy — the class, a parent between it and the one that wrote it, a trait — so all
+     * of them are touched, and none is otherwise a file this recovery read.
+     *
+     * @return array{receiver: ClassT, callee: Callee|null, call: Node\Expr\MethodCall, scope: Scope}|null
+     */
+    private function rendering(Node\Expr\MethodCall $call, Scope $scope): ?array
+    {
+        if (! $call->name instanceof Node\Identifier || $call->isFirstClassCallable()) {
+            return null;
+        }
+
+        $classes = $scope->getType($call->var)->getObjectClassNames();
+        $receiver = $this->translator->translate($scope->getType($call->var));
+        if (count($classes) !== 1 || ! $receiver instanceof ClassT || ! $this->reflectionProvider->hasClass($classes[0])) {
+            return null;
+        }
+
+        $class = $this->reflectionProvider->getClass($classes[0])->getNativeReflection();
+        $owner = ResponsableRendering::of($class, $call->name->toString(), $this->appFilter->isProjectFile(...));
+        if ($owner === null) {
+            return null;
+        }
+
+        foreach (ResponsableRendering::projectFiles($class, $this->appFilter->isProjectFile(...)) as $file) {
+            $this->touch($file);
+        }
+
+        if ($owner === ResponsableRendering::FRAMEWORK) {
+            return ['receiver' => $receiver, 'callee' => null, 'call' => $call, 'scope' => $scope];
+        }
+
+        $render = new Node\Expr\MethodCall($call->var, new Node\Identifier(ResponsableRendering::TO_RESPONSE), $call->args);
+        $callee = $this->calleeResolver->resolve($render, $scope);
+
+        return $callee === null ? null : ['receiver' => $receiver, 'callee' => $callee, 'call' => $render, 'scope' => $scope];
+    }
+
+    /**
+     * The responses one rendering is sent as: the object itself for the framework's rendering, or each
+     * return of the application's `toResponse()`, read with that object as `$this`. Not memoised: an
+     * inherited override answers for whichever object it renders, so its shape is not the method's alone.
+     * Null when any return cannot be read — publishing the others as the whole would leave the missing one
+     * out of the contract.
+     *
+     * Each arm is then bound to the call that reached it, as a descended helper's shape is
+     * ({@see bindCall()}), and stamped with the `#[ErrorComponent]` the override declares.
+     *
+     * @param  array{receiver: ClassT, callee: Callee|null, call: Node\Expr\MethodCall|Node\Expr\StaticCall, scope: Scope}  $render
+     * @param  list<string>  $paramNames  the caller's parameter names
+     * @return non-empty-list<RefinedResponse>|null
+     */
+    private function renderArms(array $render, int $depth, array $paramNames = []): ?array
+    {
+        $callee = $render['callee'];
+        if ($callee === null) {
+            return [RefinedResponse::renderedBy($render['receiver'])];
+        }
+
+        if (! $this->budget->withinDepth($depth + 1) || ! $this->budget->withinBudget($this->adapter->normalize($callee->file))) {
+            $this->budget->truncate();
+
+            return null;
+        }
+        $this->touch($callee->file);
+        $this->touch($callee->writtenIn());
+
+        $node = $this->fileAnalyzer->method($callee->file, $callee->class, $callee->method);
+        if ($node === null) {
+            return null;
+        }
+
+        $outer = $this->renderingSelf;
+        $this->renderingSelf = ['class' => $callee->class, 'receiver' => $render['receiver']];
+        $read = [];
+        try {
+            foreach ($node->getReturnStatements() as $statement) {
+                $expr = $statement->getReturnNode()->expr;
+                $refined = $expr === null
+                    ? null
+                    : $this->refineExpr($expr, $this->fileAnalyzer->stableScope($statement->getScope()), $this->parameterNames($callee), $depth + 1);
+                if ($expr === null || $refined === null || $refined->delegates) {
+                    $read[] = null;
+
+                    continue;
+                }
+                $refined = $refined->contentType === null
+                    ? self::labelledContentType($refined, $expr, $node->getStatements())
+                    : $refined;
+                // The framework's own rendering of the object carries nothing the call could bind.
+                $declared = $this->declared($refined, $callee) ?? $refined;
+                $read[] = $declared->statusOfPayload ? $declared : $this->bindCall($declared, $callee, $render['call'], $render['scope'], $paramNames);
+            }
+        } finally {
+            $this->renderingSelf = $outer;
+        }
+
+        return ResponseArms::whole($read);
+    }
+
+    /**
+     * `parent::toResponse($request)` inside the application's `toResponse()` of the object being rendered:
+     * the framework's own rendering of that object, when the parent's method is the framework's — or the
+     * parent's own override read the same way, when the application wrote that too. `false` when the call is
+     * not one of these, so the caller carries on; null when it is and could not be read.
+     */
+    private function parentRendering(Node\Expr\StaticCall $call, Scope $scope, int $depth): RefinedResponse|false|null
+    {
+        $self = $this->renderingSelf;
+        if ($self === null || ! ResponseArms::isParentRendering($call, $scope->getClassReflection()?->getName(), $self['class'])) {
+            return false;
+        }
+
+        $callee = $this->calleeResolver->resolve($call, $scope);
+        if ($callee === null) {
+            return null;
+        }
+        if (! $this->appFilter->isProjectFile($callee->file)) {
+            return RefinedResponse::renderedBy($self['receiver']);
+        }
+
+        return ResponseArms::single($this->renderArms(['receiver' => $self['receiver'], 'callee' => $callee, 'call' => $call, 'scope' => $scope], $depth));
     }
 
     /**
@@ -366,8 +550,10 @@ final class ResponseShapeRefiner
         $contentType = $ctArg instanceof LiteralT && is_string($ctArg->value) ? $ctArg->value : null;
 
         // No member map to read back: this reads a PHPStan type, and the map is written past the last
-        // `@template` the stub declares, so only our own descent ever carries one.
-        return new RefinedResponse($payload, $status, null, $contentType);
+        // `@template` the stub declares, so only our own descent ever carries one. A payload deciding its
+        // own status ({@see RefinedResponse::renderedBy()}) keeps that through a chain unless the chain
+        // states a status of its own.
+        return new RefinedResponse($payload, $status, null, $contentType, statusOfPayload: $payload !== null && $statusArg instanceof PayloadStatusT);
     }
 
     /**

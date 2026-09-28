@@ -276,8 +276,8 @@ final class InferredResponsesExtension implements OperationExtension
     }
 
     /**
-     * Place a return into `(status, payload)` bucket(s) — normally just the unwrapped pair. A bare
-     * Data return can override `calculateResponseStatus()` and re-home its body off 200, possibly to
+     * Place a return into `(status, payload)` bucket(s) — normally just the unwrapped pair. A Data return
+     * rendering itself can override `calculateResponseStatus()` and re-home its body off 200, possibly to
      * several statuses (a conditional whose arms all fold). For a union of Data classes each member
      * re-homes independently; members with no override, and non-class members, stay at 200.
      *
@@ -285,9 +285,10 @@ final class InferredResponsesExtension implements OperationExtension
      */
     private function placeReturn(string $status, ?DType $payload, DType $returnType, RouteContext $context): array
     {
-        // Only a bare Data return re-homes: default status, and the payload IS the whole return type
-        // (a JsonResponse-wrapped payload already has its own folded status).
-        if ($status !== self::DEFAULT_STATUS || $payload === null || $returnType !== $payload) {
+        // Only a payload rendering itself re-homes: the bare object, or the framework's `toResponse()` of it,
+        // which carries no status of its own ({@see FrameworkClasses::selfRendered()}). A status the code
+        // stated is already the answer.
+        if ($status !== self::DEFAULT_STATUS || $payload === null || FrameworkClasses::selfRendered($returnType) !== $payload) {
             return [[$status, $payload]];
         }
 

@@ -10,6 +10,7 @@ use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\PayloadStatusT;
 use Docuccino\Core\Inference\DType\StatusMarkerT;
 use Docuccino\Core\Inference\DType\UnknownT;
 
@@ -57,6 +58,7 @@ final readonly class RefinedResponse
         public array $payloadParamProvenance = [],
         public ?ArrayShapeT $payloadMembers = null,
         public ?ComponentDeclaration $component = null,
+        public bool $statusOfPayload = false,
     ) {}
 
     /**
@@ -69,7 +71,19 @@ final readonly class RefinedResponse
      */
     public function withComponent(ComponentDeclaration $component): self
     {
-        return new self($this->payload, $this->status, $this->statusSource, $this->contentType, $this->delegates, $this->payloadParamProvenance, $this->payloadMembers, $component);
+        return new self($this->payload, $this->status, $this->statusSource, $this->contentType, $this->delegates, $this->payloadParamProvenance, $this->payloadMembers, $component, $this->statusOfPayload);
+    }
+
+    /**
+     * An object the framework renders by its own rules — a resource through its `toResponse()`. The status
+     * is the object's to decide exactly as it is for the bare object (a resource's 201 for a model it just
+     * created), so none is claimed here: {@see $statusOfPayload} emits a {@see PayloadStatusT} status, which
+     * the adapter reads as "place it as the payload would be placed", and a chain's `->setStatusCode()` still
+     * overrides it.
+     */
+    public static function renderedBy(DType $payload): self
+    {
+        return new self($payload, statusOfPayload: true);
     }
 
     /** A `return null`/void return: the framework handles it, so there's no response to document. */
@@ -91,13 +105,13 @@ final readonly class RefinedResponse
      */
     public function withContentType(?string $contentType): self
     {
-        return new self($this->payload, $this->status, $this->statusSource, $contentType, $this->delegates, $this->payloadParamProvenance, $this->payloadMembers, $this->component);
+        return new self($this->payload, $this->status, $this->statusSource, $contentType, $this->delegates, $this->payloadParamProvenance, $this->payloadMembers, $this->component, $this->statusOfPayload);
     }
 
     /** Clears {@see $statusSource} so the bound shape reads as resolved. */
     public function withBoundStatus(LiteralT $status): self
     {
-        return new self($this->payload, $status, null, $this->contentType, $this->delegates, $this->payloadParamProvenance, $this->payloadMembers, $this->component);
+        return new self($this->payload, $status, null, $this->contentType, $this->delegates, $this->payloadParamProvenance, $this->payloadMembers, $this->component, $this->statusOfPayload);
     }
 
     /**
@@ -106,7 +120,7 @@ final readonly class RefinedResponse
      */
     public function withStatusSource(?ParamAccessor $statusSource): self
     {
-        return new self($this->payload, null, $statusSource, $this->contentType, $this->delegates, $this->payloadParamProvenance, $this->payloadMembers, $this->component);
+        return new self($this->payload, null, $statusSource, $this->contentType, $this->delegates, $this->payloadParamProvenance, $this->payloadMembers, $this->component, $this->statusOfPayload);
     }
 
     /**
@@ -114,7 +128,7 @@ final readonly class RefinedResponse
      */
     public function withPayload(?DType $payload, array $payloadParamProvenance): self
     {
-        return new self($payload, $this->status, $this->statusSource, $this->contentType, $this->delegates, $payloadParamProvenance, $this->payloadMembers, $this->component);
+        return new self($payload, $this->status, $this->statusSource, $this->contentType, $this->delegates, $payloadParamProvenance, $this->payloadMembers, $this->component, $this->statusOfPayload);
     }
 
     /**
@@ -125,7 +139,7 @@ final readonly class RefinedResponse
      */
     public function withPayloadMembers(ArrayShapeT $payloadMembers, array $payloadParamProvenance): self
     {
-        return new self($this->payload, $this->status, $this->statusSource, $this->contentType, $this->delegates, $payloadParamProvenance, $payloadMembers, $this->component);
+        return new self($this->payload, $this->status, $this->statusSource, $this->contentType, $this->delegates, $payloadParamProvenance, $payloadMembers, $this->component, $this->statusOfPayload);
     }
 
     /**
@@ -247,9 +261,11 @@ final readonly class RefinedResponse
             return null;
         }
 
+        // The payload deciding its own status is a status that is KNOWN — the payload's — so it says so
+        // rather than leaving the slot unknown ({@see PayloadStatusT}).
         $args = [
             $this->payload ?? new UnknownT('payload not folded'),
-            $this->status ?? new UnknownT('status not folded'),
+            $this->status ?? ($this->statusOfPayload && $this->payload !== null ? new PayloadStatusT : new UnknownT('status not folded')),
         ];
         if ($this->contentType !== null) {
             $args[] = new LiteralT($this->contentType);
