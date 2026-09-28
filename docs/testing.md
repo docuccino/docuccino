@@ -276,6 +276,30 @@ Consequences:
   unit tests for its pure classes (translators, registries, config objects) — not more
   subprocess fixture tests.
 
+### Why the coverage gate shares test ids
+
+A parallel coverage run merges every worker's coverage in the parent, all of it in memory at once, and
+it died there against an 8G limit after the whole suite had passed. What it was holding was test ids.
+Line coverage records, for every executed line, the tests that executed it; in a worker those lists
+repeat the same few thousand strings, each one shared. The worker hands its coverage to the parent
+through `serialize()`, which spells a string out in full at every occurrence, and `unserialize()` gives
+each occurrence a string of its own.
+
+Measured at CI's four processes: each worker recorded ~4.46M line hits by ~3,950 distinct ids of ~157
+bytes, so 92% of its ~800MB file was the same ids repeated ~1,130 times, and each file cost ~2GB once
+read back. The parent peaked at 7.9GB, and the figure grows with every test added.
+
+`tools/phpunit/ShareCoverageTestIds` (bootstrapped in `phpunit.xml`) rewrites each worker's line
+coverage just before it is written so every id is stored once and each repeat is a reference to it,
+which `serialize()` writes as a back-reference and `unserialize()` restores as one shared string. Worker
+files fell from 3.19GB to 0.24GB in total and the merge's peak from 7.9GB to 1.0GB (the whole run's
+largest process from 5.8GB to 1.25GB resident), with the clover and HTML reports byte-identical over
+the same worker files. No id and no count changes, so every report reads what it read before;
+`tests/tools/ShareCoverageTestIdsTest.php` holds it to that.
+
+Raising the limit would have bought time, not room: the payload is tests × lines each test executes,
+and more processes only spread the same total over more files.
+
 ## Measured coverage (2026-09-27)
 
 Line coverage (statements) over the suite excluding the `fixture` group. These are the numbers the
