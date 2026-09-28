@@ -421,7 +421,9 @@ re-added.
 
 Getting identities back is usually nothing at all. An OpenAPI export carries a flat `x-docuccino-id`
 on every node it mints one for **by default**, so an ordinary committed `docs/openapi.json` pairs by
-identity already. The `full` artifact carries the whole
+identity already. The one place it never appears is beside a `$ref` that points at a shared response,
+parameter or other component, because OpenAPI allows nothing there but `summary` and `description`.
+The node the `$ref` points at keeps its id, responses pair by status within their operation, and parameters by location and name. The `full` artifact carries the whole
 [Docuccino extension](/uir/) natively, including the guide pages OpenAPI has nowhere to put:
 
 ```bash

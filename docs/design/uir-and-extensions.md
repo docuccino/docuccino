@@ -531,6 +531,16 @@ document against an artifact read back off disk, so a reader that knows only the
 two sides in disjoint key spaces and reports every node it cannot pair as removed AND re-added — a
 wall of phantom breaking changes on a document nobody touched.
 
+The one node the flat id never lands on is a Reference Object: OpenAPI lets it carry nothing beside
+`$ref` but `summary` and `description` (3.0 not even those), and a strict reader refuses the whole
+document over an extension there. So a use of a shared response or parameter publishes the pointer
+alone and the id stays in the UIR, where the use site carries it nested. The diff loses nothing by
+it: responses pair by status under an operation it paired by id, and a parameter the two sides spell
+with one `in` + `name` under that operation is one parameter whatever id each read for it — an
+exported use of a shared one reads its component's. A Schema Object is the
+exception from 3.1 on, being JSON Schema, and keeps its id beside a `$ref`; in 3.0, where that `$ref`
+is a Reference Object too, it goes.
+
 ### Component naming: a minted name is a function of the thing
 
 A component's storage SLOT is handed out first-come — `Foo`, then `Foo_2` — and first-come is route
