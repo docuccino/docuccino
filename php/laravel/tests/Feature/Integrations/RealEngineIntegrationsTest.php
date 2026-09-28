@@ -28,6 +28,7 @@ use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateFacts;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateParameters;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
 use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldJsonApiResourceSchema;
+use Docuccino\Laravel\Tests\Fixtures\ApiResources\ListedCollection as ListedFixtureCollection;
 use Docuccino\Laravel\Tests\Fixtures\ApiResources\MultiShapeResource;
 use Docuccino\Laravel\Tests\Fixtures\ApiResources\PartlyDynamicMetaResource;
 use Docuccino\Laravel\Tests\Fixtures\ApiResources\ReleaseResource as EnvelopedFixtureResource;
@@ -1010,4 +1011,37 @@ it('publishes an empty (object) cast in a resource body as an object, never as t
         ->toSchema(new ClassT(EnvelopedFixtureResource::class));
 
     expect($components->schemas()['ReleaseResource']['properties']['settings'])->toBe(['type' => 'object']);
+})->group('fixture');
+
+it('publishes the with() members of the collection a newCollection() override builds, through the real engine', function (): void {
+    // The action names the framework's collection and the item mentions its collection nowhere; the
+    // engine answers the override's class, and its with() body is read as the root envelope's members.
+    // The fixture app's classes stand in by name for their mirrors here, which this process can load.
+    $action = ActionAnalysis::fromArray(FixtureRunner::analyze(
+        'app/Http/Controllers/ListedCollectionController.php',
+        'App\\Http\\Controllers\\ListedCollectionController',
+        'index',
+    ));
+    $mirror = static fn (string $fqcn): string => str_replace('App\\Http\\Resources\\', 'Docuccino\\Laravel\\Tests\\Fixtures\\ApiResources\\', $fqcn);
+    $type = $action->returns[0]->type ?? null;
+    expect($type)->toBeInstanceOf(ClassT::class);
+    assert($type instanceof ClassT);
+    $item = $type->typeArgs[0] ?? null;
+    expect($item)->toBeInstanceOf(ClassT::class);
+    assert($item instanceof ClassT);
+
+    $engine = new StubTypeEngine(analyses: [
+        ListedFixtureCollection::class.'::with' => ActionAnalysis::fromArray(FixtureRunner::analyze(
+            'app/Http/Resources/ListedCollection.php',
+            'App\\Http\\Resources\\ListedCollection',
+            'with',
+        )),
+    ]);
+    $schema = (new SchemaConverter([new JsonResourceSchema, ...DefaultTypeMappers::all()], $engine, new ComponentRegistry))
+        ->toSchema(new ClassT($mirror($type->fqcn), [new ClassT($mirror($item->fqcn))]))->schema;
+
+    expect($mirror($type->fqcn))->toBe(ListedFixtureCollection::class)
+        ->and(array_keys($schema['properties']))->toBe(['data', 'meta', 'api_version'])
+        ->and($schema['required'])->toBe(['data', 'meta', 'api_version'])
+        ->and(array_keys($schema['properties']['meta']['properties']))->toBe(['listed_at']);
 })->group('fixture');
