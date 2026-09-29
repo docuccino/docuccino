@@ -80,14 +80,12 @@ final class CopiedInputs
             return [];
         }
 
-        $hook = $reflection->getMethod(self::HOOK);
-        $declaring = $hook->getDeclaringClass()->getName();
-        $file = $hook->getFileName();
-        if ($file === false || ! self::isApplicationMethod($reflection, self::HOOK)) {
+        if (! self::isApplicationMethod($reflection, self::HOOK)) {
             return [];
         }
 
-        $method = ParsedClassFile::methodsOf($file, $declaring)[self::HOOK] ?? null;
+        // The hook PHP runs, which a parent may write, or a trait under a name of its own.
+        $method = ParsedClassFile::declarationOf($reflection->getMethod(self::HOOK));
         if ($method === null || $method->stmts === null) {
             return [];
         }

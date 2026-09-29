@@ -150,6 +150,13 @@ them.
   `RateLimitProblem` (a private constructor behind a named one). What the engine reads off each constructor
   is what decides which keys a response always carries.
 
+### Closures located by line
+
+- `app/Http/ClosureRoutes.php` — closure route actions whose declaration starts before their
+  `function`/`fn` keyword (an attribute above it, `static` on a line of its own), one whose keyword shares
+  a line with the attribute the next closure starts at, and two keywords on one line. Reflection gives a
+  closure the keyword's line, which is all a closure route or a handler callback arrives with.
+
 ### QueryBuilder deep-chain trace (the Scramble-Pro-beater)
 
 The allowed-filters chain is built inside a Query class, reached two calls deep, behind a

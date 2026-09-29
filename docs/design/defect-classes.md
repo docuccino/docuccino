@@ -556,6 +556,38 @@ degraded-but-true answer, since nothing at that call can tell them apart. Both h
 fixtures that put two of the thing on one line: two closures at one call, and two render callbacks in one
 `return`.
 
+## A reflected line read as a parsed node's start line
+
+Native reflection and php-parser disagree about where a declaration starts. `getStartLine()` on a
+`ReflectionMethod` or `ReflectionFunction` is the line of the `function`/`fn` keyword; a parsed node starts
+at its first attribute or modifier. They agree only while nothing stands on a line of its own before the
+keyword, so a lookup matching one against the other misses every `#[Attribute]` on the line above and every
+`static` or `public` on its own line — and where that line happens to be where another closure starts, it
+answers with the neighbour's body.
+
+*Instances.* The fixed-property reader found a constructor by reflected line, so one with an attribute
+above it was read as fixing nothing. Then the closure-route trace and the exception-callback lookup
+selected a closure by it: an attributed closure route was walked for nothing, and one whose keyword shared a
+line with the attribute of the next was answered with the next one's response. `GateBody` tied a parsed
+`authorize()` to its reflection by it, so an attributed gate that always allows was read as unreadable.
+The same lookup by NAME alone had six readers of its own — a custom filter's `__invoke`, a model's
+`casts()`, an `Attribute` accessor's `get:` closure, a relation method, a Data class's `defaultWrap()`, a
+FormRequest's `prepareForValidation()` — which took the last method of that name anywhere in the file, so a
+second class in it answered for the first, and missed a body a parent wrote in another file or a trait wrote
+under an alias.
+
+*The tell.* `getStartLine()` of a node compared with `getStartLine()` of a reflection, in either direction;
+or a method node picked out of a file by its name while a reflection of the method is in hand
+(`ParsedClassFile::declarationOf()` is the lookup that takes the reflection).
+
+*The fix that worked.* Compare the reflected line with the line `DeclarationLine` computes for a node (its
+keyword's), never with the node's start line. For a method, `MethodDeclaration` lets names only NOMINATE —
+its declaring class, and each trait under the name the method has there — and keeps the one nominee in the
+reflected file on the reflected line: a name alone is not an answer, because two traits can write one
+name and only `insteadof`, which reflection has already resolved, says which body runs. A closure, which
+has no name, is located at the line alone. Either lookup declines when two candidates share the line, since
+reflection gives a line and nothing else.
+
 ## A middleware read by one of its two spellings
 
 A route names a middleware by its registered alias or by the middleware's own class name, and those are
