@@ -33,7 +33,8 @@ Every `{param}` in a route's URI becomes a path parameter. Docuccino types it fr
   `$casts` entry, or the `@property` type the analyzer recovered for it.
 - An **unbound** segment is a required `string`, narrowed by any constraint the route puts on it —
   see [Route constraints](#route-constraints).
-- An optional segment (`{param?}`) is documented as optional.
+- A route with an optional segment (`{param?}`) is published once per URL it answers — see
+  [Optional segments](#optional-segments).
 - A route that resolves soft-deleted records (`->withTrashed()`) notes it on the parameter, so
   consumers know a trashed record can resolve there.
 
@@ -77,6 +78,9 @@ A `pattern` is anchored, because the router matches the whole segment. A bound m
 [`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) still take precedence over the
 constraint, and a catch-all such as `.*` says nothing a plain `string` doesn't already.
 
+A constraint on a segment of the route's host (`Route::domain('{tenant}.example.com')`) reaches the
+server variable that host becomes — see [Routes bound to a host](/laravel/guides/production/#routes-bound-to-a-host).
+
 JSON Schema reads a `pattern` in JavaScript's regular-expression dialect, and PHP's differs in ways
 that matter. In the router `\d` and `\w` match every script's digits and letters, where JavaScript's
 match ASCII only, so `->where('id', '\d+')` is published as `^(?:[0-9]|[^\x00-\x7F])+$`: exact for
@@ -89,6 +93,72 @@ counts UTF-16 units, so an emoji is two. Write `[0-9]{4}` where ASCII digits are
 published. For the same reason `whereIn()` values containing
 `.` or other regex characters are not published as an `enum`: the framework doesn't escape them, so
 `whereIn('v', ['v1.0'])` also matches `v1x0`.
+
+### Optional segments
+
+A route with an optional segment answers more than one URL: `/invoices/{status?}` serves `/invoices`
+and `/invoices/{status}`. OpenAPI has no optional path parameter — every version requires a path
+parameter to be `required: true`, because the path it sits in is only ever that path with the segment
+present — so Docuccino publishes one operation per URL the route answers. A client, a mock server or a
+contract test can then call each of them:
+
+```php
+Route::get('/invoices/{status?}', [InvoiceController::class, 'index'])->name('invoices.index');
+
+class InvoiceController
+{
+    public function index(string $status = 'open') { /* … */ }
+}
+```
+
+```yaml
+paths:
+  /invoices:
+    get:
+      operationId: invoices.index.without-status
+  /invoices/{status}:
+    get:
+      operationId: invoices.index
+      parameters:
+        - name: status
+          in: path
+          required: true
+          description: Leaving it off is the same as sending `open`.
+          schema: { type: string, default: open }
+```
+
+Each additional optional segment adds one more form: `/archive/{year?}/{month?}` publishes `/archive`,
+`/archive/{year}` and `/archive/{year}/{month}`. The full form keeps the identity and `operationId` the
+route has always had, so a document diffs as that operation unchanged and the shorter ones added. A
+shorter form's `operationId` names the segments it leaves off (`.without-status`), whether the id comes
+from the route's name, the controller method or [`#[OperationId]`](/laravel/reference/attributes/#operationid);
+an unnamed route mints one from each form's own path.
+
+Where leaving the last segment off sends a value — the route's `->defaults()` value, or else the action
+parameter's own default — that value is the parameter's `default`. A client that fills it in gets
+exactly what the shorter form gets, which is the only thing a `default` may promise, so it is published
+only where the segment could carry it: a string or an integer the route's constraint accepts, on a
+segment nothing else typed. A default of `null`, an array, a value outside the constraint, or one on a
+bound model is left out, and so is one behind
+[`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) with a type of its own.
+
+A `{param?}` followed by more of the path — `/invoices/{year?}/items` — is required at runtime too,
+because the router cannot tell where it would have ended, so it publishes one form.
+
+The router serves a URL with the first route it tries that matches it — in registration order, except
+that Laravel 13 tries every route bound to a host before the rest — and the document follows, reading
+each route's constraints, host and scheme as the router compiles them. Where another route tried first
+answers every URL a form does, that route is the operation published there: a shorter form it covers is
+left out, and a route of its own that it covers is never reached, which the build reports as
+[`route.shadowed`](/laravel/reference/diagnostics/) naming both. Where only a route's full form is
+covered — `/users/{id?}` after `/users/{id}` — the warning names the shorter paths that still reach it.
+Where the two only share a path — `/reports/{year}` constrained to numbers beside a `/reports/{year}`
+that takes `summary` or `latest` — both are reached, so neither is dropped as unreachable; OpenAPI has
+room for one operation there, so the route's own path is published and the shorter form is reported as
+[`route.operation-collision`](/laravel/reference/diagnostics/). Between two shorter forms, the one
+published is the first by path template, then host, never the one registered first, and a host does not
+give a path a slot of its own: OpenAPI keys an operation by path and method alone. A cached router
+(`route:cache`) builds the same document as the routes it was cached from.
 
 ### What the binding tells a consumer
 
