@@ -123,6 +123,10 @@ function publicExtensionSurface(): array
         // describes a response and names its shared component by it, and a partial copy is how a `501`
         // came to be described as "Error" beside a success response the registry already named.
         'Docuccino\Core\Support\ReasonPhrase',
+        // Same exemption, same reason: the ONE reading of a PHP regex as a JSON Schema `pattern`. The
+        // router's constraints and the validation `regex:` rule are both PCRE, and a second reader beside
+        // the first is how one of them publishes `\d` as ASCII digits while the other knows better.
+        'Docuccino\Core\Support\PortablePattern',
         // Same exemption, same reason: the ONE ladder from a set of numeric bounds to a value they admit.
         // A bound both constrains a value and names one, so `minimum: 5` has a legal illustration where a
         // `pattern` has none — and an integration filling an unread member has to reach for the same one

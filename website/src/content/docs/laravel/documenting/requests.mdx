@@ -31,7 +31,8 @@ Every `{param}` in a route's URI becomes a path parameter. Docuccino types it fr
   and the build reports `route-binding.untyped` rather than typing it off a key it does not use.
 - A binding that names its own column — `{post:slug}` — is typed from **that** column instead: its
   `$casts` entry, or the `@property` type the analyzer recovered for it.
-- An **unbound** segment is a required `string`.
+- An **unbound** segment is a required `string`, narrowed by any constraint the route puts on it —
+  see [Route constraints](#route-constraints).
 - An optional segment (`{param?}`) is documented as optional.
 - A route that resolves soft-deleted records (`->withTrashed()`) notes it on the parameter, so
   consumers know a trashed record can resolve there.
@@ -51,6 +52,43 @@ it. It never falls back to the model's route key: an endpoint that takes a slug 
 `integer` id is a wrong answer, and a plain `string` is at least a true one. Declaring the segment's
 type with [`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) settles it and the notice
 stops — the parameter then carries the type you wrote, so nothing is being described loosely.
+
+### Route constraints
+
+A constraint on the route — `->whereUuid()`, `->where()`, or a `Route::pattern()` registered before the
+route — is part of what the endpoint accepts: a value that doesn't match never reaches your action,
+because the router answers `404`. So a segment nothing else types is documented as what the router
+matches:
+
+| Constraint | Documented as |
+| --- | --- |
+| `->whereUuid('id')` | `format: uuid` |
+| `->whereUlid('id')` | `format: ulid` |
+| `->whereNumber('id')`, `->whereAlpha()`, `->whereAlphaNumeric()` | the framework's expression as a `pattern`, such as `^[0-9]+$` |
+| `->whereIn('status', ['draft', 'published'])` | an `enum` of those values |
+| `->where('code', '[a-z]{3}')` | `pattern: ^[a-z]{3}$` |
+
+```php
+Route::get('/invoices/{number}', [InvoiceController::class, 'show'])->whereNumber('number');
+Route::get('/reports/{period}', [ReportController::class, 'show'])->whereIn('period', ['daily', 'weekly']);
+```
+
+A `pattern` is anchored, because the router matches the whole segment. A bound model's route key and
+[`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) still take precedence over the
+constraint, and a catch-all such as `.*` says nothing a plain `string` doesn't already.
+
+JSON Schema reads a `pattern` in JavaScript's regular-expression dialect, and PHP's differs in ways
+that matter. In the router `\d` and `\w` match every script's digits and letters, where JavaScript's
+match ASCII only, so `->where('id', '\d+')` is published as `^(?:[0-9]|[^\x00-\x7F])+$`: exact for
+ASCII, and admitting any other character rather than refusing an Arabic-Indic digit the router serves.
+A `pattern` that disagreed with the router would reject values your server serves, so a constraint
+that no pattern can state truly is documented as a plain `string` and the build reports
+`route-constraint.unportable`: `.`, an inline flag such as `(?i)`, a possessive quantifier, or a count
+such as `{4}` over `\d`, `\w` or a negated class — the router counts characters there and JavaScript
+counts UTF-16 units, so an emoji is two. Write `[0-9]{4}` where ASCII digits are meant and it is
+published. For the same reason `whereIn()` values containing
+`.` or other regex characters are not published as an `enum`: the framework doesn't escape them, so
+`whereIn('v', ['v1.0'])` also matches `v1x0`.
 
 ### What the binding tells a consumer
 
@@ -922,7 +960,7 @@ a `format` claim about it would be a guess.
 | --- | --- |
 | `in:draft,sent,paid` / `Rule::in(...)` / `Rule::enum(InvoiceStatus::class)` | An `enum` of the allowed values — `integer`-typed when every value is a whole number, else `string`. `Rule::enum()` reads the enum's real cases and names the class in the description; a `->only([...])` / `->except([...])` chain narrows the documented values to match. |
 | `not_in:a,b` | `not: { enum: ["a", "b"] }` |
-| `regex:/^INV-\d+$/` | `pattern`, with the PHP delimiters stripped so it's a bare ECMA-262 regex. A modifier that changes what matches — `i`, `m`, `s`, `x` — has no `pattern` spelling, so the field is published without one and a `validation.regex-modifier` notice says so. So is a body a JSON Schema validator reads differently from PHP — `\d`, `\w` or `\s` under `/u` (they match every script there), `\A`/`\z`, inline flags, lookarounds, `.` — with a `validation.regex-unportable` notice. |
+| `regex:/^INV-\d+$/` | `pattern`, with the PHP delimiters stripped so it's a bare ECMA-262 regex, read the way [route constraints](#route-constraints) are: under `/u`, `\d` and `\w` match every script, so they are published as the ASCII class or any non-ASCII character. PHP's `$` also matches before a final newline unless the regex carries `D`, so `/^INV-\d+$/` is published as `^INV-\d+\n?$` and `/^INV-\d+$/D` as `^INV-\d+$`. A modifier that changes what matches — `i`, `m`, `s`, `x` — has no `pattern` spelling, so the field is published without one and a `validation.regex-modifier` notice says so. So is a body no pattern states truly — `.`, `\s` under `/u`, a count over a negated class or a Unicode-wide escape, inline flags, lookarounds, `\B` without `/u`, anything after a `$` that could take that final newline — with a `validation.regex-unportable` notice. |
 | `alpha:ascii`, `alpha_num:ascii`, `alpha_dash:ascii` | The ASCII class as an anchored `pattern` — `^[a-zA-Z0-9_-]+$` for `alpha_dash:ascii`. |
 | `alpha`, `alpha_num`, `alpha_dash` | Laravel accepts letters, marks and numbers from any script here, so the `pattern` is the ASCII class plus any non-ASCII character — `^(?:[a-zA-Z0-9_-]\|[^\x00-\x7F])+$`. That's exact for ASCII and wider beyond it, because the exact `\p{L}` form reads differently in validators that compile without the `u` flag. |
 | `starts_with:INV-` / `ends_with:.pdf` | An anchored `pattern` for a single value; a multi-value set becomes a description ("Must start with one of: …"), since there's no single pattern for it. |
