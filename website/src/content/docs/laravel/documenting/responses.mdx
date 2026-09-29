@@ -133,11 +133,32 @@ into an object. In those cases `data` is documented as an array or an object, si
 client can rely on.
 
 The same holds for a named collection such as `UserCollection extends ResourceCollection`. One that
-keeps Laravel's `toArray()` is documented as a list of the resource it collects — its `$collects`
-property, or the resource its name points to — and one whose `toArray()` already returns a `data`
-key is documented as that body, since Laravel doesn't wrap it a second time. With wrapping off, a
-named collection is documented both bare and wrapped under `data`, because the collection may hold a
+keeps Laravel's `toArray()` is documented as a list of the resource it collects — the resource named
+by its `#[Collects]` attribute on Laravel 13, its `$collects` property, or the resource its name points
+to — and one whose `toArray()` already returns a `data` key is documented as that body, since Laravel
+doesn't wrap it a second time. The exception is a resource whose `$forceWrapping` is on: Laravel wraps
+it under `data` whatever its body returns, and it is documented that way. With wrapping off, a named
+collection is documented both bare and wrapped under `data`, because the collection may hold a
 paginator, whose `links` and `meta` make Laravel wrap it.
+
+Laravel renumbers a collection's keys before sending it, so a collection is documented as a list.
+When a collection keeps its keys instead — through a `$preserveKeys` property on the resource or the
+named collection, or Laravel 13's `#[PreserveKeys]` attribute — its `data` is documented as an array
+or an object of that resource, paginated or not. Laravel sends kept keys as an object unless they run
+`0, 1, 2…`, so which one arrives depends on the collection you pass, not on the class:
+
+```php
+class UserResource extends JsonResource
+{
+    public $preserveKeys = true;
+}
+
+// {"data": {"3": {...}, "7": {...}}}
+return UserResource::collection(User::all()->keyBy->id);
+```
+
+A `->preserveKeys()` call on the collection itself isn't read, so declare the choice on the class when
+the document should reflect it.
 
 A list built by `UserResource::collection()` or `->toResourceCollection(UserResource::class)` is the
 collection the resource's `newCollection()` returns, so a base resource that overrides it to hand its

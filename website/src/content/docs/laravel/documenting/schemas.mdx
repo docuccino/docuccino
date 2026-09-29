@@ -86,6 +86,10 @@ Spatie Data classes are the exception: there, `withoutWrapping()` is written **o
 read statically and needs no config — see
 [classes that unwrap themselves](/laravel/packages/spatie-data/#classes-that-unwrap-themselves).
 
+A resource whose `$forceWrapping` is on is wrapped even when its `toArray()` already returns the wrap
+key, as Laravel does. That includes a first-party JSON:API resource, whose document then arrives under
+a second `data`.
+
 Laravel 13's first-party JSON:API resources are supported too: `toAttributes()`,
 `toRelationships()`, `toLinks()` and `toMeta()` build the resource object, and the `include` and
 `fields[TYPE]` query parameters those routes accept are added automatically. Pre-13 apps get identical
