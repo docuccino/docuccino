@@ -342,6 +342,33 @@ also declares a variable of that name. The whole entry is written at the `fallba
 there is, so an [overlay](/laravel/guides/customizing-output/) replaces it outright when the real
 values are something you'd rather state than derive.
 
+The router applies [route constraints](/laravel/documenting/requests/#route-constraints) to a host
+segment just as it does to a path segment, so they reach the variable too. A closed set —
+`->whereIn('tenant', ['acme', 'globex'])`, or a `Route::pattern()` of plain alternatives — becomes the
+variable's `enum`, and its first value the `default`, since OpenAPI requires a default to be one of the
+enum's values:
+
+```yaml
+servers:
+  - url: https://{tenant}.example.com
+    variables:
+      tenant:
+        enum: [acme, globex]
+        default: acme
+```
+
+Every value in the set is published, so a set naming real tenants names them to everyone who reads the
+document. To keep them out of a public one, replace the variable with an
+[overlay](/laravel/guides/customizing-output/), or filter the tenant-bound routes into a
+[document](/laravel/guides/multiple-documents/) of their own.
+
+A Server Variable has no `pattern`, so any other constraint is stated in the variable's description
+instead — `->where('tenant', '[a-z]+')` reads "It matches the pattern `^[a-z]+$`, ignoring case", since
+hosts are matched case-insensitively — and one JavaScript's regular expressions would read differently
+is left out. The `default` is still the segment's name, since nothing else names a host the route
+answers on, and where the constraint refuses that name the description says so. A route's `->defaults()` is not used for a host segment: every host the route answers on
+carries that segment, so the default never reaches your action.
+
 If the host itself comes from the environment — `Route::domain(config('app.admin_domain'))` with
 `ADMIN_DOMAIN=admin.myapp.test` — the build reports it as a
 [`config.machine-dependent-value`](/laravel/documenting/authentication/#pin-the-values-your-clients-act-on)
