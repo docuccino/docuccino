@@ -114,6 +114,51 @@ it('documents every constructor parameter every attribute takes', function (): v
         ->and($missing)->toBe([]);
 });
 
+it('prints every constructor parameter with the type and optionality it really has', function (): void {
+    // Naming a parameter is not agreeing with it: a name turned optional, or a type widened, left the
+    // printed signature claiming the old contract with the check above green. So each parameter is found
+    // in the section's printed constructor and its type (unions compared as sets, `?T` as `T|null`),
+    // whether it carries a default, and whether it is variadic are read against reflection.
+    $normalise = static function (string $type): string {
+        $parts = explode('|', str_starts_with($type, '?') ? substr($type, 1).'|null' : $type);
+        sort($parts);
+
+        return implode('|', $parts);
+    };
+
+    $page = attributesReferencePage();
+    $wrong = [];
+    $counted = 0;
+    foreach (shippedAttributeClasses() as $name => $class) {
+        $printed = preg_match('/```php\n(public function __construct.*?)```/s', attributeReferenceSection($page, $name), $block) === 1 ? $block[1] : '';
+
+        foreach ((new ReflectionClass($class))->getConstructor()?->getParameters() ?? [] as $parameter) {
+            $counted++;
+            $site = $name.'::$'.$parameter->getName();
+            $pattern = '/(?:^|[(,])\s*(?:public\s+)?(?:readonly\s+)?([?\w\\\\|]+)\s+(\.\.\.)?\$'.$parameter->getName().'\b(\s*=\s*[^,)\n]+)?/m';
+
+            if (preg_match($pattern, $printed, $match) !== 1) {
+                $wrong[] = $site.' is not in the printed constructor';
+
+                continue;
+            }
+
+            if ($normalise($match[1]) !== $normalise((string) $parameter->getType())) {
+                $wrong[] = $site.' is printed as '.$match[1].' but is '.$parameter->getType();
+            }
+            if ((($match[3] ?? '') !== '') !== $parameter->isDefaultValueAvailable()) {
+                $wrong[] = $site.' is printed '.($parameter->isDefaultValueAvailable() ? 'required but is optional' : 'optional but is required');
+            }
+            if ((($match[2] ?? '') !== '') !== $parameter->isVariadic()) {
+                $wrong[] = $site.' disagrees on being variadic';
+            }
+        }
+    }
+
+    expect($counted)->toBeGreaterThan(100)
+        ->and($wrong)->toBe([]);
+});
+
 /** One attribute's reference section: from its heading to the next one, so a neighbour cannot cover for it. */
 function attributeReferenceSection(string $page, string $name): string
 {

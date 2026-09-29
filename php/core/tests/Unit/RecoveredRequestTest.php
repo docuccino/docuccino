@@ -346,9 +346,10 @@ it('publishes the example a type-level declaration gives its field', function ()
         ->toBe(['type' => 'string', 'example' => 'Ada']);
 });
 
-it('says nothing about a type-level declaration whose arguments its constructor rejects', function (): void {
-    // No route bag collected it, so there is nothing to report it against: it documents no field, the
-    // healthy declaration beside it still does, and the build carries on.
+it('reports a type-level declaration whose arguments its constructor rejects, and reads it as absent', function (): void {
+    // It documents no field, the healthy declaration beside it still does, and the build carries on. The
+    // author wrote it and it took no effect, so they are told where: the class it sits on, and the class
+    // of what was thrown — never the thrown message, which names the absolute file.
     $components = new ComponentRegistry;
 
     (new RecoveredRequest)->apply(
@@ -361,7 +362,11 @@ it('says nothing about a type-level declaration whose arguments its constructor 
 
     expect($components->schemas()['UnreadableRequestClass']['properties'])
         ->toBe(['nickname' => ['type' => 'string'], 'note' => ['type' => 'string']])
-        ->and($components->diagnostics())->toBe([]);
+        ->and(array_map(static fn ($d): array => [$d->code, $d->message, $d->help], $components->diagnostics()))->toBe([[
+            'attribute.unreadable',
+            'The #[BodyParameter] on '.UnreadableRequestClass::class.' could not be instantiated and was ignored.',
+            'Its constructor threw TypeError. Check the arguments at that declaration against the attribute\'s constructor.',
+        ]]);
 });
 
 it('publishes tagged objects only where each branch has a component to be named after', function (string $method, ?string $class, array $attributes, bool $publishes): void {

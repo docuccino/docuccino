@@ -270,7 +270,7 @@ it('reports the field whose container it could not decide, and only that field',
 it('refuses a caller that says nothing about a source class', function (): void {
     $context = validationRulesContext();
 
-    /* @phpstan-ignore-next-line arguments.count — the missing argument IS the test */
+    /* @phpstan-ignore arguments.count (the missing argument IS the test) */
     expect(static fn () => RuleSetNormalizer::report(new RuleSet(['meta' => [ValidationRule::of('array')]]), $context))
         ->toThrow(ArgumentCountError::class);
 });
@@ -331,6 +331,9 @@ it('asks only where a declaration has not already decided the container', functi
     // type, so it leaves the question exactly as open as it found it.
     'a query declaration naming a key inside' => [[new QueryParameter(name: 'meta[locale]', type: 'string')], 'GET', ['meta', 'other']],
     'a query declaration at a body verb' => [[new QueryParameter(name: 'meta', type: 'object')], 'POST', ['meta', 'other']],
+    // A nameless one documents no parameter on a route — the name is optional only where a filter class
+    // supplies it — so it settles no field, whatever type it states.
+    'a query declaration naming nothing' => [[new QueryParameter(type: 'object')], 'GET', ['meta', 'other']],
 ]);
 
 /**

@@ -38,12 +38,12 @@ const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
     // phpdoc type grammar, the contract checker. The floor sits at the measured integer and 98 is out of
     // reach:
-    // Measured 97.64% (14619/14972): 97% of it is 14522.84 statements, 96.16 of margin (0.64pp).
+    // Measured 97.71% (14953/15304): 97% of it is 14844.88 statements, 108.12 of margin (0.71pp).
     // It was ratcheted 96 → 97 back when
     // the figure was 97.51% over a denominator 1189 statements smaller, dipped to 97.39% as core absorbed
     // work at slightly under its own average, and has come back up without the floor needing to move
     // either time — the ordinary shape for a package this size, and why 97 is where it stays.
-    'core' => ['floor' => 97, 'measured' => 97.64],
+    'core' => ['floor' => 97, 'measured' => 97.71],
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/, the
     // contract-testing assertions. The floor stays at 96 rather than ratcheting to the measured integer.
     // The arithmetic, on the record as the policy asks:

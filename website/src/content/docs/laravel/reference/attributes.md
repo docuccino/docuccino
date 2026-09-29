@@ -187,7 +187,7 @@ add** the named parameter — inference fills the rest.
 
 ```php
 public function __construct(
-    public string $name,
+    public ?string $name = null,
     public ?string $type = null,
     public ?string $description = null,
     public ?string $format = null,
@@ -222,9 +222,11 @@ The same attribute works in either representation. Under `deepObject` a `require
 the container's `required` list beside whatever the validation rules require, and a `required:` on the
 **container** (`#[QueryParameter('filter', required: false)]`) is the last word on whether the whole
 object has to be sent. Placed on a **Spatie Query Builder custom filter
-class**, `#[QueryParameter]` documents that filter (its `name` is ignored — the name comes from
-`AllowedFilter::custom`), whether the filter is registered inline or through a factory of your own
-that wraps it; see [Query Builder → custom filter classes](/laravel/packages/query-builder/#custom-filter-classes).
+class**, `#[QueryParameter]` documents that filter, whether the filter is registered inline or through a
+factory of your own that wraps it; see [Query Builder → custom filter classes](/laravel/packages/query-builder/#custom-filter-classes).
+Leave `name` off there — the name comes from `AllowedFilter::custom`, and one you write is ignored.
+Everywhere else a declaration with no `name` documents nothing, and is reported as
+[`attribute.query-parameter-unnamed`](/laravel/reference/diagnostics/#attributes).
 
 ### `#[PathParameter]`
 
