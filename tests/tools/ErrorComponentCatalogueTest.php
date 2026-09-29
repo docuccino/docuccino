@@ -12,14 +12,26 @@ use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
  * fails here rather than shipping as a catalogue that disagrees with itself.
  */
 
-/** Every status the framework tier speaks for, with the component name it publishes under. */
+/**
+ * Every status a stock framework exception is published under — each one the table classifies, and the
+ * 500 an exception with no readable status is filed at — with the component name it publishes under. Any
+ * other registered status an application throws is named the same way, which the page states in prose.
+ */
 function builtInErrorComponentNames(): array
 {
+    $statuses = [FrameworkExceptionTable::UNPLACED_STATUS];
+    foreach (FrameworkExceptionTable::exceptions() as $fqcn) {
+        $facts = FrameworkExceptionTable::match($fqcn);
+        if ($facts !== null) {
+            $statuses[] = $facts['status'];
+        }
+    }
+
     $names = [];
-    foreach (FrameworkExceptionTable::reasonPhrases() as [$status, $_phrase]) {
+    foreach (array_unique($statuses) as $status) {
         $name = FrameworkExceptionTable::componentName($status);
 
-        expect($name)->not->toBeNull($status.' has a reason phrase but no component name');
+        expect($name)->not->toBeNull($status.' is a framework status with no component name');
 
         $names[$status] = (string) $name;
     }
