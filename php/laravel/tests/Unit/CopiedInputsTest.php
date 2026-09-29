@@ -44,6 +44,7 @@ use Docuccino\Laravel\Tests\Fixtures\CopiedInputs\ServiceHandOffRequest;
 use Docuccino\Laravel\Tests\Fixtures\CopiedInputs\SpreadMergeRequest;
 use Docuccino\Laravel\Tests\Fixtures\CopiedInputs\StaticHandOffRequest;
 use Docuccino\Laravel\Tests\Fixtures\CopiedInputs\TappedHandOffRequest;
+use Docuccino\Laravel\Tests\Fixtures\CopiedInputs\TraitCopiesRequest;
 use Docuccino\Laravel\Tests\Fixtures\TaggedRules\StoreDialledNoticeRequest;
 use Docuccino\Laravel\Tests\Fixtures\TaggedRules\StoreRoutedNoticeRequest;
 use Illuminate\Foundation\Application;
@@ -139,6 +140,12 @@ it('reads an inherited hook in the class that declares it, and keys the route on
 
     expect((new CopiedInputs)->of($context, InheritedCopiesRequest::class))->toBe(['key' => ['in' => 'header', 'name' => 'Idempotency-Key']])
         ->and($context->dependencyFiles())->toContain((string) (new ReflectionClass(BaseCopiesRequest::class))->getFileName());
+});
+
+it('reads a hook a trait writes under a name of its own', function (): void {
+    // PHP runs the trait's `copyKey()` as the request's prepareForValidation(), so the copy is made; a
+    // body looked up by the hook's name in its file finds nothing and leaves the key on the body.
+    expect((new CopiedInputs)->of(copiedInputContext(), TraitCopiesRequest::class))->toBe(['key' => ['in' => 'header', 'name' => 'Idempotency-Key']]);
 });
 
 it('moves a copied key only where the rules name it as one plain value', function (): void {
