@@ -181,6 +181,11 @@ function publicExtensionSurface(): array
         // and the guard→driver resolution are integrations — and each holding its own list is how three
         // of them came to read the alias only (consequence stated in the class).
         'Docuccino\Laravel\Support\AuthMiddlewareNames',
+        // And again: the ONE reading of what a header name is and when two are the same header. The
+        // request-header reads (an extension) publish a header under the framework's lookup key, and a
+        // FormRequest's copied input (an integration) has to find that parameter by the same key — a
+        // private copy of the fold is how a copy stops finding the header its read published.
+        'Docuccino\Laravel\Support\HeaderNames',
     ];
 }
 
