@@ -14,6 +14,8 @@ use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Integrations\FormRequest\CopiedInputParameters;
 use Docuccino\Laravel\Integrations\FormRequest\CopiedInputs;
 use Docuccino\Laravel\Integrations\FormRequest\NullRejection;
+use Docuccino\Laravel\Integrations\Support\RuleParsing;
+use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Tests\Fixtures\CopiedInputs\AliasedRequest;
 use Docuccino\Laravel\Tests\Fixtures\CopiedInputs\BagWriteRequest;
 use Docuccino\Laravel\Tests\Fixtures\CopiedInputs\BaseCopiesRequest;
@@ -42,6 +44,8 @@ use Docuccino\Laravel\Tests\Fixtures\CopiedInputs\ServiceHandOffRequest;
 use Docuccino\Laravel\Tests\Fixtures\CopiedInputs\SpreadMergeRequest;
 use Docuccino\Laravel\Tests\Fixtures\CopiedInputs\StaticHandOffRequest;
 use Docuccino\Laravel\Tests\Fixtures\CopiedInputs\TappedHandOffRequest;
+use Docuccino\Laravel\Tests\Fixtures\TaggedRules\StoreDialledNoticeRequest;
+use Docuccino\Laravel\Tests\Fixtures\TaggedRules\StoreRoutedNoticeRequest;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Validator;
@@ -189,6 +193,29 @@ it('publishes on a parameter exactly the rules the body gave up, and nothing it 
         ->and($operation->parameter('header', 'idempotency-key')->schema()->resolvedField('type'))->toBe('string')
         ->and($operation->parameter('query', 'page')->resolvedField('required'))->toBeFalse();
 });
+
+it('moves a key a partition is read off with the rules it has where no partition is proved', function (string $class, string $key): void {
+    $rules = new RuleSet(array_map(RuleParsing::tokens(...), [
+        'channel' => 'required|in:email,sms',
+        'address' => 'exclude_unless:channel,email|required|email',
+        'phone' => 'exclude_unless:channel,sms|required|string|max:20',
+        'body' => 'required|string|max:500',
+    ]));
+    $normalizer = new RuleSetNormalizer;
+    $plain = $normalizer->normalize($rules);
+    $operation = new OperationDraft;
+
+    $kept = (new CopiedInputs)->move($operation, copiedInputContext(), $class, $normalizer->normalize($rules, true));
+
+    // The split had moved the tag's `required` and the member's gated `required` onto the partition; the
+    // parameter publishes what the server validates the copied value by, and the body is given up whole.
+    expect(CopiedInputs::movedFrom($operation)[$key]['rules'])->toEqual($plain->fields[$key])
+        ->and($kept->variants)->toBe([])
+        ->and($kept->fields)->toEqual(array_diff_key($plain->fields, [$key => true]));
+})->with([
+    'the tag' => [StoreRoutedNoticeRequest::class, 'channel'],
+    'a member the tag switches' => [StoreDialledNoticeRequest::class, 'phone'],
+]);
 
 /*
  * "Required" is exactly "the validator fails a present null", since a copied key holds null when what it

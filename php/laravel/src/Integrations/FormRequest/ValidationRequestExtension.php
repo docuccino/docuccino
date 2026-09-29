@@ -46,7 +46,7 @@ final class ValidationRequestExtension implements OperationExtension
             return;
         }
 
-        $normalized = $this->normalizer->normalize($rules);
+        $normalized = $this->normalizer->normalize($rules, RecoveredRequest::publishesVariants($context, $sourceClass));
         RuleSetNormalizer::report($normalized, $context, $sourceClass);
 
         // A key the FormRequest overwrites with a header, query value or route parameter validates that

@@ -101,11 +101,16 @@ final class CopiedInputs
      */
     public function move(OperationDraft $operation, RouteContext $context, string $class, RuleSet $rules): RuleSet
     {
-        $moved = self::movable($rules, $this->of($context, $class));
+        $copied = $this->of($context, $class);
+
+        // A tagged object read off a key that moves is no partition of the body any more, so it is given up
+        // first, and the rules that move are the ones the merged object would have given up.
+        $rules = $rules->releasing(array_keys(self::movable($rules, $copied)));
+        $moved = self::movable($rules, $copied);
         self::$moved ??= new WeakMap;
         self::$moved[$operation] = $moved;
 
-        return $moved === [] ? $rules : new RuleSet(array_diff_key($rules->fields, $moved));
+        return $rules->without(array_keys($moved));
     }
 
     /**
