@@ -309,10 +309,10 @@ would sit too close to the figure for an ordinary change to survive it (see `lar
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
 | `core`              | **97.64%** | 97    | fully in-process-measurable; 0.64pp above it, ~96 statements |
-| `laravel`           | **97.09%** | 96    | ratcheted 95 → 96; 97 declined at 14.07 statements (0.094pp), see below; 1.09pp above it, ~164 statements |
+| `laravel`           | **97.18%** | 96    | ratcheted 95 → 96; 97 declined at 28.14 statements (0.18pp), see below; 1.18pp above it, ~184 statements |
 | `inference-phpstan` | **54.48%** | 54    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51 → 53 → 54; 0.48pp, ~16 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 92.99%     | —     | informational only; no longer a gate             |
+| Overall             | 93.17%     | —     | informational only; no longer a gate             |
 
 Every figure here is one `composer test:coverage` run of the whole set — CI's coverage job on PHP 8.4,
 which is what the record describes — so the three read off the same clover report and the floors file
@@ -358,11 +358,11 @@ order of magnitude under the 0.47pp `core` carries and the 0.98pp the engine flo
 hair-trigger the policy names. The specific failure it would buy is a denominator change rather than a
 lost proof — deleting 259 fully covered adapter statements drops the ratio under 97 with no change in test
 quality at all, and this repository has twice deleted more than that in one change. The cost of declining
-is stated with it: a floor of 96 leaves 148 statements of room, and a regression smaller than that passes
+is stated with it: a floor of 96 leaves 184 statements of room, and a regression smaller than that passes
 the floor in silence. What answers that is the record check above, which fires at ten — the floor is no
 longer the only thing watching the number, which is what makes keeping its margin affordable. Ratchet to
 97 when the figure clears **97.20%**, about 28 statements, the order of margin the other two floors carry.
-Re-recorded at 97.09% (14,534/14,969) it has not: a floor of 97 would carry 14.07 statements, so the
+Re-recorded at 97.18% (15,100/15,538) it has not: a floor of 97 would carry 28.14 statements, so the
 decline stands.
 
 **A floor drop is only ever a documented denominator change**, and there have been two.

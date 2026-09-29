@@ -47,16 +47,16 @@ const FLOORS = [
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/, the
     // contract-testing assertions. The floor stays at 96 rather than ratcheting to the measured integer.
     // The arithmetic, on the record as the policy asks:
-    // Measured 97.09% (14534/14969): 97% of it is 14519.93 statements, so 97 would carry 14.07 (0.094pp).
+    // Measured 97.18% (15100/15538): 97% of it is 15071.86 statements, so 97 would carry 28.14 (0.18pp).
     // That is well under the margin `core` carries. The cost of declining is real and is the other half:
-    // 96 leaves 163.76 statements of room, so a genuine regression smaller than that passes the FLOOR in
+    // 96 leaves 183.52 statements of room, so a genuine regression smaller than that passes the FLOOR in
     // silence. What answers that is the record check further down, which fires at ten — the floor is no
     // longer the only thing watching this number, which is why it can afford to keep its margin. The
     // margin is worth keeping because the failure this package is exposed to is a denominator change, not
     // a lost proof: deleting 259 fully covered adapter statements drops the ratio under 97 with no change
     // in test quality at all, and deletions of that size have happened here twice. Ratchet to 97 when the
     // figure clears 97.20% — about 28 statements, the order of margin the other two floors carry.
-    'laravel' => ['floor' => 96, 'measured' => 97.09],
+    'laravel' => ['floor' => 96, 'measured' => 97.18],
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
     // which pcov cannot instrument either way. Its behavioural proof is the `fixture` group, not this

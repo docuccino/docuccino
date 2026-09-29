@@ -1092,7 +1092,9 @@ An explicit `file`/`image` rule or attribute is honored as before and never doub
 A header your code reads by name is documented for you. `$request->header('Idempotency-Key')`,
 `$request->hasHeader(…)`, `$request->headers->get(…)`, `request()->header(…)` and the `Request` facade
 all count — in the action, in anything it calls, and in the FormRequest, including the methods Laravel
-runs while resolving it such as `authorize()` and `prepareForValidation()`:
+runs while resolving it such as `authorize()` and `prepareForValidation()`. The methods
+[laravel-actions](/laravel/packages/laravel-actions/) calls on an action while it validates count the
+same way:
 
 <Tabs>
 	<TabItem label="Your code">
@@ -1122,7 +1124,7 @@ One header read under several spellings is one parameter. Some reads are never p
   responses and the security scheme.
 - A header an `apiKey` security scheme or the [API version](/laravel/guides/api-versioning/) already
   carries.
-- A header only the FormRequest's `authorize()` reads. That is a gate: without the header the request is
+- A header only the FormRequest's, or the action's, `authorize()` reads. That is a gate: without the header the request is
   refused, so it is not an optional input, and its name is often one you never meant to publish.
 - Headers the transport or a proxy sets rather than your clients: `Host`, `Cookie`, `Content-Length`,
   `Connection`, `Transfer-Encoding`, `Forwarded`, `X-Forwarded-*`, `X-Real-IP` and `CF-Connecting-IP`.
@@ -1189,11 +1191,39 @@ and 12 lets it through. A rule that reads another field, a database or the netwo
 it never makes the parameter required. A route parameter is already required and typed by the route, so
 its copy only leaves the body. A `#[HeaderParameter]` still wins over what the rules say.
 
-Only a copy Docuccino can be certain of counts: an unconditional `$this->merge([...])` with a literal key
-and a value read by a literal name — `$this->header('…')`, `$this->headers->get('…')`,
-`$this->query('…')` or `$this->route('…')`. A copy inside an `if`, a key written twice, a computed value
-such as `Str::slug($this->input('title'))`, or a hook that also calls your own methods, hands `$this` to
-other code, `replace()`s the input or returns early is documented as if the copy were not there.
+The same copy is followed in two other places it is written. A
+[laravel-actions](/laravel/packages/laravel-actions/) action's `prepareForValidation(ActionRequest $request)`
+merges into the request the package then validates, and a controller action can merge before it
+validates inline:
+
+```php
+public function store(Request $request): OrderResource
+{
+    $request->merge(['idempotency_key' => $request->header('Idempotency-Key')]);
+
+    $validated = $request->validate([
+        'sku' => ['required', 'string'],
+        'idempotency_key' => ['required', 'uuid'],
+    ]);
+
+    // ...
+}
+```
+
+Only a copy Docuccino can be certain of counts: an unconditional `merge([...])` on the request, with a
+literal key and a value read by a literal name — `header('…')`, `headers->get('…')`, `query('…')` or
+`route('…')` on that same request. A hook inherited from a parent class or taken from a trait counts
+like one written in the class. In a controller the merge has to come before the one
+`$request->validate([...])` or `Validator::make($request->all(), [...])` (with or without `->validate()`
+after it) in the action's own body. A copy
+inside an `if`, a key written twice, a computed value such as `Str::slug($this->input('title'))`, or code
+that also calls your own methods, hands the request to other code, `replace()`s the input or returns
+early is documented as if the copy were not there. So is a FormRequest that overrides how its data
+reaches the validator — its own `validationData()`, `all()`, `validator()`, `createDefaultValidator()`,
+`getValidatorInstance()` or `validateResolved()` — and an action with its own `getValidationData()` or
+`getValidator()`, since what those validate need not be the merged input. A `withValidator()` that only
+adds rules or `after()` checks keeps the copy; one that calls `setData()` or hands the validator to other
+code does not, and neither does an inline validator given `setData()` before it runs.
 
 To say more — that a header is required, its format, what it is for — declare it.
 [`#[HeaderParameter]`](/laravel/reference/attributes/#headerparameter) and

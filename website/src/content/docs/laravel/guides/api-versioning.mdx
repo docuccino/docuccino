@@ -269,7 +269,8 @@ it. Each change's own `description` becomes that version's entry.
 Rename the header with `api_version.header` if yours is called something else. Document the header
 yourself with [`#[HeaderParameter]`](/laravel/reference/attributes/#headerparameter) on an operation and
 Docuccino leaves your wording alone — two parameters of one name in one place is a document no client
-can read.
+can read. The name is compared the way Laravel reads headers, ignoring case and treating `_` as `-`, so
+`x_api_version` is the version header too.
 
 <Aside type="caution" title="`info.version` is the version">
 There is no second key naming it, because a second key could only ever disagree with the first. Write no

@@ -113,6 +113,13 @@ action reused across several routes is one shared schema.
 On a **read verb** (`GET`/`HEAD`) there's no body to send, so `rules()` becomes query parameters
 instead — the same rule as everywhere else in Docuccino.
 
+A header the action reads in the methods the package calls while it validates — `prepareForValidation()`,
+`rules()`, `withValidator()` and the rest, though not `authorize()` — is
+[documented as a header parameter](/laravel/documenting/requests/#headers-and-cookies), and a key that
+`prepareForValidation()` copies from a header is
+[validated on that header](/laravel/documenting/requests/#validating-a-header-with-your-rules), just as a
+form request's is.
+
 ## How the dispatched method is resolved
 
 The method Docuccino reads matches the package's own precedence:

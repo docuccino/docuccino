@@ -4801,3 +4801,13 @@ function modelProperties(string $model): array
     /** @var array<string, mixed> */
     return $components->schemas()[Fqcn::short($model)]['properties'] ?? [];
 }
+
+/**
+ * The source text of a reflected declaration, from its first line to its last as reflection reports them.
+ */
+function declarationSource(ReflectionClass|ReflectionFunctionAbstract $of): string
+{
+    $lines = file((string) $of->getFileName()) ?: [];
+
+    return implode('', array_slice($lines, (int) $of->getStartLine() - 1, (int) $of->getEndLine() - (int) $of->getStartLine() + 1));
+}
