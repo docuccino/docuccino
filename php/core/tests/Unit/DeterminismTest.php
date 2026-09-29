@@ -25,7 +25,8 @@ it('produces the same bytes from the model as from the raw array', function (): 
 });
 
 /**
- * Every UIR fixture in the tree, discovered rather than listed.
+ * Every UIR fixture in the tree, discovered rather than listed — an OpenAPI document carrying the
+ * extension at its root, which is what names one now that nothing else does.
  *
  * @return array<string, array{string}>
  */
@@ -36,7 +37,7 @@ function fidelityFixtures(): array
     foreach (glob(dirname(__DIR__).'/Fixtures/*.json') ?: [] as $path) {
         $decoded = json_decode((string) file_get_contents($path), true);
 
-        if (is_array($decoded) && isset($decoded['uir'], $decoded['info'])) {
+        if (is_array($decoded) && isset($decoded['openapi'], $decoded['info'], $decoded['x-docuccino'])) {
             $fixtures[basename($path, '.json')] = [basename($path)];
         }
     }
@@ -82,6 +83,33 @@ it('keeps contentHash stable when only x-docuccino.diagnostics changes', functio
     ];
 
     expect($this->hasher->hash($a))->toBe($this->hasher->hash($b));
+});
+
+/*
+ * The spec version and the schema URL are facts about the TOOL, which is why they live under
+ * `generator` rather than at the document root the OpenAPI Object closes. Stated as its own test
+ * rather than folded into the generator one: this is the fact a spec release moves, and a reader has
+ * to be able to break it on its own.
+ */
+it('keeps contentHash stable when only the UIR spec version changes', function (): void {
+    $a = workedExample();
+    $b = workedExample();
+    $b['x-docuccino']['generator']['specVersion'] = '9.9.0';
+    $b['x-docuccino']['generator']['schema'] = 'https://spec.docuccino.app/uir/9.9/schema.json';
+
+    expect($this->hasher->hash($a))->toBe($this->hasher->hash($b));
+});
+
+it('changes contentHash when a spec version brings CONTENT with it', function (): void {
+    // The other half, and the reason the rule is about the version string rather than about the spec:
+    // what a minor ADDS is content, and a workflow list appearing is a real difference to publish.
+    $a = workedExample();
+    $b = workedExample();
+    $b['x-docuccino']['workflows'] = [
+        ['id' => 'checkout', 'steps' => [['id' => 'reserve', 'operation' => 'op:v1:aaaaaaaaaaaaaaaa']]],
+    ];
+
+    expect($this->hasher->hash($a))->not->toBe($this->hasher->hash($b));
 });
 
 it('changes contentHash when a documented field changes', function (): void {

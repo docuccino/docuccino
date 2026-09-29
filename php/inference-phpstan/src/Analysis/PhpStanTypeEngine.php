@@ -9,6 +9,7 @@ use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\CallableRef;
+use Docuccino\Core\Inference\CallCondition;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\ComponentDeclaration;
@@ -19,6 +20,7 @@ use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
+use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TraceReport;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
@@ -34,6 +36,7 @@ use Docuccino\Inference\PhpStan\Throwing\AnalyzedBodies;
 use Docuccino\Inference\PhpStan\Throwing\ClassBodies;
 use Docuccino\Inference\PhpStan\Throwing\FactoryStatus;
 use Docuccino\Inference\PhpStan\Throwing\HttpExceptionStatus;
+use Docuccino\Inference\PhpStan\Throwing\ReturnedExceptions;
 use Docuccino\Inference\PhpStan\Throwing\ThrowAnalyzer;
 use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
 use Docuccino\Inference\PhpStan\Trace\ReturnValueFolder;
@@ -46,13 +49,15 @@ use PHPStan\Analyser\Scope;
 use PHPStan\Node\ClosureReturnStatementsNode;
 use PHPStan\Node\InArrowFunctionNode;
 use PHPStan\Node\MethodReturnStatementsNode;
-use PHPStan\Node\ReturnStatementsNode;
+use PHPStan\Type\ObjectType;
 use Throwable;
 
 /**
  * The PHPStan/Larastan {@see TypeEngine}: harvests `MethodReturnStatementsNode` for per-return-path
  * types, runs the 3-layer {@see ThrowAnalyzer}, and drives the interprocedural {@see Tracer}. Every
  * method is total — a failure becomes `UnknownT` plus a warning diagnostic, never an exception.
+ *
+ * @phpstan-type NarrowedSite array{pos: int, line: int, type: DType, component: ComponentDeclaration|null, guard: list<list<string>>, delegates: bool, echoes: string|null, conditions: list<CallCondition>, scope: Scope|null, expr: Node\Expr|null, foldScope: Scope}
  *
  * @internal
  */
@@ -222,11 +227,24 @@ final class PhpStanTypeEngine implements TypeEngine
             $returnNode = $statement->getReturnNode();
             $location = new SourceLocation($file, $returnNode->getStartLine());
             $scope = $this->fileAnalyzer->stableScope($statement->getScope());
-            $shape = $this->siteShape($returnNode->expr, $scope);
-            $returns[] = new ReturnSite($shape['type'], $location, $shape['component']);
+            // One return statement can be several responses: an application's `toResponse()` answering a
+            // guard arm beside the framework's rendering ({@see ResponseShapeRefiner::refineArms()}).
+            foreach ($this->siteShapes($returnNode->expr, $scope) as $shape) {
+                $returns[] = new ReturnSite($shape['type'], $location, $shape['component']);
+            }
         }
 
         return $returns;
+    }
+
+    /**
+     * The first of {@see siteShapes()} — the one shape a narrowed renderer site can carry.
+     *
+     * @return array{type: DType, component: ComponentDeclaration|null}
+     */
+    private function siteShape(?Node\Expr $expr, Scope $scope): array
+    {
+        return $this->siteShapes($expr, $scope)[0];
     }
 
     /**
@@ -235,17 +253,24 @@ final class PhpStanTypeEngine implements TypeEngine
      * component the recovery walked through is carried beside the type rather than inside it: it says
      * which method answered, not what the value is.
      *
-     * @return array{type: DType, component: ComponentDeclaration|null}
+     * @return non-empty-list<array{type: DType, component: ComponentDeclaration|null}>
      */
-    private function siteShape(?Node\Expr $expr, Scope $scope): array
+    private function siteShapes(?Node\Expr $expr, Scope $scope): array
     {
         if ($expr === null) {
-            return ['type' => new VoidT, 'component' => null];
+            return [['type' => new VoidT, 'component' => null]];
         }
 
         $type = $this->translator->translate($scope->getType($expr));
-        if (! $type instanceof ClassT || ! ResponseShapeRefiner::isResponseFqcn($type->fqcn)) {
-            return ['type' => $type, 'component' => null];
+        if (! $type instanceof ClassT) {
+            return [['type' => $type, 'component' => null]];
+        }
+        if (! ResponseShapeRefiner::isResponseFqcn($type->fqcn)) {
+            // The router sends a returned Responsable as its `toResponse()`, so an application-written one
+            // answers for the object rather than the class's own shape.
+            $rendered = $this->refiner()->renderedByOverride($expr, $scope) ?? [$type];
+
+            return array_map(static fn (DType $each): array => ['type' => $each, 'component' => null], $rendered);
         }
 
         // Already rich (our extension typed `response()->json()`/`noContent()`) — authoritative, keep it,
@@ -253,21 +278,10 @@ final class PhpStanTypeEngine implements TypeEngine
         // ({@see ResponseShapeRefiner::outranksResolvedType()}): a `new JsonResponse(...)`, or a fluent
         // chain whose `->setStatusCode()` the erased generic carried straight past.
         if ($type->typeArgs !== [] && ! $this->refiner()->outranksResolvedType($expr, $scope)) {
-            return ['type' => $type, 'component' => null];
+            return [['type' => $type, 'component' => null]];
         }
 
-        $refined = $this->refiner()->refine($expr, $scope);
-        if ($refined === null) {
-            return ['type' => $type, 'component' => null];
-        }
-        if ($refined->delegates) {
-            return ['type' => new VoidT, 'component' => null];
-        }
-
-        return [
-            'type' => $refined->toClassT(ResponseShapeRefiner::CANONICAL_RESPONSE) ?? $type,
-            'component' => $refined->component,
-        ];
+        return ResponseArms::sites($this->refiner()->refineArms($expr, $scope), $type, ResponseShapeRefiner::CANONICAL_RESPONSE);
     }
 
     /**
@@ -334,11 +348,14 @@ final class PhpStanTypeEngine implements TypeEngine
     private function doAnalyzeCallable(CallableRef $callable): ActionAnalysis
     {
         $method = $callable->method;
-        $node = $method === null
-            ? $this->fileAnalyzer->closureAtLine($callable->file, $callable->line)
-            : $this->fileAnalyzer->method($callable->file, $callable->class, $method);
+        if ($method === null) {
+            $body = $this->fileAnalyzer->callableAtLine($callable->file, $callable->line);
+        } else {
+            $node = $this->fileAnalyzer->method($callable->file, $callable->class, $method);
+            $body = $node === null ? null : CallableBody::ofMethod($node);
+        }
 
-        if (! $node instanceof ReturnStatementsNode) {
+        if ($body === null) {
             return new ActionAnalysis(
                 diagnostics: [new Diagnostic(
                     Severity::Info,
@@ -349,7 +366,10 @@ final class PhpStanTypeEngine implements TypeEngine
             );
         }
 
-        $narrowed = $this->harvestNarrowed($node, $callable);
+        $narrowed = $this->harvestNarrowed($body, $callable);
+        $returned = $callable->returnsExceptions
+            ? $this->returnedExceptions($narrowed, $callable)
+            : ['returns' => $narrowed['returns'], 'throws' => [], 'diagnostics' => [], 'files' => []];
         $truncation = $this->refinerTruncation($this->label($callable));
 
         // The analysed callable is the outermost hop on every path below it, so its own declaration wins
@@ -363,15 +383,42 @@ final class PhpStanTypeEngine implements TypeEngine
 
         return new ActionAnalysis(
             returns: $entry === null
-                ? $narrowed['returns']
-                : array_map(static fn (ReturnSite $site): ReturnSite => $site->withComponent($entry), $narrowed['returns']),
-            diagnostics: $truncation === null ? $narrowed['diagnostics'] : [...$narrowed['diagnostics'], $truncation],
+                ? $returned['returns']
+                : array_map(static fn (ReturnSite $site): ReturnSite => $site->withComponent($entry), $returned['returns']),
+            throws: $returned['throws'],
+            diagnostics: [...$narrowed['diagnostics'], ...$returned['diagnostics'], ...($truncation === null ? [] : [$truncation])],
             dependencyFiles: [
                 $callable->file,
                 ...($entryFile === null ? [] : [$entryFile]),
+                ...$returned['files'],
                 ...$this->drainRefinerFiles(),
             ],
         );
+    }
+
+    /**
+     * What a {@see CallableRef::$returnsExceptions} callable translates its parameter to, by
+     * {@see ReturnedExceptions}' rule: each return read by the same grammar a `throw` of it would be
+     * ({@see ThrowAnalyzer::returned()}).
+     *
+     * @param  array{returns: list<ReturnSite>, sites: list<NarrowedSite>}  $narrowed
+     * @return array{returns: list<ReturnSite>, throws: list<ThrownException>, diagnostics: list<Diagnostic>, files: list<string>}
+     */
+    private function returnedExceptions(array $narrowed, CallableRef $callable): array
+    {
+        $analyzer = $this->makeThrowAnalyzer();
+        $label = $this->label($callable);
+        $sites = $narrowed['sites'];
+
+        $read = ReturnedExceptions::of($narrowed['returns'], static function (int $index) use ($sites, $analyzer, $label): array {
+            $expr = $sites[$index]['expr'] ?? null;
+
+            return $expr === null ? [] : $analyzer->returned($expr, $sites[$index]['foldScope'], $label);
+        });
+
+        $throws = $analyzer->deduped($read['throws']);
+
+        return ['returns' => $read['returns'], 'throws' => $throws, 'diagnostics' => $analyzer->diagnostics(), 'files' => $analyzer->visitedFiles()];
     }
 
     /** The `#[ErrorComponent]` the analysed callable itself declares; closures have nowhere to carry one. */
@@ -409,49 +456,56 @@ final class PhpStanTypeEngine implements TypeEngine
      * response-producing one; and when a broad guard is chosen ahead of a later exact `instanceof` match,
      * or two arms match exactly, an info diagnostic says so rather than passing the shape off as certain.
      *
-     * @return array{returns: list<ReturnSite>, diagnostics: list<Diagnostic>}
+     * A ternary is the same conditional spelled inline, so it expands the way a `match` does — one site
+     * per branch, each typed in the scope its condition leaves — rather than collapsing to the one type
+     * both branches share, which for two responses is the supertype that says neither.
+     *
+     * With {@see CallableRef::$narrowToEvery} nothing is chosen: every site the narrowed type can reach
+     * comes back, in source order, each carrying the parameter it returns unchanged and the literal
+     * parameter calls its scope proves ({@see ParameterUse}).
+     *
+     * `sites` are the harvested sites behind `returns`, for a reader that needs the expression itself.
+     *
+     * @return array{returns: list<ReturnSite>, diagnostics: list<Diagnostic>, sites: list<NarrowedSite>}
      */
-    private function harvestNarrowed(ReturnStatementsNode $node, CallableRef $callable): array
+    private function harvestNarrowed(CallableBody $body, CallableRef $callable): array
     {
         $param = $callable->narrowParameter;
         $narrowTo = $callable->narrowType;
+        $every = $callable->narrowToEvery || $callable->returnsExceptions;
+        $probes = $every ? ParameterUse::literalCalls($body->parameters, $body->nodes) : [];
 
-        /** @var list<array{pos: int, line: int, type: DType, component: ComponentDeclaration|null, guard: list<list<string>>, delegates: bool}> $sites */
+        /** @var list<NarrowedSite> $sites */
         $sites = [];
-        foreach ($node->getReturnStatements() as $statement) {
-            $returnNode = $statement->getReturnNode();
-            $expr = $returnNode->expr;
-            $scope = $this->fileAnalyzer->stableScope($statement->getScope());
+        foreach ($body->returns as $return) {
+            $expr = $return['expr'];
+            $returnNode = $return['at'];
+            $scope = $this->fileAnalyzer->stableScope($return['scope']);
 
-            // One site per arm, so per-arm exception mapping composes with refinement.
-            if ($param !== null && $expr instanceof Node\Expr\Match_) {
-                foreach ($this->matchArmSites($expr, $param, $scope) as $armSite) {
+            // One site per arm, so per-arm exception mapping composes with refinement — and, read for every
+            // return, so each arm's answer is one of them even where no parameter is narrowed.
+            $expands = $param !== null || $every;
+            if ($expands && $expr instanceof Node\Expr\Match_) {
+                foreach ($this->matchArmSites($expr, $param, $scope, $body, $probes, $every) as $armSite) {
                     $sites[] = $armSite;
                 }
 
                 continue;
             }
 
-            $shape = $this->siteShape($expr, $scope);
-            $guard = $param === null ? [] : NarrowingGuard::ofType($this->translator->translate($scope->getType(new Variable($param))));
-            $sites[] = [
-                'pos' => SourceOrder::of($returnNode),
-                'line' => $returnNode->getStartLine(),
-                'type' => $shape['type'],
-                'component' => $shape['component'],
-                'guard' => $guard,
-                'delegates' => $this->isDelegation($shape['type']),
-            ];
+            if ($expands && $expr instanceof Node\Expr\Ternary && $expr->if !== null) {
+                foreach ($this->branches($expr, $scope) as [$branch, $branchScope]) {
+                    $sites[] = $this->site($branch, $branch, $branchScope, $this->paramGuard($param, $branchScope), $body, $probes, $every);
+                }
+
+                continue;
+            }
+
+            $sites[] = $this->site($expr, $returnNode, $scope, $this->paramGuard($param, $scope), $body, $probes, $every);
         }
 
         if ($param === null || $narrowTo === null) {
-            return [
-                'returns' => array_map(
-                    fn (array $s): ReturnSite => new ReturnSite($s['type'], new SourceLocation($callable->file, $s['line']), $s['component']),
-                    $sites,
-                ),
-                'diagnostics' => [],
-            ];
+            return ['returns' => $this->returnSites($sites, $callable), 'diagnostics' => [], 'sites' => $sites];
         }
 
         // Control-flow order, then every arm the narrowed type satisfies (empty guard = default branch).
@@ -461,13 +515,91 @@ final class PhpStanTypeEngine implements TypeEngine
             fn (array $candidate): bool => NarrowingGuard::satisfiedBy($candidate['guard'], $narrowTo),
         ));
 
+        if ($every) {
+            // Reaching every site means asking each one, and PHPStan's own type for the parameter there is the
+            // better answer where it has one: after `if ($e instanceof A) { return …; }` it says `$e` is
+            // anything BUT an A, which no guard of required classes can spell.
+            $admitted = array_values(array_filter(
+                $satisfiable,
+                fn (array $candidate): bool => $candidate['scope'] === null
+                    || ! $candidate['scope']->getType(new Variable($param))->isSuperTypeOf(new ObjectType($narrowTo))->no(),
+            ));
+
+            return ['returns' => $this->returnSites($admitted, $callable), 'diagnostics' => [], 'sites' => $admitted];
+        }
+
         $chosen = $this->chooseNarrowedSite($satisfiable, $narrowTo);
 
         return [
-            'returns' => $chosen === null
-                ? []
-                : [new ReturnSite($chosen['type'], new SourceLocation($callable->file, $chosen['line']), $chosen['component'])],
+            'returns' => $this->returnSites($chosen === null ? [] : [$chosen], $callable),
             'diagnostics' => $this->narrowingAmbiguity($satisfiable, $chosen, $narrowTo, $param, $callable),
+            'sites' => $chosen === null ? [] : [$chosen],
+        ];
+    }
+
+    /**
+     * @param  list<NarrowedSite>  $sites
+     * @return list<ReturnSite>
+     */
+    private function returnSites(array $sites, CallableRef $callable): array
+    {
+        return array_map(
+            static fn (array $s): ReturnSite => new ReturnSite($s['type'], new SourceLocation($callable->file, $s['line']), $s['component'], $s['echoes'], $s['conditions']),
+            $sites,
+        );
+    }
+
+    /**
+     * One returned expression as the branches it can take: a ternary's two, each in the scope its
+     * condition leaves and followed down through nested ternaries; anything else, itself. The short
+     * `?:` form is not expanded — its true branch is the condition, whose value this cannot type apart.
+     *
+     * @return list<array{Node\Expr, Scope}>
+     */
+    private function branches(Node\Expr $expr, Scope $scope): array
+    {
+        if (! $expr instanceof Node\Expr\Ternary || $expr->if === null) {
+            return [[$expr, $scope]];
+        }
+
+        return [
+            ...$this->branches($expr->if, $scope->filterByTruthyValue($expr->cond)),
+            ...$this->branches($expr->else, $scope->filterByFalseyValue($expr->cond)),
+        ];
+    }
+
+    /**
+     * The guard the narrowed parameter's type states in `$scope` ({@see NarrowingGuard::ofType()}); none
+     * where nothing is narrowed.
+     *
+     * @return list<list<string>>
+     */
+    private function paramGuard(?string $param, Scope $scope): array
+    {
+        return $param === null ? [] : NarrowingGuard::ofType($this->translator->translate($scope->getType(new Variable($param))));
+    }
+
+    /**
+     * @param  list<list<string>>  $guard
+     * @param  list<Node\Expr\MethodCall>  $probes
+     * @return NarrowedSite
+     */
+    private function site(?Node\Expr $expr, Node $positioned, Scope $scope, array $guard, CallableBody $body, array $probes, bool $every, bool $typesParameter = true): array
+    {
+        $shape = $this->siteShape($expr, $scope);
+
+        return [
+            'pos' => SourceOrder::of($positioned),
+            'line' => $positioned->getStartLine(),
+            'type' => $shape['type'],
+            'component' => $shape['component'],
+            'guard' => $guard,
+            'delegates' => $this->isDelegation($shape['type']),
+            'echoes' => $every ? ParameterUse::echoed($expr, $body->parameters, $body->nodes) : null,
+            'conditions' => $every ? ParameterUse::conditionsAt($scope, $probes) : [],
+            'scope' => $typesParameter ? $scope : null,
+            'expr' => $expr,
+            'foldScope' => $scope,
         ];
     }
 
@@ -475,8 +607,8 @@ final class PhpStanTypeEngine implements TypeEngine
      * The first site in source order that either matches the guard exactly or produces a response; falls
      * back to the first satisfiable one for a genuinely all-delegating renderer.
      *
-     * @param  list<array{pos: int, line: int, type: DType, component: ComponentDeclaration|null, guard: list<list<string>>, delegates: bool}>  $satisfiable
-     * @return array{pos: int, line: int, type: DType, component: ComponentDeclaration|null, guard: list<list<string>>, delegates: bool}|null
+     * @param  list<NarrowedSite>  $satisfiable
+     * @return NarrowedSite|null
      */
     private function chooseNarrowedSite(array $satisfiable, string $narrowTo): ?array
     {
@@ -494,21 +626,16 @@ final class PhpStanTypeEngine implements TypeEngine
      * `$param` against (a `default` arm, or a non-`instanceof` condition, is broad), type = the refined arm
      * body. Arm order is preserved via source position.
      *
-     * @return list<array{pos: int, line: int, type: DType, component: ComponentDeclaration|null, guard: list<list<string>>, delegates: bool}>
+     * @param  list<Node\Expr\MethodCall>  $probes
+     * @return list<NarrowedSite>
      */
-    private function matchArmSites(Node\Expr\Match_ $match, string $param, Scope $scope): array
+    private function matchArmSites(Node\Expr\Match_ $match, ?string $param, Scope $scope, CallableBody $body, array $probes, bool $every): array
     {
         $sites = [];
         foreach ($match->arms as $arm) {
-            $shape = $this->siteShape($arm->body, $scope);
-            $sites[] = [
-                'pos' => SourceOrder::of($arm->body),
-                'line' => $arm->body->getStartLine(),
-                'type' => $shape['type'],
-                'component' => $shape['component'],
-                'guard' => $arm->conds === null ? [] : $this->armInstanceofGuards($arm->conds, $param, $scope),
-                'delegates' => $this->isDelegation($shape['type']),
-            ];
+            $guard = $arm->conds === null || $param === null ? [] : $this->armInstanceofGuards($arm->conds, $param, $scope);
+            // The return's scope, not the arm's: it has not narrowed the parameter, so only the guard speaks.
+            $sites[] = $this->site($arm->body, $arm->body, $scope, $guard, $body, $probes, $every, typesParameter: false);
         }
 
         return $sites;
@@ -576,8 +703,8 @@ final class PhpStanTypeEngine implements TypeEngine
      * claim the type exactly. An exact site with no rival is unambiguous, as is the ordinary
      * sequential-`instanceof`-plus-default shape.
      *
-     * @param  list<array{pos: int, line: int, type: DType, component: ComponentDeclaration|null, guard: list<list<string>>, delegates: bool}>  $satisfiable
-     * @param  array{pos: int, line: int, type: DType, component: ComponentDeclaration|null, guard: list<list<string>>, delegates: bool}|null  $chosen
+     * @param  list<NarrowedSite>  $satisfiable
+     * @param  NarrowedSite|null  $chosen
      * @return list<Diagnostic>
      */
     private function narrowingAmbiguity(array $satisfiable, ?array $chosen, string $narrowTo, string $param, CallableRef $callable): array

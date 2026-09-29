@@ -26,6 +26,7 @@ use Docuccino\Core\Pipeline\Assembler;
 use Docuccino\Core\Pipeline\FragmentCache;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
 use Docuccino\Core\Provenance\SourcePathResolver;
+use Docuccino\Core\Spec\UirSpec;
 use Docuccino\Core\Support\ConfiguredFlag;
 use Docuccino\Laravel\Commands\CacheCommand;
 use Docuccino\Laravel\Commands\ClearCommand;
@@ -80,6 +81,7 @@ use Docuccino\Laravel\Runtime\DocumentCache;
 use Docuccino\Laravel\Support\GateDenial;
 use Docuccino\Laravel\Support\GatePoliciesDigestContributor;
 use Docuccino\Laravel\Support\LeakageDigestContributor;
+use Docuccino\Laravel\Support\MiddlewareClasses;
 use Docuccino\Laravel\Versioning\Scaffold\ChangeStub;
 use Docuccino\Laravel\Versioning\VersionChangeCollector;
 use Docuccino\Laravel\Watch\ArtisanBuildRunner;
@@ -116,7 +118,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
      * into the fragment cache's tool version. Written by the release workflow, never by hand — see
      * RELEASING.md; the golden comparison normalises this one member, so a bump regenerates nothing.
      */
-    public const string VERSION = '0.19.1';
+    public const string VERSION = '0.20.3';
 
     public function configurePackage(Package $package): void
     {
@@ -153,6 +155,10 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         // The resolver reflects each route while filtering and stashes it here for the context builder
         // to read back O(1). Scoped, so both share one index per build and it resets between builds.
         $this->app->scoped(ResolvedRouteIndex::class);
+
+        // The alias map the middleware readers resolve an entry's class through, read once per build
+        // after the resolver has filled the router.
+        $this->app->scoped(MiddlewareClasses::class);
 
         // Same deal: the inferred-handler tier writes response-fold deferrals, the summary transformer
         // drains them once per build.
@@ -268,7 +274,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
                 enabled: $store->enabled,
                 path: $store->path,
                 toolVersion: self::VERSION.self::sourceReference(),
-                specVersion: '1.0.0',
+                specVersion: UirSpec::VERSION,
                 identityVersion: 'v1',
             );
         });

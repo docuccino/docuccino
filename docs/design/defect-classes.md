@@ -633,9 +633,11 @@ taking the FIRST match, or by mutating through it in sequence, order is not nois
 registration whose subject the model is a subclass of; morph aliasing ends in `array_search($fqcn,
 morphMap(), true)`, which takes the first alias for a class. Both mirror the framework correctly, both
 were keyed by a digest that sorted its records first, so two registration orders produced one digest and
-a warm build replayed a fragment computed under the other resolution — and the morph half reaches
-published bytes, since the alias it resolves to is a discriminator mapping key. The third is core's own:
-`ResolvedExtensions::cacheSignature()` sorted one entry per resolved instance while every chain reading
+a warm build replayed a fragment computed under the other resolution — and the morph half reached
+published bytes while the alias was a discriminator mapping key. (A model union is no longer
+discriminated by its morph map; the map now reaches published bytes through a `morphTo`'s type-column
+enum, and its digest hashes each model's first alias taken in registration order, before sorting.)
+The third is core's own: `ResolvedExtensions::cacheSignature()` sorted one entry per resolved instance while every chain reading
 those instances is first-match-wins (`RouteContext`'s six resolvers, `SchemaConverter`'s mappers) or
 sequential mutation (`OperationPipeline`). Its docblock had already closed identity and multiplicity
 deliberately; order was the property left open, and `ExtensionSorter` decides it from the registration
@@ -1241,9 +1243,12 @@ behind. Not a flag: an option here would be an admission that the default comman
 its own question. What the command checks is what the application SHIPS — its configured export
 targets, not a format the command picks — so a pipeline writing 3.0 is told about the 3.0 file.
 `docuccino:cache` prints its emit report on the console and exits non-zero for an invalid payload,
-keeping the log for the request path. And a target with no published schema behind it — `uir`,
-`postman` — SAYS so per target rather than staying silent, because silence beside a checked target
-reads as the clean answer.
+keeping the log for the request path. And a target whose bytes nobody read back — `full`, `postman`,
+`arazzo` — SAYS so per target rather than staying silent, because silence beside a checked target
+reads as the clean answer. What that line says is held to being true of every row it covers: it
+reports the missing READ-BACK, never "no published schema", which is true of `postman` alone. The
+earlier wording said the latter, and a run printing it for a `full` target contradicted its own
+preceding line, which names the UIR version that artifact had just been validated against.
 
 The guard is `ArtifactSoundnessReachTest`, and it is a union table rather than a set of per-command
 tests: every entry point that can be asked whether a document is sound carries a row, including the
@@ -1355,3 +1360,86 @@ reverting the judge to string equality passed the whole suite until a member who
 spelling was added. And `workbench-deep-required.uir.json` stands in the population, because the axis
 these act on is the published document and the corpus had no route whose container's requiredness two
 producers contested.
+
+## A name read for a family it is not a member of
+
+An id is a name. A question about the thing it names — what the artifact contains, what it is held
+to, who may read it — is a fact on a table, and the table is what answers. Reading the fact off the
+SHAPE of the name works exactly while the names happen to agree with it, and it goes on working
+silently: a prefix test is deterministic, it is simply wrong, so the day a new name joins the family
+the readers do not fail, they answer confidently and differently.
+
+*Instances.* Three at once, when the full artifact was briefly named `openapi-3.2-full`. Each read
+`str_starts_with($id, 'openapi-')` for "a plain OpenAPI artifact", and that id satisfies the spelling
+while being the one artifact that is not plain — it retains `x-docuccino`, provenance and all.
+`DocumentEmitOptions::openApiBeside()` is the one that mattered: it picks what a published Arazzo
+description's `sourceDescriptions` points consumers at, so the wrong answer is a disclosure of source
+files, lines and symbols rather than a cosmetic slip. The other two chose which formats a suite held
+to a meta-schema, and would have reported a missing check as a passing one. Nothing failed, in any of
+the three.
+
+*The tell.* A string function — `str_starts_with`, `str_contains`, a `^`-anchored regex — applied to
+an id, with a literal that is a PREFIX of a real name rather than a name. Read the literal out loud:
+`'openapi-'` is not the name of anything the product has, which is the whole signal. The same tell
+covers a version string, a diagnostic code or a component name read for its family.
+
+*The fix that worked.* The question becomes a column. `Formats::TABLE` gained
+`publishesPlainOpenApi()` beside `checksEmittedArtifact()` and `serialisesYaml()`, and every reader
+asks the table; `Formats::plainOpenApi()` exists so a test that wants the set reads the column too.
+Comparing against a WHOLE id stays fine — that is using the name for what it is.
+
+*And the half that keeps the question from arising: don't mint the name.* The id that shipped is
+`full`, not `openapi-3.2-full`, so it is outside the `openapi-` family by construction and no prefix
+test can reach it. The version segment was buying nothing either: there is exactly ONE full format,
+because a downlevel emitter strips the extension by definition, so `openapi-3.1-full` names nothing
+and the segment discriminated between things that cannot both exist. A name that pins a fact it does
+not need — a version, a family — is the supply side of this class, and before the name ships is the
+cheapest place to close it.
+
+*The tests that recognise it.* The guard is kept although the collision that motivated it is gone
+from the ids: it covers `postman` and `arazzo` and whatever is added next, and the ids agreeing with
+`'openapi-'` again today is the same condition the original proxy was written under and survived on.
+`FormatIdReaderArchTest` refuses a prefix or substring test whose literal is a strict prefix of any id
+the table knows, across every package's `src/` and `tests/`, the workbench and the tooling tests — two
+of the three originals were test-side, so a scan stopping at `src/` would have caught one. It carries
+three things a scan of this kind is worth nothing without: a denominator (the matching calls it
+looked through, floored well under the measured count), the
+boundary pinned in both directions (`OpenApiMetaSchema` prefix-matches a vendored meta-schema's `$id`
+URL, which the scan must SEE and must not flag), and the scanner's own counter-source, where
+`'openapi:'` and `'document.openapi-invalid'` are the near misses that would have got the guard
+switched off. It was executed against both originals restored, and named each one's file and
+function. `FormatsTest` holds the two boolean columns to agreeing row for row, with Arazzo's coming
+divergence named — two guards over two columns say nothing about whether the columns agree.
+
+## A name read as a keyword because of how it is spelled
+
+A document mixes two kinds of key. At a keyword position a key is the vocabulary — `default`, `enum`,
+`example`, `x-…` — and says what its value is. Inside a map of NAMES — `properties`, `responses`,
+`headers`, `components.schemas` — a key is whatever the application called the thing, and says nothing
+about it. A walk that decides by the key's spelling alone treats a property called `default` as a
+literal and a header called `x-request-id` as an extension, so what it does to a node depends on the name
+of the key holding it.
+
+*Instances.* Seven walks, found by one. The union settler left a union `anyOf` under `responses.default`
+or a property named `enum`, while the same union under `responses.200` was discriminated. The
+vacuous-union lint said nothing about the same shapes. The leakage lint scanned a property named
+`example` as a published value, reporting its schema's `description` and its example twice. The 3.2
+emitter left `x-docuccino` provenance, which is internal, on any node named `x-…`. Both downlevel
+emitters passed an `x-…`-named header, media type or component through unconverted, so the 3.0 and 3.1
+artifacts failed their own meta-schemas. And the emitted-reference check walked into a Responses
+Object's own extensions, and into an Example Object's `dataValue`, as if they were document.
+
+*The tell.* A skip list of keyword names, or `str_starts_with($key, 'x-')`, applied without asking
+whether the node is a map of names. The other tell is the opposite mistake: an `x-` key IS an extension
+in the two maps whose Object admits one (`paths`, `responses`), so "every key in a map is a name" is
+wrong as well.
+
+*The fix that worked.* One grammar, `Document\DocumentMembers`: whether a member holds data, and whether
+it opens a map of names. The whole-document walks read it. The two downlevel emitters already know every
+position exactly, so each gained the one fact they lacked: which of their maps admit extensions.
+
+*The tests that recognise it.* `DocumentMembersTest` has a row for every entry, and checks the OpenAPI
+half against the vendored 3.0, 3.1 and 3.2 meta-schemas, with a floor on how many maps it finds. The
+guard was run with `links` and the `responses` extensibility removed, and it failed on both. Each walk
+has rows for a name spelled like a keyword and for data in the same place. No scan refuses a new walk
+that skips by spelling. The skip-list tell is the review question.

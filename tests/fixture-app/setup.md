@@ -29,8 +29,8 @@ composer require --working-dir=tests/fixture-app/app --dev larastan/larastan --n
 #     real engine loads, so whatever lands here is the only version the fixture group proves.
 #     2.2.0 and the newest 2.2.x resolve NodeScopeResolver differently — the floor hands out
 #     fiber-driven scopes, the newest hands out plain ones — so CI runs both. To reproduce the
-#     fiber leg locally:
-#     composer require --working-dir=tests/fixture-app/app --dev -W phpstan/phpstan:2.2.0 --no-interaction
+#     fiber leg locally (larastan is named too, so it can move back to a release accepting that phpstan):
+#     composer require --working-dir=tests/fixture-app/app --dev -W phpstan/phpstan:2.2.0 larastan/larastan --no-interaction
 
 # 3. Spatie packages (Query Builder trace + Data class recovery).
 composer require --working-dir=tests/fixture-app/app \
@@ -110,6 +110,45 @@ them.
   `response()->json([...])` constant-array payloads, `AnonymousResourceCollection`, and a
   union return with distinct per-line types.
 - `app/Http/Resources/UserResource.php` — a minimal `JsonResource` (`@mixin User`).
+- `app/Http/Resources/EnvelopedResource.php`, `ReleaseResource.php`, `TracedResource.php` — a base
+  resource whose `with()` adds top-level members its subclass inherits, and one whose `with()`
+  returns `[]` on one branch.
+- `app/Http/Controllers/ResourceResponseController.php` + `app/Http/Resources/SelfRespondingResource.php` — a
+  resource returned through `->response()`, `->toResponse($request)`, `->response()->setStatusCode(201)`, a
+  header chain, a named local, a collection with and without a paginator, beside the bare return; and a
+  resource whose own `toResponse()` builds a 202, reached directly, through `response()` and returned bare;
+  `GuardedResource`, `HeaderedResource`, `AcceptedResource` and `RelayingResource` override `toResponse()`
+  around `parent::toResponse()` (a guard arm, a header, a status, an unreadable relay), and
+  `InheritingRespondingResource` inherits an override.
+- `app/Http/Controllers/StatusChoiceController.php` — a status chosen between constants
+  (`$ok ? 200 : 503`) through `setStatusCode()`, `response()->json()`, the constructor, a rendered resource and
+  `noContent()`, beside the two-return form; a status read off the request; and `abort()` choosing between two.
+- `app/Http/Resources/CastEnvelopeResource.php` — objects built inline with `(object)` casts: an empty one
+  in the body, and in `with()` an empty one, a keyed one, a cast nested in a cast, and one whose keys depend
+  on the request.
+- `app/Http/Resources/CompactableResource.php` — a ternary `toArray` (one return site, two shapes)
+  and a `with()` whose other branch returns request input.
+- `app/Http/Controllers/ListedCollectionController.php` with `ListedResource.php`,
+  `ListedCollection.php`, `CatalogueResource.php`, `ShelfResource.php`, `ArchiveResource.php`,
+  `ArchiveCollection.php`, `LedgerResource.php`, `LedgerCollection.php`, `DraftResource.php`,
+  `JournalResource.php`, `JournalCollection.php`, `SketchResource.php` — `newCollection()` overrides
+  (inherited, generic, named, untyped, untyped building a named collection, untyped building one of
+  two classes) reached through `::collection()` and
+  `toResourceCollection()`, plus `@method` tags over real methods and over macros; and
+  `app/Http/Requests/AccountRequest.php`, a FormRequest typing `user()` with a `@method` tag.
+- `app/Timeline/` — a `@phpstan-sealed` interface (`TimelineEntry`) over two final readonly classes
+  whose constructors fix a backed-enum `type`, and `app/Http/Controllers/TimelineController.php`
+  answering with a `list<TimelineEntry>` payload and a union of the two classes.
+- `app/Problems/` — plain objects whose constructors assign typed properties on only some paths:
+  `ProblemDetails` (an RFC 9457 document behind a throwing guard, with `detail` and a readonly `traceId`
+  assigned in branches and a nullable `instance` assigned on every path), `RetryNotice` (an early
+  `return`), `BaseProblem` with a subclass that replaces its constructor (`ConflictProblem`) and one that
+  inherits it (`GenericProblem`), and `AssembledProblem`, which has no constructor at all. Beside them,
+  constructors that hand the work on: `HydratedProblem` (a private helper and a `CarriesTrace` trait helper,
+  each assigning one member in a branch), `FilledProblem` (a `FillsAttributes` trait writing
+  `$this->{$key}`), `PaymentProblem` (a `DataObject` parent constructor doing the same), and
+  `RateLimitProblem` (a private constructor behind a named one). What the engine reads off each constructor
+  is what decides which keys a response always carries.
 
 ### QueryBuilder deep-chain trace (the Scramble-Pro-beater)
 
@@ -424,6 +463,11 @@ in the file being walked, and an array return is no type the trace follows:
   file+line. `pair()` beside it returns TWO closures written on one line, which is all reflection can say
   about either: the boundary where the tier documents nothing rather than one callback's response for the
   other's exception.
+- `app/Exceptions/ExceptionMappers.php` — methods returning the mappers an application hands
+  `$exceptions->map()`, analysed by file+line with every reachable return read as the exception it builds:
+  a literal status, a construction one assignment back, a class's own static factory, a framework class
+  pinning its status in vendor, a status read at run time, two translations chosen at run time, a
+  translation for one subclass beside the parameter handed back, and a return naming no class at all.
 - `app/Exceptions/InvokableProblemRenderer.php` — a catch-all `__invoke(Throwable $e): JsonResponse`
   with sequential `instanceof` branches (409/401 + a 500 default) emitting a distinct
   `application/problem+json`-style body (a `type`/`title`/`status`/`instance` shape). Registered as an
@@ -485,6 +529,15 @@ importantly, NOT followed where the key only chose between sizes.
   `app/Http/Controllers/RequestPagedCollectionController.php` — the three-frame shapes: a custom
   Query-Builder terminal handing the request to the clamp, and a resource collection doing the same with no
   Query Builder anywhere.
+
+### Request headers
+
+- `app/Http/Requests/PlaceOrderRequest.php` + `app/Http/Controllers/RequestHeaderController.php` — headers
+  read by name through each receiver the framework offers: a FormRequest's `$this` in a method only the
+  action calls and in `prepareForValidation()`, which only the framework does; an injected request; the
+  `request()` helper under an `_` spelling; the facade and its global `\Request` alias. Beside them, the
+  reads that publish nothing: a credential only `authorize()` reads, a proxy's `X-Forwarded-For`, and a
+  response header SET through a method of the same name, which is no read at all.
 
 ### JSON:API + laravel-actions recovery
 

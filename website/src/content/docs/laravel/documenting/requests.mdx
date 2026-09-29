@@ -1,6 +1,9 @@
 ---
 title: Requests
-description: Document path, query, header and cookie parameters, request bodies, and file uploads — read statically from your routes and validation rules.
+head:
+  - tag: title
+    content: 'OpenAPI from Laravel Form Requests and Validation | Docuccino'
+description: Document path, query, header and cookie parameters, request bodies, and file uploads — read statically from your routes, validation rules and request reads.
 ---
 
 import { Card, CardGrid, Tabs, TabItem, Aside } from '@astrojs/starlight/components';
@@ -28,7 +31,8 @@ Every `{param}` in a route's URI becomes a path parameter. Docuccino types it fr
   and the build reports `route-binding.untyped` rather than typing it off a key it does not use.
 - A binding that names its own column — `{post:slug}` — is typed from **that** column instead: its
   `$casts` entry, or the `@property` type the analyzer recovered for it.
-- An **unbound** segment is a required `string`.
+- An **unbound** segment is a required `string`, narrowed by any constraint the route puts on it —
+  see [Route constraints](#route-constraints).
 - An optional segment (`{param?}`) is documented as optional.
 - A route that resolves soft-deleted records (`->withTrashed()`) notes it on the parameter, so
   consumers know a trashed record can resolve there.
@@ -48,6 +52,43 @@ it. It never falls back to the model's route key: an endpoint that takes a slug 
 `integer` id is a wrong answer, and a plain `string` is at least a true one. Declaring the segment's
 type with [`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) settles it and the notice
 stops — the parameter then carries the type you wrote, so nothing is being described loosely.
+
+### Route constraints
+
+A constraint on the route — `->whereUuid()`, `->where()`, or a `Route::pattern()` registered before the
+route — is part of what the endpoint accepts: a value that doesn't match never reaches your action,
+because the router answers `404`. So a segment nothing else types is documented as what the router
+matches:
+
+| Constraint | Documented as |
+| --- | --- |
+| `->whereUuid('id')` | `format: uuid` |
+| `->whereUlid('id')` | `format: ulid` |
+| `->whereNumber('id')`, `->whereAlpha()`, `->whereAlphaNumeric()` | the framework's expression as a `pattern`, such as `^[0-9]+$` |
+| `->whereIn('status', ['draft', 'published'])` | an `enum` of those values |
+| `->where('code', '[a-z]{3}')` | `pattern: ^[a-z]{3}$` |
+
+```php
+Route::get('/invoices/{number}', [InvoiceController::class, 'show'])->whereNumber('number');
+Route::get('/reports/{period}', [ReportController::class, 'show'])->whereIn('period', ['daily', 'weekly']);
+```
+
+A `pattern` is anchored, because the router matches the whole segment. A bound model's route key and
+[`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) still take precedence over the
+constraint, and a catch-all such as `.*` says nothing a plain `string` doesn't already.
+
+JSON Schema reads a `pattern` in JavaScript's regular-expression dialect, and PHP's differs in ways
+that matter. In the router `\d` and `\w` match every script's digits and letters, where JavaScript's
+match ASCII only, so `->where('id', '\d+')` is published as `^(?:[0-9]|[^\x00-\x7F])+$`: exact for
+ASCII, and admitting any other character rather than refusing an Arabic-Indic digit the router serves.
+A `pattern` that disagreed with the router would reject values your server serves, so a constraint
+that no pattern can state truly is documented as a plain `string` and the build reports
+`route-constraint.unportable`: `.`, an inline flag such as `(?i)`, a possessive quantifier, or a count
+such as `{4}` over `\d`, `\w` or a negated class — the router counts characters there and JavaScript
+counts UTF-16 units, so an emoji is two. Write `[0-9]{4}` where ASCII digits are meant and it is
+published. For the same reason `whereIn()` values containing
+`.` or other regex characters are not published as an `enum`: the framework doesn't escape them, so
+`whereIn('v', ['v1.0'])` also matches `v1x0`.
 
 ### What the binding tells a consumer
 
@@ -315,6 +356,34 @@ A rule can key on anything the
 Any of those covers a whole document from one class, which is the answer whenever the parameters are
 real but a helper's body hides them.
 </Aside>
+
+### Signed URLs
+
+A route behind Laravel's `signed` middleware refuses any request that doesn't carry the link's
+signature, so the two query parameters the middleware reads are documented on it — no annotation
+needed:
+
+| Parameter | Required | Schema | Why |
+| --- | --- | --- | --- |
+| `signature` | yes | `string` | The middleware rejects a request without one. |
+| `expires` | no | `integer` | Checked only when present — `URL::signedRoute()` links carry none, `URL::temporarySignedRoute()` links do. |
+
+Every way of writing the middleware counts: `signed`, `signed:relative`, `ValidateSignature::relative()`
+or `::absolute()`, your own subclass of `ValidateSignature`, an alias you register for either, and any
+of those inherited from a middleware group. If you point the `signed` alias at a different middleware,
+Docuccino follows it too. The same routes get the [implicit `403`](/laravel/documenting/errors/) the middleware returns.
+Parameters you exclude from the signature change nothing here, since a client may add them but never
+has to.
+
+If every link to a route expires, tighten `expires` with an attribute, which wins over what Docuccino
+infers:
+
+```php
+#[QueryParameter('expires', required: true)]
+public function __invoke(User $user, string $hash): Response
+```
+
+To leave a parameter out of the document, use `#[IgnoreParam('expires', in: 'query')]`.
 
 ## Request bodies
 
@@ -802,6 +871,81 @@ uploads](#file-uploads) below. Anything not listed leaves the property permissiv
 | `filled` | Recognized; no effect on the documented shape. |
 | `required_if`, `required_unless`, `required_with`, `required_with_all`, `required_without`, `required_without_all` | A description note ("Required when `status` is `paid`.") — a conditional requirement has no JSON Schema keyword. |
 
+### Exclude rules
+
+Laravel runs a field's rules in the order you write them, and once an `exclude` rule fires it runs
+none of the rest. So where an exclude rule sits decides what the `required` beside it means:
+
+```php
+'payment.card_number' => ['exclude_unless:payment.method,card', 'required', 'string'],
+'reference' => ['required', 'exclude_if:payment.method,transfer', 'string'],
+```
+
+`card_number` is only required when `payment.method` is `card`, so it stays out of `required` and
+gets the note "Required when payment.method is card." `reference` is checked before its exclude rule
+runs, so it's required on every request.
+
+| Rule ahead of `required` | Documented as |
+| --- | --- |
+| `exclude_unless:field,value` | Optional, "Required when `field` is `value`." |
+| `exclude_if:field,value` | Optional, "Required unless `field` is `value`." |
+| `exclude_without:a,b` | Optional, "Required when `a`, `b` are all present." |
+| `exclude` | Optional, and unconstrained: none of the rules after it ever run. |
+| `exclude_with:field`, `Rule::excludeIf(…)`, `Rule::excludeUnless(…)`, or two exclude rules | Optional, with no note: no single "Required when" sentence says exactly when Laravel requires it. |
+
+A `present` after an exclude rule leaves the field optional with no note, since `present` accepts an
+empty value that "required" would rule out. A `prohibited` after `exclude_if` / `exclude_unless`
+becomes the matching `prohibited_unless` / `prohibited_if`; after any other exclude rule it's dropped.
+Either way the field stays documented, because the API accepts it whenever the exclude rule fires.
+
+The rules after an exclude rule still document the field's type and constraints, because that's the
+value the API reads whenever it keeps the field. When the field is excluded, the API accepts any value
+there and discards it, so a request sending a wrong-typed value in that case is accepted even though
+the schema rejects it — unless the object is a tagged union, below, where each shape leaves out the
+fields it excludes.
+
+### Tagged unions
+
+When every conditional field of an object is switched on or off by the **same** field of that object,
+the object is a tagged union: the API accepts exactly one shape per value of that field. Docuccino
+documents it that way — one schema per value, told apart by the field — so a generated client gets a
+type per shape instead of one object with the rules in prose:
+
+```php
+'payment' => ['required', 'array'],
+'payment.method' => ['required', Rule::enum(PaymentMethod::class)],
+'payment.card_number' => ['exclude_unless:payment.method,card', 'required', 'string'],
+'payment.iban' => ['exclude_unless:payment.method,transfer', 'required', 'string'],
+'payment.reference' => ['required', 'string', 'max:40'],
+```
+
+`payment` publishes as a `oneOf` of `StoreOrderRequestPaymentCard` and
+`StoreOrderRequestPaymentTransfer`, with a `discriminator` on `method`. Each shape pins `method` to its
+value, carries the fields that value keeps with their rules, and requires what that value requires —
+`card_number` in one, `iban` in the other, `reference` in both. A `present` field counts as required in
+the shapes that keep it, since the key has to be sent.
+
+An enum case no exclude rule names still gets a shape, with just the fields every value keeps. The
+shapes are named after the request, the object's path and the value's enum case, so they stay the same
+however your routes change. If the object is nullable, `null` is allowed beside the union. If its tag is
+`required_with` the object itself, an empty object is allowed beside it too, because that's what
+Laravel accepts — unless the object's own rules refuse one, as `required`, `filled` or a `min:1` do.
+
+The object stays a single schema with "Required when …" notes whenever the rules don't prove one shape
+per value:
+
+- fields gated on two different fields, or a `required_if`, `prohibited_if`, `missing_with` or other
+  conditional rule in the mix;
+- an exclude rule that isn't the field's first rule, or whose condition isn't a literal list of values;
+- a tag that isn't required, or isn't limited to plain string values by `in:` or `Rule::enum()`;
+- a tag `required_with` the object, where the object carries a rule other than `array`, `nullable`,
+  `present`, `sometimes`, `required`, `filled` or a size bound, so whether it accepts an empty object
+  isn't known;
+- a tag, or a field it switches, that `prepareForValidation()` copies from a header, query value or route
+  parameter, so it isn't the body's to send;
+- a request with no class to name the shapes after (an inline `validate()`), an action carrying its own
+  `#[BodyParameter]`, or rules that become query parameters.
+
 ### Types and formats
 
 | Rule | Documented as |
@@ -859,8 +1003,9 @@ a `format` claim about it would be a guess.
 | --- | --- |
 | `in:draft,sent,paid` / `Rule::in(...)` / `Rule::enum(InvoiceStatus::class)` | An `enum` of the allowed values — `integer`-typed when every value is a whole number, else `string`. `Rule::enum()` reads the enum's real cases and names the class in the description; a `->only([...])` / `->except([...])` chain narrows the documented values to match. |
 | `not_in:a,b` | `not: { enum: ["a", "b"] }` |
-| `regex:/^INV-\d+$/` | `pattern`, with the PHP delimiters and flags stripped so it's a bare ECMA-262 regex. |
-| `alpha`, `alpha_num`, `alpha_dash` | The equivalent anchored `pattern`. |
+| `regex:/^INV-\d+$/` | `pattern`, with the PHP delimiters stripped so it's a bare ECMA-262 regex, read the way [route constraints](#route-constraints) are: under `/u`, `\d` and `\w` match every script, so they are published as the ASCII class or any non-ASCII character. PHP's `$` also matches before a final newline unless the regex carries `D`, so `/^INV-\d+$/` is published as `^INV-\d+\n?$` and `/^INV-\d+$/D` as `^INV-\d+$`. A modifier that changes what matches — `i`, `m`, `s`, `x` — has no `pattern` spelling, so the field is published without one and a `validation.regex-modifier` notice says so. So is a body no pattern states truly — `.`, `\s` under `/u`, a count over a negated class or a Unicode-wide escape, inline flags, lookarounds, `\B` without `/u`, anything after a `$` that could take that final newline — with a `validation.regex-unportable` notice. |
+| `alpha:ascii`, `alpha_num:ascii`, `alpha_dash:ascii` | The ASCII class as an anchored `pattern` — `^[a-zA-Z0-9_-]+$` for `alpha_dash:ascii`. |
+| `alpha`, `alpha_num`, `alpha_dash` | Laravel accepts letters, marks and numbers from any script here, so the `pattern` is the ASCII class plus any non-ASCII character — `^(?:[a-zA-Z0-9_-]\|[^\x00-\x7F])+$`. That's exact for ASCII and wider beyond it, because the exact `\p{L}` form reads differently in validators that compile without the `u` flag. |
 | `starts_with:INV-` / `ends_with:.pdf` | An anchored `pattern` for a single value; a multi-value set becomes a description ("Must start with one of: …"), since there's no single pattern for it. |
 | `accepted`, `accepted_if` | `boolean` with `const: true` (the `_if` form adds "Must be accepted when …"). |
 | `declined`, `declined_if` | `boolean` with `const: false`. |
@@ -891,9 +1036,9 @@ every other rule, and they're applied last, so they see the finished property.
 
 ### Recognized with no schema effect
 
-`bail`, `exclude`, `exclude_if`, `exclude_unless`, `exclude_with`, `exclude_without`,
-`current_password`. These are consumed deliberately — they're valid rules that say nothing about the
-wire shape, so they never raise an unhandled-rule diagnostic.
+`bail` and `current_password`. These are consumed deliberately — they're valid rules that say nothing
+about the wire shape, so they never raise an unhandled-rule diagnostic. The exclude rules raise none
+either; what they change is covered under [Exclude rules](#exclude-rules).
 
 ## File uploads
 
@@ -944,15 +1089,121 @@ An explicit `file`/`image` rule or attribute is honored as before and never doub
 
 ## Headers and cookies
 
-Headers and cookies aren't inferable — nothing in a route or a rules array names them — so declare
-them where they matter. [`#[HeaderParameter]`](/laravel/reference/attributes/#headerparameter) and
-[`#[CookieParameter]`](/laravel/reference/attributes/#cookieparameter) are repeatable and take the same
-shape:
+A header your code reads by name is documented for you. `$request->header('Idempotency-Key')`,
+`$request->hasHeader(…)`, `$request->headers->get(…)`, `request()->header(…)` and the `Request` facade
+all count — in the action, in anything it calls, and in the FormRequest, including the methods Laravel
+runs while resolving it such as `authorize()` and `prepareForValidation()`:
 
 <Tabs>
 	<TabItem label="Your code">
 	```php
-	#[HeaderParameter(name: 'X-Idempotency-Key', type: 'string', required: true, description: 'Replay guard for retries')]
+	class StoreOrderRequest extends FormRequest
+	{
+	    public function idempotencyKey(): ?string
+	    {
+	        return $this->header('Idempotency-Key');
+	    }
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"parameters": [
+	  { "name": "Idempotency-Key", "in": "header", "required": false, "schema": { "type": "string" } }
+	]
+	```
+	</TabItem>
+</Tabs>
+
+A read proves the server looks at the header, not that it insists on it, so the parameter is optional.
+One header read under several spellings is one parameter. Some reads are never published this way:
+
+- `Accept`, `Content-Type` and `Authorization` — OpenAPI states them through the request body, the
+  responses and the security scheme.
+- A header an `apiKey` security scheme or the [API version](/laravel/guides/api-versioning/) already
+  carries.
+- A header only the FormRequest's `authorize()` reads. That is a gate: without the header the request is
+  refused, so it is not an optional input, and its name is often one you never meant to publish.
+- Headers the transport or a proxy sets rather than your clients: `Host`, `Cookie`, `Content-Length`,
+  `Connection`, `Transfer-Encoding`, `Forwarded`, `X-Forwarded-*`, `X-Real-IP` and `CF-Connecting-IP`.
+- A name built at runtime, `$request->header($name)`, which Docuccino cannot know.
+
+A header your code reads anywhere else is published, so check what your document says about any header
+you use for access control outside `authorize()`. To keep one out, name it — as the document spells it —
+in [`#[IgnoreParam]`](/laravel/reference/attributes/#ignoreparam):
+
+```php
+#[IgnoreParam(name: 'X-Internal-Trace', in: 'header')]
+public function show(Order $order): OrderResource { /* … */ }
+```
+
+### Validating a header with your rules
+
+The Laravel way to validate a header — or a query value, or a route parameter — with ordinary rules is to
+copy it into the input in `prepareForValidation()`. Docuccino follows the copy: the rules for that key
+describe the header, and the key leaves the request body, because `merge()` writes over whatever the
+body sent:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	class StoreOrderRequest extends FormRequest
+	{
+	    protected function prepareForValidation(): void
+	    {
+	        $this->merge([
+	            'idempotency_key' => $this->header('Idempotency-Key'),
+	            'per_page' => $this->query('per_page'),
+	        ]);
+	    }
+
+	    public function rules(): array
+	    {
+	        return [
+	            'sku' => ['required', 'string'],
+	            'idempotency_key' => ['required', 'uuid'],
+	            'per_page' => ['nullable', 'integer', 'max:100'],
+	        ];
+	    }
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"parameters": [
+	  { "name": "per_page", "in": "query", "required": false,
+	    "schema": { "type": "integer", "maximum": 100 } },
+	  { "name": "Idempotency-Key", "in": "header", "required": true,
+	    "schema": { "type": "string", "format": "uuid" } }
+	]
+	```
+	The request body documents `sku` alone.
+	</TabItem>
+</Tabs>
+
+A header that was not sent is copied as `null`, and the key is there either way, so `sometimes` never
+skips its rules. The parameter is required unless the rules let a `null` through: `nullable` does, and
+so does a rule that only bounds a value, such as `max:36` on its own. Which rules refuse one is asked of
+the Laravel you have installed, because that moves between versions: 13 refuses a `null` for `ascii`,
+and 12 lets it through. A rule that reads another field, a database or the network is never asked, so
+it never makes the parameter required. A route parameter is already required and typed by the route, so
+its copy only leaves the body. A `#[HeaderParameter]` still wins over what the rules say.
+
+Only a copy Docuccino can be certain of counts: an unconditional `$this->merge([...])` with a literal key
+and a value read by a literal name — `$this->header('…')`, `$this->headers->get('…')`,
+`$this->query('…')` or `$this->route('…')`. A copy inside an `if`, a key written twice, a computed value
+such as `Str::slug($this->input('title'))`, or a hook that also calls your own methods, hands `$this` to
+other code, `replace()`s the input or returns early is documented as if the copy were not there.
+
+To say more — that a header is required, its format, what it is for — declare it.
+[`#[HeaderParameter]`](/laravel/reference/attributes/#headerparameter) and
+[`#[CookieParameter]`](/laravel/reference/attributes/#cookieparameter) are repeatable, take the same
+shape, and win over what was read:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	#[HeaderParameter(name: 'Idempotency-Key', type: 'string', format: 'uuid', required: true, description: 'Replay guard for retries')]
 	#[CookieParameter(name: 'invoice_preview', type: 'string', description: 'Signed preview token')]
 	public function store(StoreInvoiceRequest $request): InvoiceResource { /* … */ }
 	```
@@ -960,14 +1211,17 @@ shape:
 	<TabItem label="Generated OpenAPI">
 	```json
 	"parameters": [
-	  { "name": "X-Idempotency-Key", "in": "header", "description": "Replay guard for retries",
-	    "required": true, "schema": { "type": "string" } },
+	  { "name": "Idempotency-Key", "in": "header", "description": "Replay guard for retries",
+	    "required": true, "schema": { "type": "string", "format": "uuid" } },
 	  { "name": "invoice_preview", "in": "cookie", "description": "Signed preview token",
 	    "required": false, "schema": { "type": "string" } }
 	]
 	```
 	</TabItem>
 </Tabs>
+
+Cookies are declared only: Laravel encrypts the cookies it sets, so a client cannot send one it was
+not given, and a cookie read is not an input a generated client could supply.
 
 Parameters are emitted in a fixed order — path, then query, then header, then cookie, each group sorted
 by name — so adding one never reshuffles the rest of the list.
@@ -987,6 +1241,8 @@ precedence over what's inferred — you're never fighting the tool.
 ## Implicit `422`
 
 Because Docuccino recovers your request's validation rules, it also documents the `422` validation
-error that request produces — so a validated write endpoint carries its `422` automatically. A read
-route's rules become query parameters rather than a body, so it gets no implicit `422`. See
+error that request produces — so a validated endpoint carries its `422` automatically. That holds for a
+read route too: its rules become query parameters rather than a body, and a value they refuse is the
+same `422`. A query parameter you only declare with `#[QueryParameter]` has no validator behind it, so it
+adds none. See
 [implicit responses](/laravel/documenting/errors/#implicit-responses-middleware-bindings--validation).

@@ -59,7 +59,7 @@ produced it. Change any of the following and the affected operations are re-anal
 | A route's method, URI, name, action or middleware | That route |
 | A file the analysis actually read — controller, form request, resource, model, DTO, custom rule | Every operation that read it |
 | Anything under `documents.<key>` in your config, except `export`, `viewer`, `info` and `api_version` | Every operation in that document |
-| Your app's boot-time registrations: `Relation::morphMap()`, `RateLimiter::for()`, exception `render` callbacks, `app.url` | Every operation |
+| Your app's boot-time registrations: `RateLimiter::for()`, exception `render` callbacks, `app.url` | Every operation |
 | Which engine resolved, whether it's installed, and its `engine` config | Every operation |
 | Your `composer.lock` — a package or analyzer upgrade | Every operation |
 | Docuccino's own version | Everything |
@@ -71,7 +71,7 @@ Two of those rows deserve the detail:
   the controller and the operation that returns it rebuilds. Files are compared by **content**, not
   timestamp, so `touch` or a branch switch that restores the same bytes costs nothing — while a
   dependency that was deleted invalidates immediately.
-- **Boot-time registrations count because Docuccino reads them.** A morph map or a rate limiter name
+- **Boot-time registrations count because Docuccino reads them.** A rate limiter name or a render callback
   shapes the document without living in any file the analysis opened, so those facts are folded into
   the key directly.
 

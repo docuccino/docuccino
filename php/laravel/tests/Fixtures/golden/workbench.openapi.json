@@ -167,7 +167,7 @@
     "/api/attachments/{id}": {
       "get": {
         "operationId": "get.api.attachments.@id",
-        "summary": "A polymorphic morph (Widget|Gadget) → discriminated oneOf keyed by the morph map.",
+        "summary": "A polymorphic morph (Widget|Gadget) → the anyOf of the two models.",
         "tags": [
           "Integrations"
         ],
@@ -187,21 +187,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "oneOf": [
+                  "anyOf": [
                     {
                       "$ref": "#/components/schemas/Gadget"
                     },
                     {
                       "$ref": "#/components/schemas/Widget"
                     }
-                  ],
-                  "discriminator": {
-                    "mapping": {
-                      "gadget": "#/components/schemas/Gadget",
-                      "widget": "#/components/schemas/Widget"
-                    },
-                    "propertyName": "type"
-                  }
+                  ]
                 }
               }
             }
@@ -301,7 +294,7 @@
             }
           },
           "402": {
-            "description": "Error",
+            "description": "Payment Required",
             "content": {
               "application/json": {
                 "schema": {
@@ -992,6 +985,26 @@
         "tags": [
           "Forms"
         ],
+        "parameters": [
+          {
+            "name": "expires",
+            "in": "query",
+            "description": "Unix timestamp after which the signed link is no longer accepted. Carried only by links that expire.",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "signature",
+            "in": "query",
+            "description": "Signature of the signed link this request is made from. Send it, and the link's other query parameters, as the link carries them.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1499,7 +1512,10 @@
           "message": {
             "type": "string"
           }
-        }
+        },
+        "required": [
+          "message"
+        ]
       },
       "Forbidden": {
         "type": "object",

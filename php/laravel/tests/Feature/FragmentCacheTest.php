@@ -262,47 +262,33 @@ it('invalidates a fragment when a resource toArray file is edited (analysis depe
     @unlink($resourceFile);
 });
 
-it('invalidates fragments when Relation::morphMap() changes (booted-app cache input)', function (): void {
-    fragmentCacheDir('fragments');
-    $engine = new CountingTypeEngine(WorkbenchEngine::make());
-    app()->instance(TypeEngine::class, $engine);
-
-    generateDocument()->document;
-    $engine->analyzeCount = 0;
-
-    // A morph-map change alters the discriminator vocabulary → the document-level env digest changes.
-    Relation::morphMap(['widget' => 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Widget', 'gadget' => 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Gadget', 'sprocket' => 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Widget'], false);
-    generateDocument()->document;
-
-    expect($engine->analyzeCount)->toBeGreaterThan(0);
-
-    // Restore the morph map so this test never leaks into another (see TestCase setUp).
-    Relation::morphMap(['widget' => 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Widget', 'gadget' => 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Gadget'], false);
-});
-
-it('invalidates fragments when several aliases for one model are reordered (booted-app cache input)', function (): void {
-    fragmentCacheDir('fragments');
-    $engine = new CountingTypeEngine(WorkbenchEngine::make());
-    app()->instance(TypeEngine::class, $engine);
-
-    // A model with several aliases serialises its `type` as whichever was registered FIRST, so this
-    // reorder changes the discriminator the document publishes while registering the same pairs.
-    // Nothing on disk moves, so the environment digest is the only thing that can carry it. Three
-    // aliases, and the reorder moves the first two: with two, first and last are the same entry, so a
-    // digest recording the LAST alias per model would invalidate here as well.
+it('invalidates fragments when the morph map changes (booted-app cache input)', function (): void {
+    // A morphTo's type column publishes the values the map resolves, and no file records the map, so it
+    // keys the environment digest: a warm build under another map must re-derive rather than replay.
     $widget = 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Widget';
     $gadget = 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Gadget';
-    Relation::morphMap(['widget' => $widget, 'legacy_widget' => $widget, 'ancient_widget' => $widget, 'gadget' => $gadget], false);
-    generateDocument()->document;
-    $engine->analyzeCount = 0;
+    fragmentCacheDir('fragments');
+    $engine = new CountingTypeEngine(WorkbenchEngine::make());
+    app()->instance(TypeEngine::class, $engine);
 
-    Relation::morphMap(['legacy_widget' => $widget, 'widget' => $widget, 'ancient_widget' => $widget, 'gadget' => $gadget], false);
-    generateDocument()->document;
+    try {
+        generateDocument()->document;
+        $engine->analyzeCount = 0;
 
-    expect($engine->analyzeCount)->toBeGreaterThan(0);
+        Relation::morphMap(['legacy_widget' => $widget, 'gadget' => $gadget], false);
+        generateDocument()->document;
+        expect($engine->analyzeCount)->toBeGreaterThan(0);
 
-    // Restore the morph map so this test never leaks into another (see TestCase setUp).
-    Relation::morphMap(['widget' => $widget, 'gadget' => $gadget], false);
+        // Enforcement alone changes what an unmapped model can write, so it keys the digest too.
+        $engine->analyzeCount = 0;
+        Relation::requireMorphMap();
+        generateDocument()->document;
+        expect($engine->analyzeCount)->toBeGreaterThan(0);
+    } finally {
+        // Restore the morph map so this test never leaks into another (see TestCase setUp).
+        Relation::requireMorphMap(false);
+        Relation::morphMap(['widget' => $widget, 'gadget' => $gadget], false);
+    }
 });
 
 it('invalidates fragments when a render callback is registered (booted-app cache input)', function (): void {

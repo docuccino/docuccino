@@ -6,15 +6,14 @@ See the README for scope; this doc carries implementation-level detail.
 
 ## 1. UIR document
 
-OAS 3.2-shaped JSON with one reserved key `x-docuccino` allowed on every node. Schemas are
-JSON Schema 2020-12 (`jsonSchemaDialect: https://spec.openapis.org/oas/3.2/dialect/base`).
+A **valid OpenAPI 3.2 document** with one reserved key `x-docuccino` allowed on every node — nothing
+more. Schemas are JSON Schema 2020-12 (`jsonSchemaDialect:
+https://spec.openapis.org/oas/3.2/dialect/base`).
 
 Top level:
 
 ```json
 {
-  "$schema": "https://spec.docuccino.app/uir/1.0/schema.json",
-  "uir": "1.0.0",
   "openapi": "3.2.0",
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.2/dialect/base",
   "info": {}, "servers": [], "security": [], "tags": [],
@@ -22,20 +21,35 @@ Top level:
   "components": { "schemas": {}, "responses": {}, "parameters": {}, "securitySchemes": {}, "examples": {}, "headers": {} },
   "x-docuccino": {
     "document": { "id": "doc:default", "configHash": "…", "contentHash": "…" },
-    "generator": { "name": "docuccino/laravel", "version": "…", "specVersion": "1.0.0" },
+    "generator": {
+      "name": "docuccino/laravel", "version": "…",
+      "specVersion": "2.0.0", "schema": "https://spec.docuccino.app/uir/2.0/schema.json"
+    },
     "content": { "pages": [] },
     "diagnostics": []
   }
 }
 ```
 
+- The document root carries **no member OpenAPI does not define**. The spec version and the schema
+  URL are facts about the TOOL, so they ride under `generator`, which the content hash already
+  excludes: a spec release can never dirty a committed diff, and a strict OpenAPI validator accepts
+  the artifact as it stands.
 - `contentHash` = SHA-256 over canonical serialization EXCLUDING `x-docuccino.generator` and
   `x-docuccino.diagnostics` (tool upgrades don't dirty CI diffs).
 - No timestamps anywhere — banned by the UIR schema itself.
 - `x-docuccino.diagnostics` embedded only with `--embed-diagnostics` (CLI is the primary channel).
-- UIR spec semver is independent of PHP packages; `$schema` URL embeds major.minor.
+- The schema is published in two halves: the **extension schema**
+  (`…/2.0/extension.schema.json`), which describes `x-docuccino` alone and so applies on top of any
+  OpenAPI document, and the **document schema** (`…/2.0/schema.json`), which is an OpenAPI 3.2
+  document that additionally satisfies it. The document schema EMBEDS the extension as a draft
+  2020-12 schema resource rather than referencing it across files, so a vendored copy validates
+  offline with nothing beside it — a published schema that reaches the network to resolve itself puts
+  that fetch in every consumer's CI run. `composer sync-schema` generates the embedded copy from the
+  standalone file, and `SchemaSelfContainmentTest` holds the two equal and the references inside.
+- UIR spec semver is independent of PHP packages; both schema URLs embed major.minor.
   Consumers MUST ignore unknown `x-docuccino` members (additive = minor; shape/identity change =
-  major + new `$schema` URL).
+  major + new schema URLs).
 
 ### The empty-object invariant: the JSON values a PHP array cannot spell
 
@@ -189,6 +203,140 @@ SECOND copy of the subschema table — three in the example audit, two in the 3.
 the canonicalizer, one in the structural hash. `DeclaredShapeTest` therefore fails on any `const array`
 anywhere in the packages naming three or more positioned keywords unless it is one of the four
 sanctioned lists, each stated for a reason that is not "which keywords carry subschemas".
+
+### Discriminated unions
+
+A union of components is published as `anyOf` by whichever producer built it (`SchemaUnion`), and one
+reader decides afterwards whether it is owed `oneOf` + `discriminator`: `Schema\DiscriminatedUnion`, run
+by the assembler over the finished document, before overlays. The rule is read off the component
+BODIES, never the classes behind them, so it holds whichever mapper built a member and never claims a
+hidden or renamed property:
+
+- every non-null member is a pure `$ref` to a component (an inline member has no name for a `mapping`
+  to point at);
+- every member's body REQUIRES one property and pins it to a string — `const`, or a one-value `enum` —
+  that no other member shares. Distinct pinned values are what make the members mutually exclusive,
+  which is the one thing `oneOf` asserts over `anyOf`, so a union that earns no discriminator is not
+  given `oneOf` either. Where two properties qualify, the first by name wins; a value PHP would read
+  back as an integer key is left out, since a mapping keyed by it would publish as a JSON list.
+
+Deciding over the FINISHED document is what makes the answer a function of the classes alone. Decided
+while converting, a union met while one of its members was still being expanded — any hierarchy that
+refers back to itself: a tree, a thread of replies — had no body to read for that member, and since the
+registry keeps the first body registered per identity, the published parent depended on which route a
+build met first. It also makes cold equal warm without the diagnostic riding on a fragment: the
+assembler re-reads the same components either way. The walk reads members by `Document\DocumentMembers`,
+so a union under a property or response named `default`, `enum` or `x-…` is read like any other, and
+one written inside an example is data.
+
+A `null` member carries no tag, and a discriminator dispatches on a property every option of its
+`oneOf` carries, so a nullable tagged union is spelled `anyOf: [{oneOf, discriminator}, {type: null}]`
+— never `null` inside the `oneOf`, which a generator building a tagged union from the discriminator
+has no member for. The 3.0 downlevel folds the null branch into `nullable: true` beside the `oneOf`,
+and raises `downlevel.nullable-composition`: 3.0.3's `nullable` adds null only beside a `type`, so a 3.0
+reader may take the fold as the `oneOf` alone. It is the closest 3.0 spelling, not an exact one. The
+empty object (`{type: object, maxProperties: 0}`) stays outside the `oneOf` on the same argument: every
+tagged member requires its tag, so none admits `{}`, and a tagged request object whose tag is only
+`required_with` the object accepts exactly that (see below).
+
+Where every member publishes a property that at least two pin but the set falls short — a member leaves
+it open, or two share a value — `components.union-undiscriminated` names it; an untagged union reports
+nothing. There is deliberately no second emitter: a union of Eloquent models (a `MorphTo`) goes through
+the same rule, and is not discriminated by its morph map, because the alias lives in the parent's
+`*_type` column and no member's payload carries it. That column is where the map reaches the document —
+see [Morph type columns](#morph-type-columns).
+
+The value a member pins comes from the engine (`Metadata\FixedPropertyValues`), which types a property
+as the literal every instance holds only where PHP guarantees it: a `readonly`, non-promoted property
+of a `final` class, assigned by the class's own constructor as a top-level statement (nothing that could
+`return` or `goto` before it), from a string or int literal, a backed enum case, or a class constant
+holding one, whose declared type holds it without coercion. Readonly makes that one assignment the
+answer — any other write throws — except where PHP re-initialises a readonly property on a copy: a
+`__clone` (its own or inherited), a `clone($object, [...])` with properties (8.5) anywhere with set
+access — the class's body, an ancestor's (readonly is implicitly `protected(set)`, and a parent's
+`with(array $changes)` is the idiom), or a trait any of them uses — and a `public(set)` property, which
+clone-with may re-initialise from anywhere. Each of those leaves the declared type. The read is of the
+hierarchy's source, so what it cannot see is not covered: a closure bound into the class's scope from
+elsewhere, and `unserialize()`, which restores whatever the payload holds.
+
+### Tagged request objects
+
+The request side of the same union, recovered from validation rules rather than classes. An object whose
+conditional members are all switched by exclude rules on ONE of its own members — the tag — is accepted
+by Laravel in exactly one shape per tag value, so the body publishes one component per value and an
+`anyOf` of them, which the reader above discriminates. `Laravel\Integrations\Validation\TaggedRules`
+proves the partition (vocabulary, adapter); `Core\Extensions\Validation\TaggedBranches` writes it onto
+the finished body, after the source class's declarations, so a member's docblock reaches every branch.
+
+What the proof rests on, all checked against `Validator::passes()` and `ValidatesAttributes`:
+
+- A field's rules run in the order written and stop at the first exclude rule that fires. So a member is
+  gated only if the exclude rule is its FIRST rule; a rule ahead of it runs on every request. Keys under
+  a member run in key order too, so one written before its gated parent has already run by the time the
+  parent is excluded — that fails the proof.
+- `exclude_unless:tag,v…` keeps the member iff the tag's value is listed; `exclude_if:tag,v…` excludes it
+  iff it is listed (any of them). Both compare with a loose `in_array`, which is exact between two strings
+  unless both are numeric — so the tag's values must not be numeric.
+- The tag must be `required`, or `required_with` the object itself, and limited by `in:` or `Rule::enum()`
+  with nothing that could refuse a listed value. Then every non-empty accepted object carries a listed
+  tag, and a listed value the enum refuses never reaches an exclude rule, so it names no branch. A case
+  no exclude rule names still gets a branch.
+- `required_with:<object>` is satisfied by an empty object (`validateRequired` fails on an empty array),
+  so such a tag admits `{}` — unless some member is required outright, or an `exclude_if` member requires
+  itself: `exclude_if` keeps a member whose tag was never sent (`! Arr::has(...)` returns true). The
+  object's OWN rules run on `{}` too: `required` and `filled` refuse it, a size rule reads its count of 0,
+  and `array`, `nullable`, `present`, `sometimes` pass it. A rule on the object outside that list leaves
+  the answer open, and the proof fails rather than guess either way. On a tagged branch the object is
+  non-empty, so `required_with:<object>` reads as `required`.
+- `present` and `required` both put the key in a branch's `required`. An excluded member is left out of
+  the branches that exclude it; the branches stay open objects, so a value sent there is accepted, as the
+  server accepts and discards it.
+
+Any other conditional rule among the members (`required_if`, `prohibited_*`, `missing*`, a second exclude
+rule, an unread condition), a second tag, or a tag outside that grammar leaves the merged object and its
+prose exactly as before — the partial answer is today's answer, not a guessed union.
+
+A proved partition moves the tag's and the gated members' presence rules off the fields, so giving one up
+LATER has to put them back. `TaggedRules::split()` keeps the rules as written beside the fields as the set's
+merged reading (`RuleSet::$merged`), which every rewrite carries — the normalizer and the ordering rewrite
+both halves, and a key leaving the body (a copy from a header, query value or route parameter) releases
+every partition it is the tag or a gated member of, reading that object's members as merged again, before
+it goes. The converter publishes the merged reading's schema beside the split one, the source class's
+declarations are written onto both, and `TaggedBranches` puts an object it cannot split back as the merged
+schema has it, taking any partition inside it along and registering nothing for them. Wherever a partition
+is given up, the object reads byte-for-byte as it does where none was proved.
+
+A branch is minted as `<request stem><path word><value word>` — the request's own first-rung name
+(`ComponentNames::stem()`), the object's path without `*`, and the value's enum case name (else its
+minted member name) — identified as `<request id>/<path>.<tag>=<value>`. An identity with a `/` in its
+facet contributes no facet of its own: its base already starts from the request's. Both are functions of
+the rules alone. Branches exist only where a component can be named after a class: a body verb, a source
+class, and no operation-level `#[BodyParameter]` patching the body inline. A Spatie Data body is left
+alone: the order a property's rules reach the validator in is assembled by the package, not written, and
+the proof is about that order.
+
+### Morph type columns
+
+A `morphTo`'s type column holds what `Model::getMorphClass()` answers for the related model: its FIRST
+alias in the morph map, else its class name — except under `Relation::enforceMorphMap()`, where an
+unmapped model throws instead of being written. `MorphTypeValues` publishes the column as the enum of
+those answers wherever the set is closed, and otherwise leaves the declared type alone:
+
+- **Enforced:** the map bounds the set. The values are the aliases of every mapped, instantiable model
+  that is one of the relation's targets (a subclass of an abstract target included), or of every mapped
+  model where the relation names none (`MorphTo<Model, $this>`).
+- **Not enforced:** an unmapped model writes its class name, so the targets must be known and none may
+  have a subclass the build cannot see. `final` is the only proof of that PHP gives.
+- **Open either way:** a target that overrides `getMorphClass()` writes what its own code says; an
+  accessor over the column decides what is serialised; a `morphTo()` whose column cannot be read might
+  own any column on the model; and a set that comes out empty is a misreading, not a column.
+
+The targets come from the relation method's declared `@return` generic (`DeclaredReturnType`), because
+the engine types the body `$this->morphTo()` as the framework's `MorphTo<Model, $this>`. The values
+describe what is written under the booted map; rows stored before an alias was introduced may still hold
+the class name. The map keys the environment digest by the enforcement flag and each model's resolved
+alias, taken in registration order before sorting, and every class the answer read is a fragment
+dependency.
 
 ### Diff polarity: what a change under a subschema position is worth
 
@@ -441,6 +589,16 @@ cannot drift apart. This matters most where the two meet: `docuccino:diff` pairs
 document against an artifact read back off disk, so a reader that knows only the nested form puts the
 two sides in disjoint key spaces and reports every node it cannot pair as removed AND re-added — a
 wall of phantom breaking changes on a document nobody touched.
+
+The one node the flat id never lands on is a Reference Object: OpenAPI lets it carry nothing beside
+`$ref` but `summary` and `description` (3.0 not even those), and a strict reader refuses the whole
+document over an extension there. So a use of a shared response or parameter publishes the pointer
+alone and the id stays in the UIR, where the use site carries it nested. The diff loses nothing by
+it: responses pair by status under an operation it paired by id, and a parameter the two sides spell
+with one `in` + `name` under that operation is one parameter whatever id each read for it — an
+exported use of a shared one reads its component's. A Schema Object is the
+exception from 3.1 on, being JSON Schema, and keeps its id beside a `$ref`; in 3.0, where that `$ref`
+is a Reference Object too, it goes.
 
 ### Component naming: a minted name is a function of the thing
 
@@ -1213,6 +1371,55 @@ interface ExceptionToResponse {
 //      (422 {message,errors}, 401/403/404 {message}), maintained per Laravel version.
 //   3. DefaultExceptionToResponse — the terminal fallback: {message} under the status.
 //      User extensions slot in by order; attributes/config override anything.
+
+interface ExceptionTranslator {
+    public function translate(ThrownException $e, RouteContext $ctx): ?ThrownException;
+}
+// Asked in order inside RouteContext::mapThrow() BEFORE the chain above, and the first answer is the
+// exception every mapper renders and every finalizer is handed — a framework that swaps an exception
+// before rendering it (Laravel's `$exceptions->map()`, applied at the top of Handler::render()) sends the
+// swap's response, never the thrown class's. Nothing re-translates an answer, as mapException() maps once.
+// The answer keeps the throw's call chain, confidence and disposition; only class and status move, and
+// MappedResponse::$translated carries it so a class-level #[ErrorComponent] names the body from the class
+// that RENDERED it. The Laravel implementation (InferredHandler\ExceptionMapTranslator) reads the booted
+// handler's `$exceptionMap` in registration order with mapException()'s `is_a()` on the THROWN class —
+// before prepareException(), so an entry keyed on ModelNotFoundException matches, and whatever it returns
+// is then prepared as usual. A class-string target is read off the closure map() wraps it in; a closure
+// is analysed with CallableRef::$returnsExceptions. A translation is taken only where it is the whole
+// answer — one exception every reachable return agrees on; a return naming no class, several exceptions,
+// or a translation beside the throw handed back keeps the thrown answer with inferred-handler.too-dynamic
+// (HandlerDeferralLog::recordMapping()), and so does a translation whose status nothing read, though that one is
+// still taken. The map joins the environment digest beside the render and respond callbacks.
+
+interface ErrorResponseFinalizer {
+    public function finalization(ThrownException $e, ResponseDraft $rendered, RouteContext $ctx): Finalization;
+    /** @return list<ResponseDraft> */
+    public function responses(ThrownException $e, ResponseDraft $rendered, RouteContext $ctx, ComponentRegistry $components): array;
+    public function producer(): string;
+}
+// Every response the chain above renders passes through the finalizers in order, inside
+// RouteContext::mapThrow() — the one place a throw becomes a response — because a framework's
+// post-processing hook (Laravel's `$exceptions->respond()`) sees every rendered error whichever tier
+// rendered it. Keeps / Replaces / Extends. Replaces withdraws what rendering registered (components,
+// route notes; deps stay) BEFORE responses() writes, which is why the contract is two questions and not
+// one. Extends publishes alternatives: ResponseDraft::eitherOf() keeps each media type one part sends
+// and widens one several send to an empty schema, since merging two bodies' keywords describes neither.
+// The Laravel implementation (InferredHandler\RespondCallbackFinalizer) analyses the callback with
+// CallableRef::$narrowToEvery: every reachable return, the parameter a return hands back unchanged, and
+// the literal-argument parameter calls PHPStan proves at each return (CallCondition), which the adapter
+// settles per route for `is()`, `routeIs()` (Support\RoutePredicates, shared with every other reader of
+// a route predicate) and the rendered `getStatusCode()` — a stand-in status is no reading of one.
+// Each reachable return is one of three things. The rendered response handed back unchanged keeps what
+// the tiers before published. A JsonResponse is built exactly as a render callback's is, filed at the
+// status it states, else at the rendered one. Anything else is unread: beside a hand-back it leaves the
+// rendered answer standing, alone it leaves the body unsaid, and either way inferred-handler.too-dynamic.
+// Rewrites at different statuses, or away from a rendered response still sent, keep the rendered one and
+// say why. What a callback is HANDED is not what was thrown: Handler::render() runs prepareException()
+// first (a missing model becomes a NotFoundHttpException, a denial an AccessDeniedHttpException, …), so
+// both the render-callback tier and this one narrow to InferredHandler\ReceivedException's answer, held
+// to the installed prepareException() by a source-reading guard. The render-callback tier also tries the
+// renderers in Handler::render()'s order: the exception's own render() (looked past where it only returns
+// null), a Responsable's toResponse(), then the first render callback the prepared exception satisfies.
 ```
 
 ### The inferred-handler tier, and the four facts it answers for
@@ -1445,11 +1652,15 @@ body matches the document's error style:
 | Status | Signal | Synthesized exception |
 |---|---|---|
 | 401 | auth middleware matches `security.auth_middleware`, and the route is not `#[Unauthenticated]` | `AuthenticationException` |
-| 422 | a request extension recovered a validated body (its integration producer owns `requestBody`) | `ValidationException` |
+| 422 | the draft declares it validates its input (`OperationDraft::validatesInput()`, set by `RecoveredRequest::apply()` for body or read-verb query), or an integration producer owns `requestBody` | `ValidationException` |
 
-> **Deliberate gap:** the 422 signal is body-verb only. A validated GET/HEAD applies its rules as query
-> parameters (never a `requestBody`), so a validated read endpoint is NOT documented with an implicit
-> 422 even though it can 422 at runtime. Left as-is to avoid a 422 on every validated read (review B6).
+> **Read verbs:** a validated GET/HEAD applies its rules as query parameters, never a `requestBody`,
+> and a value they refuse is the same 422 a write's body gets. So the signal is the rules being APPLIED,
+> declared on the draft (`declareValidatesInput()`), not the field they landed in; a third-party
+> validator that bypasses `RecoveredRequest` declares it the same way. A 422 on every validated
+> read is the true answer: each can refuse a request, and a published enum with no response for a value
+> outside it is a contract that contradicts itself. Query parameters get no layer test, because a
+> paginator's `page` and a Query Builder allow-list are integration-written without being validated.
 
 | 404 | the route has ≥1 model-bound path parameter — ONE 404 per operation, not per param | `ModelNotFoundException` |
 | 403 | `can:` / `signed` / `verified` middleware, or a FormRequest `authorize()` the engine proves is not a literal `return true` | `AuthorizationException` |

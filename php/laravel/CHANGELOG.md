@@ -7,6 +7,38 @@ User-facing changes to `docuccino/laravel` — features, fixes, performance work
 taken from the commit messages scoped `laravel`. Entries begin after v0.1.2; older history is in
 the [repository](https://github.com/docuccino/docuccino) git log.
 
+## v0.20.3
+
+### Features
+
+- publish the request headers an action reads by name ([#558](https://github.com/docuccino/docuccino/pull/558))
+- publish the signature and expires query parameters a signed route requires ([#557](https://github.com/docuccino/docuccino/pull/557))
+- publish a morphTo's type column as the enum its morph map closes ([#552](https://github.com/docuccino/docuccino/pull/552))
+
+### Bug fixes
+
+- publish every status a choice of constant codes can send ([#561](https://github.com/docuccino/docuccino/pull/561))
+- publish a resource sent through ->response() as the resource ([#559](https://github.com/docuccino/docuccino/pull/559))
+- publish the 422 a read route's validated query can answer ([#556](https://github.com/docuccino/docuccino/pull/556))
+- document an exception as the class the exception map translates it to ([#555](https://github.com/docuccino/docuccino/pull/555))
+- publish a field required after an exclude rule as required only while it is kept ([#550](https://github.com/docuccino/docuccino/pull/550))
+- publish the top-level members a root resource's with() adds ([#543](https://github.com/docuccino/docuccino/pull/543))
+- document every error as the respond() callback sends it ([#542](https://github.com/docuccino/docuccino/pull/542))
+
+## v0.20.1
+
+### Bug fixes
+
+- read a workflow id as a name the application chose ([#528](https://github.com/docuccino/docuccino/pull/528))
+
+## v0.20.0
+
+### Features
+
+- declare a workflow on the operations that take part in it ([#514](https://github.com/docuccino/docuccino/pull/514))
+- say which operations a version had not added yet ([#508](https://github.com/docuccino/docuccino/pull/508))
+- say what a version did to a published value set ([#507](https://github.com/docuccino/docuccino/pull/507))
+
 ## v0.19.0
 
 ### Breaking changes

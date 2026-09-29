@@ -50,7 +50,7 @@ function allowedSwitchReads(): array
         // ---- Fragment/DType serialisation. Both ends are this package: what is read back is what
         // ---- `toArray()` wrote, so a non-boolean there is a bug in us and not a value to report.
         'php/core/src/Inference/DType/ArrayShapeField.php::fromArray' => [2, 'own serialised DType `optional`'],
-        'php/core/src/Inference/DType/ArrayShapeT.php::fromArray' => [2, 'own serialised DType `isList`'],
+        'php/core/src/Inference/DType/ArrayShapeT.php::fromArray' => [4, 'own serialised DType `isList`, `isObject`'],
         'php/core/src/Inference/DType/LiteralT.php::fromArray' => [1, 'a `bool` literal type restored to its value'],
 
         // ---- Internal lookups whose value this package put there itself.
@@ -58,6 +58,7 @@ function allowedSwitchReads(): array
         'php/core/src/Document/DocumentGraph.php::componentsReaching' => [1, 'own reachability set membership'],
         'php/core/src/Document/DocumentGraph.php::nodeReaches' => [1, 'own reachability set membership'],
         'php/core/src/Emit/Formats.php::checksEmittedArtifact' => [1, 'own format table column'],
+        'php/core/src/Emit/Formats.php::publishesPlainOpenApi' => [1, 'own format table column'],
         'php/core/src/Emit/Formats.php::serialisesYaml' => [1, 'own format table column'],
         'php/laravel/src/Versioning/ApiVersionTransformer.php::rewrite' => [1, 'own reachability set membership'],
 

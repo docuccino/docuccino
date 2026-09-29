@@ -191,8 +191,8 @@ it('joins every environment-digest segment on a byte no value it reads can hold'
     // them cannot report a clean scan.
     expect(count($separators))->toBeGreaterThanOrEqual(11)
         ->and(array_values(array_unique($separators)))->toBe(['"\0"'])
-        // A literal between two `.` operators is a separator by another name, and the one the Passport
-        // and morph-map segments used to pair a key with its value.
+        // A literal between two `.` operators is a separator by another name, and the shape a
+        // segment pairing a key with its value reaches for first.
         ->and($glue)->toBe([]);
 });
 

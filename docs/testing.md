@@ -276,24 +276,69 @@ Consequences:
   unit tests for its pure classes (translators, registries, config objects) — not more
   subprocess fixture tests.
 
-## Measured coverage (2026-09-11)
+### Why the coverage gate shares test ids
+
+A parallel coverage run merges every worker's coverage in the parent, all of it in memory at once, and
+it died there against an 8G limit after the whole suite had passed. What it was holding was test ids.
+Line coverage records, for every executed line, the tests that executed it; in a worker those lists
+repeat the same few thousand strings, each one shared. The worker hands its coverage to the parent
+through `serialize()`, which spells a string out in full at every occurrence, and `unserialize()` gives
+each occurrence a string of its own.
+
+Measured at CI's four processes: each worker recorded ~4.46M line hits by ~3,950 distinct ids of ~157
+bytes, so 92% of its ~800MB file was the same ids repeated ~1,130 times, and each file cost ~2GB once
+read back. The parent peaked at 7.9GB, and the figure grows with every test added.
+
+`tools/phpunit/ShareCoverageTestIds` (bootstrapped in `phpunit.xml`) rewrites each worker's line
+coverage just before it is written so every id is stored once and each repeat is a reference to it,
+which `serialize()` writes as a back-reference and `unserialize()` restores as one shared string. Worker
+files fell from 3.19GB to 0.24GB in total and the merge's peak from 7.9GB to 1.0GB (the whole run's
+largest process from 5.8GB to 1.25GB resident), with the clover and HTML reports byte-identical over
+the same worker files. No id and no count changes, so every report reads what it read before;
+`tests/tools/ShareCoverageTestIdsTest.php` holds it to that.
+
+Raising the limit would have bought time, not room: the payload is tests × lines each test executes,
+and more processes only spread the same total over more files.
+
+## Measured coverage (2026-09-29)
 
 Line coverage (statements) over the suite excluding the `fixture` group. These are the numbers the
 floors are set from — measure, then set the floor to the measured integer, unless the measured integer
-would sit a fraction of a statement above the figure (see `laravel` below).
+would sit too close to the figure for an ordinary change to survive it (see `laravel` below).
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **97.39%** | 97    | fully in-process-measurable; 0.39pp above it, ~53 statements |
-| `laravel`           | **96.93%** | 96    | ratcheted 95 → 96; 0.93pp above it, ~126 statements |
-| `inference-phpstan` | **49.98%** | 49    | real path is subprocess-only → `fixture`-proven; ratcheted 48 → 49; 0.98pp, ~26 statements |
+| `core`              | **97.64%** | 97    | fully in-process-measurable; 0.64pp above it, ~96 statements |
+| `laravel`           | **97.09%** | 96    | ratcheted 95 → 96; 97 declined at 14.07 statements (0.094pp), see below; 1.09pp above it, ~164 statements |
+| `inference-phpstan` | **54.48%** | 54    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51 → 53 → 54; 0.48pp, ~16 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 93.01%     | —     | informational only; no longer a gate             |
+| Overall             | 92.99%     | —     | informational only; no longer a gate             |
 
-Every figure here is one `composer test:coverage` run of the whole set, so the three read off the same
-clover report and the floors file quotes the same numerators. A record that disagrees with itself is the
+Every figure here is one `composer test:coverage` run of the whole set — CI's coverage job on PHP 8.4,
+which is what the record describes — so the three read off the same clover report and the floors file
+quotes the same numerators. A record that disagrees with itself is the
 one artifact the ratchet policy has nothing else to check against, and it drifts a hundredth at a time:
 update all three in the same change or none of them.
+
+**The run checks this table is still true.** `tests/tools/CoverageRecordTest.php` holds the three
+artifacts to each other, which is agreement rather than truth — and three artifacts can agree perfectly
+about a tree nobody has measured since, which is what they did for the whole of v0.20.0. So each `FLOORS`
+entry carries its `measured` figure as data, and the gate compares it against the run it is doing anyway,
+reporting `STALE` when the two are more than **ten statements** apart. The band is sized from what this
+record has been observed to do rather than from what it could do: the drift that prompted the check
+accumulated over 33 source-touching commits and came to 11 statements in `core` and 17 in `laravel`, with
+the engine unmoved, so a re-record comes due about once a release rather than once a pull request. The
+band also has to clear the measurement's own noise, which is not zero: four consecutive runs of one tree
+put `laravel` at 97.05% three times and 97.07% once — two statements in a single file, with every other
+count in the report byte-identical — so an exact-equality check would report a stale record at random.
+Where a figure flaps, record the LOWER of what was observed. A run in an environment unlike the coverage
+job's — a different PHP, a missing extension, a skipped test — can land there too; the record is what
+CI's coverage job measures.
+
+What is deliberately NOT built is a test in the ordinary suite that measures coverage for itself: that
+means a run under a coverage driver, minutes long and with a pcov dependency on `composer test`, to answer
+a question the gate already holds both halves of. The cheap half is in the gate; the expensive half would
+buy nothing the gate does not already report on every pull request.
 
 Every ratchet UP follows one of two shapes, and both are worth aiming for deliberately rather than
 waiting for. Either **the work landed in the measurable half** — a rule driven by native reflection,
@@ -306,6 +351,19 @@ other direction.
 A denominator change can also move the ratio UP, and one did: deleting a built-in error preset took
 about 130 well-covered adapter statements out of both halves, and `laravel` came back at 96.29% — the
 figure the previous note was waiting for, so the floor ratcheted 95 → 96 rather than sitting one short.
+
+`laravel` then crossed 97 and the ratchet was **declined**, which is worth recording because the reason is
+not the usual one. 97% of 14,125 statements is 13,701.25 against the 13,709 covered: 7.75 statements, an
+order of magnitude under the 0.47pp `core` carries and the 0.98pp the engine floor carries, so it is the
+hair-trigger the policy names. The specific failure it would buy is a denominator change rather than a
+lost proof — deleting 259 fully covered adapter statements drops the ratio under 97 with no change in test
+quality at all, and this repository has twice deleted more than that in one change. The cost of declining
+is stated with it: a floor of 96 leaves 148 statements of room, and a regression smaller than that passes
+the floor in silence. What answers that is the record check above, which fires at ten — the floor is no
+longer the only thing watching the number, which is what makes keeping its margin affordable. Ratchet to
+97 when the figure clears **97.20%**, about 28 statements, the order of margin the other two floors carry.
+Re-recorded at 97.09% (14,534/14,969) it has not: a floor of 97 would carry 14.07 statements, so the
+decline stands.
 
 **A floor drop is only ever a documented denominator change**, and there have been two.
 
@@ -401,7 +459,11 @@ for its pure/parent-process classes, never more subprocess fixture tests.
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **97**, `laravel` **96**, `inference-phpstan` **49**.
+  an aspiration. Current floors: `core` **97**, `laravel` **96**, `inference-phpstan` **54**.
+- The same run **checks the record**: each entry carries the `measured` figure its floor was set from,
+  and a run more than ten statements away from it reports `STALE` and fails, naming the three places to
+  re-record. Honest floors are only honest against a measurement somebody took recently, and until this
+  existed nothing compared the two — see §"Measured coverage" for the band and what it is sized from.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine
@@ -420,7 +482,12 @@ for its pure/parent-process classes, never more subprocess fixture tests.
     leaves four tenths of one statement — take the integer below and record the arithmetic in the
     floor's comment, then ratchet the run after the figure clears it with a margin. A floor a single
     uncovered line trips is a gate that fails for reasons unrelated to test quality, which is the same
-    failure mode the per-package split exists to avoid.
+    failure mode the per-package split exists to avoid. Judge the margin against the PACKAGE, not in
+    bare statements: the engine's floor was taken at 2.13 statements and `laravel`'s declined at 7.75,
+    because the second is 0.055pp of a 14,000-statement package and the first is 0.086pp of a 2,500-
+    statement one. Ask what an ordinary change does to the ratio — for a fully measurable package the
+    answer that bites is a deletion of well-covered code, which costs no proof and moves the figure
+    anyway — and record both halves: the margin declined AND the room the lower floor leaves.
   - **Never lower a floor** without a written justification in the pull request that lowers it (e.g.
     a large subprocess-only subsystem landed in that package, or well-covered classes MOVED to another
     package and took the numerator with them). A drop is a reviewed decision, not a quiet CI edit —

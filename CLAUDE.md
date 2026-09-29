@@ -149,7 +149,11 @@ php/inference-phpstan/  docuccino/inference-phpstan — PHPStan+Larastan engine 
                                                      DEV-ONLY install.
 php/laravel/            docuccino/laravel     — adapter: provider, late-bound registry,
                                                      pipeline, commands, viewer, Integrations/.
-spec/uir/1.0/schema.json     the UIR JSON Schema (the long-term product).
+spec/uir/<version>/          the published JSON Schemas (the long-term product), one directory
+                             per major.minor, every version served forever. Current is 2.0, and
+                             it is two files: schema.json (the whole document) and
+                             extension.schema.json (`x-docuccino` alone, applicable on top of
+                             any OpenAPI document).
 tests/fixture-app/           the real-engine fixture app: tracked overlay sources in src/,
                              recreate recipe in setup.md, and the provisioned Laravel +
                              Larastan install in app/ (gitignored — recreate per

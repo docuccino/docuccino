@@ -108,10 +108,10 @@ Generate and export API documentation from your routes.
 ```
 docuccino:export
     {document? : The configured document key (defaults to every document)}
-    {--format= : uir | openapi-3.2 | openapi-3.1 | openapi-3.0 | postman — writes this one format instead of the configured targets}
+    {--format= : openapi-3.2 | openapi-3.1 | openapi-3.0 | full | postman | arazzo — writes this one format instead of the configured targets}
     {--out= : Output path (defaults to the matching target, else the document export path)}
     {--fail-on=none : none | error | warning | info | hint — the quietest severity that still makes the command exit non-zero}
-    {--provenance=winners : none | winners | full — UIR provenance detail}
+    {--provenance=winners : none | winners | full — how much provenance a --format=full artifact keeps}
     {--drop-ids : Omit the flat x-docuccino-id member OpenAPI output carries by default (the artifact then diffs by method + path)}
     {--yaml : Emit YAML instead of JSON}
     {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}
@@ -120,12 +120,12 @@ docuccino:export
 | Flag | Values / default | Effect |
 | --- | --- | --- |
 | `document` | any configured key / all documents | Which document(s) to export. Unknown key → exit 1. |
-| `--format` | `uir` \| `openapi-3.2` \| `openapi-3.1` \| `openapi-3.0` \| `postman` / all configured targets | Writes **only** this format, replacing the document's [`export.targets`](/laravel/reference/configuration/#export) for that run. `uir` → raw UIR; `openapi-3.1` and `openapi-3.0` → the downlevel emitters; `postman` → a [Postman Collection v2.1.0](#postman-collections). An invalid value errors (no silent fallback). |
+| `--format` | `openapi-3.2` \| `openapi-3.1` \| `openapi-3.0` \| `full` \| `postman` \| `arazzo` / all configured targets | Writes **only** this format, replacing the document's [`export.targets`](/laravel/reference/configuration/#export) for that run. `full` → OpenAPI 3.2 with the `x-docuccino` extension retained rather than stripped; `openapi-3.1` and `openapi-3.0` → the downlevel emitters; `postman` → a [Postman Collection v2.1.0](#postman-collections); `arazzo` → an [Arazzo 1.1 workflow description](#arazzo-workflow-descriptions). An invalid value errors (no silent fallback). |
 | `--out` | path / the matching target, else [`export.path`](/laravel/reference/configuration/#export) | Overrides the output path — resolved against `base_path()` unless already absolute, and missing directories are created. Rejected when it would have to hold several artifacts at once: more than one document configured and no `document` argument, or a document with several [`export.targets`](/laravel/reference/configuration/#export) and no `--format` — in both cases each write would clobber the last. Name a document, pass `--format`, or configure per-document targets. |
 | `--fail-on` | `none` \| `error` \| `warning` \| `info` \| `hint` / `none` | The quietest severity that still fails the run: anything reported at that severity **or louder** makes the exit code non-zero, and `none` never fails on severity. `error` catches errors only, `warning` adds warnings, `info` adds the recovery reports — an unrecoverable payload, a model with no readable columns, a validation rule that could not be read — and `hint` catches everything. The floor reads everything the run **prints**: what the build found, what an emitter reported while writing each artifact, and what reading your export configuration reported before the build started. An invalid value errors (no silent fallback) — a typo must not quietly remove the gate. Codes listed under [`diagnostics.accept`](/laravel/reference/configuration/#diagnostics) still print but never fail the run; errors are never accepted. |
-| `--provenance` | `none` \| `winners` \| `full` / `winners` | UIR provenance detail. `full` keeps every record including its `overrode` trail, `winners` keeps the records but drops the trails, `none` strips provenance entirely. An invalid value errors (no silent fallback). Only `--format=uir` carries provenance — the OpenAPI emitters always drop it. |
-| `--drop-ids` | flag / off | Omits the flat `x-docuccino-id` member. OpenAPI exports carry it **by default**: `x-docuccino` itself never survives emission (it holds provenance — source file, line, symbol — which has no business in a published spec), but the id is an opaque hash of members the document already publishes, and it is what lets [`docuccino:diff`](#docuccinodiff) pair a committed artifact by identity instead of by method + path. Drop it if you want bytes indistinguishable from a hand-written spec, accepting the weaker diff. No effect on `--format=uir`, which carries identities natively. |
-| `--yaml` | flag / off | Emit YAML instead of JSON, for the single-target `--format` override. Configured targets state it in their own path instead (`.yaml`/`.yml`). Rejected with `--format=uir` and `--format=postman`, which have no YAML form. |
+| `--provenance` | `none` \| `winners` \| `full` / `winners` | How much provenance survives in the artifact `--format=full` writes. At `--provenance=full` every record is kept, including its `overrode` trail; at `winners` the records are kept but the trails dropped; at `none` provenance is stripped entirely. (The two are separate settings that happen to share a word: one names the artifact, the other how much trail is left in it.) An invalid value errors (no silent fallback). Only `--format=full` carries provenance at all — the OpenAPI emitters always drop it. |
+| `--drop-ids` | flag / off | Omits the flat `x-docuccino-id` member. OpenAPI exports carry it **by default**: `x-docuccino` itself never survives emission (it holds provenance — source file, line, symbol — which has no business in a published spec), but the id is an opaque hash of members the document already publishes, and it is what lets [`docuccino:diff`](#docuccinodiff) pair a committed artifact by identity instead of by method + path. It is never written beside a `$ref` outside a schema, where OpenAPI allows no extension member. Drop it if you want bytes indistinguishable from a hand-written spec, accepting the weaker diff. No effect on `--format=full`, which carries identities natively. |
+| `--yaml` | flag / off | Emit YAML instead of JSON, for the single-target `--format` override. Configured targets state it in their own path instead (`.yaml`/`.yml`). Rejected with `--format=full` and `--format=postman`, which have no YAML form; `--format=arazzo` accepts it, and Arazzo is usually written as YAML. |
 | `--memory-limit` | php.ini value, e.g. `2G` / unset | Raises the process memory limit before inference runs — see the shared-behavior note above. |
 
 **One build, many artifacts.** With no `--format`, the command writes every target the document
@@ -138,12 +138,12 @@ that target's path is used — looked up by format, so which file you get never 
 happens to be ordered.
 
 A target list the command cannot honor — an unknown format, two targets writing one file, a `.yaml`
-path on `uir` — fails with a `config.export-*` error **before** the build starts, so a wrong filename
+path on `full` — fails with a `config.export-*` error **before** the build starts, so a wrong filename
 never costs you an analysis. A write that fails prints `Could not write <path>.` instead of `Wrote`,
 and the command exits non-zero.
 
 **Downlevel notes.** OpenAPI 3.1 and 3.0 are older, smaller specs, so a downlevel sometimes has to
-convert or drop something the UIR carries. Every one of those steps prints a `downlevel.*` diagnostic
+convert or drop something the full document carries. Every one of those steps prints a `downlevel.*` diagnostic
 naming the construct and the JSON pointer it sat at, right after that target's `Wrote` line — so the
 artifact never quietly ships a weaker contract than your code describes.
 
@@ -180,8 +180,29 @@ Postman cannot hold a JSON Schema, so a collection is a weaker contract than the
 emitting both. Where something has no Postman equivalent at all (webhooks, callbacks, `mutualTLS` and
 `openIdConnect` schemes) a `postman.*` diagnostic names it rather than letting the file go quiet.
 
+### Arazzo workflow descriptions
+
+`--format=arazzo` (or an `arazzo` export target) writes an **[Arazzo 1.1](https://spec.openapis.org/arazzo/latest.html)**
+description of the workflows a document declares — the sequences of calls that get a consumer from
+nothing to a finished outcome.
+
+- **Steps address operations by `operationId`**, resolved from the identity the workflow declared. That
+  is the whole point of declaring a workflow against your code rather than writing the Arazzo file by
+  hand: rename a route and the workflow still names the same operation, because what it stored was the
+  operation rather than its name.
+- **A success criterion is derived** from the status your operation documents, so a step is something a
+  runner can actually fail. An operation documenting more than one success gets none — picking between
+  them would fail a workflow that worked.
+- **`sourceDescriptions`** points at the OpenAPI file exported beside it, so the two travel together.
+
+A document that declares no workflows writes **no Arazzo file at all**, and says so with
+`arazzo.no-workflows`. Arazzo requires at least one workflow and at least one source description, so
+there is no empty form of the document — writing nothing beats writing a file that fails the
+specification it names. A step whose operation the document does not publish, or publishes without an
+`operationId`, is left out with `arazzo.step-unresolved` rather than emitted pointing at nothing.
+
 **Committing the output.** Docuccino's output is deterministic — identical code produces
-byte-for-byte identical output. Commit `docs/openapi.json` (or a UIR document) and diff it in CI — see
+byte-for-byte identical output. Commit `docs/openapi.json` (or the full document) and diff it in CI — see
 [`docuccino:diff`](#docuccinodiff). For the committed artifact, `--provenance=none` (or `winners`,
 accepting that source line numbers churn as code moves — churn is cosmetic and never alters
 identities or the content hash) is the recommendation.
@@ -212,7 +233,7 @@ docuccino:validate
 This is the check-before-you-commit command, so it answers about both halves of what a build
 produces.
 
-**The UIR document**, against the bundled UIR schema. A valid one prints
+**The built document**, against the bundled Docuccino schema. A valid one prints
 `<key>: valid against UIR <version>.`; an invalid one prints `<key>: N schema violation(s).` and
 lists them as `document.schema-invalid` error diagnostics grouped by route.
 
@@ -220,9 +241,11 @@ lists them as `document.schema-invalid` error diagnostics grouped by route.
 artifact claims — the same check [`docuccino:export`](#docuccinoexport) runs as it writes each file.
 Every format in [`export.targets`](/laravel/reference/configuration/#export) is emitted in memory and
 read back; nothing is written, and no file on disk changes. You get one line per target:
-`<key>: openapi-3.2 artifact valid against its published schema.` A `uir` or `postman` target says
-`has no published schema to hold an artifact to; not checked` instead — UIR answers to its own schema
-in the first half, above, and a Postman collection has no specification to be held to.
+`<key>: openapi-3.2 artifact valid against its published schema.` A `full`, `postman` or `arazzo`
+target says `artifact not read back against a published schema; not checked` instead. The reason
+differs by format: a `full` artifact was already validated against the UIR schema in the first half,
+above; an Arazzo description answers to the Arazzo schema, but not as it is written; and a Postman
+collection has no published specification at all.
 
 Validating what you export rather than a fixed format is the point: if your pipeline ships
 `openapi-3.0`, this tells you about the 3.0 file. That also means the `downlevel.*` reports a
@@ -243,7 +266,7 @@ Diff a committed API artifact against the current document — semantic, id-base
 
 ```
 docuccino:diff
-    {old : Path to the committed UIR/OpenAPI artifact to diff against}
+    {old : Path to the committed artifact to diff against, in any format it was exported in}
     {document? : The configured document key to generate as the new side (defaults to "default")}
     {--against= : Read `old` from this git ref (git show <ref>:<old>) instead of the working tree}
     {--enforce : Enforce the document's versioning policy; exit non-zero on a violation}
@@ -252,8 +275,8 @@ docuccino:diff
 ```
 
 The diff is computed over stable `x-docuccino.id`s, so a path-param rename reads as "no change"
-while a URI change reads as remove + add. Prefer a UIR artifact for `old` — it carries the
-identities natively, and an OpenAPI artifact carries them unless it was exported with
+while a URI change reads as remove + add. Prefer a `full` artifact for `old` — it
+carries the identities natively, and an OpenAPI artifact carries them unless it was exported with
 [`--drop-ids`](#docuccinoexport).
 
 When either side has no identities the diff pairs nodes by method + path on **both** sides, like any
@@ -273,12 +296,20 @@ quiet when either side carries a single identity of that kind, where one node re
 the same thing and is far likelier.
 
 Every node OpenAPI lets a Reference Object stand in for — a path item, a request body, a response, a
-parameter, a security scheme — is read through `components` on **both** sides, so one that moved between
-inline and [shared](/laravel/documenting/errors/#repeated-bodies-become-shared-components) is not itself
-a change, while an edit to a shared one is reported against every operation that `$ref`s it. A parameter
-written as a bare `{"$ref": …}` states no `name` and no `in` — the pair that tells one parameter from
-another — so resolving it is also what lets the diff tell an operation's `$ref`ed parameters apart at
-all. Where a pointer resolves to nothing, the pointer itself does that job.
+parameter, a security scheme, a schema — is read through `components` on **both** sides, so one that
+moved between inline and [shared](/laravel/documenting/errors/#repeated-bodies-become-shared-components)
+is not itself a change, while an edit to a shared one is reported against every operation that `$ref`s
+it. A parameter written as a bare `{"$ref": …}` states no `name` and no `in` — the pair that tells one
+parameter from another — so resolving it is also what lets the diff tell an operation's `$ref`ed
+parameters apart at all. Where a pointer resolves to nothing, the pointer itself does that job.
+
+A **schema** follows the same principle, with one deliberate exception: where both sides spell the *same*
+pointer the position is compared opaquely, by that pointer. That is what keeps the component's own edits
+reported once, at `components.schemas.<Name>`, instead of once under every operation reaching it. Where
+the sides differ — inline against a pointer, or one component against another — the shapes are compared.
+A pointer that moved between component names keeps `schema.ref-changed`, non-breaking on its own because
+the name is published rather than the contract, and the two bodies are compared beside it, so a
+repointing that also narrows is reported as a narrowing.
 
 A `components.schemas` entry that nothing in either document references is a schema no operation can reach,
 so no edit to it can change a request or a response. Its changes are still reported — a component name
@@ -321,6 +352,14 @@ A `summary` or a `description` beside the pointer still wins — OpenAPI gives a
 members of its own and says every other sibling is ignored — so a `style`, an `explode` or an `x-`
 extension written there describes nothing and the component's answer stands.
 
+A **schema** pointer is the exception, because JSON Schema 2020-12 keeps every keyword beside a `$ref`
+in force: the schema at such a position is the *intersection* of the pointer and its neighbours, and
+neither one states it. So only a *bare* pointer is read through — `$ref` alone, or with annotation
+keywords, which are read through and override the component's. A pointer with anything beside it that
+constrains the value is compared as written rather than flattened into a shape neither side declares —
+at the position, or at whichever hop of a chain first states one. Docuccino spells a hoisted shape as
+the pointer alone, so this arises only against a hand-written or third-party artifact.
+
 A pointer the diff cannot follow — a name the document does not declare, a chain, a cycle, a pointer into
 another file — is a comparison it cannot make, and it says so rather than guessing. Where a path item or a
 request body is spelled that way on one side only, that endpoint or that body drops out of the comparison
@@ -336,6 +375,20 @@ still names leaves behind. A pointer into another file, a chain or a cycle is th
 than the document being wrong — the endpoint may be whole where it lives — and stays non-breaking.
 Repairing a broken pointer is not a breaking change either, and where both sides carry the same pointer
 for the same reason the document did not change there and nothing is reported.
+
+A **schema** pointer names no separate entry, because a schema position always has a comparison to make.
+A *chain* is followed: a component whose whole body is a pointer at another component resolves to the
+shape at the end of it, however many names lie between, and the names along the way are reported moving
+like any other. What compares as the keywords written at the position is a pointer the resolver reaches
+no shape through at all — a name the document does not declare, a pointer into another file, or a chain
+that comes back to a name already being resolved. Against an inline shape on the other side that reads
+as that shape's keywords leaving, which is the degraded direction on purpose: a position whose pointer
+leads nowhere describes no value, and over-reporting costs a look where under-reporting would let a
+narrowing past as safe.
+
+A schema reaching *itself*, directly or around a loop, is bounded rather than trusted: the pointer pair
+being resolved is held open for the descent beneath it, so a recursive schema compares to its depth and
+stops — and a chain rides on that same bound rather than counting hops of its own.
 
 An operation's parameters are its own plus the ones its path item declares for every operation under it,
 minus any the operation restates for the same `name` and `in` — the override OpenAPI specifies. Docuccino
@@ -788,9 +841,9 @@ docuccino:explain
 ```
 
 Every value in the document carries a record of who put it there —
-[provenance](/laravel/guides/how-it-works/#3-uir) — and this reads it back. Point it at an endpoint
+[provenance](/laravel/guides/how-it-works/#3-the-document) — and this reads it back. Point it at an endpoint
 that looks wrong and it prints, field by field, which
-[precedence layer](/laravel/guides/how-it-works/#3-uir) won, what that value displaced, the `file:line`
+[precedence layer](/laravel/guides/how-it-works/#3-the-document) won, what that value displaced, the `file:line`
 to open next, and **what to change to override it**.
 
 It reads and prints only: nothing is written, and no cache is touched.
@@ -1019,7 +1072,7 @@ build.
 
 ```
 docuccino:version-changes
-    {old : Path to the committed UIR artifact of the version this one diverges from}
+    {old : Path to the committed artifact of the version this one diverges from}
     {document? : The configured document key to build as the new side (defaults to "default")}
     {--against= : Read `old` from this git ref (git show <ref>:<old>) instead of the working tree}
     {--since= : The version the scaffolded changes shipped in (defaults to the document's info.version)}
@@ -1129,7 +1182,7 @@ What counts as failure:
 | --- | --- |
 | `install` | disabled; a configuration file could not be written; the first export failed |
 | `export` | disabled; unknown `--format`, `--fail-on` or `--provenance` value; `--out` given while exporting multiple documents, or without `--format` against a multi-target document; unknown document key; an `export.targets` list it cannot read, or a `routes.filter` it cannot apply; an artifact it wrote is not a valid document of its own format (regardless of `--fail-on`); an unaccepted diagnostic matches `--fail-on` |
-| `validate` | disabled; unknown `--fail-on` value; unknown document key; an `export.targets` list it cannot read, or a `routes.filter` it cannot apply; **either** schema violation — the UIR document's or an artifact's (regardless of `--fail-on`, and never acceptable — it's an error); an unaccepted diagnostic matches `--fail-on` |
+| `validate` | disabled; unknown `--fail-on` value; unknown document key; an `export.targets` list it cannot read, or a `routes.filter` it cannot apply; **either** schema violation — the built document's or an artifact's (regardless of `--fail-on`, and never acceptable — it's an error); an unaccepted diagnostic matches `--fail-on` |
 | `diff` | disabled; unknown document key; `old` missing, unreadable or not valid JSON; `git show` fails; a ref or path starting with `-`; the two documents are incomparable; `--enforce` with an unsatisfied verdict |
 | `cache` | disabled; unknown document key; the payload is not a valid document of its own format — cached anyway, so the viewer still has something |
 | `clear` | unknown document key (no enabled guard) |

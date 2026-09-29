@@ -7,13 +7,14 @@ namespace Docuccino\Core\Emit;
 use Docuccino\Core\Canonical\Canonicalizer;
 use Docuccino\Core\Canonical\CanonicalJsonSerializer;
 use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Document\DocumentMembers;
 use Docuccino\Core\Document\NodeIdentity;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\SpecValidation\EmittedSpecCheck;
 
 /**
- * Emits a {@see UirDocument} as pure OpenAPI 3.2 (JSON or YAML): every `x-docuccino` member goes,
- * along with the UIR-only top-level `$schema` and `uir`. Options can re-emit ids as flat
+ * Emits a {@see UirDocument} as pure OpenAPI 3.2 (JSON or YAML): every `x-docuccino` member goes, and
+ * so does the root `$schema`/`uir` pair an artifact written before UIR 2.0 carries. Options can re-emit ids as flat
  * `x-docuccino-id` members and map schema mock hints to a faker member; provenance always goes. So
  * does the content layer — OAS has nowhere to put it, and `info.description`/tag descriptions already
  * live in standard fields.
@@ -26,6 +27,12 @@ use Docuccino\Core\SpecValidation\EmittedSpecCheck;
  */
 final readonly class OpenApi32Emitter implements ReportingEmitter
 {
+    /**
+     * The members outside a schema that hold one: a parameter's, a header's and a media type's `schema`,
+     * and 3.2's `itemSchema`. `components.schemas` is the name map that holds them.
+     */
+    private const array SCHEMA_MEMBERS = ['schema', 'itemSchema'];
+
     public function __construct(
         private Canonicalizer $canonicalizer = new Canonicalizer,
         private CanonicalJsonSerializer $serializer = new CanonicalJsonSerializer,
@@ -74,6 +81,12 @@ final readonly class OpenApi32Emitter implements ReportingEmitter
     {
         $array = $document->toArray();
 
+        // A compatibility strip, not dead code: UIR 2.0 writes neither member, but the adapter's
+        // VIEWER hydrates a committed artifact and re-emits it, and one written before 2.0 carries
+        // both at the root — where the OpenAPI Object admits neither, so serving them back would
+        // publish an invalid document. They ride in `rest` now, so this is the only thing that drops
+        // them. The viewer is the whole of that reach, which is what this comment used to overstate:
+        // the diff commands hydrate a committed artifact too, and never emit one.
         unset($array['$schema'], $array['uir']);
 
         /** @var array<string, mixed> $stripped */
@@ -82,27 +95,50 @@ final readonly class OpenApi32Emitter implements ReportingEmitter
         return $stripped;
     }
 
-    private function strip(mixed $node, EmitOptions $options): mixed
+    /**
+     * Every node's `x-docuccino` off, projected where the options ask. Members are read by
+     * {@see DocumentMembers}: a header or property NAMED `x-…` is a node like any other, and data — an
+     * example, an extension's value — is published as written.
+     *
+     * Nothing is projected beside a `$ref` outside a Schema Object. Everywhere else that is a Reference
+     * Object, which every OpenAPI version says "cannot be extended with additional properties" — so an id
+     * there makes the whole document invalid to a strict reader — or a Path Item, which 3.1 reads as a
+     * Reference Object under `webhooks` and `components.pathItems`. A Schema Object is JSON Schema and
+     * takes siblings; the 3.0 downlevel moves them into an `allOf`.
+     *
+     * @param  ?string  $inNameMap  the name map $node is, or null where its keys are keywords
+     * @param  bool  $inSchema  whether $node is a Schema Object or sits inside one
+     */
+    private function strip(mixed $node, EmitOptions $options, ?string $inNameMap = null, bool $inSchema = false): mixed
     {
         if (! is_array($node)) {
             return $node;
         }
 
         if (array_is_list($node)) {
-            return array_map(fn (mixed $item): mixed => $this->strip($item, $options), $node);
+            return array_map(fn (mixed $item): mixed => $this->strip($item, $options, null, $inSchema), $node);
         }
 
-        $docuccino = $node['x-docuccino'] ?? null;
-        unset($node['x-docuccino']);
+        $docuccino = null;
+        if ($inNameMap === null) {
+            $docuccino = $node['x-docuccino'] ?? null;
+            unset($node['x-docuccino']);
+        }
 
         $out = [];
         foreach ($node as $key => $value) {
-            $out[(string) $key] = str_starts_with((string) $key, 'x-')
+            $key = (string) $key;
+            $out[$key] = DocumentMembers::holdsData($key, $value, $inNameMap)
                 ? $value
-                : $this->strip($value, $options);
+                : $this->strip(
+                    $value,
+                    $options,
+                    DocumentMembers::nameMap($key, $inNameMap),
+                    $inSchema || ($inNameMap === null ? in_array($key, self::SCHEMA_MEMBERS, true) : $inNameMap === 'schemas'),
+                );
         }
 
-        if (is_array($docuccino)) {
+        if (is_array($docuccino) && ($inSchema || ! is_string($out['$ref'] ?? null))) {
             $this->projectDocuccino($out, $docuccino, $options);
         }
 

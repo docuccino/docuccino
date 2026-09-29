@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 40 attributes with signatures and examples.
+description: The docuccino/attributes package — all 44 attributes with signatures and examples.
 ---
 
 
@@ -32,7 +32,7 @@ say `list<T>` or `array<string, T>` for the one you mean.
 
 ## At a glance
 
-All 40 attributes, grouped by what they do:
+All 44 attributes, grouped by what they do:
 
 | Attribute | Does |
 | --- | --- |
@@ -67,6 +67,7 @@ All 40 attributes, grouped by what they do:
 | [`#[CaseDescription]`](#casedescription) | Describe an enum case (`x-enumDescriptions`). |
 | [`#[Mock]`](#mock) | Hint how a mock server should fake a property. |
 | [`#[Webhook]`](#webhook) | Publish a class as a webhook your API delivers. |
+| [`#[WorkflowStep]`](#workflowstep) | Make this operation a step of a named workflow, published as Arazzo. |
 | [`#[ApiVersionChange]`](#apiversionchange) | Register one API version change, and the sentence consumers read about it. |
 | [`#[RenamedResponseField]`](#renamedresponsefield) | Declare a response field that older versions publish under another name. |
 | [`#[RenamedRequestField]`](#renamedrequestfield) | Declare a request field that older versions accept under another name. |
@@ -75,6 +76,9 @@ All 40 attributes, grouped by what they do:
 | [`#[MadeResponseFieldOptional]`](#maderesponsefieldoptional) | Declare a response field that older versions always sent. |
 | [`#[MadeRequestFieldOptional]`](#maderequestfieldoptional) | Declare a request field that older versions demanded. |
 | [`#[RemovedResponseField]`](#removedresponsefield) | Declare a response field older versions published that your code no longer has. |
+| [`#[AddedEnumValue]`](#addedenumvalue) | Declare a value this version added to a published enum, which older versions never sent or accepted. |
+| [`#[RemovedEnumValue]`](#removedenumvalue) | Declare a value older versions published that your enum no longer has. |
+| [`#[AddedOperation]`](#addedoperation) | Declare an operation this version added, which older versions did not serve. |
 | [`#[AppliesTo]`](#appliesto) | Narrow a version change to the operations it names. |
 
 ## Responses
@@ -1216,7 +1220,7 @@ whoever consumes the hint defines its grammar — so nothing checks that a forma
 empty one is refused, with an `attribute.mock-invalid` warning. An attribute naming a property the
 schema does not publish is dropped with `attribute.mock-unknown-property`.
 
-The UIR always carries the hints. OpenAPI artifacts drop them unless
+The full document always carries the hints. OpenAPI artifacts drop them unless
 [`export.mock_faker_key`](/laravel/reference/configuration/#export) names the member to publish them
 under — conventionally `x-faker`. See
 [Mock data hints](/laravel/documenting/schemas/#mock-data-hints).
@@ -1273,6 +1277,57 @@ nothing left to read it off — you declare the change once, on a class of its o
 document is derived by applying that change backwards. The classes live in
 `Docuccino\Attributes\Versioning`; the [API versioning guide](/laravel/guides/api-versioning/) walks
 the whole loop.
+
+### `#[WorkflowStep]`
+
+Targets `CLASS | METHOD | FUNCTION`, repeatable.
+
+```php
+public function __construct(
+    public string $workflow,
+    public int $order,
+    public string $id = '',
+    public string $description = '',
+    public array $parameters = [],
+    public array $body = [],
+    public string $contentType = 'application/json',
+    public array $outputs = [],
+)
+```
+
+Makes this operation a step of a named workflow — a sequence of calls a consumer follows to get
+something done — published as an [Arazzo 1.1 description](/laravel/reference/commands/#arazzo-workflow-descriptions)
+beside your API document.
+
+**The workflow needs declaring nowhere else.** Writing this on the operations that take part is the
+whole of it; `documents.*.workflows` only *enriches* one, the way `tags.definitions` enriches a tag that
+`#[Group]` created.
+
+```php
+#[WorkflowStep('checkout', order: 1, outputs: ['holdId' => '$response.body#/id'])]
+public function reserve(ReserveRequest $request) { /* … */ }
+
+#[WorkflowStep('checkout', order: 2, body: ['hold' => '$steps.reserve.outputs.holdId'])]
+public function pay(PayRequest $request) { /* … */ }
+```
+
+`order` is stated rather than taken from the order your routes happen to be registered in, because a
+sequence derived from registration order changes when an unrelated route is added. Two steps claiming
+one position is reported with `workflow.order-contested`.
+
+`id` is what later steps call this one. Leave it out and one is minted from the operation's own
+`operationId`, which is a pure function of the operation — so adding a step renames nothing.
+
+`parameters` are named the way **the operation** declares them, and where the value travels is read
+from there rather than repeated; naming one the operation doesn't declare is reported with
+`workflow.parameter-undeclared`. `parameters`, `body` and `outputs` all carry Arazzo's runtime
+expressions (`$inputs.x`, `$steps.<id>.outputs.<name>`, `$response.body#/pointer`), and a step reading
+an output no earlier step produces is reported with `workflow.output-unresolved` — the check that makes
+authoring a workflow across several controllers safe.
+
+A step whose operation a given document doesn't publish is simply not part of that document's workflow,
+with nothing reported: splitting routes across documents is normal, and a warning there would fire on
+every build.
 
 ### `#[ApiVersionChange]`
 
@@ -1584,6 +1639,124 @@ is valid.
 Where the field lands in `properties` is counted from the names already there rather than from the
 order you wrote the attributes in, so two removals on one schema come out the same way round either
 way.
+
+### `#[AddedEnumValue]`
+
+Targets `CLASS`, repeatable.
+
+```php
+public function __construct(
+    public string $enum,
+    public string|int $value,
+)
+```
+
+Declares that a value was **added** to a published enum in this change's version, so the versions before
+it never sent or accepted it and their documents leave it out.
+
+Write the value the way the wire carries it — the backing value of your backed enum, not the case name.
+A string-backed set takes `value: 'invited'`; an int-backed one takes `value: 3`, as a number, because
+an enum member published as `"3"` where your server sends `3` is one a generated client cannot match.
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'An invoice can now be `disputed`.',
+)]
+#[AddedEnumValue(enum: InvoiceStatus::class, value: 'disputed')]
+final class InvoiceGainedDisputedStatus {}
+```
+
+This is the direction that **narrows** the older document, and so the direction a per-version contract
+test can refuse: pin the version, replay your suite, and the assertion says whether your application
+really keeps the value out of a response to a caller pinned that far back. Its sibling below widens, and
+a document looser than the wire always passes.
+
+The member names and per-value descriptions published beside the set move with it. They are parallel to
+`enum` and applied by index, so the value is taken out of all of them together rather than leaving every
+member past it holding the previous one's name in your consumers' SDKs.
+
+### `#[RemovedEnumValue]`
+
+Targets `CLASS`, repeatable.
+
+```php
+public function __construct(
+    public string $enum,
+    public string|int $value,
+    public string $name = '',
+    public string $description = '',
+)
+```
+
+Declares that a value was **removed** from a published enum in this change's version, so the versions
+before it published it and their documents list it again.
+
+Like `#[RemovedResponseField]`, this names something your code no longer carries — a deleted case has no
+backing value left to read. Unlike it, there is no shape to declare: a value is its own shape, and the
+set's `type` already says what kind of value it is.
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'An invoice is never `provisional` now; it is `draft` until it is issued.',
+)]
+#[RemovedEnumValue(
+    enum: InvoiceStatus::class,
+    value: 'provisional',
+    name: 'Provisional',
+    description: 'Drafted by an importer, and not yet reviewed.',
+)]
+final class InvoiceLostProvisionalStatus {}
+```
+
+`name` is what older generated clients knew the value by. Leave it out and one is minted from the value
+itself — a pure function of that value, so putting a value back never renames a neighbour.
+
+`description` is worth writing whenever the rest of the set has one. The `x-enumDescriptions` map is
+published only when **every** value carries a description, because readers hide the values missing from
+it — so putting an undescribed value into a fully described set costs the whole set its map, and the
+build tells you which declaration did it with `versioning.enum-prose-dropped`.
+
+### `#[AddedOperation]`
+
+Targets `CLASS`, repeatable.
+
+```php
+public function __construct(
+    public string $operation,
+)
+```
+
+Declares that an operation was **added** in this change's version, so the versions before it did not
+serve it and their documents do not describe it at all.
+
+Write the operation the way the document names it — the signature `POST /api/invoices`, its
+`operationId`, or either with `*` for any run of characters. It carries its own selector rather than
+taking one from `#[AppliesTo]`, because here the operation is the *subject* rather than the place an
+edit lands; `#[AppliesTo]` on the same change narrows its other verbs and says nothing about this one.
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'Invoices can be disputed.',
+)]
+#[AddedOperation('POST /api/invoices/*/disputes')]
+final class InvoiceDisputesArrived {}
+```
+
+This is falsifiable: the older document is **narrower** than your code, so a request to that operation
+replayed with the version pinned is an exchange the older document does not describe at all.
+
+The path item goes with its last operation — an empty one is a path a client can see and get nothing
+from, and absence is OpenAPI's own way of saying the version did not serve it. Components the removed
+operation was the last reader of are **left**: an unreferenced component is valid, and pruning them
+would delete a schema an overlay or your consumers' tooling still names.
+
+There is deliberately no `#[RemovedOperation]`. Putting an operation back would mean declaring its
+parameters, bodies, responses and security, none of which your code still carries — and unlike a field
+there is no vague-but-true fallback, because an operation with no documented responses is not vague, it
+is broken.
 
 ### `#[AppliesTo]`
 

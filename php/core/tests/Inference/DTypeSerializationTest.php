@@ -16,6 +16,7 @@ use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\MapT;
 use Docuccino\Core\Inference\DType\NeverT;
 use Docuccino\Core\Inference\DType\NullT;
+use Docuccino\Core\Inference\DType\PayloadStatusT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\StatusMarkerT;
 use Docuccino\Core\Inference\DType\UnionT;
@@ -41,6 +42,7 @@ function representativeTypes(): array
         new NeverT,
         new UnknownT('mixed'),
         new StatusMarkerT,
+        new PayloadStatusT,
         new ListT(ScalarT::int()),
         new MapT(ScalarT::string(), ScalarT::int()),
         new ClassT('App\\Models\\User'),
@@ -52,6 +54,7 @@ function representativeTypes(): array
             new ArrayShapeField('id', ScalarT::int()),
             new ArrayShapeField('name', ScalarT::string(), optional: true),
         ]),
+        new ArrayShapeT([new ArrayShapeField('0', ScalarT::int())], isObject: true),
         UnionT::of([ScalarT::string(), new NullT]),
         IntersectionT::of([new ClassT('A'), new ClassT('B')]),
     ];

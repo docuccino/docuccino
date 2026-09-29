@@ -94,10 +94,10 @@ Conventions the site follows — keep them when adding pages:
 
 - **`laravel/` path scoping.** Framework-specific pages live under `laravel/`
   (`getting-started`, `documenting`, `packages`, `guides`, `reference`); framework-agnostic
-  material stays top-level (`uir/`, `extending/extension-authoring`, the comparison pages).
-  The sidebar labels don't expose the path, so the reader experience is unchanged.
+  material stays top-level (`uir/`, `extending/extension-authoring`, the comparison
+  pages). The sidebar labels don't expose the path, so the reader experience is unchanged.
 - **Topic switcher deferred.** One plain sidebar today. When a second framework ships, add
-  `starlight-sidebar-topics` (Laravel / Symfony / UIR) — a config change; no URLs move.
+  `starlight-sidebar-topics` (Laravel / Symfony / the extension) — a config change; no URLs move.
 - **Package-named sidebar entries.** Per-package support pages are named as their ecosystems
   are (Spatie Data, Spatie Query Builder, Laravel Actions…), grouped under "Package support",
   so a reader scanning for their package finds it in seconds.

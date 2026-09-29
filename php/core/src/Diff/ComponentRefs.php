@@ -9,13 +9,14 @@ use Docuccino\Core\Document\Parameter;
 use Docuccino\Core\Document\PathItem;
 use Docuccino\Core\Document\ResponseObject;
 use Docuccino\Core\Document\UirDocument;
+use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Support\Hydrate;
 
 /**
  * A document's reusable `components` buckets, used to read a `$ref`ing node back as the thing it points
  * at. The differ's one resolver: every position OAS lets a Reference Object stand in — a path item, a
- * request body, a response, a parameter, a security scheme — is read through here before anything is
- * compared.
+ * request body, a response, a parameter, a security scheme, a schema — is read through here before
+ * anything is compared.
  *
  * Resolving both sides is what keeps hoisting invisible to the diff: an inline body or parameter that
  * becomes a `$ref` (or moves between component names) compares thing-to-thing and reports nothing, while
@@ -28,6 +29,10 @@ use Docuccino\Core\Support\Hydrate;
  * that had not moved. All four resolvers merge that one way — the component's members, with a `summary` or
  * a `description` from the referring node written over them. The identity is the exception, and not a
  * member of the contract: it names the USE rather than the thing the diff pairs on.
+ *
+ * A SCHEMA is the one bucket read on demand rather than up front, and {@see resolveSchema()} says why:
+ * two positions spelling one pointer are left opaque, so the component's own edits are reported once,
+ * where that component is diffed by identity.
  *
  * For a parameter it is also what makes the comparison possible at all: a Reference Object states neither
  * `name` nor `in`, which is how a parameter is told from its neighbours, so unresolved they are
@@ -51,6 +56,7 @@ final readonly class ComponentRefs
      * @param  array<string, PathItem>  $pathItems
      * @param  array<string, array<string, mixed>>  $requestBodies
      * @param  array<string, array<string, mixed>>  $securitySchemes
+     * @param  array<string, array<string, mixed>|bool>  $schemas
      */
     private function __construct(
         private array $responses,
@@ -58,6 +64,7 @@ final readonly class ComponentRefs
         private array $pathItems,
         private array $requestBodies,
         private array $securitySchemes,
+        private array $schemas,
     ) {}
 
     public static function of(UirDocument $document): self
@@ -70,12 +77,16 @@ final readonly class ComponentRefs
             Hydrate::mapOf($rest['pathItems'] ?? null, PathItem::fromArray(...)),
             Hydrate::mapOfArrays($rest['requestBodies'] ?? null),
             Hydrate::mapOfArrays($rest['securitySchemes'] ?? null),
+            $document->components?->schemaValues() ?? [],
         );
     }
 
     /**
-     * One hop, so a component that is itself a `$ref` stays marked unresolved rather than silently
-     * flattening to nothing.
+     * One hop. A target that is itself a Reference Object keeps its pointer on the node handed back, but
+     * nothing downstream reads that as a decline — unlike {@see resolveInto()}, which reports one — so the
+     * node is compared carrying the target's empty `content` and `headers` and the chain reads at the
+     * position as the body being removed. {@see resolveParameter()} answers a chain the same way, and
+     * takes `name` and `in` from a target that states neither besides.
      */
     public function resolveResponse(ResponseObject $response): ResponseObject
     {
@@ -97,9 +108,10 @@ final readonly class ComponentRefs
     }
 
     /**
-     * A parameter's `$ref` lives among its non-modelled members. The referring site rarely carries an
-     * identity of its own — a Reference Object is usually nothing but the pointer — so the component's
-     * stands in, which is the id both a UIR document and its exported artifact publish for that parameter.
+     * A parameter's `$ref` lives among its non-modelled members. Where the referring site carries no
+     * identity of its own the component's stands in — which is every exported one, since a Reference
+     * Object takes no extension to carry it — so an id read here may name the use or the component, and
+     * {@see DocumentDiffer::diffParameters()} does not pair on it alone.
      */
     public function resolveParameter(Parameter $parameter): Parameter
     {
@@ -198,6 +210,77 @@ final readonly class ComponentRefs
         [$resolved] = self::resolveInto($scheme, 'securitySchemes', $this->securitySchemes);
 
         return $resolved;
+    }
+
+    /**
+     * The `components.schemas` entry a schema position points at, or null where this resolver will not
+     * answer for it. A schema is the one Reference Object position OAS lets recurse, so what is resolved
+     * here is narrower than the four buckets above, in two ways that each pay for themselves.
+     *
+     * Only a BARE pointer is followed — `$ref` plus, at most, the annotation keywords
+     * ({@see SchemaKeywords::isAnnotationOnly()}) and the identity the diff pairs nodes by. Under
+     * 2020-12 every keyword beside a `$ref` still applies, so the schema at such a position is the
+     * INTERSECTION of the two and neither side of a merge states it; declining is the degraded-but-true
+     * answer, and it costs nothing a Docuccino document publishes, which spells a hoisted shape as the
+     * pointer alone. The annotations that are followed override the target's, which is the merge every
+     * resolver here performs.
+     *
+     * ONE HOP PER CALL, like every resolver above — and unlike them a chain is followed, by RE-ENTRY
+     * rather than by a loop here. The referring node's pointer is dropped BEFORE the merge, so where the
+     * target is itself a pointer that `$ref` survives, the caller gets a schema position to resolve again,
+     * and the next hop is read exactly as this one was. The order of those two lines is the whole of it:
+     * merging first keeps the LEFT operand's `$ref` and the strip then takes the target's with it, which
+     * hands back a body stating nothing and reads, against an inline schema, as every keyword removed.
+     *
+     * Re-entry is what keeps the walk on ONE bound. {@see SchemaComparator} holds every pointer pair open
+     * for the descent beneath it, so a chain that closes on itself — a component naming itself, or two
+     * naming each other — meets a pair already open and compares as written, and a chain that does not
+     * terminates on the product of the two schema buckets. A loop here would need a visited set of its
+     * own, and a second bound answering the same question is the thing that drifts.
+     *
+     * A hop stops on its own where the next target is not bare: that call declines, and the position
+     * compares as the intersection it spells rather than flattening to the half this merge could state.
+     *
+     * @param  array<string, mixed>  $schema
+     * @return array<string, mixed>|bool|null
+     */
+    public function resolveSchema(array $schema): array|bool|null
+    {
+        $ref = $schema['$ref'] ?? null;
+        $name = is_string($ref) ? self::componentName($ref, 'schemas') : null;
+
+        if ($name === null || ! array_key_exists($name, $this->schemas) || ! self::isBarePointer($schema)) {
+            return null;
+        }
+
+        $target = $this->schemas[$name];
+
+        if (is_bool($target)) {
+            return $target;
+        }
+
+        unset($schema['$ref']);
+
+        return $schema + $target;
+    }
+
+    /**
+     * Whether a pointer is the WHOLE schema at its position — nothing beside it constrains the value, so
+     * the component it names is what that position describes.
+     *
+     * @param  array<string, mixed>  $schema
+     */
+    private static function isBarePointer(array $schema): bool
+    {
+        foreach (array_keys($schema) as $keyword) {
+            if ($keyword === '$ref' || $keyword === 'x-docuccino' || SchemaKeywords::isAnnotationOnly($keyword)) {
+                continue;
+            }
+
+            return false;
+        }
+
+        return true;
     }
 
     /**

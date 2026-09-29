@@ -14,6 +14,7 @@ use Docuccino\Core\Extensions\ResolvedExtensions;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Validation\RecoveredRequest;
 use Docuccino\Core\Extensions\Validation\RequestSchemaBuilder;
+use Docuccino\Core\Extensions\Validation\TaggedVariants;
 use Docuccino\Core\Extensions\Validation\ValidationSchema;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\NullTypeEngine;
@@ -191,6 +192,17 @@ it('does not hoist for read verbs (query parameters, never a body)', function ()
         ->and($op->hasParameter('query', 'q'))->toBeTrue();
 });
 
+it('declares the operation validates its input on either verb', function (string $method): void {
+    // The rules are applied whichever part of the document they land in, and the server refuses a value
+    // they reject either way — so the declaration must not depend on the verb's body-or-query split.
+    $op = new OperationDraft;
+    expect($op->validatesInput())->toBeFalse();
+
+    (new RecoveredRequest)->apply($op, requestContext(new ComponentRegistry, method: $method), objectSchema(['q' => ['type' => 'string']]), 'form-request');
+
+    expect($op->validatesInput())->toBeTrue();
+})->with(['POST', 'PUT', 'PATCH', 'DELETE', 'GET', 'HEAD']);
+
 /**
  * Dataset over every shape the read-verb flattener has to handle. `filter.radius_lat` in validator
  * syntax IS `filter[radius_lat]` on the wire, so a nested field is a bracketed leaf parameter — but a
@@ -351,3 +363,40 @@ it('says nothing about a type-level declaration whose arguments its constructor 
         ->toBe(['nickname' => ['type' => 'string'], 'note' => ['type' => 'string']])
         ->and($components->diagnostics())->toBe([]);
 });
+
+it('publishes tagged objects only where each branch has a component to be named after', function (string $method, ?string $class, array $attributes, bool $publishes): void {
+    expect(RecoveredRequest::publishesVariants(requestContext(new ComponentRegistry, $attributes, $method), $class))->toBe($publishes);
+})->with([
+    'a body from a source class' => ['POST', 'App\\StoreOrderRequest', [], true],
+    'a body with no class to name one after' => ['POST', null, [], false],
+    'a body an operation-level declaration patches inline' => ['POST', 'App\\StoreOrderRequest', [new BodyParameter(name: 'extra', type: 'string')], false],
+    'query parameters' => ['GET', 'App\\StoreOrderRequest', [], false],
+    'query parameters on HEAD' => ['HEAD', 'App\\StoreOrderRequest', [], false],
+]);
+
+it('hoists a tagged body as the union of its branches, and requires it', function (bool $admitsEmpty, bool $required): void {
+    $components = new ComponentRegistry;
+    // The tag's own `required` moved onto the partition, so the merged root requires nothing.
+    $schema = new ValidationSchema(
+        ['type' => 'object', 'properties' => ['kind' => ['type' => 'string'], 'isbn' => ['type' => 'string']]],
+        variants: [new TaggedVariants('', 'kind', ['isbn'], [
+            ['value' => 'book', 'name' => 'Book', 'members' => ['isbn'], 'required' => ['isbn']],
+            ['value' => 'gift', 'name' => 'Gift', 'members' => [], 'required' => []],
+        ], $admitsEmpty)],
+        merged: ['type' => 'object', 'properties' => ['kind' => ['type' => 'string'], 'isbn' => ['type' => 'string']], 'required' => ['kind']],
+    );
+
+    $op = new OperationDraft;
+    (new RecoveredRequest)->apply($op, requestContext($components), $schema, 'form-request', 'App\\StoreOrderRequest');
+
+    expect($components->schemas()['StoreOrderRequest'])->toBe(['anyOf' => [
+        ['$ref' => '#/components/schemas/StoreOrderRequestBook'],
+        ['$ref' => '#/components/schemas/StoreOrderRequestGift'],
+        ...($admitsEmpty ? [['type' => 'object', 'maxProperties' => 0]] : []),
+    ]])
+        // Every body the server accepts carries the tag, so it accepts no request without one.
+        ->and(($op->resolvedField('requestBody')['required'] ?? false))->toBe($required);
+})->with([
+    'a tag every body sends' => [false, true],
+    'a body that may be empty' => [true, false],
+]);

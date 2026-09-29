@@ -61,6 +61,10 @@ by a conditional merge are optional; keys from a plain `merge()` are not.
 every branch merged into one schema, rather than the first branch winning and the others' keys
 vanishing.
 
+**Nothing to send.** When a `toArray()` can return no key at all — a branch returning `[]`, or every
+key conditional — Laravel sends an empty JSON array, `[]`, not `{}`. The component is documented as
+the object or that empty array, so a client doesn't reject the response.
+
 **Naming.** A component takes the resource's short class name by default. Override the published name
 with [`#[SchemaName]`](/laravel/reference/attributes/#schemaname), and pin the identity the diff engine
 tracks — so a class rename isn't reported as a removal plus an addition — with
@@ -158,25 +162,51 @@ related models stay a graph of references, never an infinite inline expansion. A
 left out, under the name it's loaded by — `$hidden = ['latestPost']`, the relation's own name, rather
 than the snake-cased key it serializes as, which is the name Eloquent matches too.
 
-**Polymorphic relations.** A `morphTo` becomes a `oneOf` of the possible models, with a
-`discriminator` when every variant is registered in a morph map — so clients can tell the variants
-apart reliably:
+**Polymorphic relations.** A `morphTo` becomes an `anyOf` of the possible models. There is no
+`discriminator`: the morph alias lives in the parent's `*_type` column, not in the related model's own
+body, so no field of the payload names the variant for a client to read. A model whose body does fix
+such a field is discriminated like any [tagged union](#tagged-unions).
 
-```json
-"schema": {
-  "oneOf": [
-    { "$ref": "#/components/schemas/Invoice" },
-    { "$ref": "#/components/schemas/Subscription" }
-  ],
-  "discriminator": {
-    "propertyName": "type",
-    "mapping": {
-      "invoice": "#/components/schemas/Invoice",
-      "subscription": "#/components/schemas/Subscription"
+**Polymorphic type columns.** The `*_type` column beside a `morphTo` holds what `getMorphClass()` writes
+for the related model: its alias in your morph map, or its class name when it has none. Where that makes
+the column's values a closed set, it is documented as an `enum`, so a generated client can name every
+related type and tell which one a row points at:
+
+```php
+Relation::enforceMorphMap([
+    'post' => Post::class,
+    'video' => Video::class,
+    'user' => User::class,
+]);
+
+/**
+ * @property string $commentable_type
+ */
+class Comment extends Model
+{
+    /** @return MorphTo<Post|Video, $this> */
+    public function commentable(): MorphTo
+    {
+        return $this->morphTo();
     }
-  }
 }
 ```
+
+Here `commentable_type` is documented as `enum: [post, video]` — the aliases of the models the
+relation's generic names, not the whole map. The set is closed when:
+
+- the map is **enforced**, since an unmapped model cannot be written at all. A relation typed
+  `MorphTo<Model, $this>` names no models, so every mapped alias is documented;
+- or the map is not enforced but every model the generic names is `final`, so each one writes its alias
+  or, unmapped, its class name, and no subclass can write a third value.
+
+Anywhere else the column keeps its declared type: an unenforced map with a relation that names no models
+or names one open to subclasses, a related model that overrides `getMorphClass()`, an accessor over the
+column, or a `morphTo()` whose relation name is computed at runtime. A nullable type column
+(`@property string|null`) documents `null` beside the set.
+
+The enum describes what your application writes under its current morph map. Rows stored before you
+introduced an alias still hold the class name that was written then, so migrate them when you add a map.
 
 **Dates.** Eloquent hands every date attribute — a date cast, a `$dates` entry, the framework
 timestamps, a soft-delete column — to `serializeDate()` before it goes out, so the column is documented
@@ -223,6 +253,61 @@ one for a response column, state it in an
 one place an annotation reaches: name it in a
 [`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) with a `format:`. Either way the
 notice keeps naming what could not state the format.
+
+## Plain PHP objects
+
+A class that is none of the above — a value object nested in a resource's `toArray()`, or returned in a
+`response()->json()` body — is documented from its public properties and hoisted to a component named
+after the class. PHP's `json_encode` writes every public property that has a value, `null` included, so
+a property is **required** whenever it always has one: it's promoted in the constructor, has a default,
+or is untyped. A nullable property like that is required with a `null`-admitting type, because the key
+is always there:
+
+```php
+final readonly class InvoiceLine
+{
+    public function __construct(
+        public string $sku,
+        public int $quantity,
+        public ?string $note, // required, as `string | null`
+    ) {}
+}
+```
+
+A typed property with no default that isn't promoted has a value only if something assigns it, and
+`json_encode` leaves out a property that has no value. So Docuccino reads the constructor. A property it
+assigns on every path is required, even if the value can be `null`. One it assigns on only some paths is
+optional, and doesn't become nullable:
+
+```php
+final class ProblemDetails
+{
+    public string $title;   // required
+    public string $detail;  // optional: sent only when there is something to say
+
+    public function __construct(string $title, ?string $detail = null)
+    {
+        $this->title = $title;
+
+        if ($detail !== null) {
+            $this->detail = $detail;
+        }
+    }
+}
+```
+
+A path that throws doesn't count, because it builds no object, and `readonly` properties work the same
+way. A `$this->method()` the constructor calls counts as part of it, when the class (or one of its traits)
+declares that method. Where the constructor can't answer, a non-nullable property is required and a
+nullable one is optional. That happens when there's no constructor, when the property belongs to a parent
+class and a subclass's own constructor runs, and when something else may assign the property: the parent
+constructor, a method that assigns `$this->{$name}` or passes `$this` on, or the named constructor of a
+class whose constructor is private. A class that implements `JsonSerializable` decides its own keys, so its nullable properties
+stay optional too.
+
+Named as a request body type — `#[BodyParameter(type: InvoiceLine::class)]` — the same class is published
+as its own `InvoiceLineRequest` component, because what a client may send differs from what the server
+writes: a property with a default can be left out, so it's optional there, nullable or not.
 
 ## Enums
 
@@ -314,6 +399,93 @@ class names resolve through that file's `use` statements, and an accessor's `@re
 types its property the same way. The `@phpstan-`/`@psalm-` prefixed forms of each tag are read too,
 and win over the plain one where both are present.
 
+## Tagged unions
+
+A payload that can be one of several classes usually carries a field saying which — a `type`, a
+`kind`. When each class fixes that field itself, the response is published as a `oneOf` with a
+`discriminator`, so a generated client gets a union it can narrow on the field instead of a bag of
+optional properties:
+
+```php
+enum AttachmentKind: string
+{
+    case Image = 'image';
+    case Link = 'link';
+}
+
+final readonly class ImageAttachment
+{
+    public AttachmentKind $kind;
+
+    public function __construct(public string $url, public int $width, public int $height)
+    {
+        $this->kind = AttachmentKind::Image;
+    }
+}
+
+// LinkAttachment likewise, with AttachmentKind::Link
+
+public function show(Attachment $attachment): ImageAttachment|LinkAttachment
+```
+
+```json
+"schema": {
+  "oneOf": [
+    { "$ref": "#/components/schemas/ImageAttachment" },
+    { "$ref": "#/components/schemas/LinkAttachment" }
+  ],
+  "discriminator": {
+    "propertyName": "kind",
+    "mapping": {
+      "image": "#/components/schemas/ImageAttachment",
+      "link": "#/components/schemas/LinkAttachment"
+    }
+  }
+}
+```
+
+Each class publishes its tag as the one value it can hold — `"kind": { "type": "string", "const":
+"image" }`, and required — which is what makes the members mutually exclusive. A property counts as
+fixed when it is `readonly`, the class is `final`, and the class's own constructor assigns it once, as
+a plain statement, from a string or integer literal, a backed enum case, or a class constant holding
+one. Anything looser — a value passed in, chosen by an `if`, or on a class a subclass could construct
+differently — could hold another member's value, so the union stays an `anyOf` with the property typed
+as declared. So does a class that can re-tag a copy of itself — a `clone($this, ['kind' => …])` in its
+own body, a parent class, or a trait either uses, or a `public(set)` property anyone may re-initialise
+that way. Where the
+members all publish the field and some of them fix it, an info diagnostic names the member that doesn't.
+
+A union that may also be `null` keeps the null outside the tagged members, since it carries no tag to
+dispatch on: `anyOf: [{ oneOf: [...], discriminator: {...} }, { type: "null" }]`. The same rule holds
+for any union of components — models, resources, data objects — whichever produced the members, and a
+member that refers back to the union (a tree, a thread of replies) is read like any other.
+
+**Interfaces and base classes.** A value typed by an interface could be any class that implements it,
+and nothing stops the next class from joining — so an interface on its own is documented as an open
+object. Seal it with the tag PHPStan and Psalm already enforce, and it's documented as exactly the
+classes it lists, under its own name:
+
+```php
+/**
+ * @phpstan-sealed ImageAttachment|LinkAttachment
+ */
+interface Attachment {}
+
+/** @return list<Attachment> */
+public function index(): array
+```
+
+`Attachment` becomes a component holding the `oneOf` and its `discriminator`, and the response is an
+array of `$ref`s to it. An abstract class sealed the same way — or with `@psalm-inheritors` — works
+alike. When exporting OpenAPI 3.0, which has no `const`, each tag goes out as a one-value `enum` and the
+`discriminator` is kept; a nullable union becomes the tagged `oneOf` with `nullable: true` beside it.
+OpenAPI 3.0.3 lets `nullable` add `null` only beside a `type`, so some 3.0 tools read that as the
+`oneOf` alone — the `downlevel.nullable-composition` info says so, and the 3.1 export has no such gap.
+
+A request body gets the same union from its validation rules when one field's value decides which of
+the others it carries — see [Tagged unions](/laravel/documenting/requests/#tagged-unions) on the
+requests page.
+
 ## Describing a schema
 
 A component says what its fields are; `#[Description]` on the class says what the thing *is*, once, for
@@ -357,7 +529,7 @@ that separately, as machine-facing metadata a mock server reads — never as pro
 	}
 	```
 	</TabItem>
-	<TabItem label="Generated UIR">
+	<TabItem label="Generated document">
 	```json
 	"CustomerData": {
 	  "type": "object",
@@ -396,11 +568,11 @@ that separately, as machine-facing metadata a mock server reads — never as pro
 belong together, so the `email` and `fullName` above describe one imaginary customer rather than two.
 Either parameter alone is a complete hint.
 
-The UIR always carries them, under `x-docuccino.mock`. The OpenAPI tab above is what
+The full document always carries them, under `x-docuccino.mock`. The OpenAPI tab above is what
 [`export.mock_faker_key`](/laravel/reference/configuration/#export) produces when you name a member to
 publish under — `x-faker` is the convention most mock servers read — and leaving the key out keeps the
 exported artifacts pure OpenAPI. Only the expression projects: `seedGroup` is a relationship *between*
-properties, which a single member on one of them can't carry, so it stays in the UIR.
+properties, which a single member on one of them can't carry, so it stays in the extension.
 
 Columns, `toArray()` keys and validated fields have no PHP property to annotate, so on a class the
 attribute names the member instead and repeats as needed:

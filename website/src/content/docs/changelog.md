@@ -13,6 +13,70 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.20.3
+
+### Features
+
+- **laravel**: publish the request headers an action reads by name ([#558](https://github.com/docuccino/docuccino/pull/558))
+- **laravel**: publish the signature and expires query parameters a signed route requires ([#557](https://github.com/docuccino/docuccino/pull/557))
+- **inference-phpstan**: read an exception mapper's returns as the exceptions they build ([#554](https://github.com/docuccino/docuccino/pull/554))
+- **core**: let an extension translate a thrown exception before it is rendered ([#553](https://github.com/docuccino/docuccino/pull/553))
+- **laravel**: publish a morphTo's type column as the enum its morph map closes ([#552](https://github.com/docuccino/docuccino/pull/552))
+- **core**: publish a union of classes told apart by a fixed tag as a discriminated oneOf ([#544](https://github.com/docuccino/docuccino/pull/544))
+
+### Bug fixes
+
+- **laravel**: publish every status a choice of constant codes can send ([#561](https://github.com/docuccino/docuccino/pull/561))
+- **core**: describe a response by its own status, and let a declared status retire an unread one ([#560](https://github.com/docuccino/docuccino/pull/560))
+- **laravel**: publish a resource sent through ->response() as the resource ([#559](https://github.com/docuccino/docuccino/pull/559))
+- **laravel**: publish the 422 a read route's validated query can answer ([#556](https://github.com/docuccino/docuccino/pull/556))
+- **laravel**: document an exception as the class the exception map translates it to ([#555](https://github.com/docuccino/docuccino/pull/555))
+- **core**: let a nullable enum or const admit the null it is published beside ([#551](https://github.com/docuccino/docuccino/pull/551))
+- **laravel**: publish a field required after an exclude rule as required only while it is kept ([#550](https://github.com/docuccino/docuccino/pull/550))
+- **core**: require a plain object's nullable keys that json_encode always writes ([#549](https://github.com/docuccino/docuccino/pull/549))
+- **laravel**: publish the top-level members a root resource's with() adds ([#543](https://github.com/docuccino/docuccino/pull/543))
+- **laravel**: document every error as the respond() callback sends it ([#542](https://github.com/docuccino/docuccino/pull/542))
+- **ci**: let the pinned-phpstan fixture leg move larastan back with it ([#546](https://github.com/docuccino/docuccino/pull/546))
+
+## v0.20.2
+
+### Bug fixes
+
+- **core**: read a JSON object's members as unordered when diffing values ([#529](https://github.com/docuccino/docuccino/pull/529))
+
+## v0.20.1
+
+### Features
+
+- **website**: lead a docs reader back to the product ([#526](https://github.com/docuccino/docuccino/pull/526))
+
+### Bug fixes
+
+- **laravel**: read a workflow id as a name the application chose ([#528](https://github.com/docuccino/docuccino/pull/528))
+
+## v0.20.0
+
+### Breaking changes
+
+- **core**: rename the "uir" emit format to "full" ([#519](https://github.com/docuccino/docuccino/pull/519))
+  - the emit format id `uir` is now `full`, in the CLI and in `export.targets`. There is no alias: `uir` is refused, with an error naming the replacement.
+- **core**: carry the spec version and schema URL in the extension ([#518](https://github.com/docuccino/docuccino/pull/518))
+  - `$schema` and `uir` no longer sit at the document root. Read the spec version from `x-docuccino.generator.specVersion` and the schema URL from `x-docuccino.generator.schema`. The UIR spec moves to 2.0 — removing two required root members is a shape change against a published 1.0 — and 2.0 publishes two files, a self-contained document schema and a standalone extension schema. No committed artifact's `contentHash` changes, and diff history is preserved.
+- **core**: carry declared workflows in the document, as UIR 1.1 ([#511](https://github.com/docuccino/docuccino/pull/511))
+  - emitted UIR documents declare `uir: 1.1.0` and the 1.1 `$schema` URL, and every `contentHash` changes once as the spec version leaves the hash.
+
+### Features
+
+- **laravel**: declare a workflow on the operations that take part in it ([#514](https://github.com/docuccino/docuccino/pull/514))
+- **core**: publish declared workflows as an Arazzo description ([#512](https://github.com/docuccino/docuccino/pull/512))
+- **laravel**: say which operations a version had not added yet ([#508](https://github.com/docuccino/docuccino/pull/508))
+- **laravel**: say what a version did to a published value set ([#507](https://github.com/docuccino/docuccino/pull/507))
+
+### Bug fixes
+
+- **core**: follow a schema $ref chain to the shape at the end of it ([#523](https://github.com/docuccino/docuccino/pull/523))
+- **core**: read a schema $ref as the schema it names, not as the string it is ([#522](https://github.com/docuccino/docuccino/pull/522))
+
 ## v0.19.1
 
 ### Features

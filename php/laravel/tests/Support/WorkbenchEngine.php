@@ -76,6 +76,15 @@ final class WorkbenchEngine
             new PropertyMetadata('submittedAt', UnionT::of([ScalarT::string(), new NullT])),
         ]);
 
+        // The two published value sets a version change addresses, on one body: one described value by
+        // value, one only partly. The DType carries case NAMES; the schema chain reflects the class for
+        // the backing values, which is what a set's `enum` publishes.
+        $visibleFormData = new ClassMetadata('Workbench\\App\\Data\\VisibleFormData', [
+            new PropertyMetadata('id', ScalarT::int()),
+            new PropertyMetadata('visibility', new EnumT('Workbench\\App\\Enums\\FormVisibility', ['Public', 'Internal', 'Invited'])),
+            new PropertyMetadata('priority', new EnumT('Workbench\\App\\Enums\\WidgetPriority', ['Low', 'Normal', 'High'])),
+        ]);
+
         $widgetData = new ClassMetadata('Workbench\\App\\Data\\WidgetData', [
             new PropertyMetadata('id', ScalarT::int()),
             new PropertyMetadata('name', ScalarT::string()),
@@ -263,7 +272,7 @@ final class WorkbenchEngine
                     new ReturnSite($jsonResponse(new VoidT, 204), $location),
                 ]),
 
-                // A polymorphic morph (Widget|Gadget) → discriminated oneOf keyed by the morph map.
+                // A polymorphic morph (Widget|Gadget) → the anyOf of the two models.
                 self::CONTROLLER.'showAttachment' => new ActionAnalysis(
                     returns: [new ReturnSite(UnionT::of([new ClassT(self::WIDGET_MODEL), new ClassT(self::GADGET_MODEL)]), $location)],
                 ),
@@ -302,6 +311,7 @@ final class WorkbenchEngine
                     // A date-time the payload holds as the object, which is what it is delivered as.
                     new PropertyMetadata('submittedAt', new ClassT('Carbon\\CarbonImmutable')),
                 ]),
+                'Workbench\\App\\Data\\VisibleFormData' => $visibleFormData,
                 'Workbench\\App\\Data\\WidgetData' => $widgetData,
                 self::ARTICLE_DATA => new ClassMetadata(self::ARTICLE_DATA, [
                     new PropertyMetadata('id', ScalarT::int()),
@@ -315,12 +325,14 @@ final class WorkbenchEngine
                     // `mixed` is UnknownT, whose schema is the EMPTY schema, so `additionalProperties`
                     // is an empty array in the draft and `{}` in the artifact. That pair — the empty
                     // schema plus an authored example — is what killed an export, and no fixture in this
-                    // repo had it when the example lint shipped.
+                    // repo had it when the example lint shipped. Its keys are written unsorted, as an
+                    // author writes them: the artifact sorts them and a fresh build does not, and a
+                    // self-diff must not read that as a change.
                     new PropertyMetadata(
                         'metadata',
                         new MapT(ScalarT::string(), new UnknownT('mixed')),
                         'Whatever the publishing system stored alongside the article.',
-                        '{"source": "syndication", "wordCount": 1200}',
+                        '{"wordCount": 1200, "source": "syndication"}',
                     ),
                     // The same map, with the EMPTY object literal beside it — the natural example on a
                     // free-form map, and the one the reader refused as untypable, dropping a valid

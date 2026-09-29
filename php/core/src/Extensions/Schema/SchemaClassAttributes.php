@@ -30,16 +30,20 @@ use Docuccino\Attributes\SchemaName;
 use Docuccino\Attributes\Security;
 use Docuccino\Attributes\Summary;
 use Docuccino\Attributes\Unauthenticated;
+use Docuccino\Attributes\Versioning\AddedEnumValue;
+use Docuccino\Attributes\Versioning\AddedOperation;
 use Docuccino\Attributes\Versioning\ApiVersionChange;
 use Docuccino\Attributes\Versioning\AppliesTo;
 use Docuccino\Attributes\Versioning\MadeRequestFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldRequired;
+use Docuccino\Attributes\Versioning\RemovedEnumValue;
 use Docuccino\Attributes\Versioning\RemovedResponseField;
 use Docuccino\Attributes\Versioning\RenamedParameter;
 use Docuccino\Attributes\Versioning\RenamedRequestField;
 use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Attributes\Webhook;
+use Docuccino\Attributes\WorkflowStep;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Provenance\ClassNames;
@@ -116,6 +120,8 @@ final class SchemaClassAttributes
      */
     public const array ELSEWHERE = [
         Abilities::class => 'on the action',
+        AddedEnumValue::class => 'on a version-change class, beside its #[ApiVersionChange]',
+        AddedOperation::class => 'on a version-change class, beside its #[ApiVersionChange]',
         ApiVersionChange::class => 'on a version-change class',
         AppliesTo::class => 'on a version-change class, to narrow it to some operations',
         CookieParameter::class => 'on the action',
@@ -134,6 +140,7 @@ final class SchemaClassAttributes
         OptionallyAuthenticated::class => 'on the action',
         PathParameter::class => 'on the action',
         QueryParameter::class => 'on the action, or on a custom filter class',
+        RemovedEnumValue::class => 'on a version-change class, beside its #[ApiVersionChange]',
         RemovedResponseField::class => 'on a version-change class, beside its #[ApiVersionChange]',
         RenamedParameter::class => 'on a version-change class, beside its #[ApiVersionChange]',
         RenamedRequestField::class => 'on a version-change class, beside its #[ApiVersionChange]',
@@ -144,6 +151,7 @@ final class SchemaClassAttributes
         Security::class => 'on the action',
         Summary::class => 'on the action',
         Unauthenticated::class => 'on the action',
+        WorkflowStep::class => 'on the action',
         Webhook::class => 'on the webhook class it names',
     ];
 

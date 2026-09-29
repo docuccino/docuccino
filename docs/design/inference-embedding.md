@@ -315,9 +315,32 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    `withStatus()` is deliberately absent (PSR-7's setter; no response class here declares it), and so are
    SUBCLASSES of the four — a strict receiver check is what keeps `(new StreamedResponse(…))->setStatusCode(202)`
    out, since everything recovered here is emitted as a `JsonResponse` and a streamed body is not one.
-   A status that will not fold refuses the chain rather than guessing; a header link that will not read
-   reports its media type UNKNOWN instead, which drops whatever the receiver carried but keeps the status,
-   because a header is the one thing that cannot have touched it.
+   A link that will not read is reported UNKNOWN in the one fact it could have set, never refused: a header
+   link drops whatever media type the receiver carried but keeps the status, and a `->setStatusCode()` that
+   will not fold drops the receiver's status but keeps the body — each is the one thing the other cannot
+   have touched. A status is read as EVERY constant it can be (`$ok ? 200 : 503`, `ScalarFold::ints()`), and
+   so is one passed to the constructor or forwarded to a helper's status parameter; the adapter publishes one
+   response per code, and a status stated but unreadable under `default` rather than under a code the
+   endpoint may never send. An inferred range (`int<200, 299>`) is not a constant and folds to nothing.
+   A helper handing its status parameter to `response()->json($d, $code)` records the accessor exactly as
+   `new JsonResponse($d, $code)` does (`ResponseFactoryCall` is the one reader of those arguments, shared
+   with the return-type extension), and a call site that passes nothing binds the parameter's DEFAULT —
+   `$this->ok($d)` is the 200 its signature says, not a status nothing read.
+   A Responsable asked to render itself (`$resource->response()`, `->toResponse($request)`) is not an
+   opaque vendor call: the router sends ANY returned Responsable through its `toResponse()`, and
+   `JsonResource::response()` is that call on the current request, so whoever WROTE `toResponse()` answers.
+   The framework's own resource rendering is the receiver itself — it sends exactly what returning the
+   resource bare sends — and is emitted as `JsonResponse<TheResource, PayloadStatusT>`: the status is KNOWN,
+   it is the payload's to decide as it is for the bare return (the created-model 201, a Data class's
+   `calculateResponseStatus()`), and a header stamped afterwards changes nothing about it; a chain's
+   `->setStatusCode()` still overrides it. An application-written `toResponse()` is read with that object as
+   `$this` — not memoised, since an inherited override answers for whichever object it renders — whether it
+   is reached directly, through the framework's `response()`, or by returning the object bare; inside it,
+   `parent::toResponse()` is the framework rendering that object. EVERY return of the override is a response
+   (`ResponseShapeRefiner::refineArms()`): a guard arm answering 410 beside `parent::toResponse()` is two,
+   and if any arm cannot be read the whole widens to the declared class rather than publishing a subset.
+   Whoever answers, the answer holds only until a closer override is written, so every project file of the
+   object's hierarchy joins the dependencies.
 2. **Value-flow / status provenance.** A callee's recovered shape is CALL-INDEPENDENT: a status that is
    not a literal is recorded as the `ParamAccessor` it reads from (the parameter itself, `->value`,
    `->name`, or a no-arg `->method()`), and each body member's provenance is recorded the same way. The
@@ -391,7 +414,48 @@ takes its guard from PHPStan's per-return flow narrowing. A
 `return match (true) { $e instanceof X => …, default => … }` renderer collapses to a SINGLE return
 whose scope leaves `$e` un-narrowed, so its arms are decomposed off the AST instead, reading each arm's
 own `instanceof` conditions (walking `&&`/`||`, so a compound condition contributes every class named).
-Selection is source-order-first-match either way — the runtime semantics of both shapes.
+Selection is source-order-first-match either way — the runtime semantics of both shapes. A returned
+ternary is the same conditional inline and expands the same way, one site per branch, each typed in the
+scope `filterByTruthyValue()`/`filterByFalseyValue()` leaves: collapsed, two responses are the supertype
+that says neither.
+
+A response POST-PROCESSOR (`$exceptions->respond()`) is read with `CallableRef::$narrowToEvery`, where
+nothing is chosen: every site the narrowed type reaches comes back, and PHPStan's own type for the
+parameter at each non-`match` site decides reachability too, since after `if ($e instanceof A) return …;`
+it says "anything but an A", which no guard of required classes spells. Each site also carries the
+parameter it returns unchanged (`ReturnSite::$returnsParameter`) and the literal-argument parameter calls
+whose value the site's scope proves (`CallCondition`; PHPStan remembers `$request->is('api/*')` narrowed
+inside the branch that tested it). What a call MEANS stays the adapter's.
+
+An exception MAPPER (`$exceptions->map()`) is read with `CallableRef::$returnsExceptions`: the sites are
+harvested exactly as for a post-processor, and each one that does not hand the parameter back is also read
+into `ActionAnalysis::$throws` as the throw of what it builds — `ThrowAnalyzer::returned()` wraps the
+returned expression in the `throw` it stands for and asks `statusForType()`, so a literal constructor
+argument, a local assigned once, a class's own static factory and a pinned status read exactly as they
+read at a `throw`, and one grammar decides both. Only an instantiable `Throwable` counts as a class; a
+return naming none (a declared interface, an abstract base, a `mixed`) comes back typed `UnknownT` rather
+than as its declared type, so the adapter can tell an incomplete answer from a whole one without reading a
+diagnostic code. What a translation MEANS — which entry matches, what several answers amount to — stays
+the adapter's (`InferredHandler\ExceptionMapTranslator`).
+
+`ParameterUse` judges "unchanged" off the AST, over every use of the parameter that can run before the
+return. A use is a TOUCH unless it is the receiver of a reader (`get*`/`is*`/`has*` other than
+`isNotModified()`, which rewrites a response whose validators match into a 304 — the prefix rule is held to
+every such method of the framework's response classes by calling each; a header-bag reader; or a header
+write naming a literal header other than `Content-Type`), an `instanceof` operand, or the value itself
+handed out by a `return` through ternary/`match` branches. Everything else — reassignment, a write through
+it, any other call on it, and ANY other appearance (an argument to a function, static or method call, a
+constructor, an alias, a closure capture, `extract()`) — is a touch, because an object is a handle and code
+the analyser does not read may write through it; so is any reach into the scope that never names it (a
+variable variable, `func_get_args()`, `func_get_arg()`, `compact()`, `get_defined_vars()`,
+`debug_backtrace()` — PHP refuses to call these dynamically, so a call by name is every spelling). The
+rewritten answer is then read as unread, which keeps the rendered answer beside it and says so. A touch
+does not count where it cannot run first: in a branch exclusive of the return's (the other arm of an
+`if`/ternary/`match`), after a `return`, `throw` or `exit` that leaves first — unless a `try` with a catch
+encloses the touch, since whatever the touch throws lands in the catch, which may go on to the return (all
+but where the return sits in that same block with no loop around) — or written after the return, unless a
+loop encloses both or it sits in a `finally`. One escape is not read: a callee handed nothing reaching up the call stack for its caller's
+arguments (`debug_backtrace()` inside the helper), which no expression in the callback shows.
 
 Two honesty rules ride on top:
 
@@ -665,10 +729,11 @@ them for both — so the three layers are re-run over its throw points and the s
 it is written. Bounded to what the body itself writes: a closure at the argument, or one assignment behind
 it, against descent's own depth budget and cycle guard. The one caller with no offset to ask with is the
 handler tier, which locates a render callback from `ReflectionFunction`'s file+line
-(`FileAnalyzer::closureAtLine()`); a line carrying two callbacks is one reflection cannot tell apart, so
-it answers neither. An ARROW function is the boundary — PHPStan models it with `InArrowFunctionNode`,
-which carries no statement result, so there are no throw points to read and the exception is not surfaced
-at all (pinned as a fixture row rather than described).
+(`FileAnalyzer::callableAtLine()`, closures and arrow functions alike — an arrow function's one return is
+its body expression in the scope `InArrowFunctionNode` is walked with); a line carrying two callbacks is
+one reflection cannot tell apart, so it answers neither. For THROWS an arrow function is the boundary —
+`InArrowFunctionNode` carries no statement result, so there are no throw points to read and the exception
+is not surfaced at all (pinned as a fixture row rather than described).
 
 The callee's OWN signature decides what is left to read after it, and it is a function of the version the
 app resolved. `Connection::transaction()` returns `mixed` up to Laravel 12 and is generic over its callback

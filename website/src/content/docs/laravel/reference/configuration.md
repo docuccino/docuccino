@@ -406,7 +406,7 @@ Folders become default nav groups; frontmatter (`title`/`slug`/`summary`/`tags` 
 `nav.{group,order,hidden,type,ref}`) overrides. `::operation{...}` / `::schema{...}` directives are
 resolved against the document; broken refs become diagnostics. `null` compiles nothing. See
 [Adding your own pages](/laravel/guides/narrative-content/) for the full workflow, or the
-[UIR content layer](/uir/#content-layer) for how it lives in the raw document.
+[content layer](/uir/#content-layer) for how it lives in the full document.
 
 ### `examples`
 
@@ -460,6 +460,30 @@ assembly time as the `overlay(45)` precedence layer — a standards-based hand-e
 survives regeneration. See [Customizing the output](/laravel/guides/customizing-output/) for worked
 examples.
 
+### `workflows`
+
+Prose and inputs for the workflows your [`#[WorkflowStep]`](/laravel/reference/attributes/#workflowstep)
+attributes declare, keyed by workflow id.
+
+```yaml
+# workflows:
+#   checkout:
+#     summary: 'Take payment for a basket'
+#     description: 'Reserve the basket, take payment, then confirm.'
+#     inputs: {}
+```
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `<workflow id>.summary` | none | One line saying what the workflow achieves, for the consumer following it. |
+| `<workflow id>.description` | none | The longer form, CommonMark. |
+| `<workflow id>.inputs` | none | A JSON Schema describing the values the workflow is started with, published as the Arazzo workflow's `inputs`. |
+
+**Enrichment only.** Config never *creates* a workflow, the way `tags.definitions` never creates a tag —
+the attributes declare it and a document with no configuration publishes it fine. An entry naming a
+workflow no operation declares a step of is reported with `workflow.describes-nothing` rather than
+published, so a renamed workflow doesn't leave prose behind pointing at nothing.
+
 ### `representation`
 
 ```yaml
@@ -487,7 +511,7 @@ from "API changed".
 | Key | Values | Default | Effect |
 | --- | --- | --- | --- |
 | `filters` | `bracketed` \| `deepObject` | `bracketed` | Query Builder filter/field style: one flat `filter[status]` / `fields[type]` parameter each (`bracketed`), or a single `filter` / `fields` object parameter with `style: deepObject` (`deepObject`). It is the wire form the whole surface takes, so everything that describes one of those keys follows it — a `#[QueryParameter('filter[status]')]` and a `'filter.status'` validation rule alike land on the flat parameter under `bracketed` and on the object's property under `deepObject`, never on both. See [Spatie Query Builder](/laravel/packages/query-builder/). |
-| `nullable` | `type-array` \| `anyof` | `type-array` | How nullability is expressed: `type: ["string","null"]` vs a `{type: null}` `anyOf` branch (legacy tooling). |
+| `nullable` | `type-array` \| `anyof` | `type-array` | How nullability is expressed: `type: ["string","null"]` vs a `{type: null}` `anyOf` branch (legacy tooling). A value that may be one of a closed set or null — an `enum`, a `const` — always takes the `{type: null}` branch, because the list would still refuse a null folded into its `type`. |
 | `operation_id` | `route-name` \| `controller-method` | `route-name` | Where the `operationId` comes from. `route-name` uses the route's name, `controller-method` builds `{ShortController}@{method}`. Neither source is always there — an unnamed route is the ordinary case, and a closure route has no controller — and an operation with no `operationId` is one a client generator names a method for out of the path, differently per generator. So whichever strategy is set, an operation the strategy cannot name is named from its own method and path, spelled so the path can be read back off the name: `GET /api/forms` becomes `get.api.forms`, `GET /api/forms/{form}` becomes `get.api.forms.@form`. That spelling is what keeps one name to one operation — a reduction that folded `-`, `_` and `/` together would name `/api/user-profile` and `/api/user/profile` alike. Nothing outside the operation is read, so a name never moves because another route was added, removed or renamed. Either way [`#[OperationId]`](/laravel/reference/attributes/#operationid) still wins. |
 | `enums.naming` | `names` \| `none` \| `x-enumNames` \| `x-enum-varnames` | `names` | SDK member-name hints on enum schemas. The default `names` emits both spellings (`x-enum-varnames` for OpenAPI Generator and the TypeScript toolchain, `x-enumNames` for NSwag); a single-key keyword pins one tool's shape; `none` turns hints off. Read by the [Enum integration](/laravel/documenting/schemas/#enums) and the [Query Builder sort/include enums](/laravel/packages/query-builder/#sorts-and-includes-are-enums-of-the-allow-list). |
 | `enums.components` | `true` \| `false` | `true` | Whether each reflectable enum hoists to a shared `#/components/schemas` entry that properties and query-parameter item schemas `$ref` (`true`), or its `type`/`enum`/`x-enumDescriptions` are inlined at every use site (`false`). |
@@ -496,9 +520,13 @@ from "API changed".
 | `pagination.components` | `true` \| `false` | `true` | Whether a [paginated envelope](/laravel/documenting/responses/#pagination) hoists to one `#/components/schemas` entry per item type and paginator kind — `ArticleResourcePage`, `ArticleResourceCursorPage` — that every paginated operation `$ref`s, and its `links`/`meta` to one entry per shape (`PaginationLinks`, `PaginationMeta`) that the pages `$ref` in turn (`true`); or the whole envelope is restated on each operation (`false`). Hoisting means an SDK generator mints one page type per item type instead of one per endpoint, over one set of envelope members instead of one per page. An envelope whose item type could not be identified, or whose item schema is not itself a component, keeps the envelope on the operation either way — but still points at the member components, whose shapes never depended on the item type. |
 
 The hoist is narrow — 4xx/5xx only, only bodies that repeat, only responses with `content`, never one
-already a `$ref` — and [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references
-on both sides, so moving a body between inline and shared is not a change. Worked output and the exact
-rules: [repeated bodies become shared components](/laravel/documenting/errors/#repeated-bodies-become-shared-components).
+already a `$ref`. [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) reads a reference as
+the thing it names on both sides, a schema pointer included, so turning this key on is not itself a
+change: neither the response moving into `components.responses` nor the body shape moving into
+`components.schemas` is reported at the operations it left. A hoist that also edits the shape still
+is, because the component is compared against what the inline copy said. Worked output and the exact
+rules: [repeated bodies become shared
+components](/laravel/documenting/errors/#repeated-bodies-become-shared-components).
 
 ### `integrations`
 
@@ -570,7 +598,7 @@ export:
   targets:
     - { format: 'openapi-3.2', path: 'docs/openapi.json' }
     - { format: 'openapi-3.1', path: 'docs/openapi-3.1.yaml' }
-    - { format: 'uir', path: 'docs/api.uir.json' }
+    - { format: 'full', path: 'docs/api.full.json' }
     - { format: 'postman', path: 'docs/collection.json' }
 ```
 
@@ -592,7 +620,7 @@ Rules the command enforces before it builds anything:
   clobber the other.
 - **The extension picks the serialization.** A `.yaml` or `.yml` path emits YAML; anything else emits
   JSON. There is no `yaml` key, because the path already says it.
-- **`uir` and `postman` have no YAML form**, so a `.yaml` path on either is an error rather than a
+- **`full` and `postman` have no YAML form**, so a `.yaml` path on either is an error rather than a
   `.yaml` file holding JSON.
 
 A broken target list fails the command with a `config.export-*` error **before** the build runs, so
@@ -608,8 +636,8 @@ export:
 
 `mock_faker_key` is the member every [`#[Mock]`](/laravel/reference/attributes/#mock) faker
 expression is published under in the OpenAPI artifacts. Unset — the default — leaves them out, so a
-bare export is pure OpenAPI. The `uir` format carries the hints whichever way this is set, and
-turning it on rewrites no byte of the UIR: it shapes the projection, never the document, so
+bare export is pure OpenAPI. The `full` format carries the hints whichever way this is set, and
+turning it on rewrites no byte of the full document: it shapes the projection, never the document, so
 `configHash` and the fragment cache are untouched.
 
 ### `versioning`

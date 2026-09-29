@@ -33,10 +33,13 @@ use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
 use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
 use Docuccino\Core\Extensions\Validation\RuleSet;
+use Docuccino\Core\Extensions\Validation\TaggedVariants;
+use Docuccino\Core\Extensions\Validation\ValidationRule;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassMetadata;
+use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
@@ -57,9 +60,11 @@ use Docuccino\Core\Pipeline\FragmentCache;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Pipeline\OperationFragment;
 use Docuccino\Core\Support\ConfiguredFlag;
+use Docuccino\Core\Support\Fqcn;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Core\Support\JsonValue;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
+use Docuccino\Inference\PhpStan\Metadata\ClassMetadataFactory;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureEdit;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 use Docuccino\Laravel\Commands\WatchCommand;
@@ -68,17 +73,23 @@ use Docuccino\Laravel\Config\DeclaredSettings;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Config\ViewerConfig;
 use Docuccino\Laravel\Extensions\AttributeParametersExtension;
+use Docuccino\Laravel\Integrations\Eloquent\ModelSchema;
+use Docuccino\Laravel\Integrations\InferredHandler\HandlerReflector;
+use Docuccino\Laravel\Integrations\InferredHandler\ReceivedException;
 use Docuccino\Laravel\Integrations\QueryBuilder\ListValueDescriber;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\SpatieData\WrapResolver;
 use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
+use Docuccino\Laravel\Integrations\Support\RuleParsing;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
+use Docuccino\Laravel\Integrations\Validation\TaggedRules;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
 use Docuccino\Laravel\Testing\ApiContract;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Almanac;
+use Docuccino\Laravel\Tests\Fixtures\ExcludedFields\StorePaymentRequest;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\NestedWrapItemData;
 use Docuccino\Laravel\Tests\Support\BuildSettings;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
@@ -92,6 +103,8 @@ use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Http\Kernel as HttpKernelContract;
 use Illuminate\Foundation\Configuration\ApplicationBuilder;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Foundation\Exceptions\Handler;
+use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Foundation\Http\Kernel as HttpKernel;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -99,6 +112,7 @@ use Illuminate\Routing\MiddlewareNameResolver;
 use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\Router;
 use Illuminate\Testing\TestResponse;
+use Opis\JsonSchema\Validator;
 use PhpParser\Node;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\FindingVisitor;
@@ -339,6 +353,26 @@ function registerAppMiddlewareGroup(string $name, array $middleware): void
             $configuration->group($name, $middleware);
 
             $kernel->setMiddlewareGroups($configuration->getMiddlewareGroups());
+        },
+    );
+}
+
+/**
+ * Register middleware aliases the way an application's own `bootstrap/app.php` does — on the
+ * `Middleware` configuration object applied when the HTTP kernel resolves, laid over the framework's
+ * defaults. The same population {@see registerAppMiddlewareGroup()} stands in for, for the alias map.
+ *
+ * @param  array<string, string>  $aliases
+ */
+function registerAppMiddlewareAliases(array $aliases): void
+{
+    app()->afterResolving(
+        HttpKernelContract::class,
+        static function (HttpKernel $kernel) use ($aliases): void {
+            $configuration = new Middleware;
+            $configuration->alias($aliases);
+
+            $kernel->setMiddlewareAliases($configuration->getMiddlewareAliases());
         },
     );
 }
@@ -760,9 +794,12 @@ function loadFixture(string $name): array
  * an oracle without anyone remembering it exists: five recorded UIR goldens sat outside both globs
  * with the whole suite green.
  *
- * A UIR document is one carrying `uir` and `info`. Recursive and per package, so a fixture directory
- * that grows a subdirectory, or a package that grows a fixture tree, is inside the domain the moment
- * it exists rather than the moment somebody widens a glob.
+ * A UIR document is an OpenAPI document carrying the Docuccino extension at its root: `openapi`,
+ * `info` and `x-docuccino` together. The extension member is what names it, because from UIR 2.0 on
+ * everything else about it IS an OpenAPI document — and an artifact written before 2.0 carries the
+ * member too, so one rule covers both. Recursive and per package, so a fixture directory that grows a
+ * subdirectory, or a package that grows a fixture tree, is inside the domain the moment it exists
+ * rather than the moment somebody widens a glob.
  *
  * @return list<string>
  */
@@ -789,9 +826,131 @@ function uirDocuments(): array
 
             $decoded = json_decode((string) file_get_contents($entry->getPathname()), true);
 
-            if (is_array($decoded) && isset($decoded['uir'], $decoded['info'])) {
+            if (is_array($decoded) && isset($decoded['openapi'], $decoded['info'], $decoded['x-docuccino'])) {
                 $found[] = $entry->getPathname();
             }
+        }
+    }
+
+    sort($found);
+
+    return $found;
+}
+
+/**
+ * Every UIR version the repository publishes, read off the authoring directory rather than listed.
+ *
+ * A published `$id` is served forever, so the guards over the family have to cover the versions that
+ * are no longer newest — listing them by hand is how the second one goes unguarded the day a third
+ * ships.
+ *
+ * @return list<string>
+ */
+function publishedSchemaVersions(): array
+{
+    return array_keys(schemaVersionsUnder(dirname(__DIR__).'/spec/uir'));
+}
+
+/** The version a fresh build validates against: the newest the repository publishes. */
+function defaultSchemaVersion(): string
+{
+    $versions = publishedSchemaVersions();
+
+    return $versions[count($versions) - 1];
+}
+
+/**
+ * Every schema FILE a version publishes, keyed `<version>/<name>` and valued as a dataset row.
+ *
+ * Read off the directory for the reason the versions are: the family is two files from 2.0 on — the
+ * document schema and the extension schema it references — and a guard naming `schema.json` alone
+ * would have left the second one to drift in silence.
+ *
+ * It lives here rather than in a test file because it is the ONE statement of what counts as a
+ * published schema, and three guards plus both sync tools turn on it. It was two reads of one
+ * directory before, in two files, and they had already parted on that very question — one enumerated
+ * `.json` and the other took whatever `is_file()` said yes to, which is how a stray file left beside
+ * a schema would have shipped inside the composer package unseen.
+ *
+ * @return array<string, array{string, string}>
+ */
+function publishedSchemaFiles(): array
+{
+    return schemaFilesUnder(dirname(__DIR__).'/spec/uir');
+}
+
+/**
+ * The same read against any of the three copy roots — `spec/uir`, `php/core/resources/spec/uir`,
+ * `website/public/uir` — so the drift guard can compare SETS rather than only look each canonical
+ * file up in turn. A copy holding a file the source no longer authors is drift the other way, and a
+ * one-way presence check is blind to it.
+ *
+ * @return array<string, array{string, string}>
+ */
+function schemaFilesUnder(string $root): array
+{
+    $files = [];
+
+    foreach (schemaVersionsUnder($root) as $version => $names) {
+        foreach ($names as $name) {
+            $files[$version.'/'.$name] = [$version, $name];
+        }
+    }
+
+    return $files;
+}
+
+/**
+ * The `.json` files of each version directory under a uir root, sorted both ways. `.json` is what a
+ * schema file IS, spelled here once for `tools/sync-schema.php`, `website/scripts/sync-schema.mjs`
+ * and every guard over them.
+ *
+ * @return array<string, list<string>>
+ */
+function schemaVersionsUnder(string $root): array
+{
+    if (! is_dir($root)) {
+        return [];
+    }
+
+    $versions = array_values(array_filter(
+        scandir($root) ?: [],
+        static fn (string $entry): bool => $entry !== '.' && $entry !== '..' && is_dir($root.'/'.$entry),
+    ));
+    sort($versions);
+
+    $found = [];
+    foreach ($versions as $version) {
+        $names = array_values(array_filter(
+            scandir($root.'/'.$version) ?: [],
+            static fn (string $entry): bool => str_ends_with($entry, '.json') && is_file($root.'/'.$version.'/'.$entry),
+        ));
+        sort($names);
+
+        $found[$version] = $names;
+    }
+
+    return $found;
+}
+
+/**
+ * Every file under a copy root, `.json` or not, as `<version>/<name>` — what a packaged directory
+ * ACTUALLY holds. The drift guard needs this beside {@see schemaFilesUnder()} because the two answer
+ * different questions: one says which schemas are there, the other says whether anything else is.
+ *
+ * @return list<string>
+ */
+function everyFileUnder(string $root): array
+{
+    if (! is_dir($root)) {
+        return [];
+    }
+
+    $found = [];
+
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS)) as $entry) {
+        if ($entry instanceof SplFileInfo && $entry->isFile()) {
+            $found[] = substr($entry->getPathname(), strlen(rtrim($root, '/')) + 1);
         }
     }
 
@@ -1098,7 +1257,6 @@ function kitchenSink(): array
 function emptyCollectionPositions(): array
 {
     return [
-        'uir' => '1.0.0',
         'openapi' => '3.2.0',
         'info' => ['title' => 'Empty collection positions', 'version' => '1.0.0'],
         'servers' => [['url' => 'https://example.com', 'variables' => []]],
@@ -1344,7 +1502,6 @@ function regenerateGolden(string $actual, ?string $recorded): string
 function diffBase(): array
 {
     return [
-        'uir' => '1.0.0',
         'openapi' => '3.2.0',
         'info' => ['title' => 'Forms API', 'version' => '1.0.0'],
         'paths' => [
@@ -1407,8 +1564,10 @@ function diffBase(): array
 }
 
 /**
- * Recursively strips every `x-docuccino` member and the UIR-only top-level `$schema`/`uir`, so the
- * remainder is exactly what a lossless OAS 3.2 transcode must equal.
+ * Recursively strips every `x-docuccino` member, so the remainder is exactly what a lossless OAS 3.2
+ * transcode must equal. That is the whole of it from UIR 2.0 on: the root `$schema`/`uir` pair the
+ * emitter also drops is carried by no document this version builds, and a subject that has one is
+ * written for the test that needs it rather than reached through here.
  *
  * @param  array<string, mixed>  $node
  * @return array<string, mixed>
@@ -2493,6 +2652,148 @@ function switchReadSites(string $source): array
 }
 
 /**
+ * The string functions that answer a question about PART of a string: the ones a caller reaches for
+ * when they mean to test an id's shape rather than the id itself. {@see formatIdPrefixTests}.
+ *
+ * @return list<string>
+ */
+function prefixMatchers(): array
+{
+    return [
+        'str_starts_with', 'str_ends_with', 'str_contains', 'strpos', 'stripos', 'strrpos', 'strripos',
+        'strstr', 'stristr', 'strncmp', 'strncasecmp', 'substr_compare', 'substr_count', 'fnmatch',
+        'preg_match', 'preg_match_all', 'preg_split', 'preg_replace', 'preg_quote',
+    ];
+}
+
+/**
+ * Every prefix- or substring-matching call in one source, paired with each string literal sitting
+ * directly in its argument list — one scan, with the two projections below over it.
+ *
+ * Tokenised for the reason {@see referencesIn} tokenises: it draws the string-and-comment line for
+ * free, so `str_starts_with($id, 'openapi-')` written inside a message or a docblock is not a call. A
+ * literal nested inside an INNER call is left to that call, which the same scan reaches on its own.
+ *
+ * @return list<array{line: int, site: string, literal: string}>
+ */
+function prefixMatchCalls(string $source): array
+{
+    $tokens = significantTokens($source);
+    $total = count($tokens);
+    $matchers = prefixMatchers();
+    $found = [];
+
+    foreach ($tokens as $index => $token) {
+        $matched = false;
+        foreach ($matchers as $matcher) {
+            $matched = $matched || namesGlobalSymbol($token, $matcher);
+        }
+
+        $previous = $tokens[$index - 1] ?? null;
+        if (! $matched
+            || ($previous !== null && $previous->is([T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION]))
+            || ($tokens[$index + 1] ?? null)?->text !== '(') {
+            continue;
+        }
+
+        $depth = 0;
+        for ($i = $index + 1; $i < $total; $i++) {
+            $text = $tokens[$i]->text;
+
+            if ($text === '(' || $text === '[' || $text === '{') {
+                $depth++;
+
+                continue;
+            }
+
+            if ($text === ')' || $text === ']' || $text === '}') {
+                $depth--;
+
+                if ($depth === 0) {
+                    break;
+                }
+
+                continue;
+            }
+
+            if ($depth === 1 && $tokens[$i]->is(T_CONSTANT_ENCAPSED_STRING)) {
+                $found[] = [
+                    'line' => $token->line,
+                    'site' => enclosingFunction($tokens, $index),
+                    'literal' => stripcslashes(substr($tokens[$i]->text, 1, -1)),
+                ];
+            }
+        }
+    }
+
+    return $found;
+}
+
+/**
+ * Every place one source tests a FORMAT ID by its SHAPE — the scan behind {@see Formats}'s table
+ * columns, as the line the call opens on and the function it sits in.
+ *
+ * A format id is a name, never a family. A reader spelling a question about the ARTIFACT as a test on
+ * the id gets a confident wrong answer the day a name joins the family without the fact — which is
+ * what happened in three places at once while the full artifact was called `openapi-3.2-full`, one of
+ * them deciding what a published Arazzo description points consumers at. The question a prefix test
+ * is reaching for is a column on the table, and asking the table is the only way to get it right.
+ *
+ * So: a matching call ({@see prefixMatchCalls}) whose literal is a STRICT prefix of an id in $ids. A
+ * whole id is not one — comparing against a name is the correct thing to do — and four characters is
+ * the floor, because shorter than that the literal is likelier to be somebody else's word than a
+ * format's. The literal is read through its regex punctuation too, so `'/^openapi-/'` is the same
+ * question asked with a different tool; `'openapi:'` is not, the colon making it a YAML key.
+ *
+ * **It therefore says nothing about an id of four characters or fewer**, and `full` is one: every
+ * strict prefix of it is under the floor, and `'full'` itself is a whole id. That is a gap and not a
+ * subtlety, so `FormatIdReaderArchTest` carries a ROW per id saying what each one's reach is, with
+ * `full`'s reading zero. Lowering the floor was measured rather than argued and does not close it —
+ * the reach it would buy is `'ful'` and `'fu'`, which nobody writes; what a reader reaching for a
+ * family question about `full` writes is `str_contains($id, 'full')`, a WHOLE id, exempt here and
+ * equivalent to `===` for as long as `full` is the only id carrying that word.
+ *
+ * @param  list<string>  $ids
+ * @return list<array{line: int, site: string, literal: string}>
+ */
+function formatIdPrefixTests(string $source, array $ids): array
+{
+    return array_values(array_filter(
+        prefixMatchCalls($source),
+        static function (array $call) use ($ids): bool {
+            $needle = trim($call['literal'], '/\\^$|()[]{}*+?# \'"');
+
+            if (strlen($needle) < 4 || in_array($needle, $ids, true)) {
+                return false;
+            }
+
+            foreach ($ids as $id) {
+                if ($needle !== $id && str_starts_with($id, $needle)) {
+                    return true;
+                }
+            }
+
+            return false;
+        },
+    ));
+}
+
+/**
+ * {@see formatIdPrefixTests} over a directory, as sorted `relative/path.php::function` strings.
+ *
+ * @param  list<string>  $ids
+ * @return list<string>
+ */
+function formatIdPrefixTestsIn(string $directory, array $ids, string $relativeTo): array
+{
+    return sourceSitesIn(
+        $directory,
+        static fn (string $source): array => array_column(formatIdPrefixTests($source, $ids), 'site'),
+        $relativeTo,
+    );
+}
+
+/**
  * Every ASSOCIATIVE `json_decode` a directory of PHP sources performs, as sorted `relative/path.php::function`
  * strings — the scan behind the one-reader rule ({@see JsonValue}).
  *
@@ -3149,7 +3450,8 @@ function assertWarmEqualsCold(callable $before, callable $after, ?callable $engi
 
 /**
  * Register a render callback on the booted exception handler and return the `CallableRef::symbol()` the
- * inferred-handler tier will analyse it under, so a stub engine can be scripted for exactly that key.
+ * inferred-handler tier will analyse it under for a throw of `$exceptionType`, so a stub engine can be
+ * scripted for exactly that key.
  */
 function registerRenderCallback(Closure $callback, string $exceptionType): string
 {
@@ -3165,8 +3467,36 @@ function registerRenderCallback(Closure $callback, string $exceptionType): strin
         null,
         $function->getStartLine(),
         $function->getParameters()[0]->getName(),
-        $exceptionType,
+        ReceivedException::byRenderCallbacks($exceptionType),
     ))->symbol();
+}
+
+/**
+ * Register a `respond()` callback on the booted exception handler and return the `CallableRef::symbol()` the
+ * finalizer analyses it under for `$exceptionType`, so a stub engine can be scripted for exactly that key.
+ */
+function registerRespondCallback(callable $callback, string $exceptionType): string
+{
+    /** @var Handler $handler */
+    $handler = app(ExceptionHandler::class);
+    $handler->respondUsing($callback);
+
+    return (new HandlerReflector($handler))->respondCallback()?->ref($exceptionType)->symbol() ?? '';
+}
+
+/**
+ * Register an exception-map entry on the booted exception handler — `map($from, $to)` exactly as an
+ * application writes it — and return the `CallableRef::symbol()` the translator analyses its mapper under
+ * for a throw of `$thrown`, so a stub engine can be scripted for exactly that key. Empty for an entry with
+ * nothing to analyse: a class-string target, or a mapper with no source.
+ */
+function registerExceptionMap(Closure|string $from, Closure|string|null $to, string $thrown): string
+{
+    /** @var Handler $handler */
+    $handler = app(ExceptionHandler::class);
+    $handler->map($from, $to);
+
+    return (new HandlerReflector($handler))->mappingFor($thrown)?->ref($thrown)?->symbol() ?? '';
 }
 
 /**
@@ -4310,4 +4640,164 @@ function packageOwnedExtension(string $package): DocumentTransformer
 
     /** @var DocumentTransformer */
     return new $class;
+}
+
+/**
+ * The `payment` object {@see TaggedBranches} splits in its tests: tagged by `method`, one member only `card`
+ * keeps, one on every branch, and the annotations and bounds that stay on the object.
+ *
+ * @return array<string, mixed>
+ */
+function taggedObject(): array
+{
+    return [
+        'type' => 'object',
+        'description' => 'How the order is paid.',
+        'minProperties' => 1,
+        'properties' => [
+            'method' => ['type' => 'string', 'enum' => ['card', 'transfer'], 'description' => 'Which way.', 'x-enum-varnames' => ['Card', 'Transfer']],
+            'number' => ['type' => 'string'],
+            'note' => ['type' => 'string'],
+        ],
+        'required' => ['note'],
+    ];
+}
+
+/**
+ * A request body holding `$payment`.
+ *
+ * @param  array<string, mixed>  $payment
+ * @return array<string, mixed>
+ */
+function taggedBody(array $payment): array
+{
+    return ['type' => 'object', 'properties' => ['payment' => $payment, 'total' => ['type' => 'integer']], 'required' => ['payment']];
+}
+
+/** The partition of {@see taggedObject()}. */
+function paymentVariants(bool $admitsEmpty = false): TaggedVariants
+{
+    return new TaggedVariants('payment', 'method', ['number'], [
+        ['value' => 'card', 'name' => 'PaymentCard', 'members' => ['number'], 'required' => ['number']],
+        ['value' => 'transfer', 'name' => 'PaymentTransfer', 'members' => [], 'required' => []],
+    ], $admitsEmpty);
+}
+
+/** The body's partition in {@see taggedSet()}: `t` switches `x` on. */
+function taggedSetVariants(): TaggedVariants
+{
+    return new TaggedVariants('', 't', ['x'], [
+        ['value' => 'a', 'name' => 'A', 'members' => ['x'], 'required' => ['x']],
+        ['value' => 'b', 'name' => 'B', 'members' => [], 'required' => []],
+    ]);
+}
+
+/**
+ * A rule set with two tagged objects, the body by `t` and `o` by `k`, their presence rules moved onto the
+ * partitions and the rules as written kept beside as the merged reading.
+ */
+function taggedSet(): RuleSet
+{
+    $rules = static fn (string ...$names): array => array_map(static fn (string $name): ValidationRule => ValidationRule::of($name), $names);
+
+    return new RuleSet(
+        ['t' => $rules('in'), 'x' => $rules('string'), 'o' => $rules('array'), 'o.k' => $rules('in'), 'o.y' => $rules(), 'note' => $rules('string')],
+        [taggedSetVariants(), new TaggedVariants('o', 'k', ['y'], [
+            ['value' => 'c', 'name' => 'OC', 'members' => ['y'], 'required' => ['y']],
+            ['value' => 'd', 'name' => 'OD', 'members' => [], 'required' => []],
+        ])],
+        ['t' => $rules('required', 'in'), 'x' => $rules('required_if', 'string'), 'o' => $rules('array'), 'o.k' => $rules('required', 'in'), 'o.y' => $rules('required_if'), 'note' => $rules('string')],
+    );
+}
+
+/**
+ * One field's rule names, pipe-joined, for a dataset to read at a glance.
+ *
+ * @param  list<ValidationRule>  $rules
+ */
+function taggedSetNames(array $rules): string
+{
+    return implode('|', array_map(static fn (ValidationRule $rule): string => $rule->name, $rules));
+}
+
+/**
+ * A rule set written as Laravel pipe strings, as {@see TaggedRules} splits it.
+ *
+ * @param  array<string, string>  $fields
+ */
+function taggedRules(array $fields): RuleSet
+{
+    return TaggedRules::split(new RuleSet(array_map(RuleParsing::tokens(...), $fields)));
+}
+
+/**
+ * The branches a split recorded, one line each — `value: members | required` — for a dataset to read at a
+ * glance.
+ *
+ * @return list<string>
+ */
+function taggedBranchLines(TaggedVariants $variants): array
+{
+    return array_map(
+        static fn (array $branch): string => sprintf('%s: %s | %s', $branch['value'], implode(',', $branch['members']), implode(',', $branch['required'])),
+        $variants->branches,
+    );
+}
+
+/**
+ * Two verdicts on one body: whether Laravel's validator accepts it under the FormRequest's own rules, and
+ * whether the request component the build published for that FormRequest does — `$ref`s into the rest of the
+ * document resolved, so a body published as a union of components is judged as the union.
+ *
+ * @param  class-string<FormRequest>  $request
+ * @param  array<string, mixed>  $body
+ * @param  callable(Router): void  $routes
+ * @param  callable(): TypeEngine  $engine
+ * @return array{0: bool, 1: bool}
+ */
+function requestRuleVerdicts(string $request, array $body, callable $routes, callable $engine): array
+{
+    // A JSON `{}` reaches Laravel as an empty array, so an empty object is written as one and read as the other.
+    /** @var array<string, mixed> $data */
+    $data = json_decode((string) json_encode($body), true, flags: JSON_THROW_ON_ERROR);
+    $rules = $request::create('/', 'POST', $data)->rules();
+    $accepted = Illuminate\Support\Facades\Validator::make($data, $rules)->passes();
+
+    // Decoded as objects: an unconstrained `{}` property decoded to an array would stop being a schema.
+    $document = json_decode((new UirEmitter)->emit(localityBuild($routes, $engine)->document), flags: JSON_THROW_ON_ERROR);
+    $validator = new Validator;
+    $validator->resolver()?->registerRaw($document, 'https://docuccino.test/document.json');
+    $component = (object) ['$ref' => 'https://docuccino.test/document.json#/components/schemas/'.Fqcn::short($request)];
+    $documented = $validator->validate(json_decode((string) json_encode($body)), $component)->isValid();
+
+    return [$accepted, $documented];
+}
+
+/**
+ * {@see requestRuleVerdicts()} for the excluded-fields fixture.
+ *
+ * @param  array<string, mixed>  $body
+ * @param  callable(Router): void  $routes
+ * @param  callable(): TypeEngine  $engine
+ * @return array{0: bool, 1: bool}
+ */
+function excludedFieldsVerdicts(array $body, callable $routes, callable $engine): array
+{
+    return requestRuleVerdicts(StorePaymentRequest::class, $body, $routes, $engine);
+}
+
+/**
+ * The property schemas an Eloquent model publishes, its columns read by the engine's own reflection of
+ * the class — the `@property` tags a stub would only restate.
+ *
+ * @return array<string, mixed>
+ */
+function modelProperties(string $model): array
+{
+    $components = new ComponentRegistry;
+    $engine = new StubTypeEngine(classes: [$model => (new ClassMetadataFactory)->forClass(new ClassRef($model))]);
+    (new SchemaConverter([new ModelSchema, ...DefaultTypeMappers::all()], $engine, $components))->toSchema(new ClassT($model));
+
+    /** @var array<string, mixed> */
+    return $components->schemas()[Fqcn::short($model)]['properties'] ?? [];
 }

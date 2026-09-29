@@ -1,6 +1,4 @@
 {
-  "$schema": "https://spec.docuccino.app/uir/1.0/schema.json",
-  "uir": "1.0.0",
   "openapi": "3.2.0",
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.2/dialect/base",
   "info": {
@@ -263,6 +261,7 @@
                         "layer": "integration",
                         "fields": [
                           "properties",
+                          "required",
                           "type"
                         ],
                         "source": {
@@ -278,7 +277,77 @@
                     "message": {
                       "type": "string"
                     }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "x-docuccino": {
+              "id": "res:v1:xvkbdjhw7r7yaybf",
+              "provenance": [
+                {
+                  "producer": "integration:implicit-response",
+                  "layer": "integration",
+                  "fields": [
+                    "component",
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/AppFilteredListController.php",
+                    "line": 29,
+                    "symbol": "implicit:validated-request"
                   }
+                }
+              ],
+              "facts": {
+                "component": "UnprocessableEntity"
+              }
+            },
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "integration:implicit-response",
+                        "layer": "integration",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/AppFilteredListController.php",
+                          "line": 29,
+                          "symbol": "implicit:validated-request"
+                        }
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "errors": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message",
+                    "errors"
+                  ]
                 }
               }
             }
@@ -291,12 +360,13 @@
     "document": {
       "id": "doc:default",
       "configHash": "ea6bfd93e3167e0c49a4fb2af52f7fc478b1574f5b39a144841391e149f7df73",
-      "contentHash": "bdfe48087482fb995316c07893d3eed85c1bde73f3ef0395f0061a213c80a009"
+      "contentHash": "9e6db1e4358edc377dcad104cca85b42d2d0446801d6c233cc069756a8772c3c"
     },
     "generator": {
       "name": "docuccino/laravel",
       "version": "0.18.0",
-      "specVersion": "1.0.0"
+      "specVersion": "2.0.0",
+      "schema": "https://spec.docuccino.app/uir/2.0/schema.json"
     }
   }
 }

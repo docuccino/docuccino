@@ -1,5 +1,8 @@
 ---
 title: Responses
+head:
+  - tag: title
+    content: 'OpenAPI Response Schemas from Laravel Resources | Docuccino'
 description: Document success responses from your action return types — resources, models, enums, JsonResponse payloads, status codes, HTML views, file downloads, streams, and 204s.
 ---
 
@@ -66,6 +69,78 @@ component it references is defined once and shared. Control or disable the wrapp
 Each response's `description` is the standard reason phrase for its status — `200 OK`,
 `201 Created`, `202 Accepted`, `204 No Content`, and so on — so you don't hand-write them. Responses
 are emitted in ascending status order, whatever order your return paths appear in.
+
+### Top-level metadata from `with()`
+
+Anything a resource's `with()` method returns is documented beside `data`, just as Laravel sends it.
+The method is read like `toArray()`, so defining it once on a base resource documents it on every
+endpoint that returns a subclass:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Http/Resources/ApiResource.php
+	abstract class ApiResource extends JsonResource
+	{
+	    public function with(Request $request): array
+	    {
+	        return [
+	            'meta' => (object) [],
+	            'build' => (string) config('app.version'),
+	        ];
+	    }
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"schema": {
+	  "type": "object",
+	  "properties": {
+	    "data": { "$ref": "#/components/schemas/InvoiceResource" },
+	    "meta": { "type": "object" },
+	    "build": { "type": "string" }
+	  },
+	  "required": ["data", "meta", "build"]
+	}
+	```
+	</TabItem>
+</Tabs>
+
+An `(object)` cast is documented as the object it builds, here and anywhere else in a response:
+`(object) []` as an empty object, just like `new stdClass`, and `(object) ['self' => $url]` with its
+`self` member. Laravel never filters inside an object, so an empty one is always sent as `{}`, never
+as the `[]` an emptied array becomes.
+
+A member is required when every branch of `with()` returns it, and optional when a branch returns
+less — including a branch that returns `[]`, or one whose keys can't be read, like
+`$request->only([...])`. Unlike `toArray()`, Laravel never filters what `with()` returns, so a
+`when()` member is always sent — as its value, or as `{}` when the condition is false — and is
+documented that way. A `mergeWhen()` in `with()` isn't spliced either, so the members of such a
+`with()` are left undocumented, as are those of a resource that sets the `$with` property instead of
+overriding the method, since the property may be changed at runtime.
+
+As in Laravel, only the resource at the root of the response contributes: a resource nested inside
+another's `toArray()` adds nothing, and its component never carries these members. A resource that
+turns wrapping off is still wrapped under `data` once `with()` adds something, because that is the
+body Laravel sends; where `with()` may add nothing, both bodies are documented.
+
+The same holds for a named collection such as `UserCollection extends ResourceCollection`. One that
+keeps Laravel's `toArray()` is documented as a list of the resource it collects — its `$collects`
+property, or the resource its name points to — and one whose `toArray()` already returns a `data`
+key is documented as that body, since Laravel doesn't wrap it a second time. With wrapping off, a
+named collection is documented both bare and wrapped under `data`, because the collection may hold a
+paginator, whose `links` and `meta` make Laravel wrap it.
+
+A list built by `UserResource::collection()` or `->toResourceCollection(UserResource::class)` is the
+collection the resource's `newCollection()` returns, so a base resource that overrides it to hand its
+whole family one collection class documents that class's `with()` on every such list, paginated or
+not. On a paginated list the members sit beside `data`, `links` and `meta`, and a `meta` object from
+`with()` extends the pagination `meta`, as Laravel merges it. A key that the pagination `meta` also
+sends, such as `total`, is merged by Laravel into an array of both values, and is documented that way.
+An override with no return type, written the way Laravel writes its own, is documented as the class its
+body builds with `new`. If it builds different classes on different paths, it is documented as
+Laravel's own collection.
 
 ### Union return types
 
@@ -225,11 +300,9 @@ you passed — the `JsonResponse` wrapper itself is never rendered as a generic 
 paths with distinct statuses become distinct responses on the same operation:
 
 ```php
-public function store(StoreInvoiceRequest $request): JsonResponse
+public function accept(Invoice $invoice): JsonResponse
 {
-    $invoice = Invoice::create($request->validated());
-
-    return response()->json(new InvoiceResource($invoice), 201); // → 201 with the resource body
+    return response()->json(['status' => 'accepted', 'id' => $invoice->id], 202); // → 202 with that body
 }
 ```
 
@@ -274,21 +347,60 @@ Literal values in the payload survive as JSON Schema `const`s, so `'accepted'` i
 only value that status returns. Two return paths that share a status contribute one response whose
 schema is the union of their shapes.
 
-A status computed at runtime (not a literal) falls back to `200`; pin it with
-[`#[Response]`](/laravel/reference/attributes/#response) when you need an exact code.
+A status that chooses between codes gets a response for each of them, the same as two return paths:
+
+```php
+return response()->json(['ok' => $healthy], $healthy ? 200 : 503); // → 200 and 503, same body
+```
+
+A status Docuccino can't read at all, such as `->setStatusCode($upstream->status())`, is not documented
+under a code the endpoint may never send. Its body goes under `default` ("any status") and an
+`inferred-response.status-unread` info diagnostic names the action. Name the codes it sends with
+[`#[Response(status: …)]`](/laravel/reference/attributes/#response): each status you name below `400` takes
+the inferred body, and `default` goes away. A helper that takes the status as a parameter
+(`$this->ok($data, 201)`) is read at each call, and a call that passes none sends the parameter's default.
 
 ### Automatic `201 Created`
 
 Returning a resource wrapped directly around a freshly created model — `new InvoiceResource(Invoice::create(...))`,
 `InvoiceResource::make(Invoice::create(...))`, or the same around `Invoice::forceCreate(...)` — is
-documented as `201 Created` automatically, matching Laravel's own behavior: those factory methods set
+documented as `201 Created` automatically, whether you return the resource or its `->response()`. This
+matches Laravel's own behavior: those factory methods set
 `wasRecentlyCreated`, so `ResourceResponse::calculateStatus()` answers `201`. Only that direct
 create-wrap is detected; create into a variable first, or use `#[Response]`, when you need the code to be
 explicit. An explicit `201` always wins.
 
+### A resource's own response
+
+Laravel's way to send a resource with a status of your choosing is to ask the resource for its response
+and set the status on that. Docuccino documents the resource body either way: `->response()`,
+`->toResponse($request)`, and anything you chain onto them publish exactly what returning the resource
+bare publishes, including its `data` wrapper and the members its `with()` adds.
+
+```php
+public function store(StoreInvoiceRequest $request): JsonResponse
+{
+    $invoice = $this->invoices->issue($request->validated());
+
+    return (new InvoiceResource($invoice))->response()->setStatusCode(201); // → 201 with the resource body
+}
+```
+
+The status is the one the server sends. A `->setStatusCode()` you chain is the status. Without one, the
+resource decides as it does for a bare return, so `(new InvoiceResource(Invoice::create(...)))->response()`
+is still an [automatic `201`](#automatic-201-created). A collection works the same way:
+`InvoiceResource::collection($invoices->paginate())->response()` gets the pagination envelope.
+
+A resource that overrides `toResponse()` has written its own response, and the router sends that override
+even when you return the resource bare. So Docuccino documents the body and status the override builds,
+not the resource's `toArray()` shape. Each `return` in the override is its own response. A guard that
+answers `410` and otherwise returns `parent::toResponse($request)` is documented as both the `410` and
+the resource envelope.
+
 ### Spatie Data success status
 
 A [Spatie Data](/laravel/packages/spatie-data/) class returned from a `POST` documents **`201 Created`**,
+returned bare or through `$data->toResponse($request)`,
 from Spatie's own `ResponsableData` default; any other verb documents `200`. A class that **overrides**
 `calculateResponseStatus()` documents that instead — `return 201;`, a class constant like
 `Response::HTTP_CREATED`, or a conditional whose arms are *all* constants

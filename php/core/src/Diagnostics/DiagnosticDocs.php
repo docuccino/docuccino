@@ -24,6 +24,7 @@ final class DiagnosticDocs
      * @var array<string, string>
      */
     private const SECTIONS = [
+        'arazzo' => 'arazzo-workflow-descriptions',
         'attribute' => 'attributes',
         'authorization' => 'authorization',
         'components' => 'routes-operations-and-names',
@@ -52,10 +53,12 @@ final class DiagnosticDocs
         'rate-limit' => 'package-integrations',
         'route' => 'routes-operations-and-names',
         'route-binding' => 'routes-operations-and-names',
+        'route-constraint' => 'routes-operations-and-names',
         'security' => 'security-schemes',
         'server' => 'servers',
         'spatie-data' => 'package-integrations',
         'tags' => 'routes-operations-and-names',
+        'workflow' => 'workflows',
         'validation' => 'responses-recovered-from-your-code',
         'versioning' => 'api-versions',
         'webhook' => 'webhooks',

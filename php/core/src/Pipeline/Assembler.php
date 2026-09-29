@@ -14,6 +14,7 @@ use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
 use Docuccino\Core\Extensions\Document\UirDocumentDraft;
 use Docuccino\Core\Extensions\Schema\ComponentNames;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
+use Docuccino\Core\Extensions\Schema\DiscriminatedUnion;
 use Docuccino\Core\Identity\ContentHasher;
 use Docuccino\Core\Identity\IdentityGenerator;
 use Docuccino\Core\Overlay\OverlayApplier;
@@ -22,6 +23,7 @@ use Docuccino\Core\Provenance\ClassNames;
 use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
 use Docuccino\Core\Provenance\SourcePathResolver;
+use Docuccino\Core\Spec\UirSpec;
 use Throwable;
 
 /**
@@ -39,10 +41,6 @@ use Throwable;
  */
 final class Assembler
 {
-    private const SCHEMA_URL = 'https://spec.docuccino.app/uir/1.0/schema.json';
-
-    private const UIR_VERSION = '1.0.0';
-
     private const OPENAPI_VERSION = '3.2.0';
 
     private const DIALECT = 'https://spec.openapis.org/oas/3.2/dialect/base';
@@ -86,8 +84,6 @@ final class Assembler
         $componentSchemas = $this->buildComponents($components);
 
         $doc = [
-            '$schema' => self::SCHEMA_URL,
-            'uir' => self::UIR_VERSION,
             'openapi' => self::OPENAPI_VERSION,
             'jsonSchemaDialect' => self::DIALECT,
             'info' => $document->info,
@@ -150,11 +146,27 @@ final class Assembler
         $doc = $this->publishSchemaNames($doc, $components->schemaRenames());
         $doc = ComponentNames::rename($doc, $responseRenames, 'responses');
         $doc = $this->publishSecuritySchemeNames($doc, $schemeRenames);
+
+        // Over every finished component and under the published names, so whether a union is
+        // discriminated is a function of its members' bodies and never of which one a route met first.
+        [$doc, $undiscriminated] = DiscriminatedUnion::settle($doc);
+        foreach ($undiscriminated as $diagnostic) {
+            $diagnostics[] = $diagnostic;
+        }
+
         $doc = self::orderComponents($doc);
 
         $doc['x-docuccino'] = [
             'document' => ['id' => $documentId, 'configHash' => $document->hash()],
-            'generator' => ['name' => $this->generatorName, 'version' => $generatorVersion, 'specVersion' => self::UIR_VERSION],
+            // The spec version and the schema URL live here rather than at the root, where the OpenAPI
+            // Object admits neither: this subtree is excluded from `contentHash`, so a spec bump can
+            // never dirty a committed diff.
+            'generator' => [
+                'name' => $this->generatorName,
+                'version' => $generatorVersion,
+                'specVersion' => UirSpec::VERSION,
+                'schema' => UirSpec::schemaUrl(),
+            ],
         ];
 
         foreach ($components->diagnostics() as $diagnostic) {

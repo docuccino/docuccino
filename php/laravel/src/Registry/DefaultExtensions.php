@@ -32,11 +32,14 @@ use Docuccino\Laravel\Extensions\ImplicitResponsesExtension;
 use Docuccino\Laravel\Extensions\InferredResponsesExtension;
 use Docuccino\Laravel\Extensions\PathParametersExtension;
 use Docuccino\Laravel\Extensions\RecordedExamplesExtension;
+use Docuccino\Laravel\Extensions\RequestHeadersExtension;
 use Docuccino\Laravel\Extensions\RouteServersExtension;
 use Docuccino\Laravel\Extensions\SecurityExtension;
+use Docuccino\Laravel\Extensions\SignedRouteParametersExtension;
 use Docuccino\Laravel\Extensions\UnmatchedIgnoredResponsesExtension;
 use Docuccino\Laravel\Extensions\ViewMediaType;
 use Docuccino\Laravel\Extensions\ViewTypeToSchema;
+use Docuccino\Laravel\Integrations\FormRequest\CopiedInputParameters;
 use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
 use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsIntegration;
 use Docuccino\Laravel\Integrations\InferredHandler\InferredHandlerIntegration;
@@ -46,6 +49,8 @@ use Docuccino\Laravel\Routing\LaravelRouteResolver;
 use Docuccino\Laravel\Support\GatePoliciesDigestContributor;
 use Docuccino\Laravel\Support\LeakageDigestContributor;
 use Docuccino\Laravel\Versioning\ApiVersionTransformer;
+use Docuccino\Laravel\Workflows\WorkflowAssembly;
+use Docuccino\Laravel\Workflows\WorkflowStepExtension;
 
 /**
  * The built-in extension set, dogfooding the public API: everything here implements only the core
@@ -74,7 +79,11 @@ final class DefaultExtensions
         return [
             LaravelRouteResolver::class,
             PathParametersExtension::class,
+            SignedRouteParametersExtension::class,
             AttributeParametersExtension::class,
+            // Runs last in the security phase, so every declared header and every scheme the operation
+            // requires are there for it to defer to.
+            RequestHeadersExtension::class,
             AttributeRequestBodyExtension::class,
             InferredResponsesExtension::class,
             AttributeResponsesExtension::class,
@@ -119,6 +128,9 @@ final class DefaultExtensions
             // FormRequest / inline validate() request documentation; the rule vocabulary registers
             // through the same chain.
             ValidationRequestExtension::class,
+            // A key the FormRequest copies from a header or query value: its rules go on that parameter,
+            // after the request-header reads have published every header the code may publish.
+            CopiedInputParameters::class,
             ...ValidationIntegration::transformers(),
             // Reflection-rich enum schemas (backing values, #[CaseDescription]) — must sit ahead of the
             // core case-names-only mapper.
@@ -148,6 +160,11 @@ final class DefaultExtensions
             // lints, so they read what will be emitted. A document declaring no `api_version` is not a
             // version and this moves nothing.
             ApiVersionTransformer::class,
+            // Records what each operation says about the workflows it takes part in, and reconciles the
+            // sequence once the whole route set has been seen. One registration each: the observation
+            // rides the operation fragment, so a warm build assembles the same workflows a cold one does.
+            WorkflowStepExtension::class,
+            WorkflowAssembly::class,
             // The document lints. All diagnostics-only, and all pinned to Priorities::LAST so they read
             // what will be emitted — this list's order is not what settles that, the attribute is.
             SensitiveFieldLint::class,

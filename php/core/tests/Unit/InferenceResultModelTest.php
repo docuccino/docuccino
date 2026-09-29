@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\CallableRef;
+use Docuccino\Core\Inference\CallCondition;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\ComponentDeclaration;
 use Docuccino\Core\Inference\DType\ScalarT;
@@ -79,6 +81,7 @@ it('round-trips class metadata with its properties, summary and dependency files
         properties: [
             new PropertyMetadata('id', ScalarT::int(), 'The invoice id.', '17', new SourceLocation('/app/Data/Invoice.php', 9)),
             new PropertyMetadata('note', ScalarT::string()),
+            new PropertyMetadata('memo', ScalarT::string(), initialised: false),
         ],
         summary: 'An invoice.',
         dependencyFiles: ['/app/Data/Invoice.php', '/app/Data/Invoice.php'],
@@ -94,7 +97,10 @@ it('round-trips class metadata with its properties, summary and dependency files
         ->and($decoded->properties[0]->location?->line)->toBe(9)
         // The optional members stay ABSENT rather than serializing as nulls, so two runs of the same
         // class produce the same bytes.
-        ->and($decoded->properties[1]->toArray())->toBe(['name' => 'note', 'type' => ScalarT::string()->toArray()]);
+        ->and($decoded->properties[1]->toArray())->toBe(['name' => 'note', 'type' => ScalarT::string()->toArray()])
+        // `false` is an answer — a constructor path completes without the property — and not an absence.
+        ->and($decoded->properties[2]->initialised)->toBeFalse()
+        ->and($decoded->properties[1]->initialised)->toBeNull();
 });
 
 it('omits an empty summary and dependency set from class metadata entirely', function (): void {
@@ -120,9 +126,10 @@ it('degrades malformed class metadata around the properties it can still read', 
 });
 
 it('degrades a malformed property type and location to an unknown type and no location', function (): void {
-    $decoded = PropertyMetadata::fromArray(['name' => 'id', 'type' => 'nope', 'location' => 'nope']);
+    $decoded = PropertyMetadata::fromArray(['name' => 'id', 'type' => 'nope', 'location' => 'nope', 'initialised' => 'yes']);
 
     expect($decoded->type)->toBeInstanceOf(UnknownT::class)
+        ->and($decoded->initialised)->toBeNull()
         ->and($decoded->location)->toBeNull()
         ->and($decoded->summary)->toBeNull();
 });
@@ -229,4 +236,45 @@ it('round-trips a source location carrying a byte offset', function (): void {
     expect($payload)->toBe(['file' => '/app/a.php', 'line' => 4, 'pos' => 91])
         ->and(SourceLocation::fromArray($payload)->toArray())->toBe($payload)
         ->and(SourceLocation::fromArray(['file' => 9])->file)->toBe('');
+});
+
+it('round-trips the parameter a return hands back and the calls proven at it, and omits both where there are none', function (): void {
+    $site = new ReturnSite(
+        ScalarT::string(),
+        new SourceLocation('/app/x.php', 3),
+        returnsParameter: 'response',
+        conditions: [
+            new CallCondition('request', 'is', ['api/*', 'hooks/*'], false),
+            new CallCondition('response', 'getStatusCode', [], 419),
+        ],
+    );
+    $payload = $site->toArray();
+
+    expect(ReturnSite::fromArray($payload)->toArray())->toBe($payload)
+        ->and(ReturnSite::fromArray($payload)->conditions[1]->value)->toBe(419)
+        // Absent keys, not empty ones, so an analysis carrying neither serializes as it always did.
+        ->and((new ReturnSite(ScalarT::string(), new SourceLocation('')))->toArray())->toBe(['type' => ScalarT::string()->toArray(), 'location' => (new SourceLocation(''))->toArray()]);
+});
+
+it('carries both facts onto a declaration made further out on the call path', function (): void {
+    $site = new ReturnSite(ScalarT::string(), new SourceLocation('/app/x.php', 3), returnsParameter: 'response', conditions: [new CallCondition('request', 'is', ['api/*'], true)]);
+    $moved = $site->withComponent(new ComponentDeclaration('Problem', 'App\\Renderer::render'));
+
+    expect($moved->returnsParameter)->toBe('response')
+        ->and($moved->conditions)->toBe($site->conditions);
+});
+
+it('degrades a malformed call condition around the members it can still read', function (): void {
+    // A scalar coerces, as everywhere else in the model; anything that is not one leaves the member empty.
+    $decoded = CallCondition::fromArray(['parameter' => 1, 'method' => [], 'arguments' => ['api/*', 3], 'value' => ['x']]);
+
+    expect($decoded->toArray())->toBe(['parameter' => '1', 'method' => '', 'arguments' => ['api/*'], 'value' => false]);
+});
+
+it('keys a callable analysed for every reachable return apart from one analysed for the first', function (): void {
+    $first = new CallableRef('/app/bootstrap.php', null, null, 12, 'e', 'App\\Exceptions\\Missing');
+    $every = new CallableRef('/app/bootstrap.php', null, null, 12, 'e', 'App\\Exceptions\\Missing', narrowToEvery: true);
+
+    expect($every->symbol())->not->toBe($first->symbol())
+        ->and($every->target())->toBe($first->target());
 });

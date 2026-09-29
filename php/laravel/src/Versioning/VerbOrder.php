@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Versioning;
 
+use Docuccino\Attributes\Versioning\AddedEnumValue;
+use Docuccino\Attributes\Versioning\AddedOperation;
 use Docuccino\Attributes\Versioning\MadeRequestFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldRequired;
+use Docuccino\Attributes\Versioning\RemovedEnumValue;
 use Docuccino\Attributes\Versioning\RemovedResponseField;
 use Docuccino\Attributes\Versioning\RenamedParameter;
 use Docuccino\Attributes\Versioning\RenamedRequestField;
@@ -30,12 +33,22 @@ use Docuccino\Laravel\Support\ParameterLocations;
  * last and every other verb sees the spelling it was written against, and the rename re-spells
  * `properties` and `required` together at the end.
  *
- * A removal is the one verb that names a field the code does NOT spell, so that sentence does not
- * cover it — and it still goes before the rename, for the other half of the same reason. A removal
- * PUTS a member back, and where it lands is counted against the names already standing
- * ({@see MemberOrder}); run the rename first and that count is taken against names this change itself
- * invented, so the position of a re-added field would be a function of another of the change's own
- * verbs. Run it before, and every insertion is counted against the schema the CODE publishes.
+ * The two verbs that name something the code does NOT spell — a removed field and a removed enum
+ * value — are not covered by that sentence, and they still go before the rename. A removal PUTS a
+ * member back, and where it lands is counted against the names already standing ({@see MemberOrder});
+ * run the rename first and that count is taken against names this change itself invented, so the
+ * position of a re-added field would be a function of another of the change's own verbs. Run it
+ * before, and every insertion is counted against the schema the CODE publishes.
+ *
+ * The value-set verbs move no name at all — a value is not a key, and the enum a rename could collide
+ * with is a class rather than a field — so nothing orders them against the renames but the rule itself,
+ * which is the reason to have stated it as a rule.
+ *
+ * **After even the rename goes the operation removal**, which is the one verb that deletes rather than
+ * edits. Every other verb names a node this change may also be deleting, and one that ran afterwards
+ * would find its target gone and report a declaration that is perfectly correct as rotted — a report
+ * about the change's own doing. Run it last and every other verb sees the document the CODE publishes,
+ * which is the same sentence the rename's rule is, one level up.
  *
  * The rule holds unchanged for the renames that reach a REQUEST body and a parameter, and it holds for
  * the same reason rather than by extension. `#[RenamedRequestField]` renames a property of the request
@@ -72,7 +85,7 @@ final class VerbOrder
      * legible in the file that owns it.
      *
      * @param  list<Diagnostic>  $diagnostics
-     * @return list<VersionVerb|OperationVerb>
+     * @return list<VersionVerb|OperationVerb|OperationSetVerb>
      */
     public static function read(AttributeSet $attributes, string $class, array &$diagnostics): array
     {
@@ -94,6 +107,14 @@ final class VerbOrder
             $verbs[] = self::removal($declaration, $class, $diagnostics);
         }
 
+        foreach ($attributes->all(AddedEnumValue::class) as $declaration) {
+            $verbs[] = self::enumValue($declaration->enum, $declaration->value, false, '#[AddedEnumValue]', $class, $diagnostics);
+        }
+
+        foreach ($attributes->all(RemovedEnumValue::class) as $declaration) {
+            $verbs[] = self::enumValue($declaration->enum, $declaration->value, true, '#[RemovedEnumValue]', $class, $diagnostics, $declaration->name, $declaration->description);
+        }
+
         foreach ($attributes->all(RenamedResponseField::class) as $declaration) {
             $verbs[] = self::rename($declaration, SchemaFacet::Response, '#[RenamedResponseField]', $class, $diagnostics);
         }
@@ -104,6 +125,10 @@ final class VerbOrder
 
         foreach ($attributes->all(RenamedParameter::class) as $declaration) {
             $verbs[] = self::parameterRename($declaration, $class, $diagnostics);
+        }
+
+        foreach ($attributes->all(AddedOperation::class) as $declaration) {
+            $verbs[] = self::addedOperation($declaration, $class, $diagnostics);
         }
 
         return array_values(array_filter($verbs));
@@ -155,6 +180,30 @@ final class VerbOrder
             $removal->required,
             $removal->description,
         );
+    }
+
+    /**
+     * The value-set pair. The class name is normalised like every other word an author typed; the VALUE
+     * is not, because it is not a word but a datum — the set can publish `" draft"` and `"draft"` side
+     * by side, and trimming would silently name the wrong member of it.
+     *
+     * @param  list<Diagnostic>  $diagnostics
+     */
+    private static function enumValue(string $enum, string|int $value, bool $publishedBefore, string $declaration, string $class, array &$diagnostics, string $name = '', string $description = ''): ?EnumValueEdit
+    {
+        $enum = trim($enum);
+
+        if ($enum === '') {
+            $diagnostics[] = VersionChangeCollector::unapplicable(
+                $class,
+                sprintf('one of its %s declarations leaves `enum:` empty', $declaration),
+                'A value belongs to a set, and the set is named by the enum class the document publishes it for.',
+            );
+
+            return null;
+        }
+
+        return new EnumValueEdit($enum, $value, $publishedBefore, $name, $description);
     }
 
     /**
@@ -218,6 +267,29 @@ final class VerbOrder
         }
 
         return new ParameterRenameEdit($in, $pair['from'], $pair['to']);
+    }
+
+    /**
+     * The operation-set verb. Its selector is the whole declaration, so an empty one names nothing and
+     * would otherwise be a `*` by accident — which would take every operation out of the document.
+     *
+     * @param  list<Diagnostic>  $diagnostics
+     */
+    private static function addedOperation(AddedOperation $added, string $class, array &$diagnostics): ?AddedOperationEdit
+    {
+        $operation = trim($added->operation);
+
+        if ($operation === '') {
+            $diagnostics[] = VersionChangeCollector::unapplicable(
+                $class,
+                'one of its #[AddedOperation] declarations names no operation',
+                'Write the operation the way the document names it — `POST /api/things`, an operationId, or either with a `*`.',
+            );
+
+            return null;
+        }
+
+        return new AddedOperationEdit($operation);
     }
 
     /**

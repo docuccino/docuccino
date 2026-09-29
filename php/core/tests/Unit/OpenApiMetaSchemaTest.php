@@ -73,6 +73,18 @@ it('emits JSON that answers to its own OpenAPI meta-schema', function (string $f
     expect(OpenApiMetaSchema::findings($format, $json))->toBe([]);
 })->with(metaSchemaSubjects());
 
+/*
+ * With ids kept, which is what `docuccino:export` writes unless told otherwise — the default the rest of
+ * this file does not emit. Every id lands on a node of its own, so a Reference Object carrying one is
+ * the finding this is here to see: a strict reader refuses the whole document over it.
+ */
+it('emits JSON with ids kept that answers to its own OpenAPI meta-schema', function (string $fixture, string $format): void {
+    $document = UirDocument::fromArray(loadFixture($fixture));
+    $json = json_decode(Formats::emit($format, $document, (new EmitOptions)->withKeepIds())->output, flags: JSON_THROW_ON_ERROR);
+
+    expect(OpenApiMetaSchema::findings($format, $json))->toBe([]);
+})->with(metaSchemaSubjects());
+
 it('emits YAML that answers to its own OpenAPI meta-schema', function (string $fixture, string $format): void {
     [, $yaml] = metaSchemaEmissions($fixture, $format);
 
@@ -108,13 +120,13 @@ it('emits YAML and JSON that agree on the order they write members in', function
 })->with(metaSchemaSubjects());
 
 it('vendors a meta-schema for every OpenAPI format the emitters offer', function (): void {
-    $emitted = array_values(array_filter(
-        Formats::ids(),
-        static fn (string $id): bool => str_starts_with($id, 'openapi-'),
-    ));
+    // The formats that publish PLAIN OpenAPI, read off the column and never off the ids: `full`
+    // emits an OpenAPI description too, and is held to the UIR schema before emission instead.
+    $emitted = Formats::plainOpenApi();
 
     expect(array_keys(OpenApiMetaSchema::SCHEMAS))->toEqualCanonicalizing($emitted)
-        ->and($emitted)->toHaveCount(3);
+        ->and($emitted)->toHaveCount(3)
+        ->and(Formats::publishesPlainOpenApi('full'))->toBeFalse();
 });
 
 it('pins each vendored meta-schema to the dated URI it was fetched from', function (): void {

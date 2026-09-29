@@ -23,7 +23,9 @@ use PHPStan\Node\MethodReturnStatementsNode;
 use PHPStan\Node\ReturnStatementsNode;
 use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\Type\Constant\ConstantIntegerType;
+use PHPStan\Type\ObjectType;
 use PHPStan\Type\Type;
+use Throwable;
 
 /**
  * The 3-layer exception-flow engine (docs/design/inference-embedding.md §6):
@@ -106,7 +108,44 @@ final class ThrowAnalyzer
 
         $raw = $this->analyzeMethod($node, $selfLabel, 0, [], []);
 
-        return $this->dedupe($raw);
+        return $this->deduped($raw);
+    }
+
+    /**
+     * The exceptions a RETURNED expression builds, each at the status a `throw` of that same expression would
+     * state — how a callable that answers with an exception for the framework to render (an exception map's
+     * translation) is read. One grammar for a construction whether it is thrown or handed back: the status
+     * read is {@see statusForType()} over the expression wrapped as the `throw` it stands for, so a local
+     * assigned once, a static factory on the class and a pinned status all read here as they read at a throw.
+     *
+     * Only classes a handler could be handed count: an instantiable `Throwable`. A return typed as an
+     * interface or an abstract base names no class the response could be read from, and answers nothing.
+     * Accumulates across calls, like {@see analyze()} within one body, so {@see diagnostics()} and
+     * {@see visitedFiles()} cover every return read.
+     *
+     * @return list<ThrownException>
+     */
+    public function returned(Node\Expr $expr, Scope $scope, string $selfLabel): array
+    {
+        $frame = $this->frame($selfLabel, $scope, $expr);
+        $thrown = new Node\Expr\Throw_($expr, $expr->getAttributes());
+
+        $results = [];
+        foreach ($scope->getType($expr)->getObjectClassNames() as $class) {
+            if (! $this->reflectionProvider->hasClass($class)) {
+                continue;
+            }
+
+            $reflection = $this->reflectionProvider->getClass($class);
+            if ($reflection->isInterface() || $reflection->isAbstract() || ! $reflection->implementsInterface('Throwable')) {
+                continue;
+            }
+
+            $status = $this->statusForType($reflection->getName(), null, $thrown, $scope, $frame)['status'];
+            $results[] = new ThrownException($reflection->getName(), $status, [$frame], ThrowConfidence::Certain, ThrowDisposition::Signal);
+        }
+
+        return $results;
     }
 
     /**
@@ -160,6 +199,19 @@ final class ThrowAnalyzer
             // and because the callee's own answer says nothing about what the closure it runs throws.
             foreach ($this->applyClosures($node, $scope, $selfLabel, $depth, $visited, $priorChain, $frame) as $result) {
                 $results[] = $result;
+            }
+
+            // A call read off a `@method` tag naming a real method carries the magic method's throws, and
+            // PHP runs the real one ({@see CalleeResolver::shadowedMethod()}), so the point is re-read as
+            // what the analyser would have made of that method: its `@throws`, or an undeclared call.
+            $shadowed = $this->calleeResolver->shadowedMethod($node, $scope);
+            if ($shadowed !== null) {
+                $declared = $shadowed->getThrowType();
+                if ($declared !== null && $declared->isVoid()->yes()) {
+                    continue;
+                }
+                $explicit = $declared !== null;
+                $type = $declared ?? new ObjectType(Throwable::class);
             }
 
             // Layer 2: KnownThrowers registry, keyed on the callee name — for callees we cannot read.
@@ -466,10 +518,13 @@ final class ThrowAnalyzer
     }
 
     /**
+     * One throw per identity, the most confident kept, in status-then-class order — for {@see analyze()} and
+     * for throws gathered by {@see returned()}.
+     *
      * @param  list<ThrownException>  $raw
      * @return list<ThrownException>
      */
-    private function dedupe(array $raw): array
+    public function deduped(array $raw): array
     {
         $byIdentity = [];
         foreach ($raw as $throw) {

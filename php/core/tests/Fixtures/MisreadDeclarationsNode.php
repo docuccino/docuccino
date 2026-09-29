@@ -25,16 +25,20 @@ use Docuccino\Attributes\RuleSchema;
 use Docuccino\Attributes\Security;
 use Docuccino\Attributes\Summary;
 use Docuccino\Attributes\Unauthenticated;
+use Docuccino\Attributes\Versioning\AddedEnumValue;
+use Docuccino\Attributes\Versioning\AddedOperation;
 use Docuccino\Attributes\Versioning\ApiVersionChange;
 use Docuccino\Attributes\Versioning\AppliesTo;
 use Docuccino\Attributes\Versioning\MadeRequestFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldRequired;
+use Docuccino\Attributes\Versioning\RemovedEnumValue;
 use Docuccino\Attributes\Versioning\RemovedResponseField;
 use Docuccino\Attributes\Versioning\RenamedParameter;
 use Docuccino\Attributes\Versioning\RenamedRequestField;
 use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Attributes\Webhook;
+use Docuccino\Attributes\WorkflowStep;
 
 /**
  * Every class-target attribute a TYPE is NOT read for, on one class — the whole
@@ -46,6 +50,8 @@ use Docuccino\Attributes\Webhook;
  */
 #[Description(text: 'A node whose author put an operation\'s declarations on the type.')]
 #[Abilities]
+#[AddedEnumValue]
+#[AddedOperation]
 #[ApiVersionChange]
 #[AppliesTo]
 #[CookieParameter]
@@ -65,6 +71,7 @@ use Docuccino\Attributes\Webhook;
 #[PathParameter]
 #[QueryParameter]
 #[QueryParameter]
+#[RemovedEnumValue]
 #[RemovedResponseField]
 #[RenamedParameter]
 #[RenamedRequestField]
@@ -76,6 +83,7 @@ use Docuccino\Attributes\Webhook;
 #[Summary]
 #[Unauthenticated]
 #[Webhook]
+#[WorkflowStep]
 final class MisreadDeclarationsNode
 {
     public string $name = '';

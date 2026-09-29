@@ -8,10 +8,17 @@ use Docuccino\Core\Canonical\Canonicalizer;
 use Docuccino\Core\Canonical\CanonicalJsonSerializer;
 
 /**
- * `contentHash`: hex SHA-256 over the document's canonical serialization, minus
- * `x-docuccino.generator` and `x-docuccino.diagnostics`, so tool upgrades and diagnostic churn don't
- * dirty committed diffs. `x-docuccino.document.contentHash` is excluded too — a hash can't be one of
- * its own inputs — which keeps the value recomputable and stable across rewrites.
+ * `contentHash`: hex SHA-256 over the document's canonical serialization, minus everything that
+ * describes the TOOL rather than the API — `x-docuccino.generator` and `x-docuccino.diagnostics` — so
+ * tool upgrades and diagnostic churn don't dirty committed diffs. `x-docuccino.document.contentHash`
+ * is excluded too — a hash can't be one of its own inputs — which keeps the value recomputable and
+ * stable across rewrites.
+ *
+ * The spec version and the schema URL are in that set because they live under `generator`, which is
+ * where they belong: every consumer diffing two artifacts across a spec upgrade would otherwise see
+ * every document's hash move and read it as "the API changed". What a spec version ADDS still moves
+ * the hash, because that is content — a workflow list appearing is a real difference. The version
+ * STRING saying which spec was used is not.
  *
  * @internal
  */

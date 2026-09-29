@@ -498,8 +498,21 @@ it('keeps every exception and every mapping pointed at something that still exis
         ->and(CONFIG_REFERENCE_OPAQUE)->not->toBeEmpty()
         ->and(CONFIG_REFERENCE_DOCUMENTED_ONCE)->not->toBeEmpty();
 
+    // A keyed map is a SEGMENT name matched wherever it sits, and the bag it names is not always
+    // top-level — `workflows` is declared at `documents.*.workflows`. So the check is that exactly ONE
+    // declared bag ends in it: a name describing two would wildcard both, silently, in every reader
+    // derived from this list. `examples` names three bags today and `tags` two, so either added here
+    // later has to be addressed as a path first.
+    //
+    // Deduplicated rather than counted, because `$declared` unions the two shipped files and
+    // `documents` is a key in both.
     foreach (CONFIG_REFERENCE_KEYED_MAPS as $map) {
-        expect($declared)->toContain($map);
+        $bags = array_unique(array_filter(
+            $declared,
+            static fn (string $key): bool => $key === $map || str_ends_with($key, '.'.$map),
+        ));
+
+        expect(count($bags))->toBe(1, $map.' names '.count($bags).' bags across the shipped files, not one');
     }
 
     foreach (CONFIG_REFERENCE_OPAQUE as $opaque) {

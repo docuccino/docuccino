@@ -1,0 +1,28 @@
+---
+// The docs live on a subdomain and the sidebar has no entry for the product itself, so without this
+// a reader who arrived from a search has no route back to what Docuccino is. Starlight's own icons
+// are rendered by the default component; this adds the one link they do not cover.
+import Default from '@astrojs/starlight/components/SocialIcons.astro';
+---
+
+<a class="product-link" href="https://docuccino.app">docuccino.app</a>
+<Default><slot /></Default>
+
+<style>
+	@layer starlight.core {
+		.product-link {
+			color: var(--sl-color-gray-3);
+			font-size: var(--sl-text-sm);
+			text-decoration: none;
+			white-space: nowrap;
+		}
+
+		.product-link:hover {
+			color: var(--sl-color-white);
+		}
+
+		/* No breakpoint of its own: Starlight renders this slot twice — in the header's right-group,
+		   which it already hides below md, and again in the mobile menu, where the link SHOULD show.
+		   A media query here would hide it in the one place a phone reader goes looking. */
+	}
+</style>

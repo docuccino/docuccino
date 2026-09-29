@@ -6,8 +6,9 @@ namespace Docuccino\Laravel\Integrations\Eloquent;
 
 /**
  * The entry point for the Eloquent model schema integration. Always on — illuminate/database ships
- * with every Laravel app — contributing the {@see ModelSchema} type mapper and {@see MorphToSchema}
- * (polymorphic morph unions → discriminated `oneOf`).
+ * with every Laravel app — contributing the {@see ModelSchema} type mapper. A union of models, a
+ * `MorphTo` included, is core's union of their components; the morph map reaches the document only
+ * through the parent's type column ({@see MorphTypeValues}).
  */
 final class EloquentIntegration
 {
@@ -18,12 +19,10 @@ final class EloquentIntegration
     {
         return [
             ModelSchema::class,
-            MorphToSchema::class,
             // The route-binding schema resolvers, both gated: a disabled Eloquent integration leaves
             // bound path params to the string fallback rather than typing them off the model.
             EloquentRouteBindingSchema::class,
-            // Environment-digest seam (A4): the polymorphic morph map drives MorphTo discriminators,
-            // so a morph-map change must invalidate the document-level fragment-cache digest.
+            // A morphTo's type column publishes values read out of the morph map, so the map keys the cache.
             MorphMapDigestContributor::class,
         ];
     }

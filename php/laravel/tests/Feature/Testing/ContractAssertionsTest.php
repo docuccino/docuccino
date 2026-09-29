@@ -57,7 +57,7 @@ it('names the file and line a failing path parameter was inferred from', functio
         expect($failure->getMessage())
             ->toContain('path {form}')
             ->toContain('must match the type: integer')
-            ->toContain('from     inference (inference) — workbench/app/Http/Controllers/FormController.php:32');
+            ->toContain('from     inference (inference) — workbench/app/Http/Controllers/FormController.php:35');
 
         return;
     }
@@ -253,7 +253,7 @@ it('refuses a document key nothing configures', function (): void {
 it('reads the document’s own uir export target when the suite names no path', function (): void {
     setBuild('documents.default.export.targets', [
         ['format' => 'openapi-3.2', 'path' => 'docs/openapi.json'],
-        ['format' => 'uir', 'path' => 'docs/api.uir.json'],
+        ['format' => 'full', 'path' => 'docs/api.uir.json'],
     ]);
 
     expect(ApiContract::artifactPath())->toEndWith('/docs/api.uir.json');

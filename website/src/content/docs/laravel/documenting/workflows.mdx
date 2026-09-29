@@ -1,0 +1,369 @@
+---
+title: Workflows
+description: Publish the order your endpoints have to be called in — declared on the operations that take part, exported as an Arazzo description beside your OpenAPI file.
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Placing a paid order takes three calls. Hold the stock, take payment, confirm the order — in that
+order, and the payment needs the hold id the first call handed back. Your OpenAPI document describes
+all three endpoints perfectly and says nothing at all about any of that.
+
+So the sequence lives somewhere else: a README, an onboarding call, a support thread, someone's
+Postman folder. It goes stale the first time you add a step, and the only people who find out are
+the ones whose integration breaks.
+
+A workflow puts that sequence where the rest of your contract already is — on the operations that
+take part in it, published by the same build.
+
+## Declare each step where it happens
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Http/Controllers/CheckoutController.php
+	use Docuccino\Attributes\Response;
+	use Docuccino\Attributes\WorkflowStep;
+	use Illuminate\Http\JsonResponse;
+	use Illuminate\Http\Request;
+
+	final class CheckoutController
+	{
+	    /**
+	     * Hold the order's stock.
+	     *
+	     * Reserves every line for fifteen minutes, so payment can be taken against a basket that will
+	     * still be there when it settles.
+	     */
+	    #[Response(status: 201, type: 'array{id: string, expiresAt: string}', description: 'The hold.')]
+	    #[WorkflowStep('checkout', order: 1, id: 'hold',
+	        description: 'Hold the stock so it is still there when payment settles.',
+	        parameters: ['order' => '$inputs.orderId'],
+	        outputs: ['holdId' => '$response.body#/id'],
+	    )]
+	    public function hold(string $order): JsonResponse { /* … */ }
+
+	    /**
+	     * Take payment for a held order.
+	     */
+	    #[Response(status: 201, type: 'array{id: string, status: string}', description: 'The payment.')]
+	    #[WorkflowStep('checkout', order: 2, id: 'pay',
+	        description: 'Charge the payment method for the held total.',
+	        body: ['hold' => '$steps.hold.outputs.holdId', 'method' => '$inputs.paymentMethod'],
+	        outputs: ['paymentId' => '$response.body#/id'],
+	    )]
+	    public function pay(Request $request): JsonResponse { /* … */ }
+
+	    /**
+	     * Confirm the order.
+	     */
+	    #[Response(status: 200, type: 'array{id: string, status: string}', description: 'The confirmed order.')]
+	    #[WorkflowStep('checkout', order: 3, id: 'confirm',
+	        description: 'Turn the paid hold into a confirmed order.',
+	        parameters: ['order' => '$inputs.orderId'],
+	        body: ['payment' => '$steps.pay.outputs.paymentId'],
+	    )]
+	    public function confirm(string $order): JsonResponse { /* … */ }
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated Arazzo">
+	```yaml
+	workflows:
+	  -
+	    workflowId: checkout
+	    steps:
+	      -
+	        stepId: hold
+	        description: 'Hold the stock so it is still there when payment settles.'
+	        operationId: orders.hold
+	        parameters:
+	          -
+	            name: order
+	            in: path
+	            value: $inputs.orderId
+	        successCriteria:
+	          -
+	            condition: '$statusCode == 201'
+	        outputs:
+	          holdId: '$response.body#/id'
+	      -
+	        stepId: pay
+	        description: 'Charge the payment method for the held total.'
+	        operationId: payments.store
+	        requestBody:
+	          contentType: application/json
+	          payload:
+	            hold: $steps.hold.outputs.holdId
+	            method: $inputs.paymentMethod
+	        successCriteria:
+	          -
+	            condition: '$statusCode == 201'
+	        outputs:
+	          paymentId: '$response.body#/id'
+	      -
+	        stepId: confirm
+	        description: 'Turn the paid hold into a confirmed order.'
+	        operationId: orders.confirm
+	        parameters:
+	          -
+	            name: order
+	            in: path
+	            value: $inputs.orderId
+	        requestBody:
+	          contentType: application/json
+	          payload:
+	            payment: $steps.pay.outputs.paymentId
+	        successCriteria:
+	          -
+	            condition: '$statusCode == 200'
+	```
+	</TabItem>
+</Tabs>
+
+**There is nothing to declare centrally.** No registry, no workflow class, no YAML listing the steps
+in order — three [`#[WorkflowStep]`](/laravel/reference/attributes/#workflowstep) attributes on three
+actions are the whole of it. Docuccino collects what each operation says, sorts by the `order` each
+one stated, and publishes a single `checkout` workflow with three steps in it. A fourth step is a
+fourth attribute, wherever in your app that action lives.
+
+`order` is stated rather than taken from the order your routes are registered in, because a sequence
+that reads itself off route registration reorders itself the day you add an unrelated route. Two
+steps claiming one position is reported with `workflow.order-contested` rather than settled for you.
+
+## What that file is
+
+[Arazzo](https://spec.openapis.org/arazzo/latest.html) is an OpenAPI Initiative specification — a
+companion to OpenAPI built for exactly this: sequences of calls, and the values that travel between
+them. Docuccino emits version 1.1.0.
+
+It matters because the sequence stops being prose. A description that names operations and states
+where each value comes from is something a program can read — validate, drive, or turn into a
+worked example — in a way that a paragraph of instructions never will be. It is a young
+specification, and the tooling around it is still arriving, so the first thing you get from the file
+is the plainest one: the sequence your consumers depend on is now generated from the code that
+implements it, and the build tells you when the two stop agreeing.
+
+## Pass a value from one step to the next
+
+A step's `parameters`, `body` and `outputs` carry Arazzo's runtime expressions, so a later call can
+use what an earlier one returned:
+
+| Expression | What it reads |
+| --- | --- |
+| `$inputs.orderId` | A value the consumer starts the workflow with. |
+| `$steps.hold.outputs.holdId` | An output an earlier step declared. |
+| `$response.body#/id` | A member of this step's own response, named by JSON Pointer. |
+
+Step one declares `outputs: ['holdId' => '$response.body#/id']`, and step two reads
+`$steps.hold.outputs.holdId` in its body. That is the whole handoff, and it is the part a README
+always gets wrong.
+
+**A parameter is named the way the operation declares it, and nothing repeats where it travels.**
+`parameters: ['order' => '$inputs.orderId']` published `in: path` above without being told, because
+the operation already says so:
+
+```json
+"operationId": "orders.hold",
+"parameters": [
+  { "name": "order", "in": "path", "required": true, "schema": { "type": "string" } }
+]
+```
+
+Pass a name the operation doesn't declare and the value is left out with a
+`workflow.parameter-undeclared` warning rather than guessed into a query string.
+
+### The rest of the attribute
+
+| Argument | Default | What it sets |
+| --- | --- | --- |
+| `workflow` | — | The workflow this operation is a step of. Operations sharing the name share the workflow. |
+| `order` | — | Where the step runs, low to high. |
+| `id` | minted from the `operationId` | What later steps call this one, in `$steps.<id>.outputs.<name>`. |
+| `description` | none | What this step does, for the consumer following the sequence. |
+| `parameters` | none | Parameter name → a literal or a runtime expression. |
+| `body` | none | The request payload, members literal or runtime expressions. |
+| `contentType` | `'application/json'` | The media type the body is sent as. |
+| `outputs` | none | Output name → the expression that reads it out of the response. |
+
+Leave `id` out and one is minted from the operation's own `operationId`, with the characters Arazzo
+doesn't take replaced — the routes `imports.store` and `imports.show` give you:
+
+```yaml
+    steps:
+      -
+        stepId: imports_store
+        operationId: imports.store
+        successCriteria:
+          -
+            condition: '$statusCode == 202'
+      -
+        stepId: imports_show
+        operationId: imports.show
+```
+
+That id is a function of the operation, so adding a step renames nothing. Name it yourself when
+another step has to read from it — a name you chose survives a route rename, and reads better in the
+expression.
+
+## The success check writes itself
+
+Every step above carries a `successCriteria` nobody wrote:
+
+```yaml
+        successCriteria:
+          -
+            condition: '$statusCode == 201'
+```
+
+It comes from the status the operation documents. `hold` answers `201`, so a runner that gets
+anything else knows the workflow has stopped, and a step that asserts nothing is a step that can
+never fail.
+
+An operation documenting more than one success status gets no criterion at all — picking between
+them would fail a workflow that had worked — and a `2XX` range is not a status anything can compare
+against. Documenting one success status per operation is what buys the check.
+
+## Add the prose your consumers read
+
+Everything above is published with no configuration at all. What
+[`workflows`](/laravel/reference/configuration/#workflows) adds is the prose and the starting values,
+under the workflow's id in `docuccino.yaml`:
+
+<Tabs>
+	<TabItem label="docuccino.yaml">
+	```yaml
+	documents:
+	  default:
+	    workflows:
+	      checkout:
+	        summary: 'Place a paid order'
+	        description: 'Hold the stock, take payment, then confirm the order.'
+	        inputs:
+	          type: object
+	          properties:
+	            orderId: { type: string }
+	            paymentMethod: { type: string }
+	          required: [orderId, paymentMethod]
+	```
+	</TabItem>
+	<TabItem label="Generated Arazzo">
+	```yaml
+	  -
+	    workflowId: checkout
+	    summary: 'Place a paid order'
+	    description: 'Hold the stock, take payment, then confirm the order.'
+	    inputs:
+	      type: object
+	      properties:
+	        orderId:
+	          type: string
+	        paymentMethod:
+	          type: string
+	      required:
+	        - orderId
+	        - paymentMethod
+	    steps:
+	```
+	</TabItem>
+</Tabs>
+
+`inputs` is a JSON Schema, and it is what documents the `$inputs.orderId` your steps read.
+
+<Aside type="caution" title="Config enriches a workflow; it never creates one">
+An entry naming a workflow no operation declares a step of carries nothing, so it's reported instead
+of published:
+
+```
+[warning] workflow.describes-nothing: The configuration describes a workflow "refunds" that no operation declares a step of, so nothing carries the description.
+  - Config enriches a workflow that #[WorkflowStep] declares; it does not create one. Check the spelling, or retire the entry if the workflow is gone.
+```
+
+Rename a workflow and this is what tells you the prose was left behind.
+</Aside>
+
+## Export it beside your OpenAPI file
+
+Workflows ride in the document, so they are built with everything else.
+[`docuccino:export`](/laravel/reference/commands/#docuccinoexport) writes the Arazzo file as a one-off:
+
+```bash
+php artisan docuccino:export --format=arazzo --out=docs/workflows.arazzo.yaml
+```
+
+Or add it to the document's [`export.targets`](/laravel/reference/configuration/#export), so one build
+writes both artifacts:
+
+```yaml
+documents:
+  default:
+    export:
+      targets:
+        - { format: 'openapi-3.2', path: 'docs/openapi.json' }
+        - { format: 'arazzo', path: 'docs/workflows.arazzo.yaml' }
+```
+
+Arazzo is usually written as YAML, and the path decides: `.yaml` or `.yml` emits YAML, anything else
+JSON. `--yaml` forces it for a one-off export.
+
+**`sourceDescriptions` points at the OpenAPI file you export beside it.** An Arazzo step names an
+operation; the file it names it in is the plain OpenAPI target this document already writes, as a
+path relative to the Arazzo file's own directory. With the two targets above, both in `docs/`, that
+is simply:
+
+```yaml
+sourceDescriptions:
+  -
+    name: openapi
+    url: openapi.json
+    type: openapi
+```
+
+So the pair travels: copy both files anywhere and the reference still resolves. Configure one plain
+OpenAPI target — `openapi-3.2`, `openapi-3.1` or `openapi-3.0` — and there is nothing else to set.
+A document that configures none still gets a source description, because Arazzo requires one, but it
+points at the conventional `openapi.json` rather than at a file you publish, which is worth fixing.
+
+A document that declares no workflows writes **no file at all**, rather than one that fails the
+specification it names:
+
+```
+Wrote nothing for /home/you/orders-api/docs/workflows.arazzo.yaml (arazzo) — see below.
+
+Diagnostics for arazzo:
+  (document)
+    [info] arazzo.no-workflows: This document declares no workflows, so no Arazzo description was written.
+      - An Arazzo description must carry at least one workflow, and a workflow at least one step, so there is no empty form of one to write.
+```
+
+An existing file is left exactly as it was — nothing truncates a committed artifact and calls it a
+success.
+
+The workflows themselves live in the document, under
+[`x-docuccino.workflows`](/uir/#workflows) — the `full` format keeps that member, and the plain
+OpenAPI formats strip the extension along with everything else in it. So the Arazzo file is where a
+consumer of your OpenAPI artifact finds the sequence.
+
+## What Docuccino tells you
+
+A step is checked against the operation it names, on every build:
+
+```
+Diagnostics for default:
+  (document)
+    [warning] workflow.output-undocumented: The step "receipt" of the workflow "receipts" reads its output "url" from `/downloadUrl`, which its operation's response does not document.
+      - Point at a member the response schema describes, or document the member — a workflow output a consumer cannot find in the response is a promise the document does not keep. Nothing is reported where the response describes no shape to contradict.
+    [warning] workflow.parameter-undeclared: The step "receipt" of the workflow "receipts" passes "orderId", which its operation declares no parameter of that name, so nothing says where the value travels and it was left out.
+      - Name the parameter the way the operation declares it — a step supplies a parameter the operation already has, and its location is read from there rather than repeated.
+```
+
+Both of those are the workflow having drifted from the code under it: a response field that was
+renamed, a route parameter that is called `order` and not `orderId`. Reading an output no earlier
+step produces is caught the same way, which is what makes a workflow spread across several
+controllers safe to edit. Every code, how loud it is and what to change is in the
+[diagnostics reference](/laravel/reference/diagnostics/#workflows).
+
+One silence is deliberate. A step whose operation a given document doesn't publish is simply not part
+of that document's workflow, with nothing reported — splitting routes across
+[several documents](/laravel/guides/multiple-documents/) is normal, and a warning there would fire on
+every build.

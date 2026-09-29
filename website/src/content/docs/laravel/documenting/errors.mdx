@@ -1,5 +1,8 @@
 ---
 title: Error responses
+head:
+  - tag: title
+    content: 'Document Laravel API Error Responses in OpenAPI | Docuccino'
 description: Document 4xx and 5xx responses automatically — read out of your real exception handling, with framework defaults behind them.
 ---
 
@@ -37,11 +40,16 @@ problem+json because its renderer says so, and one that answers something else i
 ## Your exception handling (automatic)
 
 Docuccino reads your app's real error handling and documents the exact shape it produces. For each
-exception it looks, in order, for:
+exception it looks, in the order Laravel does, for:
 
 <Steps>
 
-1. **A `render` callback** registered in `bootstrap/app.php` (`->withExceptions(...)`) whose
+1. **The exception's own `render()` method.** One that returns `null` is passed over, as Laravel passes
+   over it.
+
+2. **A `Responsable` exception's `toResponse()`.**
+
+3. **A `render` callback** registered in `bootstrap/app.php` (`->withExceptions(...)`) whose
    first-parameter type the exception matches — a closure (`->render(fn (PaymentException $e) => …)`),
    an invokable renderer (`->render(new ProblemRenderer)`), an `[$object, 'method']` pair, or a
    first-class callable. Callbacks are tried in registration order, which is Laravel's own match
@@ -49,11 +57,14 @@ exception it looks, in order, for:
    provider or a package are found too — Docuccino reflects the booted handler rather than scanning
    `bootstrap/app.php` as text.
 
-2. **The exception's own `render()` method.**
-
-3. **A `Responsable` exception's `toResponse()`.**
-
 </Steps>
+
+Laravel converts a few exceptions before any callback sees them, and Docuccino matches your callbacks
+against the converted one, as Laravel does. A missing model (route–model binding, `findOrFail()`)
+reaches your callbacks as a `NotFoundHttpException`, an authorization denial as an
+`AccessDeniedHttpException` (an `HttpException` where the denial states a status of its own), and an
+expired CSRF token as an `HttpException` carrying `419`. So `->render(fn (NotFoundHttpException $e) => …)`
+is the callback that shapes a missing model's 404; one typed `ModelNotFoundException` never runs.
 
 Each is analyzed with the thrown type in mind, so even a single catch-all handler that branches on
 `instanceof` is documented correctly per exception. Status codes and response bodies are read
@@ -75,7 +86,7 @@ directly from the code:
 	<TabItem label="Generated OpenAPI">
 	```json
 	"402": {
-	  "description": "Error",
+	  "description": "Payment Required",
 	  "content": {
 	    "application/json": {
 	      "schema": {
@@ -93,8 +104,9 @@ directly from the code:
 </Tabs>
 
 Throw this from an action and a `402` response with that body shape is documented. The description is
-the RFC 9110 reason phrase for the status (`401` is `Unauthorized`, `422` is `Unprocessable Entity`, and
-so on); a status without a standard phrase — like `402` here — is documented with a generic `Error`. If a
+the status's registered reason phrase (`401` is `Unauthorized`, `402` is `Payment Required`, `422` is
+`Unprocessable Entity`, and so on); a status the IANA registry does not name, like Laravel's `419`, is
+described by its class, `Client Error` or `Server Error`. If a
 handler is too dynamic to read statically, Docuccino records a diagnostic and publishes what it *did* read;
 where it read nothing at all the response falls to the next tier, which answers with the status alone
 wherever it can see a renderer of yours returning a response for that exception.
@@ -117,7 +129,7 @@ to make readable.
 	<TabItem label="Your code">
 	```php
 	// app/Exceptions/ProblemRenderer.php
-	public function __invoke(ModelNotFoundException $e): JsonResponse
+	public function __invoke(NotFoundHttpException $e): JsonResponse
 	{
 	    // The label is a literal on the call; the payload comes back from a formatter
 	    // resolved at run time, so nothing static can say what shape it takes.
@@ -142,6 +154,119 @@ to make readable.
 </Tabs>
 
 An empty schema hoists nowhere, so nothing is minted into `components` for a shape nobody read.
+
+### Exceptions translated by `map()`
+
+Laravel swaps an exception you register with `$exceptions->map()` for its translation before anything
+renders it, so the exception's own `render()`, your render callbacks and `respond()` all see the
+translation and never the class thrown. Docuccino documents the error the same way: as the exception your
+map translates it to.
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// bootstrap/app.php
+	->withExceptions(function (Exceptions $exceptions): void {
+	    $exceptions->map(PaymentDeclined::class, fn (PaymentDeclined $e) => new HttpException(402, $e->getMessage()));
+	    $exceptions->map(InvoiceMissing::class, AuthorizationException::class);
+	})
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"402": {
+	  "description": "Payment Required",
+	  "content": {
+	    "application/json": {
+	      "schema": {
+	        "type": "object",
+	        "properties": {
+	          "message": { "type": "string" }
+	        },
+	        "required": ["message"]
+	      }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+A route that throws `PaymentDeclined` is documented with the `402` your closure builds, and one that
+throws `InvoiceMissing` with the `403` an authorization denial renders to. Every form `map()` accepts is
+read: a class-string target, a closure beside the class it translates, and a single closure keyed on its
+parameter type. An entry keyed on a parent class translates every subclass thrown, and where several
+entries match, the first one registered wins, as it does in Laravel. Errors the framework raises for you,
+like a route binding's missing model or a failed validation, are translated too.
+
+The status is read from what the closure returns, the same way it is read from a `throw`: a literal
+argument, a local assigned once, or a class that fixes its own status. When the class reads and the status
+does not, the error is documented as that class under the [stand-in status](#when-a-500-is-a-stand-in).
+When the closure's return can't be named at all, or it returns different exceptions on different branches,
+the error stays documented as the exception thrown. Either way the `inferred-handler.too-dynamic`
+diagnostic names the map entry, so you know which one to make readable.
+
+### Errors reshaped in `respond()`
+
+Laravel passes every rendered error through the callback you give `$exceptions->respond()`, and
+Docuccino reads it the same way: whatever the tiers above documented for an exception is what the
+callback receives, and what the callback returns is what gets published.
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// bootstrap/app.php
+	->withExceptions(function (Exceptions $exceptions): void {
+	    $exceptions->respond(fn (Response $response, Throwable $e, Request $request): Response =>
+	        $request->is('api/*') ? ApiProblem::fromResponse($response, $e) : $response);
+	})
+
+	// app/Http/ApiProblem.php
+	public static function fromResponse(Response $response, Throwable $e): JsonResponse
+	{
+	    $status = $response->getStatusCode();
+
+	    return new JsonResponse([
+	        'type' => 'about:blank',
+	        'title' => Response::$statusTexts[$status] ?? 'Error',
+	        'status' => $status,
+	    ], $status, ['Content-Type' => 'application/problem+json']);
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI (an api/* route)">
+	```json
+	"404": {
+	  "description": "Not Found",
+	  "content": {
+	    "application/problem+json": {
+	      "schema": {
+	        "type": "object",
+	        "properties": {
+	          "type":   { "type": "string", "const": "about:blank" },
+	          "title":  { "type": "string" },
+	          "status": { "type": "integer" }
+	        },
+	        "required": ["type", "title", "status"]
+	      }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+A response the callback builds without stating a status keeps the one it was handed, which is what
+`$response->getStatusCode()` reads. A branch that returns `$response` unchanged keeps what was already
+documented; one that first hands `$response` to a helper, which may rewrite it in place, is reported as
+unread rather than assumed unchanged. A branch on `$request->is(…)`, `$request->routeIs(…)` or `$response->getStatusCode()` is
+settled for each route wherever the route alone decides it, so the `api/*` routes above publish
+problem+json and every other route keeps the framework's body. A branch Docuccino cannot settle without a
+live request — `$request->expectsJson()`, or a path pattern that turns on a parameter's value or on
+whether an optional one was given — publishes both answers side by side, since the server really does send either
+one; where both answers use the same media type, that media type gets a schema that constrains nothing
+rather than one mixing the members of two different bodies. And a branch returning something Docuccino
+cannot read is reported with the same `inferred-handler.too-dynamic` diagnostic as a render callback.
 
 ### Responses built through a helper
 
@@ -183,7 +308,7 @@ the schema, and every member whose value is a constant is pinned with a JSON-Sch
 <Tabs>
 	<TabItem label="Your code">
 	```php
-	$e instanceof AuthorizationException =>
+	$e instanceof AccessDeniedHttpException =>
 	    ProblemResponse::make('https://errors.example/forbidden', 'Forbidden', 403, $e->getMessage()),
 	```
 	</TabItem>
@@ -285,7 +410,7 @@ and title — and pass a case into the helper:
 	}
 
 	// The arm names a concrete case:
-	$e instanceof AuthorizationException =>
+	$e instanceof AccessDeniedHttpException =>
 	    ProblemResponse::make(ProblemType::Forbidden, $e->getMessage(), $request),
 	```
 	</TabItem>
@@ -424,7 +549,9 @@ no analyser can read it — Docuccino knows the number the way you do, from the 
 look up.
 
 Anything outside that table still gets documented if its status is known: the final fallback tier emits
-`{ "message": string }` under the exception's status, or `500` when no status could be determined. Set
+the same `{ "message": string }` body, `message` required, under the exception's status, or `500` when no
+status could be determined. It is the body Laravel's renderer sends for any exception it renders, so an
+`HttpException` subclass of your own that fixes a `501` is documented exactly as the framework's `404` is. Set
 `error_responses` to `none` to emit no error responses at all.
 
 ### When a `500` is a stand-in
@@ -451,7 +578,7 @@ at:
 
 ```
 responses.500
-  ! this status is a stand-in: nothing read one for the error filed here
+  ! this status is a stand-in: nothing read one for the response filed here
   from App\Exceptions\LedgerRejectedException  app/Queries/LedgerReviewQuery.php:28
 ```
 
@@ -483,7 +610,7 @@ diagnostic names the callback to fix.
 	<TabItem label="Your code">
 	```php
 	// app/Exceptions/ProblemRenderer.php — a plain response, and a status read off the exception
-	public function __invoke(ModelNotFoundException $e): Response
+	public function __invoke(NotFoundHttpException $e): Response
 	{
 	    return response($this->body($e), $e->getCode() ?: 404);
 	}
@@ -518,7 +645,7 @@ errors:
 | Status | When it's added | How to opt out |
 | --- | --- | --- |
 | `401` | The route has authentication middleware (matching `security.auth_middleware`). | Mark the route [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) — or `#[IgnoreResponse(401)]`. |
-| `422` | A validated request body was recovered (Spatie Data, a form request, or an action's `rules()`). | `#[IgnoreResponse(422)]`. |
+| `422` | Validation rules were recovered (Spatie Data, a form request, an inline `validate()`, or an action's `rules()`), whether they document the body or, on a read route, the query parameters. | `#[IgnoreResponse(422)]`. |
 | `404` | The route binds a model to a path parameter (implicit binding). One `404` per operation. | `#[IgnoreResponse(404)]`. |
 | `403` | The route has `can:` / `signed` / `verified` middleware, or a form request `authorize()` gate that isn't a literal `return true`. | `#[IgnoreResponse(403)]`. |
 
@@ -658,7 +785,7 @@ and can say which:
 | `403` | `Forbidden` | `AuthorizationException`, `AccessDeniedHttpException`, `InvalidSignatureException`, `can:` / `signed` / `verified` middleware, a form request `authorize()` gate |
 | `404` | `NotFound` | `ModelNotFoundException`, `RecordsNotFoundException`, `NotFoundHttpException`, and route–model binding |
 | `413` | `ContentTooLarge` | `PostTooLargeException` |
-| `422` | `UnprocessableEntity` | `ValidationException`, `UnprocessableEntityHttpException`, and any recovered request body |
+| `422` | `UnprocessableEntity` | `ValidationException`, `UnprocessableEntityHttpException`, and any recovered validation rules |
 | `429` | `TooManyRequests` | `ThrottleRequestsException`, `TooManyRequestsHttpException`, and [`throttle`](/laravel/documenting/rate-limiting/) middleware |
 | `500` | `InternalServerError` | An exception carrying no status anything could read |
 | `405`, `406`, `409`, `410`, `411`, `412`, `415`, `423`, `428`, `503` | `MethodNotAllowed`, `NotAcceptable`, `Conflict`, `Gone`, `LengthRequired`, `PreconditionFailed`, `UnsupportedMediaType`, `Locked`, `PreconditionRequired`, `ServiceUnavailable` | Symfony's `HttpException` subclass for that status — `MethodNotAllowedHttpException`, `ConflictHttpException` and the rest — or an unrecognized exception resolving to it |
@@ -669,6 +796,11 @@ operation documents a `410`. A subclass of your own inherits the status the same
 `ThrottleRequestsException` is documented as a `429` because it extends `TooManyRequestsHttpException` —
 so the one that falls through to `500` is the bare `HttpException`, whose status is an argument rather
 than a fact about the class.
+
+The same goes for any other status the IANA registry names, when the fallback tier documents it. An
+`HttpException` of your own that fixes a `501` publishes `NotImplemented`, a `502` `BadGateway`, a `504`
+`GatewayTimeout`, and so on for every registered code. A status the registry leaves unnamed, like Laravel's
+`419`, has only its class to go on, and every unnamed code shares that, so it publishes as `Error419`.
 
 An error nothing claims a name for still falls back to `Error<status>`, the statuses in that table
 included — the reason phrases belong to the tier documenting those errors, never to the status. A `402`
@@ -782,9 +914,9 @@ final class InvoiceNotFoundException extends ApiException {}
 final class PolicyDeniedException extends ApiException {}
 ```
 
-**It names a status that has no name of its own.** A `410` is `Error410` by default, because nothing in
-the table above speaks for it. The attribute is the only way that body gets called something a client
-can read.
+**It names a status that has no name of its own.** A `419` is `Error419` by default, because the IANA
+registry gives it no name to publish. The attribute is the only way that body gets called something a
+client can read.
 
 **Two exceptions may share one name.** Different classes raising the same error is normal, and where
 their bodies match under one status they publish one component. Where the bodies differ the name is
@@ -1013,11 +1145,16 @@ Two render methods naming *the same* component for bodies that differ is settled
 contest: both bodies keep a name derived from their own content and the build reports
 `components.name-collision`.
 
-Where a body lives is representation, not contract, so
-[`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references on both sides: a body
-moving between inline and shared reports nothing, while a real edit to a shared body is reported against
-every operation referencing it. In the UIR document each operation also keeps its own response id and
-provenance in `x-docuccino` beside the `$ref`.
+Where a response or a shape lives is representation, not contract, so
+[`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) reads a `$ref` as the thing it names on
+both sides. The hoist itself is not a change: a response moving between inline and
+`components.responses`, and a body shape moving between inline and `components.schemas`, each report
+nothing at the operations they left, and the changeset carries only the component arriving. What is
+still reported is a hoist that also *edits* the shape — the component is compared against what the
+inline copy said — and an edit to the shared body afterwards, which is reported once, at the
+component, rather than under every operation pointing at it. [Diffing your
+API](/laravel/guides/diffing/) has what to expect. In the full document each operation also keeps its
+own response id and provenance in `x-docuccino` beside the `$ref`.
 
 Set [`representation.errors.components`](/laravel/reference/configuration/#representation) to `false` to
 keep every copy inline.

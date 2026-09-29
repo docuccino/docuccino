@@ -6,9 +6,10 @@ namespace Docuccino\Core\TypeGrammar;
 
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTextNode;
+use PHPStan\PhpDocParser\Ast\Type\TypeNode;
 
 /**
- * The one docblock reader: prose, `@example`, `@summary`/`@description`, `@property`/`@param`/`@var`
+ * The one docblock reader: prose, `@example`, `@summary`/`@description`, `@property`/`@param`/`@var`/`@return`
  * tags — each with its `@phpstan-`/`@psalm-` prefixed forms — and the OAS summary/description split,
  * all through the shared {@see PhpDocParserStack} so there's a single grammar.
  */
@@ -23,11 +24,15 @@ final class DocBlockReader
 
     private const PARAM_TAGS = ['@phpstan-param', '@psalm-param', '@param'];
 
+    private const RETURN_TAGS = ['@phpstan-return', '@psalm-return', '@return'];
+
     private const PROPERTY_TAGS = [
         '@phpstan-property', '@phpstan-property-read',
         '@psalm-property', '@psalm-property-read',
         '@property', '@property-read',
     ];
+
+    private const SEALED_TAGS = ['@phpstan-sealed', '@psalm-inheritors'];
 
     public function __construct(
         private readonly PhpDocParserStack $stack = new PhpDocParserStack,
@@ -118,6 +123,52 @@ final class DocBlockReader
                 $type = trim((string) $tag->type);
                 if ($type !== '') {
                     return $type;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** The first type a `@return` tag states, in {@see self::RETURN_TAGS} precedence, or null. */
+    public function returnType(?string $docComment): ?string
+    {
+        $node = $this->stack->parseDocBlock($docComment);
+        if ($node === null) {
+            return null;
+        }
+
+        foreach (self::RETURN_TAGS as $tagName) {
+            foreach ($node->getReturnTagValues($tagName) as $tag) {
+                $type = trim((string) $tag->type);
+                if ($type !== '') {
+                    return $type;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The type a `@phpstan-sealed` (or `@psalm-inheritors`) tag closes a hierarchy over, as written, or
+     * null. Read off the tag's text rather than its node class, which older parsers do not have.
+     */
+    public function sealed(?string $docComment): ?string
+    {
+        $node = $this->stack->parseDocBlock($docComment);
+        if ($node === null) {
+            return null;
+        }
+
+        foreach (self::SEALED_TAGS as $tagName) {
+            foreach ($node->getTagsByName($tagName) as $tag) {
+                $value = $tag->value;
+                $type = property_exists($value, 'type') && $value->type instanceof TypeNode
+                    ? (string) $value->type
+                    : (string) $value;
+                if (trim($type) !== '') {
+                    return trim($type);
                 }
             }
         }

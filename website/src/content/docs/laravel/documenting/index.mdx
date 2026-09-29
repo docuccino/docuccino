@@ -58,6 +58,11 @@ supported.
 		href="/laravel/documenting/webhooks/"
 		description="The calls your API makes, documented from the payload classes it sends."
 	/>
+	<LinkCard
+		title="Workflows"
+		href="/laravel/documenting/workflows/"
+		description="The order your endpoints have to be called in, and the values that travel between them — published as an Arazzo description."
+	/>
 </CardGrid>
 
 ## How support activates
@@ -106,7 +111,7 @@ can also be switched off per document with `integrations.<key>.enabled = false` 
 | [API resources](/laravel/documenting/schemas/#api-resources) | Response schemas from `JsonResource` shapes, wrapped per the resource's own `$wrap` | Built in | [`integrations.api_resources.wrap`](/laravel/reference/configuration/#integrations) |
 | [First-party JSON:API resources](/laravel/packages/timacdonald-json-api/#which-one-runs) | JSON:API documents from Laravel's own `JsonApiResource`, plus its `include` / `fields[TYPE]` parameters | Laravel 13+ — activates when the `JsonApiResource` class exists | [`integrations.api_resources`](/laravel/reference/configuration/#integrations) |
 | [JSON:API resources (timacdonald)](/laravel/packages/timacdonald-json-api/) | Pre-13 JSON:API documents from `timacdonald/json-api` resources — identical output to the first-party support, plus `include` / `fields[TYPE]` | [`timacdonald/json-api`](https://github.com/timacdonald/json-api) | [`integrations.timacdonald_json_api`](/laravel/reference/configuration/#integrations) |
-| [Eloquent models](/laravel/documenting/schemas/) | Model schemas from columns, refined by `$visible` / `$hidden` / `$appends` / casts — including polymorphic `MorphTo` as a discriminated `oneOf` | Built in | [`integrations.eloquent`](/laravel/reference/configuration/#integrations) |
+| [Eloquent models](/laravel/documenting/schemas/) | Model schemas from columns, refined by `$visible` / `$hidden` / `$appends` / casts — including polymorphic `MorphTo` as a union of the related models | Built in | [`integrations.eloquent`](/laravel/reference/configuration/#integrations) |
 | [Enums](/laravel/documenting/schemas/) | Backed enums by their backing values, `#[CaseDescription]` prose as `x-enumDescriptions`, and codegen name hints (on by default) | Built in — always on | [`representation.enums`](/laravel/reference/configuration/#representation) |
 
 ### Error responses
@@ -125,6 +130,7 @@ can also be switched off per document with `integrations.<key>.enabled = false` 
 | [Spatie Laravel Permission](/laravel/packages/laravel-permission/) | `role:` / `permission:` / `role_or_permission:` middleware as an `x-permissions` member and a description line | [`spatie/laravel-permission`](https://spatie.be/docs/laravel-permission) | Opt-in — [`integrations.permission.enabled`](/laravel/reference/configuration/#integrations) |
 | [Rate limiting](/laravel/documenting/rate-limiting/) | A `429` response with `Retry-After` and `X-RateLimit-*` headers, read from `throttle` middleware | Built in | [`integrations.rate_limit`](/laravel/reference/configuration/#integrations) |
 | [Webhooks](/laravel/documenting/webhooks/) | The calls your API makes, from classes carrying `#[Webhook]` — payload, acknowledgement and prose | Built in — opt in by naming a directory | [`webhooks.dir`](/laravel/reference/configuration/#webhooks) |
+| [Workflows](/laravel/documenting/workflows/) | The sequences a consumer follows, from operations carrying `#[WorkflowStep]` — order, the values passed between steps, and a derived success check | Built in — opt in by declaring a step | [`workflows`](/laravel/reference/configuration/#workflows) |
 | [Spatie Query Builder](/laravel/packages/query-builder/) | Filters, sorts, includes, sparse field sets, and pagination — traced through the builder several method calls deep | [`spatie/laravel-query-builder`](https://spatie.be/docs/laravel-query-builder) | [`integrations.query_builder`](/laravel/reference/configuration/#integrations) |
 | [Spatie JSON API Paginate](/laravel/packages/json-api-paginate/) | JSON:API `page[number]` / `page[size]` (or `page[cursor]`) pagination parameters from `jsonPaginate()` | [`spatie/laravel-json-api-paginate`](https://github.com/spatie/laravel-json-api-paginate) | [`integrations.json_api_paginate`](/laravel/reference/configuration/#integrations) |
 
@@ -146,11 +152,11 @@ fallback  <  inference  <  integration  <  docblock  <  attribute  <  overlay  <
 
 So an integration's best guess is always something you can refine with a docblock or an
 [attribute](/laravel/reference/attributes/) — you're never fighting the tool.
-[How it works](/laravel/guides/how-it-works/#3-uir) takes the ladder a rung at a time, with what
+[How it works](/laravel/guides/how-it-works/#3-the-document) takes the ladder a rung at a time, with what
 typically arrives at each one.
 
-Every contribution is recorded with its source in the document's provenance (visible in the raw
-[UIR](/uir/)), labeled by the integration that made it — for example `integration:query-builder` or
+Every contribution is recorded with its source in the document's provenance (visible under
+[`x-docuccino`](/uir/)), labeled by the integration that made it — for example `integration:query-builder` or
 `integration:sanctum`. That's what lets tooling explain *why* a given detail is documented the way
 it is.
 

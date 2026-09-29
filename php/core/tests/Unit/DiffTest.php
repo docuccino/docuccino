@@ -15,6 +15,7 @@ use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Emit\EmitOptions;
 use Docuccino\Core\Emit\OpenApi32Emitter;
+use Docuccino\Core\Identity\ContentHasher;
 use Docuccino\Core\Identity\IdentityGenerator;
 use Docuccino\Core\Support\JsonValue;
 
@@ -148,7 +149,6 @@ it('reports no API churn for an emitted artifact against the document it came fr
  */
 it('reads a {} property schema as the empty schema it is, not as a missing property', function (): void {
     $document = static fn (mixed $displayName): array => [
-        'uir' => '1.0.0',
         'openapi' => '3.2.0',
         'info' => ['title' => 'T', 'version' => '1.0.0'],
         'paths' => [],
@@ -333,6 +333,34 @@ it('classifies a removed parameter as breaking', function (): void {
     $changes = changesByCode(diffOf(diffBase(), $new));
     expect($changes)->toHaveKey('parameter.removed');
     expect($changes['parameter.removed']->breaking)->toBeTrue();
+});
+
+/*
+ * OAS makes `in` + `name` unique within an operation, so the one parameter each side spells that way under
+ * a paired operation is the same parameter, whatever id either side read for it. An id is not always
+ * carried across an export: a Reference Object takes no extension, so a shared parameter's use site reads
+ * its component's id back instead of its own.
+ */
+it('pairs a parameter whose id moved by its location and name', function (): void {
+    $new = diffBase();
+    $new['paths']['/api/v1/forms/{id}']['get']['parameters'][1]['x-docuccino']['id'] = 'par:v1:eeeeeeeeeeeeeeee';
+
+    expect(diffOf(diffBase(), $new)->changes)->toBe([]);
+
+    // Compared, not waved through: an edit to the parameter is still reported against it.
+    $new['paths']['/api/v1/forms/{id}']['get']['parameters'][1]['required'] = true;
+    expect(array_keys(changesByCode(diffOf(diffBase(), $new))))->toBe(['parameter.became-required']);
+});
+
+it('still reports a parameter renamed under a moved id as removed and added', function (): void {
+    $new = diffBase();
+    $new['paths']['/api/v1/forms/{id}']['get']['parameters'][1]['x-docuccino']['id'] = 'par:v1:eeeeeeeeeeeeeeee';
+    $new['paths']['/api/v1/forms/{id}']['get']['parameters'][1]['name'] = 'state';
+
+    $codes = array_map(static fn (Change $change): string => $change->code, diffOf(diffBase(), $new)->changes);
+    sort($codes);
+
+    expect($codes)->toBe(['parameter.added', 'parameter.removed']);
 });
 
 it('classifies a removed response status as breaking', function (): void {
@@ -954,6 +982,733 @@ it('still reads a deleted schema and an unrelated new one as a removal and an ad
         ->and($changes['schema.removed']->path)->toBe('components.schemas.Error404')
         ->and($changes)->toHaveKey('schema.added')
         ->and($changes['schema.added']->path)->toBe('components.schemas.Envelope');
+});
+
+// --- Hoisted error SHAPES, at the schema position ($ref schemas) ------------
+
+/**
+ * `diffBase404()` with the shared 404 BODY hoisted into `components.schemas`, each operation's response
+ * schema left as the pointer to it — what `representation.errors.components` publishes for a second
+ * endpoint returning an error the document already describes.
+ *
+ * The population {@see diffHoistedShape()} does NOT stand in: there the whole RESPONSE moves into
+ * `components.responses` and its schema stays inline, which is the one hoist the response resolver
+ * already covered.
+ *
+ * @param  array<string, mixed>  $shape  the shared body, as a schema
+ * @param  array<string, mixed>  $pointer  members the referring node carries beside its `$ref`
+ * @return array<string, mixed>
+ */
+function diffSharedErrorSchema(array $shape, array $pointer = []): array
+{
+    $doc = diffBase404();
+
+    foreach ([['/api/v1/forms/{id}', 'get'], ['/api/v1/forms', 'get']] as [$path, $method]) {
+        $doc['paths'][$path][$method]['responses']['404']['content']['application/json']['schema'] =
+            $pointer + ['$ref' => '#/components/schemas/NotFound'];
+    }
+
+    $doc['components']['schemas']['NotFound'] =
+        ['x-docuccino' => ['id' => (new IdentityGenerator)->publishedSchemaId('404:application/json', $shape)]] + $shape;
+
+    return $doc;
+}
+
+/**
+ * The shared 404 body, with `code` the property a narrowing takes away.
+ *
+ * @return array<string, mixed>
+ */
+function diffErrorBody(bool $withCode = true): array
+{
+    $properties = ['message' => ['type' => 'string']];
+
+    if ($withCode) {
+        $properties['code'] = ['type' => 'string'];
+    }
+
+    return ['type' => 'object', 'properties' => $properties];
+}
+
+/**
+ * `diffBase404()` with the shared body inline in both operations — the pre-hoist document.
+ *
+ * @return array<string, mixed>
+ */
+function diffInlineErrorSchema(array $shape): array
+{
+    $doc = diffBase404();
+
+    foreach ([['/api/v1/forms/{id}', 'get'], ['/api/v1/forms', 'get']] as [$path, $method]) {
+        $doc['paths'][$path][$method]['responses']['404']['content']['application/json']['schema'] = $shape;
+    }
+
+    return $doc;
+}
+
+it('reports nothing but the component when an inline error shape hoists into components.schemas', function (): void {
+    // A schema position describes the schema it RESOLVES to, so moving one body between inline and shared
+    // moves no contract: the server accepts and returns what it did. Read as a string, the pointer had
+    // every keyword of the inline side reading as removed — `--enforce` demanding a major version for a
+    // second endpoint returning an error the document already described.
+    $inline = diffInlineErrorSchema(diffErrorBody());
+    $hoisted = diffSharedErrorSchema(diffErrorBody());
+
+    $out = diffOf($inline, $hoisted);
+    expect(array_map(static fn (Change $c): string => $c->code.' @'.$c->path, $out->changes))
+        ->toBe(['schema.added @components.schemas.NotFound'])
+        ->and($out->isBreaking())->toBeFalse();
+
+    // And the other way: un-hoisting is the same non-event, with the component's departure the whole
+    // of what the changeset has to say.
+    $back = diffOf($hoisted, $inline);
+    expect(array_map(static fn (Change $c): string => $c->code.' @'.$c->path, $back->changes))
+        ->toBe(['schema.removed @components.schemas.NotFound'])
+        ->and($back->isBreaking())->toBeFalse();
+});
+
+it('still calls a hoist that narrows the shared shape breaking, at every operation', function (): void {
+    // The fix may not buy its silence by going blind: the component arriving is not a licence to stop
+    // reading it. A property the old inline body carried and the shared one does not is gone from a
+    // response, and it is gone from every operation that now points at the shared one.
+    $out = diffOf(diffInlineErrorSchema(diffErrorBody()), diffSharedErrorSchema(diffErrorBody(withCode: false)));
+    $removed = array_values(array_filter($out->changes, static fn (Change $c): bool => $c->code === 'schema.property-removed'));
+
+    expect($out->isBreaking())->toBeTrue()
+        ->and($removed)->toHaveCount(2)
+        ->and(array_map(static fn (Change $c): bool => $c->breaking, $removed))->toBe([true, true])
+        ->and(array_map(static fn (Change $c): string => $c->path, $removed))->toBe([
+            'GET /api/v1/forms responses 404 application/json schema.properties.code',
+            'GET /api/v1/forms/{id} responses 404 application/json schema.properties.code',
+        ]);
+});
+
+it('reads a pointer carrying nothing but annotations as the shape it names', function (): void {
+    // OAS lets a Reference Object write its own `description`, and a hoist that also writes one is the
+    // same hoist. What the position describes is still the component, so the annotation overriding the
+    // target's is the only thing to report — and it is reported as the non-event it is.
+    $out = diffOf(
+        diffInlineErrorSchema(diffErrorBody()),
+        diffSharedErrorSchema(diffErrorBody(), pointer: ['description' => 'The error body']),
+    );
+
+    expect($out->isBreaking())->toBeFalse()
+        ->and(array_map(static fn (Change $c): string => $c->code, $out->changes))
+        ->toBe(['schema.annotation-changed', 'schema.annotation-changed', 'schema.added']);
+});
+
+it('leaves a pointer that is not the whole schema compared as written', function (): void {
+    // The recorded limit, pinned rather than left silent. Under 2020-12 a keyword beside a `$ref` still
+    // applies, so the position describes the INTERSECTION of the two and no merge states it; declining to
+    // flatten is the degraded answer, and what it costs is that the move is reported keyword by keyword.
+    // Docuccino spells a hoisted shape as the pointer alone, so nothing it publishes reaches this.
+    $out = diffOf(
+        diffInlineErrorSchema(diffErrorBody()),
+        diffSharedErrorSchema(diffErrorBody(), pointer: ['type' => 'object']),
+    );
+
+    expect($out->isEmpty())->toBeFalse()
+        ->and(array_map(static fn (Change $c): string => $c->code, $out->changes))
+        ->toContain('schema.property-removed');
+});
+
+/**
+ * `diffSharedErrorSchema()`'s document with one more hop: the component the responses point at is
+ * itself a bare pointer, and the shape lives one name further on. Nothing Docuccino publishes spells a
+ * component this way, so the population is a hand-written `old` side.
+ *
+ * @param  list<string>  $through  the names between the responses' pointer and the body, outermost first
+ * @param  array<string, mixed>|null  $shape  the body the last name in the chain holds
+ * @return array<string, mixed>
+ */
+function diffChainedErrorSchema(array $through = ['Problem'], ?array $shape = null): array
+{
+    $doc = diffSharedErrorSchema($shape ?? diffErrorBody());
+
+    $body = $doc['components']['schemas']['NotFound'];
+    $names = ['NotFound', ...$through];
+
+    foreach ($through as $i => $name) {
+        $doc['components']['schemas'][$names[$i]] = [
+            'x-docuccino' => ['id' => 'sch:v1:'.str_repeat((string) (7 + $i), 16)],
+            '$ref' => '#/components/schemas/'.$name,
+        ];
+    }
+
+    $doc['components']['schemas'][$names[count($names) - 1]] = $body;
+
+    return $doc;
+}
+
+/**
+ * The per-position rows a schema pointer produces where the resolver will not read through it, against
+ * an inline typed object on the other side: the position compares as WRITTEN, and a bare pointer writes
+ * nothing that constrains the value.
+ *
+ * @return list<string>
+ */
+function diffUnreadPointerRows(): array
+{
+    $rows = [];
+
+    foreach (['GET /api/v1/forms', 'GET /api/v1/forms/{id}'] as $operation) {
+        $at = $operation.' responses 404 application/json schema';
+        $rows[] = 'schema.property-removed @'.$at.'.properties.code';
+        $rows[] = 'schema.property-removed @'.$at.'.properties.message';
+        $rows[] = 'schema.type-removed @'.$at.'.type';
+    }
+
+    return $rows;
+}
+
+it('follows a schema pointer whose target is itself a pointer', function (): void {
+    // A schema position describes the schema it RESOLVES to, and an alias component resolves to the same
+    // schema its target does: what the server returns at that 404 is the object either spelling names.
+    // So the answer this asserts is the contract's, not the walk's — the two components arriving are the
+    // whole of what moved, exactly as they are for the one-hop hoist above.
+    //
+    // It is the reverse of what this row used to pin, and the old answer was wrong rather than merely
+    // coarse: `--enforce` refused a purely additive change because a position that describes an object
+    // was read as describing nothing.
+    $out = diffOf(diffInlineErrorSchema(diffErrorBody()), diffChainedErrorSchema());
+
+    expect(array_map(static fn (Change $c): string => $c->code.' @'.$c->path, $out->changes))
+        ->toBe([
+            'schema.added @components.schemas.NotFound',
+            'schema.added @components.schemas.Problem',
+        ])
+        ->and($out->isBreaking())->toBeFalse();
+});
+
+it('follows a chain of any length rather than a second hop', function (): void {
+    // One hop per call, and the caller re-enters — so the length of the chain is not a number written
+    // anywhere. Two hops passing while three fail would mean a bound had been spelled out by accident.
+    $out = diffOf(diffInlineErrorSchema(diffErrorBody()), diffChainedErrorSchema(['Mid', 'Body']));
+
+    expect(array_map(static fn (Change $c): string => $c->code.' @'.$c->path, $out->changes))
+        ->toBe([
+            'schema.added @components.schemas.Body',
+            'schema.added @components.schemas.Mid',
+            'schema.added @components.schemas.NotFound',
+        ])
+        ->and($out->isBreaking())->toBeFalse();
+});
+
+it('still calls a chain that narrows the shape breaking, at every operation', function (): void {
+    // The silence is bought by resolving, never by going blind: the property the inline body carried and
+    // the schema at the end of the chain does not is gone from a response, and gone from every operation
+    // whose pointer leads there.
+    $out = diffOf(
+        diffInlineErrorSchema(diffErrorBody()),
+        diffChainedErrorSchema(shape: diffErrorBody(withCode: false)),
+    );
+
+    expect(array_map(static fn (Change $c): string => $c->code.' @'.$c->path, $out->changes))
+        ->toBe([
+            'schema.property-removed @GET /api/v1/forms responses 404 application/json schema.properties.code',
+            'schema.property-removed @GET /api/v1/forms/{id} responses 404 application/json schema.properties.code',
+            'schema.added @components.schemas.NotFound',
+            'schema.added @components.schemas.Problem',
+        ])
+        ->and($out->isBreaking())->toBeTrue();
+});
+
+it('carries a boolean schema through a chain that reaches it', function (): void {
+    // `false` is the one schema value compared as itself, and a chain is not a licence to lose it: a 404
+    // that used to carry an object and now satisfies nothing is a response no reader can read.
+    $never = diffChainedErrorSchema();
+    $never['components']['schemas']['Problem'] = false;
+
+    $out = diffOf(diffInlineErrorSchema(diffErrorBody()), $never);
+
+    expect(array_map(static fn (Change $c): string => $c->code.' @'.$c->path, $out->changes))
+        ->toBe([
+            'schema.always-invalid-added @GET /api/v1/forms responses 404 application/json schema',
+            'schema.always-invalid-added @GET /api/v1/forms/{id} responses 404 application/json schema',
+            'schema.added @components.schemas.NotFound',
+            'schema.added @components.schemas.Problem',
+        ])
+        ->and($out->isBreaking())->toBeTrue();
+});
+
+it('lets the outermost pointer of a chain write the annotations the position publishes', function (): void {
+    // OAS lets a Reference Object write its own `description` over its target's, and a chain does not
+    // hand that privilege to the middle of itself: the annotation a reader sees at the position is the
+    // one the position states, however many names lie between it and the body.
+    $described = diffChainedErrorSchema();
+    $described['components']['schemas']['NotFound']['description'] = 'The alias says this';
+
+    foreach ([['/api/v1/forms/{id}', 'get'], ['/api/v1/forms', 'get']] as [$path, $method]) {
+        $described['paths'][$path][$method]['responses']['404']['content']['application/json']['schema'] =
+            ['description' => 'The error body', '$ref' => '#/components/schemas/NotFound'];
+    }
+
+    $out = diffOf(diffInlineErrorSchema(diffErrorBody()), $described);
+    $annotations = array_values(array_filter($out->changes, static fn (Change $c): bool => $c->code === 'schema.annotation-changed'));
+
+    expect($out->isBreaking())->toBeFalse()
+        ->and($annotations)->toHaveCount(2)
+        ->and(array_map(static fn (Change $c): mixed => $c->fields[0]->new, $annotations))
+        ->toBe(['The error body', 'The error body']);
+});
+
+it('leaves a chain through a target that is not the whole schema compared as written', function (): void {
+    // The 2020-12 limit, one name in: a keyword beside a `$ref` still applies, so the middle of the chain
+    // is an INTERSECTION no merge states and the resolution stops there rather than flattening to the
+    // half it could write. What the position then publishes is the pointer and the keyword, both — and
+    // pinning that is what proves the stop is a decline rather than a silent loss, since the pre-fix
+    // merge dropped the inner name on the floor.
+    $intersection = diffChainedErrorSchema();
+    $intersection['components']['schemas']['NotFound']['minProperties'] = 1;
+
+    $out = diffOf(diffInlineErrorSchema(diffErrorBody()), $intersection);
+
+    expect(array_map(static fn (Change $c): string => $c->code.' @'.$c->path, $out->changes))
+        ->toBe([
+            'schema.refinement-narrowed @GET /api/v1/forms responses 404 application/json schema.minProperties',
+            'schema.property-removed @GET /api/v1/forms responses 404 application/json schema.properties.code',
+            'schema.property-removed @GET /api/v1/forms responses 404 application/json schema.properties.message',
+            'schema.type-removed @GET /api/v1/forms responses 404 application/json schema.type',
+            'schema.refinement-narrowed @GET /api/v1/forms/{id} responses 404 application/json schema.minProperties',
+            'schema.property-removed @GET /api/v1/forms/{id} responses 404 application/json schema.properties.code',
+            'schema.property-removed @GET /api/v1/forms/{id} responses 404 application/json schema.properties.message',
+            'schema.type-removed @GET /api/v1/forms/{id} responses 404 application/json schema.type',
+            'schema.added @components.schemas.NotFound',
+            'schema.added @components.schemas.Problem',
+        ])
+        ->and($out->isBreaking())->toBeTrue();
+
+    // Declining is not the same as forgetting, and this is the half the pre-fix merge got wrong in the
+    // quiet direction: it stripped the inner pointer along with the outer one, so a position that reached
+    // one name through an intersection and now reaches another reported the outer move and swallowed the
+    // inner. Both names are published, both are types in a generated client, and both are reported.
+    $through = static function (string $alias, string $inner): array {
+        $doc = diffBase404();
+
+        foreach ([['/api/v1/forms/{id}', 'get'], ['/api/v1/forms', 'get']] as [$path, $method]) {
+            $doc['paths'][$path][$method]['responses']['404']['content']['application/json']['schema'] =
+                ['$ref' => '#/components/schemas/'.$alias];
+        }
+
+        $doc['components']['schemas'][$alias] = [
+            'x-docuccino' => ['id' => 'sch:v1:4141414141414141'],
+            '$ref' => '#/components/schemas/'.$inner,
+            'minProperties' => 1,
+        ];
+        $doc['components']['schemas'][$inner] = ['x-docuccino' => ['id' => 'sch:v1:4242424242424242']] + diffErrorBody();
+
+        return $doc;
+    };
+
+    $names = array_map(
+        static fn (Change $c): string => $c->fields[0]->old.' -> '.$c->fields[0]->new,
+        array_values(array_filter(
+            diffOf($through('Alias', 'Body'), $through('Pointer', 'Shape'))->changes,
+            static fn (Change $c): bool => $c->code === 'schema.ref-changed'
+                && $c->path === 'GET /api/v1/forms responses 404 application/json schema.$ref',
+        )),
+    );
+
+    expect($names)->toBe([
+        '#/components/schemas/Alias -> #/components/schemas/Pointer',
+        '#/components/schemas/Body -> #/components/schemas/Shape',
+    ]);
+});
+
+it('terminates on a chain that closes on itself, with no bound of its own', function (array $chain): void {
+    // The re-entry spelling buys its chain-following on the bound the walk already had: the pointer PAIR
+    // is held open for the descent beneath it, so a chain that comes back to a name it is already
+    // resolving meets an open pair and compares as written. Nothing here counts hops.
+    //
+    // What the position then says is the degraded-but-true answer, and the same one an undeclared name
+    // gets: a component that resolves only to itself describes no value, so against an inline object
+    // every keyword reads as removed rather than as silently unchanged.
+    $cyclic = diffSharedErrorSchema(diffErrorBody());
+    $added = [];
+
+    foreach ($chain as $name => $points) {
+        $cyclic['components']['schemas'][$name] = [
+            'x-docuccino' => ['id' => 'sch:v1:'.str_repeat((string) (count($added) + 7), 16)],
+            '$ref' => '#/components/schemas/'.$points,
+        ];
+        $added[] = 'schema.added @components.schemas.'.$name;
+    }
+
+    sort($added);
+    $out = diffOf(diffInlineErrorSchema(diffErrorBody()), $cyclic);
+
+    expect(array_map(static fn (Change $c): string => $c->code.' @'.$c->path, $out->changes))
+        ->toBe([...diffUnreadPointerRows(), ...$added])
+        ->and($out->isBreaking())->toBeTrue();
+})->with([
+    'a component naming itself' => [['NotFound' => 'NotFound']],
+    'two naming each other' => [['NotFound' => 'Problem', 'Problem' => 'NotFound']],
+    'three around a ring' => [['NotFound' => 'Problem', 'Problem' => 'Other', 'Other' => 'NotFound']],
+]);
+
+it('bounds a cycle reached through both documents at once', function (): void {
+    // The worst case the bound answers: both sides cycle, and the heads are swapped, so no single
+    // document's walk repeats and only the PAIR does. Three reports per operation and done — the pair at
+    // the position, the pair one hop in, and then the first pair again, open, compared as written. That
+    // is the same count the mutually recursive descent below produces, because it is the same bound.
+    $document = static function (string $head): array {
+        $doc = diffBase404();
+
+        foreach ([['/api/v1/forms/{id}', 'get'], ['/api/v1/forms', 'get']] as [$path, $method]) {
+            $doc['paths'][$path][$method]['responses']['404']['content']['application/json']['schema'] =
+                ['$ref' => '#/components/schemas/'.$head];
+        }
+
+        $doc['components']['schemas']['Ping'] = ['x-docuccino' => ['id' => 'sch:v1:3131313131313131'], '$ref' => '#/components/schemas/Pong'];
+        $doc['components']['schemas']['Pong'] = ['x-docuccino' => ['id' => 'sch:v1:3232323232323232'], '$ref' => '#/components/schemas/Ping'];
+
+        return $doc;
+    };
+
+    $out = diffOf($document('Ping'), $document('Pong'));
+
+    expect($out->isBreaking())->toBeFalse()
+        ->and(array_unique(array_map(static fn (Change $c): string => $c->code, $out->changes)))->toBe(['schema.ref-changed'])
+        ->and($out->changes)->toHaveCount(6);
+});
+
+it('reads a chained RESPONSE component as the body going, which is wrong', function (): void {
+    // The same defect at a sibling position, pinned as what ships rather than left to be rediscovered.
+    // Of the six places OAS puts a Reference Object, a chain is now followed at a schema, and reported at
+    // a path item, a request body and a security scheme, where `resolveInto()` sees the target's pointer
+    // and answers `unresolved-ref`. A RESPONSE does neither: the target's pointer rides along on a node
+    // whose `content` and `headers` came from a component that states none, so a body the server still
+    // returns reads as removed — and reads BREAKING, on a hoist that changed no contract.
+    //
+    // This row asserts a wrong answer on purpose, so that closing it has to come past a red test rather
+    // than through silence. What makes it wrong is stated from the contract and not from the code: the
+    // 404 carries the same `application/json` body on both sides of this diff.
+    $body = ['description' => 'Not found', 'content' => ['application/json' => ['schema' => ['type' => 'object', 'properties' => ['message' => ['type' => 'string']]]]]];
+
+    $chained = diffHoisted404($body);
+    $chained['components']['responses'] = [
+        'Error404' => ['$ref' => '#/components/responses/Error404Body'],
+        'Error404Body' => $body,
+    ];
+
+    $out = diffOf(diffBase404(), $chained);
+
+    expect(array_map(static fn (Change $c): string => $c->code.($c->breaking ? '!' : '').' @'.$c->path, $out->changes))
+        ->toBe([
+            'response.content-removed! @GET /api/v1/forms responses 404 application/json',
+            'response.content-removed! @GET /api/v1/forms/{id} responses 404 application/json',
+            'response.description-changed @GET /api/v1/forms responses 404',
+            'response.description-changed @GET /api/v1/forms/{id} responses 404',
+        ])
+        // The one hop is right: the same document with the chain flattened out reports nothing at all,
+        // so the rows above are the chain and not the hoist.
+        ->and(diffOf(diffBase404(), diffHoisted404($body))->isEmpty())->toBeTrue();
+});
+
+it('loses a chained PARAMETER component to a pointer it cannot name, which is wrong', function (): void {
+    // The second half of the same sliver, and the worse half: a Reference Object states neither `name`
+    // nor `in`, so a component that is one hands back neither, the parameter cannot pair with its inline
+    // opposite number, and the diff reports a required query parameter REMOVED from an operation that
+    // still declares it. The contract says `status` is on both sides of this diff.
+    $chained = diffHoistedParams(['FormId']);
+    $chained['components']['parameters']['StatusAlias'] = ['$ref' => '#/components/parameters/Status'];
+    $chained['paths']['/api/v1/forms/{id}']['get']['parameters'][] = ['$ref' => '#/components/parameters/StatusAlias'];
+
+    $out = diffOf(diffBase(), $chained);
+
+    expect(array_map(static fn (Change $c): string => $c->code.($c->breaking ? '!' : '').' @'.$c->path, $out->changes))
+        ->toBe([
+            'parameter.removed! @GET /api/v1/forms/{id} parameters query:status',
+            'parameter.added @GET /api/v1/forms/{id} parameters #/components/parameters/Status',
+        ])
+        // Again the one hop is right, so what these rows measure is the chain alone.
+        ->and(diffOf(diffBase(), diffHoistedParams())->isEmpty())->toBeTrue();
+});
+
+it('reads a schema pointer at a name no document declares as the pointer it is', function (): void {
+    // A schema position always has a comparison to make, so an unreadable pointer needs no entry of its
+    // own — and gets none. That is the difference from `pathItem.unresolved-ref` and
+    // `requestBody.unresolved-ref`, which exist because those two DROP the node from the comparison and
+    // so owe the reader a note saying the endpoint went uncompared. There is no silence here to explain.
+    //
+    // The answer is the same one a chain gets, and for the same reason: the resolver declined, so the
+    // position compares as written. A pointer the document does not declare publishes nothing at that
+    // position for anybody reading it, which is why the rows are breaking rather than tidy.
+    $dangling = diffSharedErrorSchema(diffErrorBody());
+    unset($dangling['components']['schemas']['NotFound']);
+
+    $out = diffOf(diffInlineErrorSchema(diffErrorBody()), $dangling);
+
+    expect(array_map(static fn (Change $c): string => $c->code.' @'.$c->path, $out->changes))
+        ->toBe(diffUnreadPointerRows())
+        ->and($out->isBreaking())->toBeTrue()
+        ->and(array_filter($out->changes, static fn (Change $c): bool => str_ends_with($c->code, 'unresolved-ref')))
+        ->toBe([]);
+});
+
+it('calls repointing a schema at a narrower component breaking', function (): void {
+    // The other half of the same defect, and the one that fails quiet: two pointers compared as STRINGS
+    // report the name moving and nothing else, while the component that went and the one that arrived are
+    // each non-breaking on their own — so a response body that lost a property passed `--enforce` as safe.
+    $old = diffSharedErrorSchema(diffErrorBody());
+
+    $new = $old;
+    unset($new['components']['schemas']['NotFound']);
+    $new['components']['schemas']['Problem'] = ['x-docuccino' => ['id' => 'sch:v1:9999999999999999']] + diffErrorBody(withCode: false);
+    foreach ([['/api/v1/forms/{id}', 'get'], ['/api/v1/forms', 'get']] as [$path, $method]) {
+        $new['paths'][$path][$method]['responses']['404']['content']['application/json']['schema']['$ref'] = '#/components/schemas/Problem';
+    }
+
+    $out = diffOf($old, $new);
+    $codes = array_map(static fn (Change $c): string => $c->code.($c->breaking ? '!' : ''), $out->changes);
+
+    expect($out->isBreaking())->toBeTrue()
+        // The name still moves and is still reported: a component name is a type in a generated client,
+        // and the consumer regenerating theirs needs to see it. It is the SHAPE that decides breaking.
+        ->and(array_count_values($codes)['schema.ref-changed'] ?? 0)->toBe(2)
+        ->and(array_count_values($codes)['schema.property-removed!'] ?? 0)->toBe(2);
+});
+
+it('reports a repointing that changes no shape as a name moving and nothing else', function (): void {
+    // The rule's other side, so the fix cannot pay for its silence by dropping the name report: two
+    // components with one body are one schema, and all that moved is what a generated client will call it.
+    $old = diffSharedErrorSchema(diffErrorBody());
+
+    $new = $old;
+    $new['components']['schemas']['Problem'] = $old['components']['schemas']['NotFound'];
+    unset($new['components']['schemas']['NotFound']);
+    foreach ([['/api/v1/forms/{id}', 'get'], ['/api/v1/forms', 'get']] as [$path, $method]) {
+        $new['paths'][$path][$method]['responses']['404']['content']['application/json']['schema']['$ref'] = '#/components/schemas/Problem';
+    }
+
+    $out = diffOf($old, $new);
+
+    expect($out->isBreaking())->toBeFalse()
+        ->and(array_map(static fn (Change $c): string => $c->code, $out->changes))->toBe(['schema.ref-changed', 'schema.ref-changed']);
+});
+
+it('reports an edit to a shared shape once, where the component is diffed', function (): void {
+    // The reason two positions spelling ONE pointer stay opaque. Resolving them would compare the same
+    // two bodies again under every operation that points at the component, and a reviewer reading the
+    // changeset would see one edit reported three times.
+    $out = diffOf(diffSharedErrorSchema(diffErrorBody()), diffSharedErrorSchema(diffErrorBody(withCode: false)));
+    $removed = array_values(array_filter($out->changes, static fn (Change $c): bool => $c->code === 'schema.property-removed'));
+
+    expect($removed)->toHaveCount(1)
+        ->and($removed[0]->path)->toBe('components.schemas.NotFound.properties.code')
+        ->and($removed[0]->breaking)->toBeTrue();
+});
+
+it('compares mutually recursive schemas across a repointing without looping', function (): void {
+    // A schema is the one Reference Object position that may reach itself, so resolution is bounded by
+    // holding the pointer PAIR open for the descent beneath it. Two components that point at each other,
+    // swapped, are the pair that alternates forever without it — and the walk still has to answer.
+    $document = static function (string $head): array {
+        $doc = diffBase404();
+
+        foreach ([['/api/v1/forms/{id}', 'get'], ['/api/v1/forms', 'get']] as [$path, $method]) {
+            $doc['paths'][$path][$method]['responses']['404']['content']['application/json']['schema'] =
+                ['$ref' => '#/components/schemas/'.$head];
+        }
+
+        $doc['components']['schemas']['Node'] = [
+            'x-docuccino' => ['id' => 'sch:v1:1010101010101010'],
+            'type' => 'object',
+            'properties' => ['next' => ['$ref' => '#/components/schemas/Leaf']],
+        ];
+        $doc['components']['schemas']['Leaf'] = [
+            'x-docuccino' => ['id' => 'sch:v1:2020202020202020'],
+            'type' => 'object',
+            'properties' => ['next' => ['$ref' => '#/components/schemas/Node']],
+        ];
+
+        return $doc;
+    };
+
+    $out = diffOf($document('Node'), $document('Leaf'));
+
+    // Both bodies are `type: object` with one `next`, so the only thing that moved is which name each
+    // position leads with — reported, never breaking, and reported a bounded number of times.
+    expect($out->isBreaking())->toBeFalse()
+        ->and(array_unique(array_map(static fn (Change $c): string => $c->code, $out->changes)))->toBe(['schema.ref-changed'])
+        // Three per operation, and every one of them true: the position itself, the `next` beneath it,
+        // and the `next` beneath THAT, where the pair is already open and the pointers compare as
+        // written. Unguarded the same walk dies at ~12,400 frames.
+        ->and($out->changes)->toHaveCount(6);
+});
+
+it('reads a self-referencing schema hoisted out of an inline body', function (): void {
+    // The single-schema form of the same bound: the component the position now names describes itself,
+    // so the walk meets the pointer it is already resolving.
+    $shape = [
+        'type' => 'object',
+        'properties' => ['child' => ['$ref' => '#/components/schemas/NotFound']],
+    ];
+
+    $out = diffOf(diffInlineErrorSchema($shape), diffSharedErrorSchema($shape));
+
+    expect(array_map(static fn (Change $c): string => $c->code.' @'.$c->path, $out->changes))
+        ->toBe(['schema.added @components.schemas.NotFound']);
+});
+
+// --- The other two default-on hoists (enums, pagination) --------------------
+
+/**
+ * `diffBase()`'s `status` query parameter with its closed set hoisted into `components.schemas` and the
+ * parameter pointing at it — what `representation.enums.components` publishes once the set is reachable
+ * as a reflectable enum rather than as a form request's `in:` rule.
+ *
+ * A REQUEST position, where the error hoists are all reader-side: the polarity has to survive the
+ * resolution, or an enum value added would read as breaking on a parameter that merely accepts more.
+ *
+ * @param  list<string>  $cases
+ * @return array<string, mixed>
+ */
+function diffHoistedEnum(array $cases): array
+{
+    $doc = diffBase();
+    $doc['paths']['/api/v1/forms/{id}']['get']['parameters'][1]['schema'] = ['$ref' => '#/components/schemas/FormStatus'];
+    $doc['components']['schemas']['FormStatus'] = [
+        'x-docuccino' => ['id' => 'sch:v1:5555555555555555'],
+        'type' => 'string',
+        'enum' => $cases,
+    ];
+
+    return $doc;
+}
+
+/**
+ * `diffBase()` with the same set stated inline on the parameter — the policy-off document.
+ *
+ * @param  list<string>  $cases
+ * @return array<string, mixed>
+ */
+function diffInlineEnum(array $cases): array
+{
+    $doc = diffBase();
+    $doc['paths']['/api/v1/forms/{id}']['get']['parameters'][1]['schema'] = ['type' => 'string', 'enum' => $cases];
+
+    return $doc;
+}
+
+it('reports nothing but the component when a closed set hoists into components.schemas', function (): void {
+    $cases = ['draft', 'published', 'archived'];
+
+    $out = diffOf(diffInlineEnum($cases), diffHoistedEnum($cases));
+    expect(array_map(static fn (Change $c): string => $c->code.' @'.$c->path, $out->changes))
+        ->toBe(['schema.added @components.schemas.FormStatus'])
+        ->and($out->isBreaking())->toBeFalse();
+});
+
+it('keeps a hoisted set on the side of the wire its position is on', function (): void {
+    // The polarity travels with the resolution or the fix has traded one wrong answer for another. On a
+    // REQUEST a value arriving widens what the server accepts and gates nothing, while a value gone
+    // refuses a request that used to work — and both verdicts are read out of the resolved body, at a
+    // position whose pointer is all the parameter itself now says.
+    $widened = diffOf(diffInlineEnum(['draft', 'published']), diffHoistedEnum(['draft', 'published', 'archived']));
+    $narrowed = diffOf(diffInlineEnum(['draft', 'published', 'archived']), diffHoistedEnum(['draft', 'published']));
+
+    expect(array_map(static fn (Change $c): string => $c->code.($c->breaking ? '!' : ''), $widened->changes))
+        ->toBe(['schema.enum-value-added', 'schema.added'])
+        ->and(array_map(static fn (Change $c): string => $c->code.($c->breaking ? '!' : ''), $narrowed->changes))
+        ->toBe(['schema.enum-value-removed!', 'schema.added']);
+});
+
+/**
+ * The page-of-X envelope as `representation.pagination.components` off states it: one flat object whose
+ * item list, `links` and `meta` are all written out on the operation.
+ *
+ * @param  list<string>  $meta  the `meta` members, so a narrowing can take one away
+ * @return array<string, mixed>
+ */
+function diffInlinePage(array $meta = ['total', 'per_page']): array
+{
+    $doc = diffBase();
+    $doc['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema'] = [
+        'type' => 'object',
+        'properties' => [
+            'data' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => ['id' => ['type' => 'integer']]]],
+            'links' => ['type' => 'object', 'properties' => ['first' => ['type' => 'string'], 'last' => ['type' => 'string']]],
+            'meta' => ['type' => 'object', 'properties' => array_map(static fn (): array => ['type' => 'integer'], array_flip($meta))],
+        ],
+    ];
+
+    return $doc;
+}
+
+/**
+ * The same envelope once the item type has a component of its own: the page is a pointer, and so are its
+ * `links`, its `meta` and the ITEMS of its list — so reading it back takes four hops through two
+ * documents' buckets, at three different depths.
+ *
+ * @param  list<string>  $meta
+ * @return array<string, mixed>
+ */
+function diffHoistedPage(array $meta = ['total', 'per_page']): array
+{
+    $doc = diffBase();
+    $doc['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema'] =
+        ['$ref' => '#/components/schemas/FormResourcePage'];
+
+    $doc['components']['schemas']['FormResourcePage'] = [
+        'x-docuccino' => ['id' => 'sch:v1:6666666666666666'],
+        'type' => 'object',
+        'properties' => [
+            'data' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/FormResource']],
+            'links' => ['$ref' => '#/components/schemas/PaginationLinks'],
+            'meta' => ['$ref' => '#/components/schemas/PaginationMeta'],
+        ],
+    ];
+    $doc['components']['schemas']['FormResource'] = [
+        'x-docuccino' => ['id' => 'sch:v1:7777777777777777'],
+        'type' => 'object',
+        'properties' => ['id' => ['type' => 'integer']],
+    ];
+    $doc['components']['schemas']['PaginationLinks'] = [
+        'x-docuccino' => ['id' => 'sch:v1:8888888888888888'],
+        'type' => 'object',
+        'properties' => ['first' => ['type' => 'string'], 'last' => ['type' => 'string']],
+    ];
+    $doc['components']['schemas']['PaginationMeta'] = [
+        'x-docuccino' => ['id' => 'sch:v1:aaaa1111aaaa1111'],
+        'type' => 'object',
+        'properties' => array_map(static fn (): array => ['type' => 'integer'], array_flip($meta)),
+    ];
+
+    return $doc;
+}
+
+it('reports nothing but the components when a paginated envelope hoists', function (): void {
+    // The deepest of the three doors: the envelope, its two sub-objects and the item its list carries are
+    // four pointers at three depths, read against one inline body. A pointer reached from INSIDE a
+    // component the same walk just resolved is the case a single hop could not answer.
+    $out = diffOf(diffInlinePage(), diffHoistedPage());
+
+    // Sorted, because what this row states is WHICH changes there are — the changeset's own order is
+    // pinned by the tests that own it.
+    $reported = array_map(static fn (Change $c): string => $c->code.' @'.$c->path, $out->changes);
+    sort($reported);
+
+    expect($out->isBreaking())->toBeFalse()
+        ->and($reported)->toBe([
+            'schema.added @components.schemas.FormResource',
+            'schema.added @components.schemas.FormResourcePage',
+            'schema.added @components.schemas.PaginationLinks',
+            'schema.added @components.schemas.PaginationMeta',
+        ]);
+});
+
+it('still reads a member that narrowed beneath a hoisted envelope', function (): void {
+    // Two hops down and one component along: the property is gone from what the operation returns, and
+    // the resolution exists to find it there rather than to stop looking.
+    $out = diffOf(diffInlinePage(), diffHoistedPage(['total']));
+    $removed = array_values(array_filter($out->changes, static fn (Change $c): bool => $c->code === 'schema.property-removed'));
+
+    expect($out->isBreaking())->toBeTrue()
+        ->and($removed)->toHaveCount(1)
+        ->and($removed[0]->breaking)->toBeTrue()
+        ->and($removed[0]->path)
+        ->toBe('GET /api/v1/forms/{id} responses 200 application/json schema.properties.meta.properties.per_page');
 });
 
 // --- Hoisted parameters ($ref parameters) ----------------------------------
@@ -2103,7 +2858,6 @@ it('keeps a webhook and a path template of the same name apart', function (): vo
     // is all there is to key on: keyed on it alone the two are one operation, and an edit to the webhook
     // reads as an edit to the path — or, once their content parts them, as both being replaced.
     $doc = [
-        'uir' => '1.0.0',
         'openapi' => '3.2.0',
         'paths' => ['/forms' => ['get' => ['summary' => 'List forms', 'responses' => ['200' => ['description' => 'Forms']]]]],
         'webhooks' => ['/forms' => ['get' => ['summary' => 'Poll me', 'responses' => ['200' => ['description' => 'Ack']]]]],
@@ -3097,3 +3851,106 @@ it('tells two values JSON cannot encode apart, so a removed enum value is still 
     'strings that are not valid UTF-8' => ["\xB1\x31", "\xB2\x31"],
     'INF and NAN' => [INF, NAN],
 ]);
+
+/**
+ * A JSON object is an unordered set of members (RFC 8259 §4), so two that differ only in member order
+ * are one value. An exported artifact has had its schema values' keys sorted and a fresh build keeps
+ * them as written, so a comparison that read member order reported an export diffed against its own
+ * build as changed — breaking, where the value was a `const` or an enum member. The second half is the
+ * control: the same reordering with one member's value moved is still that keyword's change.
+ */
+it('reads a value whose members only changed order as unchanged, at every value keyword', function (string $keyword, mixed $written, mixed $sorted, mixed $edited, string $code, bool $breaking): void {
+    expect(diffOfSchemaKeyword($keyword, $sorted, $written)->isEmpty())->toBeTrue();
+
+    $changeset = diffOfSchemaKeyword($keyword, $sorted, $edited);
+
+    expect(diffCodes($changeset))->toBe([$code])
+        ->and($changeset->isBreaking())->toBe($breaking);
+})->with([
+    'example' => ['example', ['min' => 0, 'max' => 100], ['max' => 100, 'min' => 0], ['min' => 0, 'max' => 99], 'schema.annotation-changed', false],
+    'example, nested' => ['example', ['range' => ['min' => 0, 'max' => 100]], ['range' => ['max' => 100, 'min' => 0]], ['range' => ['min' => 1, 'max' => 100]], 'schema.annotation-changed', false],
+    'example, object in a list' => ['example', [['min' => 0, 'max' => 100]], [['max' => 100, 'min' => 0]], [['min' => 0, 'max' => 99]], 'schema.annotation-changed', false],
+    'example, stdClass' => ['example', (object) ['min' => 0, 'max' => 100], (object) ['max' => 100, 'min' => 0], (object) ['min' => 0, 'max' => 99], 'schema.annotation-changed', false],
+    'examples' => ['examples', [['min' => 0, 'max' => 100]], [['max' => 100, 'min' => 0]], [['min' => 0, 'max' => 99]], 'schema.annotation-changed', false],
+    'const' => ['const', ['min' => 0, 'max' => 100], ['max' => 100, 'min' => 0], ['min' => 0, 'max' => 99], 'schema.refinement-changed', true],
+    'enum member' => ['enum', [['min' => 0, 'max' => 100]], [['max' => 100, 'min' => 0]], [['min' => 0, 'max' => 99]], 'schema.enum-value-removed', true],
+]);
+
+it('still reads order where JSON has it, and an object as no list', function (): void {
+    // A list is ordered, `{}` is not `[]`, and an object whose keys are "0" and "1" is not the
+    // two-element list those keys would spell once sorted.
+    expect(diffCodes(diffOfSchemaKeyword('example', [1, 2], [2, 1])))->toBe(['schema.annotation-changed'])
+        ->and(diffCodes(diffOfSchemaKeyword('example', new stdClass, [])))->toBe(['schema.annotation-changed'])
+        ->and(diffCodes(diffOfSchemaKeyword('example', [1 => 'b', 0 => 'a'], ['a', 'b'])))->toBe(['schema.annotation-changed']);
+});
+
+/**
+ * The one load-bearing compatibility property of a breaking release, executed rather than promised:
+ * an artifact committed before UIR 2.0 still pairs against one built after it, and the `contentHash`
+ * a consumer has in their repository does not move.
+ *
+ * Both halves were prose until now, in the design doc and in the upgrade notes, and nothing in the
+ * suite fed a pre-2.0-shaped document to anything at all. `ALGO_VERSION` stays `v1` and identities
+ * never read a document-level member, so the pairing holds — but the whole point of a rule this
+ * release rests on is that breaking it has to fail a test rather than reach a user.
+ */
+it('pairs an artifact written before UIR 2.0 against one built after it, hash unmoved', function (): void {
+    $generator = ['name' => 'docuccino/laravel', 'version' => '0.19.0'];
+
+    // Exactly what a v0.19 export wrote: the spec version and schema URL at the root, where the
+    // OpenAPI Object admits neither and where UIR 2.0 took them from.
+    $legacy = [
+        '$schema' => 'https://spec.docuccino.app/uir/1.1/schema.json',
+        'uir' => '1.1.0',
+        ...diffBase(),
+    ];
+    $legacy['x-docuccino']['generator'] = [...$generator, 'specVersion' => '1.1.0'];
+
+    // And the same application, rebuilt after the upgrade: same API, both facts moved under
+    // `generator`, and a newer tool version besides.
+    $modern = diffBase();
+    $modern['x-docuccino']['generator'] = [
+        'name' => 'docuccino/laravel',
+        'version' => '0.20.0',
+        'specVersion' => '2.0.0',
+        'schema' => 'https://spec.docuccino.app/uir/2.0/schema.json',
+    ];
+
+    // The pairing: nothing about the API changed, so nothing is reported. A document-level member
+    // entering identity would show up here as every operation being replaced.
+    expect(diffOf($legacy, $modern)->isEmpty())->toBeTrue()
+        // The same the other way round, because a user diffs in both directions.
+        ->and(diffOf($modern, $legacy)->isEmpty())->toBeTrue();
+
+    // The control, and the shape that WOULD break it: `ALGO_VERSION` staying `v1` is the whole of why
+    // the two artifacts pair, and an emptiness assertion over a differ that had stopped pairing
+    // anything would pass just as quietly. Bump it and a v0.19 artifact is not comparable at all —
+    // which is the outcome this release had to avoid, so it is worth seeing refused.
+    /** @var array<string, mixed> $reminted */
+    $reminted = json_decode(str_replace(':v1:', ':v2:', (string) json_encode($modern)), true, flags: JSON_THROW_ON_ERROR);
+
+    expect(IdentityGenerator::ALGO_VERSION)->toBe('v1')
+        ->and(fn (): mixed => diffOf($legacy, $reminted))->toThrow(IncomparableDocumentsException::class);
+
+    // Hydration keeps the older artifact whole: both root members ride in `rest`, so the differ is
+    // reading the document that is on disk rather than a version of it with two members quietly gone.
+    $hydrated = UirDocument::fromArray($legacy)->toArray();
+
+    expect($hydrated['$schema'] ?? null)->toBe('https://spec.docuccino.app/uir/1.1/schema.json')
+        ->and($hydrated['uir'] ?? null)->toBe('1.1.0');
+
+    // And the hash. v0.19's hasher opened by unsetting the two root members, which is spelled out
+    // here rather than asked of the current code — a guard that asks the code for its own rule agrees
+    // with whatever the code does. What that tool hashed and what this one hashes must be the same
+    // bytes, or every consumer's next build tells them their API changed.
+    $asTheOlderToolHashedIt = $legacy;
+    unset($asTheOlderToolHashedIt['$schema'], $asTheOlderToolHashedIt['uir']);
+
+    expect((new ContentHasher)->hash($asTheOlderToolHashedIt))->toBe((new ContentHasher)->hash($modern));
+
+    // The control: the hash is not simply insensitive to everything. A real content change moves it.
+    $edited = $modern;
+    $edited['paths']['/api/v1/forms/{id}']['get']['summary'] = 'Show one form';
+
+    expect((new ContentHasher)->hash($edited))->not->toBe((new ContentHasher)->hash($modern));
+});

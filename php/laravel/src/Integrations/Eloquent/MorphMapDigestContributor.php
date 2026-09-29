@@ -8,42 +8,28 @@ use Docuccino\Core\Extensions\Contracts\EnvironmentDigestContributor;
 use Illuminate\Database\Eloquent\Relations\Relation;
 
 /**
- * Contributes the polymorphic morph map (`Relation::morphMap()`) to the environment digest (design
- * §10, A4): the alias → FQCN table drives MorphTo discriminator mappings, so a change to it can alter
- * any operation documenting a morph relation. Gated with the Eloquent integration — a document that
- * disables Eloquent never keys its warm fragments on the morph map.
+ * Contributes the morph map to the environment digest: a `morphTo`'s type column publishes the values
+ * {@see MorphTypeValues} reads out of it, so a changed map must not replay a fragment built under the
+ * old one. Gated with the Eloquent integration.
  *
- * Two segments, because the map is read two ways. Alias → model is a keyed lookup, so that half is
- * hashed as a SET, sorted by alias: a reorder no discriminator can see must not churn every warm
- * fragment. Model → alias is not — it is the first alias for the model in iteration order, which is
- * what a discriminator PUBLISHES, so a model carrying two aliases resolves to whichever was registered
- * first. Sorting that away would hash two applications alike and let a warm fragment publish the alias
- * the other one meant, so the resolved answer is hashed beside the set.
+ * What is hashed is what the reader consumes — whether the map is enforced, and each model's resolved
+ * alias. That alias is the FIRST one registered for the model (`array_search()`), so it is taken in
+ * registration order before the pairs are sorted by class: sorting first would hash two maps alike
+ * that publish different values.
  */
 final class MorphMapDigestContributor implements EnvironmentDigestContributor
 {
     public function digest(): string
     {
-        $morphMap = Relation::morphMap();
-
-        // First alias per model, taken in registration order: the same answer `array_search()` gives
-        // {@see MorphToSchema}, which is what the discriminator mapping is minted from.
         $resolved = [];
-        foreach ($morphMap as $alias => $fqcn) {
-            $resolved[$fqcn] ??= (string) $alias;
+        foreach (Relation::morphMap() as $alias => $class) {
+            $resolved[$class] ??= (string) $alias;
         }
-        ksort($resolved);
-        ksort($morphMap);
+        ksort($resolved, SORT_STRING);
 
-        $parts = ['morph'];
-        foreach ($morphMap as $alias => $fqcn) {
-            $parts[] = (string) $alias;
-            $parts[] = $fqcn;
-        }
-
-        $parts[] = 'aliases';
-        foreach ($resolved as $fqcn => $alias) {
-            $parts[] = $fqcn;
+        $parts = ['enforced', Relation::requiresMorphMap() ? '1' : '0', 'aliases'];
+        foreach ($resolved as $class => $alias) {
+            $parts[] = $class;
             $parts[] = $alias;
         }
 
