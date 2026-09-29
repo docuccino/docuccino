@@ -310,9 +310,9 @@ would sit too close to the figure for an ordinary change to survive it (see `lar
 |---------------------|------------|-------|--------------------------------------------------|
 | `core`              | **97.64%** | 97    | fully in-process-measurable; 0.64pp above it, ~96 statements |
 | `laravel`           | **97.09%** | 96    | ratcheted 95 → 96; 97 declined at 14.07 statements (0.094pp), see below; 1.09pp above it, ~164 statements |
-| `inference-phpstan` | **53.88%** | 53    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51 → 53; 0.88pp, ~29 statements |
+| `inference-phpstan` | **54.48%** | 54    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51 → 53 → 54; 0.48pp, ~16 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 93.05%     | —     | informational only; no longer a gate             |
+| Overall             | 92.99%     | —     | informational only; no longer a gate             |
 
 Every figure here is one `composer test:coverage` run of the whole set — CI's coverage job on PHP 8.4,
 which is what the record describes — so the three read off the same clover report and the floors file
@@ -459,7 +459,7 @@ for its pure/parent-process classes, never more subprocess fixture tests.
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **97**, `laravel` **96**, `inference-phpstan` **53**.
+  an aspiration. Current floors: `core` **97**, `laravel` **96**, `inference-phpstan` **54**.
 - The same run **checks the record**: each entry carries the `measured` figure its floor was set from,
   and a run more than ten statements away from it reports `STALE` and fails, naming the three places to
   re-record. Honest floors are only honest against a measurement somebody took recently, and until this

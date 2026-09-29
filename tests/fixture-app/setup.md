@@ -139,6 +139,16 @@ them.
 - `app/Timeline/` — a `@phpstan-sealed` interface (`TimelineEntry`) over two final readonly classes
   whose constructors fix a backed-enum `type`, and `app/Http/Controllers/TimelineController.php`
   answering with a `list<TimelineEntry>` payload and a union of the two classes.
+- `app/Problems/` — plain objects whose constructors assign typed properties on only some paths:
+  `ProblemDetails` (an RFC 9457 document behind a throwing guard, with `detail` and a readonly `traceId`
+  assigned in branches and a nullable `instance` assigned on every path), `RetryNotice` (an early
+  `return`), `BaseProblem` with a subclass that replaces its constructor (`ConflictProblem`) and one that
+  inherits it (`GenericProblem`), and `AssembledProblem`, which has no constructor at all. Beside them,
+  constructors that hand the work on: `HydratedProblem` (a private helper and a `CarriesTrace` trait helper,
+  each assigning one member in a branch), `FilledProblem` (a `FillsAttributes` trait writing
+  `$this->{$key}`), `PaymentProblem` (a `DataObject` parent constructor doing the same), and
+  `RateLimitProblem` (a private constructor behind a named one). What the engine reads off each constructor
+  is what decides which keys a response always carries.
 
 ### QueryBuilder deep-chain trace (the Scramble-Pro-beater)
 
