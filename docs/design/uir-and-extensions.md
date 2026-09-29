@@ -1272,6 +1272,17 @@ the `faker` half onto `export.mock_faker_key` (conventionally `x-faker`) or drop
 `export` so it stays out of `configHash`.
 All other `x-*` members pass through untouched.
 
+Blank readings: `x-docuccino.facts.blankAsNull` = a pattern, on a request field's schema (a body member
+or a query parameter's `schema`), where the server reads a blank string there as the null the field
+takes and accepts it — Laravel's `TrimStrings` + `ConvertEmptyStringsToNull` ahead of a `nullable`
+field no implicit rule refuses. A fact rather than a widening of the schema: the schema is what a client
+is held to, sending null already does what a blank does, and a blank folded into `type` or `anyOf` cost
+generated clients their enums and formats. Core's `Document\BlankAsNull` is the one writer and reader;
+the contract checker reads a blank that matches it as that null in a query value, a form field and a
+JSON request body, and nowhere a framework does not rewrite (path, header, cookie, anything a response
+carries). The adapter's `BlankString` owns which strings, at which keys, and which rules refuse; the
+OAS emitters strip it with the rest of `x-docuccino`, so it lives in the `full` artifact only.
+
 `source.line` is provenance, not identity, so it never affects `contentHash` or any `id`.
 Committed UIR artifacts should therefore emit with `--provenance=none` (or `winners` and
 accept that source line numbers churn as code moves); the churn is cosmetic and cannot alter

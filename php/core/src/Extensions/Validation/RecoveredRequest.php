@@ -385,12 +385,13 @@ final class RecoveredRequest
         $members = new DeepObjectMembers($operation);
 
         foreach (self::queryLeaves($result->schema, []) as [$name, $schema, $required]) {
-            // A hint is an x-docuccino member, not a schema keyword — it travels on the draft rather
-            // than through the guard, which would publish it as a keyword of that name.
+            // A hint or a fact is an x-docuccino member, not a schema keyword — it travels on the draft
+            // rather than through the guard, which would publish it as a keyword of that name.
             $docuccino = $schema['x-docuccino'] ?? null;
             unset($schema['x-docuccino']);
             /** @var array<string, mixed>|null $mock */
             $mock = is_array($docuccino) && is_array($docuccino['mock'] ?? null) ? $docuccino['mock'] : null;
+            $facts = is_array($docuccino) && is_array($docuccino['facts'] ?? null) ? $docuccino['facts'] : [];
 
             $member = $members->schemaFor($name);
             if ($member !== null) {
@@ -400,6 +401,9 @@ final class RecoveredRequest
                 $members->stateRequired($name, $required ? true : null);
                 if ($mock !== null) {
                     $member->assignMock($mock);
+                }
+                foreach ($facts as $key => $fact) {
+                    $member->setDocuccinoFact((string) $key, $fact);
                 }
 
                 foreach ($schema as $keyword => $value) {
@@ -413,6 +417,9 @@ final class RecoveredRequest
             $parameter->setRequired($required, $contribution);
             if ($mock !== null) {
                 $parameter->schema()->assignMock($mock);
+            }
+            foreach ($facts as $key => $fact) {
+                $parameter->schema()->setDocuccinoFact((string) $key, $fact);
             }
 
             $description = $schema['description'] ?? null;

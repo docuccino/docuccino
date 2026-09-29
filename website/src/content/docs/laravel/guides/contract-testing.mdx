@@ -150,11 +150,19 @@ What they hold you to:
 - **The fields are read as they arrived, not as your application left them.** `TrimStrings` and
   `ConvertEmptyStringsToNull` are in Laravel's default global stack and rewrite the request in place,
   and every `$request->merge()` in your middleware and controllers adds fields no client sent — so the
-  parameter bag an assertion can reach is not the message. The trait records each request at the front
-  of the middleware stack, ahead of all of it. Where nothing recorded one — a suite that reaches the
-  assertions without the trait, or a `TestResponse` built by hand — the body is not checked and the note
-  says so, rather than reading whatever is in the bag. `ApiContract::captureRequestBodies()` turns the
-  recording on for a test case that cannot take the trait.
+  parameter bags an assertion can reach are not the message. The trait records each request's body and
+  query string at the front of the middleware stack, ahead of all of it. Where nothing recorded one — a
+  suite that reaches the assertions without the trait, or a `TestResponse` built by hand — the body is
+  not checked and the note says so, rather than reading whatever is in the bag.
+  `ApiContract::captureRequestBodies()` turns the recording on for a test case that cannot take the
+  trait.
+- **A blank the server reads as `null` is checked as that `null`.** Where the document states that
+  Laravel turns a blank string on a field into `null` before validating (see [Blank
+  values](/laravel/documenting/requests/#blank-values)), a blank in the query string, a form field or a
+  JSON body is checked as the `null` your rules saw — so clearing a form field, or sending `?status=`,
+  passes exactly where your application accepts it. The statement travels in the `full` artifact the
+  assertions read by default; an artifact exported as plain OpenAPI does not carry it, and a blank is
+  then checked as the string it is.
 - **A request carrying a file is read as the multipart request it is.** Laravel's test client labels
   `post()` `application/x-www-form-urlencoded` even when you hand it an `UploadedFile`, and no client
   can send a file that way — so a request with file parts is checked against the `multipart/form-data`
