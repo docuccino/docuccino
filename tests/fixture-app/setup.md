@@ -128,6 +128,14 @@ them.
   on the request.
 - `app/Http/Resources/CompactableResource.php` — a ternary `toArray` (one return site, two shapes)
   and a `with()` whose other branch returns request input.
+- `app/Http/Controllers/ListedCollectionController.php` with `ListedResource.php`,
+  `ListedCollection.php`, `CatalogueResource.php`, `ShelfResource.php`, `ArchiveResource.php`,
+  `ArchiveCollection.php`, `LedgerResource.php`, `LedgerCollection.php`, `DraftResource.php`,
+  `JournalResource.php`, `JournalCollection.php`, `SketchResource.php` — `newCollection()` overrides
+  (inherited, generic, named, untyped, untyped building a named collection, untyped building one of
+  two classes) reached through `::collection()` and
+  `toResourceCollection()`, plus `@method` tags over real methods and over macros; and
+  `app/Http/Requests/AccountRequest.php`, a FormRequest typing `user()` with a `@method` tag.
 - `app/Timeline/` — a `@phpstan-sealed` interface (`TimelineEntry`) over two final readonly classes
   whose constructors fix a backed-enum `type`, and `app/Http/Controllers/TimelineController.php`
   answering with a `list<TimelineEntry>` payload and a union of the two classes.

@@ -132,6 +132,16 @@ key is documented as that body, since Laravel doesn't wrap it a second time. Wit
 named collection is documented both bare and wrapped under `data`, because the collection may hold a
 paginator, whose `links` and `meta` make Laravel wrap it.
 
+A list built by `UserResource::collection()` or `->toResourceCollection(UserResource::class)` is the
+collection the resource's `newCollection()` returns, so a base resource that overrides it to hand its
+whole family one collection class documents that class's `with()` on every such list, paginated or
+not. On a paginated list the members sit beside `data`, `links` and `meta`, and a `meta` object from
+`with()` extends the pagination `meta`, as Laravel merges it. A key that the pagination `meta` also
+sends, such as `total`, is merged by Laravel into an array of both values, and is documented that way.
+An override with no return type, written the way Laravel writes its own, is documented as the class its
+body builds with `new`. If it builds different classes on different paths, it is documented as
+Laravel's own collection.
+
 ### Union return types
 
 An action whose return type has more than one arm documents as `anyOf`, one branch per arm — and each
