@@ -922,8 +922,9 @@ a `format` claim about it would be a guess.
 | --- | --- |
 | `in:draft,sent,paid` / `Rule::in(...)` / `Rule::enum(InvoiceStatus::class)` | An `enum` of the allowed values — `integer`-typed when every value is a whole number, else `string`. `Rule::enum()` reads the enum's real cases and names the class in the description; a `->only([...])` / `->except([...])` chain narrows the documented values to match. |
 | `not_in:a,b` | `not: { enum: ["a", "b"] }` |
-| `regex:/^INV-\d+$/` | `pattern`, with the PHP delimiters and flags stripped so it's a bare ECMA-262 regex. |
-| `alpha`, `alpha_num`, `alpha_dash` | The equivalent anchored `pattern`. |
+| `regex:/^INV-\d+$/` | `pattern`, with the PHP delimiters stripped so it's a bare ECMA-262 regex. A modifier that changes what matches — `i`, `m`, `s`, `x` — has no `pattern` spelling, so the field is published without one and a `validation.regex-modifier` notice says so. So is a body a JSON Schema validator reads differently from PHP — `\d`, `\w` or `\s` under `/u` (they match every script there), `\A`/`\z`, inline flags, lookarounds, `.` — with a `validation.regex-unportable` notice. |
+| `alpha:ascii`, `alpha_num:ascii`, `alpha_dash:ascii` | The ASCII class as an anchored `pattern` — `^[a-zA-Z0-9_-]+$` for `alpha_dash:ascii`. |
+| `alpha`, `alpha_num`, `alpha_dash` | Laravel accepts letters, marks and numbers from any script here, so the `pattern` is the ASCII class plus any non-ASCII character — `^(?:[a-zA-Z0-9_-]\|[^\x00-\x7F])+$`. That's exact for ASCII and wider beyond it, because the exact `\p{L}` form reads differently in validators that compile without the `u` flag. |
 | `starts_with:INV-` / `ends_with:.pdf` | An anchored `pattern` for a single value; a multi-value set becomes a description ("Must start with one of: …"), since there's no single pattern for it. |
 | `accepted`, `accepted_if` | `boolean` with `const: true` (the `_if` form adds "Must be accepted when …"). |
 | `declined`, `declined_if` | `boolean` with `const: false`. |

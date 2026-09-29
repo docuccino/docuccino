@@ -14,6 +14,7 @@ use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Laravel\Integrations\Support\RuleParsing;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
+use Illuminate\Support\Facades\Validator;
 use Workbench\App\Enums\WidgetStatus;
 
 /**
@@ -173,10 +174,17 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'file' => [[['file']], ['format' => 'binary', 'type' => 'string']],
     'image' => [[['image']], ['description' => 'An image file.', 'format' => 'binary', 'type' => 'string']],
 
-    // AlphaRuleTransformer — canonical ECMA-262 character-class patterns.
-    'alpha' => [[['alpha']], ['pattern' => '^[a-zA-Z]+$', 'type' => 'string', 'example' => 'example']],
-    'alpha_num' => [[['alpha_num']], ['pattern' => '^[a-zA-Z0-9]+$', 'type' => 'string', 'example' => 'example']],
-    'alpha_dash' => [[['alpha_dash']], ['pattern' => '^[a-zA-Z0-9_-]+$', 'type' => 'string', 'example' => 'example']],
+    // AlphaRuleTransformer — `:ascii` is Laravel's ASCII class exactly. Without it the server takes any
+    // script's letters, so the pattern admits every non-ASCII character too: exact over ASCII, wider past
+    // it, and compiled alike with or without the `u` flag (`AlphaRulesGoldenTest` holds both claims).
+    'alpha' => [[['alpha']], ['pattern' => '^(?:[a-zA-Z]|[^\\x00-\\x7F])+$', 'type' => 'string', 'example' => 'example']],
+    'alpha_num' => [[['alpha_num']], ['pattern' => '^(?:[a-zA-Z0-9]|[^\\x00-\\x7F])+$', 'type' => 'string', 'example' => 'example']],
+    'alpha_dash' => [[['alpha_dash']], ['pattern' => '^(?:[a-zA-Z0-9_-]|[^\\x00-\\x7F])+$', 'type' => 'string', 'example' => 'example']],
+    'alpha:ascii' => [[['alpha', ['ascii']]], ['pattern' => '^[a-zA-Z]+$', 'type' => 'string', 'example' => 'example']],
+    'alpha_num:ascii' => [[['alpha_num', ['ascii']]], ['pattern' => '^[a-zA-Z0-9]+$', 'type' => 'string', 'example' => 'example']],
+    'alpha_dash:ascii' => [[['alpha_dash', ['ascii']]], ['pattern' => '^[a-zA-Z0-9_-]+$', 'type' => 'string', 'example' => 'example']],
+    // Laravel tests the first parameter for `ascii` and nothing else, so any other word is the any-script form.
+    'alpha_dash (a parameter other than ascii)' => [[['alpha_dash', ['strict']]], ['pattern' => '^(?:[a-zA-Z0-9_-]|[^\\x00-\\x7F])+$', 'type' => 'string', 'example' => 'example']],
 
     // AffixRuleTransformer — single value → anchored pattern (literal regex-escaped); multi → description.
     'starts_with (single → pattern)' => [[['starts_with', ['abc']]], ['pattern' => '^abc', 'type' => 'string', 'example' => 'abcexample']],
@@ -310,13 +318,82 @@ it('normalises regex delimiters to a bare ECMA-262 pattern across delimiter styl
 })->with([
     'slash' => ['/^[a-z]+$/', '^[a-z]+$'],
     'hash delimiter' => ['#^[a-z]+$#', '^[a-z]+$'],
-    'tilde + trailing flags' => ['~^\\d+$~i', '^\\d+$'],
+    'tilde + a trailing modifier' => ['~^[0-9]+$~u', '^[0-9]+$'],
+    // Without `/u` PHP's class escapes are ASCII, as ECMA-262's are.
+    'a class escape without /u' => ['/^INV-\\d+$/', '^INV-\\d+$'],
     'brace bracket-pair' => ['{^[0-9]+$}', '^[0-9]+$'],
     'paren bracket-pair' => ['(hello)', 'hello'],
     'angle bracket-pair' => ['<^x$>', '^x$'],
-    'too short → kept verbatim' => ['x', 'x'],
-    'no closing delimiter → kept verbatim' => ['/abc', '/abc'],
 ]);
+
+it('publishes no pattern for a regex whose body a pattern reads differently, as the server reads it', function (string $rule, string $value, string $read): void {
+    // The server accepts the value — by Laravel itself — and the body, read the way an ECMA-262 validator
+    // reads it (`$read`, spelled in PHP's own ASCII dialect), would refuse it.
+    expect(Validator::make(['f' => $value], ['f' => [$rule]])->passes())->toBeTrue()
+        ->and(preg_match($read, $value))->toBe(0);
+
+    $context = vocabularyContext();
+    $ordered = (new RuleOrdering)->order(new RuleSet(['f' => [ValidationRule::of('regex', [substr($rule, 6)])]]));
+    $result = (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, $context);
+
+    expect($result->schema['properties']['f'])->toBe(['type' => 'string'])
+        ->and(array_map(static fn ($d): string => $d->code, $context->components()->diagnostics()))->toBe(['validation.regex-unportable']);
+})->with([
+    // Under `/u` PHP's `\d`, `\w` and `\s` match every script; ECMA-262's are ASCII, `u` flag or not.
+    '\d under /u' => ['regex:/^\d+$/u', '٣', '/^[0-9]+$/'],
+    '\w under /u' => ['regex:/^\w+$/u', 'é', '/^[A-Za-z0-9_]+$/'],
+    'a class escape in a class under /u' => ['regex:/^[\d-]+$/u', '٣-٣', '/^[0-9-]+$/'],
+    // PCRE-only syntax: ECMA-262 reads `\A` and `\z` as the letters without `u`, and refuses them with it.
+    '\A and \z' => ['regex:/\Aabc\z/', 'abc', '/Aabcz/'],
+    // An inline flag is no ECMA-262 syntax at all, so the whole document would fail to compile.
+    'an inline flag' => ['regex:/^(?i)[a-z]+$/', 'ABC', '/^[a-z]+$/'],
+    // A negated class matches a non-ASCII character as one code point here and one byte without `/u`; a
+    // count over it is a different count in UTF-16 units.
+    'a count over a negated class' => ['regex:/^[^\/]{2}$/', 'é', '/^[^\/]{2}$/u'],
+    // PHP's `.` stops only at `\n`; ECMA-262's at `\r`, U+2028 and U+2029 too.
+    'a dot' => ['regex:/^a.b$/', "a\rb", '/^a[^\n\r]b$/'],
+]);
+
+it('publishes no pattern for a regex PHP itself cannot compile', function (string $raw): void {
+    $context = vocabularyContext();
+    $ordered = (new RuleOrdering)->order(new RuleSet(['f' => [ValidationRule::of('regex', [$raw])]]));
+    $result = (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, $context);
+
+    // Laravel's validator throws on it, so there is no value the server accepts to describe.
+    expect(@preg_match($raw, ''))->toBeFalse()
+        ->and($result->schema['properties']['f'])->toBe(['type' => 'string'])
+        ->and(array_map(static fn ($d): string => $d->code, $context->components()->diagnostics()))->toBe(['validation.regex-unportable']);
+})->with(['too short' => ['x'], 'no closing delimiter' => ['/abc'], 'an unbalanced group' => ['/^(ab$/']]);
+
+it('publishes no pattern for a regex whose modifier changes what matches, as the server reads it', function (string $rule, string $value): void {
+    // The server accepts the value — by Laravel itself — and the modifier-less body would refuse it.
+    expect(Validator::make(['f' => $value], ['f' => [$rule]])->passes())->toBeTrue()
+        ->and(preg_match('/'.substr($rule, 7, (int) strrpos($rule, '/') - 7).'/', $value))->toBe(0);
+
+    $context = vocabularyContext();
+    $ordered = (new RuleOrdering)->order(new RuleSet(['f' => [ValidationRule::of('regex', [substr($rule, 6)])]]));
+    $result = (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, $context);
+    $diagnostics = $context->components()->diagnostics();
+
+    // So the document states no pattern — a string, which is true — and says why to the author.
+    expect($result->schema['properties']['f'])->toBe(['type' => 'string'])
+        ->and(array_map(static fn ($d): string => $d->code, $diagnostics))->toBe(['validation.regex-modifier']);
+})->with([
+    'i — case-insensitive' => ['regex:/^[a-z]+$/i', 'ABC'],
+    'm — anchors per line' => ['regex:/^[a-z]+$/m', "abc\n123"],
+    's — a dot matches a newline' => ['regex:/^a.b$/s', "a\nb"],
+    'x — whitespace is not literal' => ['regex:/^a b$/x', 'ab'],
+    'with others beside it' => ['regex:/^[a-z]+$/ui', 'ABC'],
+]);
+
+it('keeps the pattern under a modifier that never narrows it', function (string $raw): void {
+    $context = vocabularyContext();
+    $ordered = (new RuleOrdering)->order(new RuleSet(['f' => [ValidationRule::of('regex', [$raw])]]));
+    $result = (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, $context);
+
+    expect($result->schema['properties']['f']['pattern'])->toBe('^[a-z]+$')
+        ->and($context->components()->diagnostics())->toBe([]);
+})->with(['/^[a-z]+$/u', '/^[a-z]+$/D', '/^[a-z]+$/U', '/^[a-z]+$/A', '/^[a-z]+$/']);
 
 it('applies every presence-rule entry to the required/nullable contract', function (): void {
     // required / present mark the field required.
