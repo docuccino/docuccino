@@ -125,6 +125,13 @@ another's `toArray()` adds nothing, and its component never carries these member
 turns wrapping off is still wrapped under `data` once `with()` adds something, because that is the
 body Laravel sends; where `with()` may add nothing, both bodies are documented.
 
+A `data` key in `with()` isn't a member of its own: Laravel merges it into the data it wraps. When
+its keys are all ones `toArray()` never returns, they simply join the resource's, and the resource is
+documented as before. Otherwise the merge changes what is sent. A key both return becomes an array of
+both values, and on a collection, paginated or not, the keys join the list's positions and turn it
+into an object. In those cases `data` is documented as an array or an object, since that is all a
+client can rely on.
+
 The same holds for a named collection such as `UserCollection extends ResourceCollection`. One that
 keeps Laravel's `toArray()` is documented as a list of the resource it collects — its `$collects`
 property, or the resource its name points to — and one whose `toArray()` already returns a `data`
