@@ -964,3 +964,50 @@ it('publishes no with() member required when a with() branch returns request inp
     expect(array_keys($schema['properties']))->toBe(['data', 'debug'])
         ->and($schema['required'])->toBe(['data']);
 })->group('fixture');
+
+it('publishes an (object) cast as the object it sends, keys and all', function (): void {
+    // PHPStan types `(object) [...]` as an object shape intersected with stdClass. json_encode writes the
+    // shape's keys as the object's members and stdClass adds none, so the members are the contract: an
+    // empty cast is `{}`, a keyed one carries its keys, a key set on one branch only may be absent, and a
+    // cast inside a cast or a list inside a cast keeps its own wire form.
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyze(
+        'app/Http/Resources/CastEnvelopeResource.php',
+        'App\\Http\\Resources\\CastEnvelopeResource',
+        'with',
+    ));
+
+    $engine = new StubTypeEngine(analyses: [EnvelopedFixtureResource::class.'::with' => $analysis]);
+    $schema = (new SchemaConverter([new JsonResourceSchema, ...DefaultTypeMappers::all()], $engine, new ComponentRegistry))
+        ->toSchema(new ClassT(EnvelopedFixtureResource::class))->schema;
+
+    $object = ['type' => 'object'];
+    expect($schema['properties']['meta'])->toBe($object)
+        ->and($schema['properties']['links'])->toBe([
+            'type' => 'object',
+            'properties' => ['self' => ['type' => 'string']],
+            'required' => ['self'],
+        ])
+        ->and($schema['properties']['paging']['properties']['cursor'])->toBe($object)
+        ->and($schema['properties']['paging']['properties']['pages']['type'])->toBe('array')
+        ->and($schema['properties']['paging']['required'])->toBe(['cursor', 'pages'])
+        ->and(array_keys($schema['properties']['filters']['properties']))->toBe(['sort', 'q'])
+        ->and($schema['properties']['filters']['required'])->toBe(['sort'])
+        ->and(json_encode($schema))->not->toContain('allOf');
+})->group('fixture');
+
+it('publishes an empty (object) cast in a resource body as an object, never as the [] an emptied array is sent as', function (): void {
+    // A resource filters the arrays in its body and sends one left keyless as `[]`, but it never looks
+    // inside an object, so `(object) []` is `{}` on the wire and the schema must not admit an array.
+    $engine = new StubTypeEngine(analyses: [
+        EnvelopedFixtureResource::class.'::toArray' => ActionAnalysis::fromArray(FixtureRunner::analyze(
+            'app/Http/Resources/CastEnvelopeResource.php',
+            'App\\Http\\Resources\\CastEnvelopeResource',
+            'toArray',
+        )),
+    ]);
+    $components = new ComponentRegistry;
+    (new SchemaConverter([new JsonResourceSchema, ...DefaultTypeMappers::all()], $engine, $components))
+        ->toSchema(new ClassT(EnvelopedFixtureResource::class));
+
+    expect($components->schemas()['ReleaseResource']['properties']['settings'])->toBe(['type' => 'object']);
+})->group('fixture');
