@@ -27,6 +27,8 @@ through the same inference that powers everything else:
 - an **API Resource** becomes its [resource schema](/laravel/documenting/schemas/#api-resources);
 - an **Eloquent model** becomes its [model schema](/laravel/documenting/schemas/#eloquent-models);
 - a **backed enum** becomes its [enum schema](/laravel/documenting/schemas/#enums);
+- a **collection** becomes an array or an object of its items, since its keys decide which — see
+  [lists and maps](/laravel/documenting/schemas/#arrays-lists-and-maps);
 - a **resource collection** becomes an array of that schema, wrapped in the `{ data, links, meta }`
   pagination envelope when the collection paginates — `paginate()` (length-aware), `simplePaginate()`
   (no `total`/`last_page`), `cursorPaginate()`, or the
@@ -141,8 +143,11 @@ it under `data` whatever its body returns, and it is documented that way. With w
 collection is documented both bare and wrapped under `data`, because the collection may hold a
 paginator, whose `links` and `meta` make Laravel wrap it.
 
-Laravel renumbers a collection's keys before sending it, so a collection is documented as a list.
-When a collection keeps its keys instead — through a `$preserveKeys` property on the resource or the
+Laravel renumbers a collection's integer keys before sending it, so a collection is documented as a
+list. String keys are never renumbered: a resource collection built from `->keyBy('slug')` is sent as
+an object. Docuccino doesn't read the keys of the collection you pass to a resource, so such a
+collection is still documented as a list; call `->values()` first when the list is what clients should
+get. When a collection keeps its keys instead — through a `$preserveKeys` property on the resource or the
 named collection, or Laravel 13's `#[PreserveKeys]` attribute — its `data` is documented as an array
 or an object of that resource, paginated or not. Laravel sends kept keys as an object unless they run
 `0, 1, 2…`, so which one arrives depends on the collection you pass, not on the class:

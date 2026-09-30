@@ -398,6 +398,23 @@ PHP spells both with `array`; the emitted schema keeps them apart.
 | A literal shape, `['id' => int, 'total' => float]` | An object with those named properties |
 | A bare `array` with nothing to refine it | Permissive — no `type` claimed |
 
+A Laravel collection is sent as the array it holds, keys included. Its keys are a list only while they
+run `0, 1, 2…`, and calls like `->filter()` and `->sortBy()` keep the keys of the items they drop or move,
+which Laravel then sends as an object. String keys prove no object either: a `->keyBy()` over no rows is
+sent as `[]`, and PHP turns a numeric-string key such as `"0"` back into an integer. So a collection your
+action returns is documented as `type: ["array", "object"]` of its items, whatever built it:
+
+```php
+// [{...}, {...}] or {"1": {...}, "0": {...}} — documented as an array or an object of users
+return User::all()->sortBy('name');
+```
+
+When clients should get a list, return a [resource collection](/laravel/documenting/schemas/#api-resources),
+which Laravel renumbers before sending. A collection class that overrides how it is sent —
+`jsonSerialize()`, `toJson()` or `all()` — sends whatever the override returns, so nothing is claimed about
+its body; for an Eloquent collection that is the class its model names in `$collectionClass` or
+`#[CollectedBy]`, and a model with its own `newCollection()` claims nothing either.
+
 Since `array` says nothing about its elements, Docuccino reads the tag that does:
 
 ```php
