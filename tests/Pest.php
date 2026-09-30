@@ -2287,6 +2287,39 @@ function phpStringLiterals(string $source, string $prefix = ''): array
 }
 
 /**
+ * Every class a shipped package DECLARES, whichever package and directory, as FQCN => the file declaring it.
+ * Read off a parsed AST ({@see phpDeclaredClasses()}), so a population derived from it reaches past the
+ * directory its members happen to sit in today.
+ *
+ * @return array<class-string, string>
+ */
+function shippedDeclaredClasses(): array
+{
+    static $found = null;
+    if (is_array($found)) {
+        return $found;
+    }
+
+    $found = [];
+    foreach (glob(dirname(__DIR__).'/php/*/src', GLOB_ONLYDIR) ?: [] as $root) {
+        /** @var iterable<SplFileInfo> $entries */
+        $entries = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+        foreach ($entries as $entry) {
+            if ($entry->isFile() && $entry->getExtension() === 'php') {
+                foreach (phpDeclaredClasses((string) file_get_contents($entry->getPathname())) as $fqcn) {
+                    /** @var class-string $fqcn */
+                    $found[$fqcn] = $entry->getPathname();
+                }
+            }
+        }
+    }
+
+    ksort($found);
+
+    return $found;
+}
+
+/**
  * Every class the Laravel adapter DECLARES, as FQCN => the source of the file declaring it. Read off a
  * parsed AST rather than matched as text: two guards derive populations from this, and each spelling one
  * of them could not recognise was a class silently outside it.
@@ -4695,7 +4728,9 @@ function shippedLints(): array
     foreach ((array) glob(dirname(__DIR__).'/php/core/src/Lint/*.php') as $file) {
         $class = 'Docuccino\Core\Lint\\'.basename((string) $file, '.php');
 
-        if ((new ReflectionClass($class))->implementsInterface(DocumentTransformer::class)) {
+        // A lint is something a document registers, so the contract every one of them implements is not one.
+        $reflection = new ReflectionClass($class);
+        if ($reflection->isInstantiable() && $reflection->implementsInterface(DocumentTransformer::class)) {
             $lints[] = $class;
         }
     }

@@ -238,12 +238,13 @@ final class DocumentGenerator
             $this->generatorVersion,
             $content,
         );
-        $bag->addAll($assembly->diagnostics);
-
         $published = UirDocument::fromArray($assembly->document);
         foreach ($this->schemaErrors($assembly->document, $published, $meanwhile) as $message) {
             $bag->add(new Diagnostic(severity: Severity::Error, code: 'document.schema-invalid', message: $message));
         }
+
+        // Last, since it waits for the lints running beside everything above; the bag sorts what it holds.
+        $bag->addAll($assembly->diagnostics());
 
         return new GenerationResult($published, $bag->sorted(), $assembly->schemaSources);
     }

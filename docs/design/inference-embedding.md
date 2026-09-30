@@ -206,16 +206,20 @@ the same invariant: what a worker leaves unbuilt, the build makes itself, so a w
 - A worker whose build has gone — killed by a timeout, `docuccino:watch`'s among them — stops at its next
   operation rather than finishing the cold build, and takes the claims and the scratch store with it.
 
-**Workers after the document.** Once an export's document is assembled, its schema check and each
-target's emit read the document and nothing else, so each runs in a worker of its own
-(`BuildWorkers::later()`), at most one fewer than the limit at once since the build keeps working too. An
-answer is data, sent behind its length so that one cut short by a dying worker is told from a whole one,
-and whatever a worker did not answer the build makes itself when it asks for it — so a task may read
-nothing that changes before then, and its answer is the same wherever and whenever it is made. Neither end
-of the channel has a deadline, for the reason the wait under `run()` has none, and an answer let go unasked
-(a build that threw first) has its worker ended and reaped. Every file is still written, and every report
-printed, by the build itself in target order, one artifact held at a time. On the same application, a warm
-build exporting four targets measured 1.62s before and 1.24s after, byte-identical.
+**Workers beside the document.** What reads the document and writes nothing runs in a worker of its
+own (`BuildWorkers::later()`), at most one fewer than the limit at once since the build keeps working
+too: a run of lints (`Lint\DocumentLint`) at its turn in the transformer chain, and an export's schema
+check and each target's emit once the document is finished. An answer is data, sent behind its length so
+that one cut short by a dying worker is told from a whole one, and whatever a worker did not answer the
+build makes itself when it asks for it — so a task may read nothing that changes before then, and its
+answer is the same wherever and whenever it is made. That is why a run of lints reads a copy of the draft
+taken at its turn rather than the draft itself, which every transformer after it goes on writing. Neither
+end of the channel has a deadline, for the reason the wait under `run()` has none, and an answer let go
+unasked (a build that threw first) has its worker ended and reaped. What the lints said is read with the
+rest of the assembly's diagnostics, last (`AssemblyResult::diagnostics()`), and every file is still
+written, and every report printed, by the build itself in target order, one artifact held at a time. On
+the same application, a warm build exporting four targets measured 1.62s before the schema check and emits
+moved, 1.25s after, and 0.98s with the lints beside it too, byte-identical throughout.
 
 ## 4. Boundary (contract in docuccino/core; zero PHPStan imports)
 

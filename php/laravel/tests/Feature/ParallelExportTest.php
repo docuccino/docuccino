@@ -6,6 +6,7 @@ use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Pipeline\Assembler;
 use Docuccino\Core\Pipeline\BuildWorkers;
 use Docuccino\Laravel\Commands\ExportCommand;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
@@ -16,11 +17,11 @@ use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\BufferedOutput;
 
 /*
- * Once an export's document exists, checking it against its schema and writing each of its targets need
- * nothing from one another, so where the build may fork they run side by side. All that may change is the
- * time: each test here puts work done by workers beside the same work done in one process, and compares
- * everything the two produced. A task no worker answered is made here, and makes the same bytes, so each also
- * holds the workers to having answered: nothing else tells a worker that works from one that never does.
+ * The lints, the schema check and each target's emit read the document and nothing else, so where the build
+ * may fork they run side by side with the rest of it. All that may change is the time: each test here puts
+ * work done by workers beside the same work done in one process, and compares everything the two produced. A
+ * task no worker answered is made here, and makes the same bytes, so each also holds the workers to having
+ * answered: nothing else tells a worker that works from one that never does.
  *
  * The fragment store is warm for every run that counts workers, so the operations — which a cold build
  * hands to workers of its own — start none of them.
@@ -88,17 +89,17 @@ function exportWith(int $limit, string $artifacts): array
     return [$exit, $output->fetch(), $written, $started, $workers->answered()];
 }
 
-it('writes and reports every target exactly as one process does, with the schema check beside them', function (): void {
+it('writes and reports every target exactly as one process does, with the lints and the schema check beside them', function (): void {
     [$exit, $output, $written] = exportWith(1, $this->dir.'/artifacts');
-    [$parallelExit, $parallelOutput, $parallelWritten, $started, $answered] = exportWith(6, $this->dir.'/artifacts');
+    [$parallelExit, $parallelOutput, $parallelWritten, $started, $answered] = exportWith(8, $this->dir.'/artifacts');
 
     // Both runs share every line of the command, so what they agree on is also held to what it must be: each
     // target reported in the order it is configured, and what an emit said about its artifact — the
     // collection's empty `baseUrl`, since the workbench declares no server — reported with it.
     preg_match_all('/^Wrote \S+\/(\S+) \(/m', $output, $reported);
 
-    // The schema check and every target's emit, each in a worker of its own that answered for it.
-    expect($started)->toBe(5)
+    // The lints, the schema check and every target's emit, each in a worker of its own that answered for it.
+    expect($started)->toBe(6)
         ->and($answered)->toBe($started)
         ->and(array_keys($written))->toBe(['api.uir.json', 'collection.json', 'openapi-3.1.yaml', 'openapi.json'])
         ->and($reported[1])->toBe(['openapi.json', 'openapi-3.1.yaml', 'api.uir.json', 'collection.json'])
@@ -108,10 +109,10 @@ it('writes and reports every target exactly as one process does, with the schema
         ->and($parallelExit)->toBe($exit);
 });
 
-it('shares one limit between the schema check and the emits, and does what is past it here', function (): void {
+it('shares one limit between everything beside the build, and does what is past it here', function (): void {
     [, $output, $written] = exportWith(1, $this->dir.'/artifacts');
 
-    // Three at once: this process, the schema check, and the first target's emit.
+    // Three at once: this process, the lints and the schema check, so every emit is made here.
     [, $limitedOutput, $limitedWritten, $started, $answered] = exportWith(3, $this->dir.'/artifacts');
 
     expect($started)->toBe(2)
@@ -233,18 +234,20 @@ it('leaves no worker behind when writing a target throws', function (): void {
     $command->setLaravel(app());
 
     expect(static fn () => $command->run(new ArrayInput([]), $output))->toThrow(RuntimeException::class, 'Unable to write output.')
-        ->and($started)->toBe(5)
+        ->and($started)->toBe(6)
         // No child of this process is left, finished or not: each worker was ended and reaped as its answer
-        // was let go.
+        // was let go, the lints' among them.
         ->and(pcntl_waitpid(-1, $status, WNOHANG))->toBe(-1);
 });
 
 it('hands every part of a run that can start a worker the one set of workers the run has', function (): void {
-    // The schema check is started by the generator and the emits by the command, and they share one limit
-    // only by sharing one set of workers: two sets would each keep to the limit and run twice as many.
+    // The lints are started by the assembler, the schema check by the generator and the emits by the command,
+    // and they share one limit only by sharing one set of workers: each set would keep to the limit alone.
     $workers = app(BuildWorkers::class);
     $generator = (new ReflectionProperty(DocumentBuilder::class, 'generator'))->getValue(app(DocumentBuilder::class));
+    $assembler = (new ReflectionProperty(DocumentGenerator::class, 'assembler'))->getValue($generator);
 
     expect(app(BuildWorkers::class))->toBe($workers)
-        ->and((new ReflectionProperty(DocumentGenerator::class, 'workers'))->getValue($generator))->toBe($workers);
+        ->and((new ReflectionProperty(DocumentGenerator::class, 'workers'))->getValue($generator))->toBe($workers)
+        ->and((new ReflectionProperty(Assembler::class, 'workers'))->getValue($assembler))->toBe($workers);
 });
