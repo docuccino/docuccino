@@ -75,10 +75,12 @@ function exportedAsConsoleBuild(string $out): array
 {
     MemoryLimitOption::capture(new CommandStarting('docuccino:export', new ArgvInput(['artisan', 'docuccino:export']), new NullOutput));
 
-    // A command of its own each time, as each process gets one: a command links a code's docs once per run.
+    // A command of its own each time, as each process gets one: a command links a code's docs once per run,
+    // and a run's workers are its own, limit and all.
     $kernel = app(ConsoleKernel::class);
     assert($kernel instanceof FoundationConsoleKernel);
     $kernel->setArtisan(null);
+    app()->forgetScopedInstances();
 
     $exit = Artisan::call('docuccino:export', ['--format' => 'openapi-3.2', '--out' => $out]);
 

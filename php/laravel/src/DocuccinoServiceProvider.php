@@ -251,8 +251,9 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             ->needs('$generatorVersion')
             ->give(self::VERSION);
 
-        // The forked workers a cold build may hand its operations to — a console build's only.
-        $this->app->bind(BuildWorkers::class, static fn (Application $app): BuildWorkers => ConsoleBuildWorkers::for($app));
+        // The forked workers a build may hand its work to — a console build's only. One set for the whole
+        // run, so every part of it that starts a worker counts against the same limit.
+        $this->app->scoped(BuildWorkers::class, static fn (Application $app): BuildWorkers => ConsoleBuildWorkers::for($app));
 
         // Core does the assembling; the generator metadata names this adapter. A second adapter would
         // bind its own name here.
