@@ -198,11 +198,11 @@ it('publishes both containers, and bounds both, for a field the rules leave open
         'meta' => [ValidationRule::of('nullable'), ValidationRule::of('array'), ValidationRule::of('max', ['5'])],
     ]);
 
-    expect(validationSchema($set, schemaConverter())['properties']['meta'])->toBe([
+    expect(validationSchema($set, schemaConverter())['properties']['meta'])->toBe(blankAsNull([
         'type' => ['array', 'object', 'null'],
         'maxItems' => 5,
         'maxProperties' => 5,
-    ]);
+    ]));
 });
 
 /**

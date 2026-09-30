@@ -685,8 +685,8 @@ it('widens an undecided container for null under either nullable policy', functi
         new RepresentationPolicy(nullable: 'anyof'),
     )->schema['properties']['meta'];
 
-    expect($folded)->toBe(['type' => ['array', 'object', 'null']])
-        ->and($branched)->toBe(['anyOf' => [['type' => 'array'], ['type' => 'object'], ['type' => 'null']]]);
+    expect($folded)->toBe(blankAsNull(['type' => ['array', 'object', 'null']]))
+        ->and($branched)->toBe(blankAsNull(['anyOf' => [['type' => 'array'], ['type' => 'object'], ['type' => 'null']]]));
 });
 
 /**

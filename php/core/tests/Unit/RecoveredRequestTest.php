@@ -18,6 +18,7 @@ use Docuccino\Core\Extensions\Validation\TaggedVariants;
 use Docuccino\Core\Extensions\Validation\ValidationSchema;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\NullTypeEngine;
+use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Tests\Fixtures\ExampledRequestClass;
 use Docuccino\Core\Tests\Fixtures\MockedRequestClass;
 use Docuccino\Core\Tests\Fixtures\PinnedRequestClass;
@@ -316,6 +317,28 @@ it('carries a hint onto the query parameter a validated field flattens to', func
         // and then clobbered it with the provenance block beside it.
         ->and($parameter['schema']['x-docuccino']['mock'])->toBe(['faker' => 'numberBetween:1,100', 'seedGroup' => 'listing'])
         ->and($parameter['schema']['x-docuccino'])->toHaveKey('provenance');
+});
+
+it('carries a blank reading onto the query parameter, or the container member, a validated field lands on', function (): void {
+    // A fact is an x-docuccino member too, so it travels on the draft the way a hint does — onto the
+    // parameter a leaf flattens to, and onto the member of a deepObject container another producer owns.
+    $fact = ['facts' => ['blankAsNull' => '^ *$']];
+    $schema = new ValidationSchema(['type' => 'object', 'properties' => [
+        'status' => ['type' => ['string', 'null'], 'x-docuccino' => $fact],
+        'filter' => ['type' => 'object', 'properties' => ['state' => ['type' => ['string', 'null'], 'x-docuccino' => $fact]]],
+    ]]);
+
+    $op = new OperationDraft;
+    $by = Contribution::integration('query-builder');
+    $container = $op->parameter('query', 'filter');
+    $container->set('style', 'deepObject', $by);
+    $container->set('explode', true, $by);
+    $container->schema()->set('type', 'object', $by);
+
+    (new RecoveredRequest)->apply($op, requestContext(new ComponentRegistry, method: 'GET'), $schema, 'form-request');
+
+    expect($op->parameter('query', 'status')->freeze()->toArray()['schema']['x-docuccino']['facts'])->toBe($fact['facts'])
+        ->and($container->freeze()->toArray()['schema']['properties']['state']['x-docuccino']['facts'])->toBe($fact['facts']);
 });
 
 it('reports a source class\'s unusable #[Mock] against the build', function (): void {

@@ -936,10 +936,55 @@ uploads](#file-uploads) below. Anything not listed leaves the property permissiv
 | Rule | Documented as |
 | --- | --- |
 | `required`, `present` | The field joins the object's `required` list. |
-| `nullable` | The type admits `null` (`type: [string, null]`). |
+| `nullable` | The type admits `null` (`type: [string, null]`); a blank string the middleware turns into `null` is noted beside it — see [Blank values](#blank-values). |
 | `sometimes` | Keeps the field **out** of `required` — even alongside `required`, because `sometimes\|required` means "required when present". |
-| `filled` | Recognized; no effect on the documented shape. |
+| `filled` | No effect on the documented shape; a `nullable` field with it takes no blank — see [Blank values](#blank-values). |
 | `required_if`, `required_unless`, `required_with`, `required_with_all`, `required_without`, `required_without_all` | A description note ("Required when `status` is `paid`.") — a conditional requirement has no JSON Schema keyword. |
+
+### Blank values
+
+Laravel's default middleware trims every string in a request and turns an empty one into `null` before
+your rules run. So a `nullable` field takes `""` and `"   "` exactly as it takes `null`, whatever its
+other rules say about a value. The published schema doesn't change for it: a client that wants to clear
+the field can send `null`, and a schema that also took a blank would cost every generated client the
+type it stands for. Docuccino states the reading beside the schema instead, as a fact tooling can act
+on:
+
+```php
+'status' => ['nullable', 'in:draft,sent,paid'],
+```
+
+```json
+"status": {
+  "x-docuccino": {
+    "facts": { "blankAsNull": "^[\\x00\\t-\\r …]*$" }
+  },
+  "anyOf": [
+    { "type": "string", "enum": ["draft", "sent", "paid"] },
+    { "type": "null" }
+  ]
+}
+```
+
+The pattern matches the strings Laravel reads as `null` there, invisible characters included, read
+with code-point semantics. It is carried in the `full` artifact; the OpenAPI exports leave it out with
+the rest of `x-docuccino`, so your consumers see the schema alone. The [contract
+assertions](/laravel/guides/contract-testing/) read it: a blank in a query string, a form field or a
+JSON body is checked as the `null` your rules saw, so a test that clears a form field or sends
+`?status=` passes where your application accepts it.
+
+A field only carries the fact where a blank really gets through. A `required`, `filled`, `accepted` or
+`declined` rule refuses the `null` a blank becomes, and so does a field that isn't `nullable`. A
+conditional rule, like `required_if`, refuses it only while its condition holds, which the document
+can't state — so the fact stands beside one, just as the field stays out of `required`. A rule this
+reference doesn't list leaves the field as permissive as it already is, blank included.
+
+A few keys keep their whitespace. `TrimStrings` leaves `password`, `password_confirmation` and
+`current_password` untrimmed by default, so only `""` is read as `null` there, and the fact says so. A
+whitespace-only value on one of those reaches your rules as a string, and Laravel lets it through
+without running them; the assertions hold it to the field's schema instead. Docuccino doesn't read your middleware stack: keys you
+add with `TrimStrings::except()`, or an application without `ConvertEmptyStringsToNull`, are documented
+as the default stack treats them.
 
 ### Exclude rules
 

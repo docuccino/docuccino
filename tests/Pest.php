@@ -13,6 +13,7 @@ use Docuccino\Core\Contract\Outcome;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
 use Docuccino\Core\Diff\SchemaComparator;
+use Docuccino\Core\Document\BlankAsNull;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Draft\SchemaDraft;
@@ -81,6 +82,7 @@ use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\SpatieData\WrapResolver;
 use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 use Docuccino\Laravel\Integrations\Support\RuleParsing;
+use Docuccino\Laravel\Integrations\Validation\BlankString;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\TaggedRules;
@@ -469,6 +471,18 @@ function convertedComponent(SchemaConverter $converter, array $schema): array
     expect($registry->schemas())->toHaveKey($slot);
 
     return [$registry->schemaRenames()[$slot] ?? $slot, $registry->schemas()[$slot]];
+}
+
+/**
+ * A validated field's schema as a nullable one publishes it: unchanged, beside the fact that the default
+ * middleware reads a blank string there as the null it takes ({@see BlankString}).
+ *
+ * @param  array<string, mixed>  $schema
+ * @return array<string, mixed>
+ */
+function blankAsNull(array $schema): array
+{
+    return BlankAsNull::onto($schema, BlankString::PATTERN);
 }
 
 /**
