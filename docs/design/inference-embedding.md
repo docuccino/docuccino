@@ -81,11 +81,18 @@ missing recording is pure COST — one more live pass — never a different answ
 - Recording is abandoned MID-PASS the moment it crosses its budget, dropping what it accumulated, and the
   file is remembered so later asks go straight to a live pass with no accumulation at all — otherwise one
   huge file materialises hundreds of MB before being discarded, and re-pays that on every later ask. Two
-  bounds, because nodes are only a proxy for the real risk: 100k retained nodes (~1.7 KB each as measured, so
-  ~170 MB; the whole fixture app is ~7.5k nodes, a 500-file application extrapolates to ~60k) and
-  `memory_get_usage()` reaching 70% of the process's own `memory_limit`. When the total retained would exceed
-  the node budget the WHOLE store is cleared rather than evicted file by file: a cleared file is walked live
-  and re-recorded, so the cheap reset is a correct one and the replay path keeps no ordering to maintain.
+  bounds, because nodes are only a proxy for the real risk: a node budget sized to the process's memory
+  ceiling — the nodes that fit in 30% of it at ~1.7 KB each, the most one was measured to retain, never
+  fewer than 100k, and a process with no ceiling sized as one given 2G (265k) — and `memory_get_usage()`
+  reaching 70% of the process's own `memory_limit`. When the total retained would exceed the node budget
+  the WHOLE store is cleared rather than evicted file by file: a cleared file is walked live and
+  re-recorded, so the cheap reset is a correct one and the replay path keeps no ordering to maintain.
+
+  The budget used to be a fixed 100k, from the fixture app's ~7.5k nodes extrapolated to ~60k for a
+  500-file application. A real application's cold build walked 544 files and recorded 128,905 nodes, so it
+  cleared the store once and walked 57 files a second time. Retaining all of them cost +33 MB of peak
+  memory (665 → 698 MB), about 320 bytes a node, since a recording mostly shares the scopes a harvest already
+  holds. The re-walks cost more than that memory saved.
 - A recording is stamped with the SIZE of the adapter's analysed-file set and discarded when that set has
   grown since. This is the one way a recording could answer with less than a live pass: PHPStan gates trait
   inlining on the analysed set, so a file primed after the recording was made would make a fresh pass over
