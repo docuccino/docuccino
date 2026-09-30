@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Composer\Autoload\ClassLoader;
 use Composer\InstalledVersions;
 use Composer\Semver\VersionParser;
 use Docuccino\Core\Canonical\Canonicalizer;
@@ -248,6 +249,197 @@ function collectorObservingEngine(): object
             $this->collecting[] = gc_enabled();
 
             return $this->answers->trace($action, $visitor);
+        }
+    };
+}
+
+/**
+ * A directory of this process's own under the system temp directory, for a suite to build into. Named for
+ * the process as well, so {@see removeTemporaryDirectory()} can only ever take away its own caller's.
+ */
+function temporaryDirectory(string $slug): string
+{
+    $directory = sys_get_temp_dir().'/docuccino-'.$slug.'-'.getmypid().'-'.bin2hex(random_bytes(6));
+    mkdir($directory, 0700);
+
+    return $directory;
+}
+
+/**
+ * Remove a {@see temporaryDirectory()} and everything under it, and refuse anything else. A path a suite
+ * never got to assign reads as '', whose glob is `/*`, and a sweep pointed at the wrong root is an incident
+ * rather than a failure — so only a docuccino directory of this process's own, directly under the temp
+ * directory, is taken. `is_link()` is asked before `is_dir()`, which answers true for a link to one.
+ */
+function removeTemporaryDirectory(?string $directory): void
+{
+    $own = sys_get_temp_dir().'/docuccino-';
+
+    if ($directory === null
+        || ! str_starts_with($directory, $own)
+        || ! str_contains($directory, '-'.getmypid().'-')
+        || str_contains(substr($directory, strlen($own)), '/')
+        || is_link($directory)
+        || ! is_dir($directory)) {
+        return;
+    }
+
+    $remove = static function (string $path) use (&$remove): void {
+        foreach (scandir($path) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+
+            $child = $path.'/'.$entry;
+            is_dir($child) && ! is_link($child) ? $remove($child) : @unlink($child);
+        }
+
+        @rmdir($path);
+    };
+
+    $remove($directory);
+}
+
+/**
+ * Run `$body` — PHP, with no opening tag — in a process of its own, with this repository's autoloader loaded
+ * and the process leading a session of its own, so the timeout takes down whatever it forked as well. Hands
+ * back its exit code (null when it had to be killed) and everything it printed. `$meanwhile` is handed the
+ * process id on every poll until it answers true, and `$settle` is how long what the process forked may take
+ * to end by itself once it has gone (`settled` says whether it did) before it is killed. A process limit is
+ * the body's to set (`posix_setrlimit()`), since a shell's `ulimit` flags differ from one `sh` to another.
+ *
+ * @param  list<string>  $arguments  what the body reads from `$argv`, from index 1
+ * @param  array<string, string>  $ini
+ * @param  (Closure(int): bool)|null  $meanwhile
+ * @return array{exit: int|null, output: string, settled: bool}
+ */
+function runPhp(string $body, array $arguments = [], array $ini = [], float $timeout = 30.0, ?Closure $meanwhile = null, float $settle = 0.0): array
+{
+    $autoload = dirname((string) (new ReflectionClass(ClassLoader::class))->getFileName(), 2).'/autoload.php';
+    $script = sys_get_temp_dir().'/docuccino-script-'.getmypid().'-'.bin2hex(random_bytes(6)).'.php';
+    file_put_contents($script, "<?php\n\nposix_setsid();\nrequire ".var_export($autoload, true).";\n\n".$body);
+
+    $php = [PHP_BINARY];
+    foreach ($ini as $name => $value) {
+        $php[] = '-d';
+        $php[] = $name.'='.$value;
+    }
+
+    $command = [...$php, $script, ...$arguments];
+
+    $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    expect($process)->not->toBeFalse();
+
+    $pid = (int) proc_get_status($process)['pid'];
+    stream_set_blocking($pipes[1], false);
+    stream_set_blocking($pipes[2], false);
+
+    $output = '';
+    $deadline = microtime(true) + $timeout;
+    $exit = null;
+    $called = false;
+
+    while (true) {
+        $output .= (string) stream_get_contents($pipes[1]).(string) stream_get_contents($pipes[2]);
+        $status = proc_get_status($process);
+
+        if (! $status['running']) {
+            $exit = $status['exitcode'];
+            break;
+        }
+
+        if ($meanwhile !== null && ! $called) {
+            $called = $meanwhile($pid) === true;
+        }
+
+        if (microtime(true) > $deadline) {
+            posix_kill(-$pid, SIGKILL);
+            break;
+        }
+
+        usleep(20000);
+    }
+
+    $until = microtime(true) + $settle;
+    while (posix_kill(-$pid, 0) && microtime(true) < $until) {
+        usleep(20000);
+    }
+    $settled = ! posix_kill(-$pid, 0);
+
+    // Whatever the script forked goes with it, finished or not: a worker left running would outlive the test.
+    posix_kill(-$pid, SIGKILL);
+    $output .= (string) stream_get_contents($pipes[1]).(string) stream_get_contents($pipes[2]);
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    proc_close($process);
+    @unlink($script);
+
+    return ['exit' => $exit, 'output' => $output, 'settled' => $settled];
+}
+
+/**
+ * A {@see TypeEngine} answering as `$inner` does that counts every question asked of it in the process that
+ * made it. With `$deaths` set, the first forked copy of that process to ask a second question kills itself
+ * there, leaving a file in `$deaths` to say so — how a test stands a worker dying with work half done.
+ */
+function countingEngine(TypeEngine $inner, ?string $deaths = null): object
+{
+    return new class($inner, $deaths) implements TypeEngine
+    {
+        public int $asked = 0;
+
+        private int $askedHere = 0;
+
+        private readonly int $parent;
+
+        public function __construct(private readonly TypeEngine $inner, private readonly ?string $deaths)
+        {
+            $this->parent = (int) getmypid();
+        }
+
+        public function analyzeAction(ActionRef $action): ActionAnalysis
+        {
+            $this->ask();
+
+            return $this->inner->analyzeAction($action);
+        }
+
+        public function analyzeCallable(CallableRef $callable): ActionAnalysis
+        {
+            $this->ask();
+
+            return $this->inner->analyzeCallable($callable);
+        }
+
+        public function classMetadata(ClassRef $class): ClassMetadata
+        {
+            $this->ask();
+
+            return $this->inner->classMetadata($class);
+        }
+
+        public function trace(ActionRef $action, TraceVisitor $visitor): TraceReport
+        {
+            $this->ask();
+
+            return $this->inner->trace($action, $visitor);
+        }
+
+        private function ask(): void
+        {
+            if ((int) getmypid() === $this->parent) {
+                $this->asked++;
+
+                return;
+            }
+
+            if ($this->deaths !== null && ++$this->askedHere === 2) {
+                $claim = @fopen($this->deaths.'/died', 'x');
+                if ($claim !== false) {
+                    fclose($claim);
+                    posix_kill(posix_getpid(), SIGKILL);
+                }
+            }
         }
     };
 }

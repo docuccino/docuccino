@@ -903,14 +903,16 @@ engine:
   # memory_limit: '2G'
   # project_paths: ['app']
   # config: 'phpstan.neon'
+  # workers: 4
 ```
 
 | Key | Default | Effect |
 | --- | --- | --- |
 | `mode` | `in-process` | `in-process` runs PHPStan; `null` skips inference entirely (docblocks and attributes still work). Those are the two modes. Set it per environment with `DOCUCCINO_ENGINE`. A boot failure degrades to no inference rather than failing the build. |
-| `memory_limit` | unset | PHP memory limit for inference, applied on **console builds only**. Only ever **raises** — an already-higher or unlimited process is left alone, and `-1` isn't accepted here — so the knob can't introduce the exhaustion it exists to prevent. `--memory-limit` on the build commands overrides it. |
+| `memory_limit` | unset | PHP memory limit for inference, applied on **console builds only** — a process started to run a Docuccino command, not a web request or a command called in-process with `Artisan::call()`. Only ever **raises** — an already-higher or unlimited process is left alone, and `-1` isn't accepted here — so the knob can't introduce the exhaustion it exists to prevent. `--memory-limit` on the build commands overrides it. |
 | `project_paths` | every `autoload` PSR-4 root | The **descend** scope: directories the engine follows for general interprocedural analysis (throw classification, inline `Validator::make()` rules). Bounds descent into callee bodies. Unset, it is every PSR-4 source root your `composer.json` declares under `autoload` — for a stock Laravel application that is `app/` plus the two `database/` roots the skeleton maps, and it picks up your `Modules\…`/`Domain\…` roots if you map any. Set it only to **narrow** descent. |
 | `config` | unset | Your own PHPStan config file, included by the one the engine writes for itself. Relative to the application base path. A file that isn't there warns (`config.engine-config-missing`) and inference runs without it. |
+| `workers` | worked out | How many forked workers a console build shares its uncached operations between. Unset, it is the CPUs the process may use (its CPU affinity and any container CPU quota), up to 8, no more than fit in a container's memory limit at `memory_limit` each, and never more than one for every 8 uncached operations. `0` or `1` builds everything in one process, and so does a value that isn't a whole number, which is reported (`config.value-type`). Needs the `pcntl` and `posix` extensions, so Windows always builds in one. Only a process started to run a Docuccino command forks: never a viewer request, nor a command called in-process with `Artisan::call()`. The document is byte-identical whatever the count, so it's left out of the fragment cache key. |
 
 PHP cannot catch memory exhaustion, so it's the one failure that kills a build instead of degrading —
 `memory_limit` and `--memory-limit` exist to prevent it. Full walkthrough:

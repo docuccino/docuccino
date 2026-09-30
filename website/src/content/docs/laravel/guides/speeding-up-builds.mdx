@@ -49,6 +49,28 @@ state of inference. If the engine package isn't installed, a warm build still wa
 `engine.not-installed` — that verdict comes from reading your environment, not from asking the
 analyzer.
 
+## A cold build shares the work
+
+When there are operations to analyze, the build forks workers to share them — one for each CPU the
+process may use, up to eight, and never more than one for every eight uncached operations. Each worker
+inherits the analyzer the build already booted, builds whole operations and hands them back through the
+fragment store, so the document is byte-identical to the one a single process writes. There's nothing to
+turn on: every console build with the `pcntl` extension does it, whether or not `cache.enabled` is true. A
+console build is a process started to run the command — `Artisan::call()` from a queued job, a controller or
+another command builds inside the process it was called from, which serves other work, and never forks it.
+
+```yaml
+# docuccino.yaml
+engine:
+  workers: 2 # 1 builds everything in one process
+```
+
+Set `engine.workers` only to pin the count, on a machine where the CPUs aren't all yours to use; `0` or
+`1` turns forking off. Each worker runs under the same `memory_limit` as the build, so in a container with a
+memory limit no more workers start than fit in it at that ceiling each — and none beside the build where
+`memory_limit` is `-1`. Windows always builds in one process, and so does a viewer request that builds the
+document.
+
 ## What makes a fragment rebuild
 
 A fragment is keyed on everything that could change its output, and checked against the files that
@@ -75,11 +97,12 @@ Two of those rows deserve the detail:
   shapes the document without living in any file the analysis opened, so those facts are folded into
   the key directly.
 
-Four things deliberately stay *out* of the key, because rebuilding for them would cost far more than
+Five things deliberately stay *out* of the key, because rebuilding for them would cost far more than
 they're worth:
 
 - **`engine.memory_limit`** (and `--memory-limit`). A process ceiling can't change a documented byte,
   so raising it doesn't throw away your cache.
+- **`engine.workers`**. How many processes share a build can't change a documented byte either.
 - **`documents.<key>.export` and `documents.<key>.viewer`.** Export targets say *where* artifacts are
   written, never what's in them, and `viewer` is wiring for the docs page rather than anything the
   document says. Adding a second target, renaming an output file or moving the viewer route writes
