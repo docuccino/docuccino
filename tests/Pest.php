@@ -55,6 +55,7 @@ use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
+use Docuccino\Core\Inference\TraceReport;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Patch\Contribution;
@@ -201,6 +202,54 @@ function generateDocument(?callable $mutateConfig = null, string $key = 'default
     $config = app(DocumentConfigFactory::class)->make($key, $raw, 'skeleton');
 
     return app(DocumentGenerator::class)->generate($config, app(TypeEngine::class));
+}
+
+/**
+ * A {@see TypeEngine} that answers as an empty {@see StubTypeEngine} does and remembers, at every question a
+ * route asks it, whether the cycle collector was running.
+ */
+function collectorObservingEngine(): object
+{
+    return new class implements TypeEngine
+    {
+        /** @var list<bool> */
+        public array $collecting = [];
+
+        private readonly StubTypeEngine $answers;
+
+        public function __construct()
+        {
+            $this->answers = new StubTypeEngine;
+        }
+
+        public function analyzeAction(ActionRef $action): ActionAnalysis
+        {
+            $this->collecting[] = gc_enabled();
+
+            return $this->answers->analyzeAction($action);
+        }
+
+        public function analyzeCallable(CallableRef $callable): ActionAnalysis
+        {
+            $this->collecting[] = gc_enabled();
+
+            return $this->answers->analyzeCallable($callable);
+        }
+
+        public function classMetadata(ClassRef $class): ClassMetadata
+        {
+            $this->collecting[] = gc_enabled();
+
+            return $this->answers->classMetadata($class);
+        }
+
+        public function trace(ActionRef $action, TraceVisitor $visitor): TraceReport
+        {
+            $this->collecting[] = gc_enabled();
+
+            return $this->answers->trace($action, $visitor);
+        }
+    };
 }
 
 /**

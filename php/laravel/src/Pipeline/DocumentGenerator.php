@@ -153,41 +153,55 @@ final class DocumentGenerator
         $fragments = [];
         /** @var list<array{RouteDescriptor, string, OperationFragment}> $built */
         $built = [];
-        foreach ($this->descriptors($resolved, $document, $bag) as $descriptor) {
-            if ($descriptor->fallback) {
-                $bag->add(self::fallbackOmitted($descriptor));
 
-                continue;
+        // The cycle collector is paused while the operations build, as PHPStan's own command pauses it for
+        // a whole analysis: every collection walks the analyser's retained graph and frees next to nothing
+        // (docs/design/inference-embedding.md §2 has the measurement). It is put back as it was, so nothing
+        // outside the build runs any differently.
+        $collecting = gc_enabled();
+        gc_disable();
+
+        try {
+            foreach ($this->descriptors($resolved, $document, $bag) as $descriptor) {
+                if ($descriptor->fallback) {
+                    $bag->add(self::fallbackOmitted($descriptor));
+
+                    continue;
+                }
+
+                // A route registered for several verbs documents one operation per method.
+                foreach ($descriptor->documentableMethods() as $method) {
+                    $fragment = $this->processRoute($descriptor, $method, $document, $documentId, $documentScope, $engine, $resolved, $components, $bag, $fragmentHash, $extensionClasses, $cache);
+                    if ($fragment !== null) {
+                        $fragments[] = $fragment;
+                        $built[] = [$descriptor, $method, $fragment];
+                        $this->collectNotes($fragment, $resolved);
+                    }
+                }
             }
+            $bag->addAll(self::routelessOnce($this->formDiagnostics($built)));
 
-            // A route registered for several verbs documents one operation per method.
-            foreach ($descriptor->documentableMethods() as $method) {
-                $fragment = $this->processRoute($descriptor, $method, $document, $documentId, $documentScope, $engine, $resolved, $components, $bag, $fragmentHash, $extensionClasses, $cache);
+            // Webhooks are document-level — no route reaches them — but each one is still an operation, so
+            // it travels as a fragment and is cached, restored and reported exactly like a route's.
+            [$declarations, $webhookDiagnostics] = $this->webhooks->collect($document);
+            $bag->addAll($webhookDiagnostics);
+
+            foreach ($declarations as $declaration) {
+                $fragment = $this->processWebhook($declaration, $document, $documentId, $documentScope, $engine, $resolved, $components, $bag, $fragmentHash, $extensionClasses, $cache);
                 if ($fragment !== null) {
                     $fragments[] = $fragment;
-                    $built[] = [$descriptor, $method, $fragment];
+                    $bag->addAll($fragment->diagnostics);
+                    // Everything a fragment carries is drained the same way here as in the route loop
+                    // above. A webhook has no RouteContext, so nothing writes a note while one is BUILT
+                    // today — but a fragment restored from the cache carries whatever it was stored with,
+                    // and a consumer that reads one of an object's members and not the other is where the
+                    // next producer's finding goes missing without anything failing.
                     $this->collectNotes($fragment, $resolved);
                 }
             }
-        }
-        $bag->addAll(self::routelessOnce($this->formDiagnostics($built)));
-
-        // Webhooks are document-level — no route reaches them — but each one is still an operation, so
-        // it travels as a fragment and is cached, restored and reported exactly like a route's.
-        [$declarations, $webhookDiagnostics] = $this->webhooks->collect($document);
-        $bag->addAll($webhookDiagnostics);
-
-        foreach ($declarations as $declaration) {
-            $fragment = $this->processWebhook($declaration, $document, $documentId, $documentScope, $engine, $resolved, $components, $bag, $fragmentHash, $extensionClasses, $cache);
-            if ($fragment !== null) {
-                $fragments[] = $fragment;
-                $bag->addAll($fragment->diagnostics);
-                // Everything a fragment carries is drained the same way here as in the route loop
-                // above. A webhook has no RouteContext, so nothing writes a note while one is BUILT
-                // today — but a fragment restored from the cache carries whatever it was stored with,
-                // and a consumer that reads one of an object's members and not the other is where the
-                // next producer's finding goes missing without anything failing.
-                $this->collectNotes($fragment, $resolved);
+        } finally {
+            if ($collecting) {
+                gc_enable();
             }
         }
 

@@ -93,6 +93,9 @@ missing recording is pure COST — one more live pass — never a different answ
   cleared the store once and walked 57 files a second time. Retaining all of them cost +33 MB of peak
   memory (665 → 698 MB), about 320 bytes a node, since a recording mostly shares the scopes a harvest already
   holds. The re-walks cost more than that memory saved.
+- The cycle collector is paused while operations build (`DocumentGenerator`), as PHPStan's own command
+  pauses it for a whole analysis. Each collection walks the graph the analyser keeps, so on that same cold
+  build 34 collections cost 1.9s and freed 5,026 cycles. Paused, peak memory rose 11 MB.
 - A recording is stamped with the SIZE of the adapter's analysed-file set and discarded when that set has
   grown since. This is the one way a recording could answer with less than a live pass: PHPStan gates trait
   inlining on the analysed set, so a file primed after the recording was made would make a fresh pass over
