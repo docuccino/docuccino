@@ -1461,13 +1461,24 @@ emitters passed an `x-…`-named header, media type or component through unconve
 artifacts failed their own meta-schemas. And the emitted-reference check walked into a Responses
 Object's own extensions, and into an Example Object's `dataValue`, as if they were document.
 
+A second round found more walks, each reading `$ref` by how the key holding it was spelled rather than
+where it stood. In the schemas a check hands the validator, a property called `default` or `example` held its `$ref`
+as if it were a literal, so the shared component root got a pointer nothing resolved and a valid response
+failed its contract test; the same walks re-pointed a `$ref` a `const` states, so a value equal to what the
+document says failed its own schema (`SchemaCheck`, `ReachableDefs`). In the published path,
+`ComponentNames::rename()` moved a pointer an example states along with the component it names — an
+unrelated route contesting that name rewrote another operation's example — and the fragment closure, version
+reach, the version fork and `docuccino:explain` each followed such a pointer as a reference.
+
 *The tell.* A skip list of keyword names, or `str_starts_with($key, 'x-')`, applied without asking
 whether the node is a map of names. The other tell is the opposite mistake: an `x-` key IS an extension
 in the two maps whose Object admits one (`paths`, `responses`), so "every key in a map is a name" is
 wrong as well.
 
 *The fix that worked.* One grammar, `Document\DocumentMembers`: whether a member holds data, and whether
-it opens a map of names. The whole-document walks read it. The two downlevel emitters already know every
+it opens a map of names. The whole-document walks read it. The walks over what a check hands the validator
+read `Contract\SchemaMembers`, which also knows the validator's own maps of names, and the two are held to one
+rule written from the specifications (`MemberGrammarsAgreementTest`). The two downlevel emitters already know every
 position exactly, so each gained the one fact they lacked: which of their maps admit extensions.
 
 *The tests that recognise it.* `DocumentMembersTest` has a row for every entry, and checks the OpenAPI

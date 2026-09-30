@@ -820,7 +820,9 @@ final class DocumentGenerator
      * it. The full closure — not just what this route registered first — is what makes a cached
      * fragment self-sufficient: deleting the route that happened to own a shared component can't leave
      * a survivor with a dangling `$ref`, and a build where every fragment came back warm still has the
-     * schemes its operations authenticate with.
+     * schemes its operations authenticate with. The refs are the ones {@see ComponentNames::referenced()}
+     * reads, so a pointer an example states carries nothing: restored, it would publish a component warm
+     * that nothing publishes cold.
      *
      * @param  array<string, mixed>  $operation
      * @return array{0: array<string, array<string, mixed>>, 1: array<string, string>, 2: array<string, array<string, mixed>>, 3: array<string, string>, 4: array<string, array<string, mixed>>, 5: array<string, string>, 6: array<string, string>}
@@ -842,8 +844,8 @@ final class DocumentGenerator
         $schemeBases = [];
         $seenSchema = [];
         $seenResponse = [];
-        $schemaQueue = $this->refs($operation, 'schemas');
-        $responseQueue = $this->refs($operation, 'responses');
+        $schemaQueue = ComponentNames::referenced($operation);
+        $responseQueue = ComponentNames::referenced($operation, 'responses');
 
         // Responses first: pulling in a response can reveal further schema (or response) refs.
         while ($responseQueue !== []) {
@@ -857,12 +859,12 @@ final class DocumentGenerator
                 $responseBases[$name] = $responseBaseMap[$name];
             }
 
-            foreach ($this->refs($responseRegistry[$name], 'responses') as $nested) {
+            foreach (ComponentNames::referenced($responseRegistry[$name], 'responses') as $nested) {
                 if (! isset($seenResponse[$nested])) {
                     $responseQueue[] = $nested;
                 }
             }
-            foreach ($this->refs($responseRegistry[$name], 'schemas') as $schemaRef) {
+            foreach (ComponentNames::referenced($responseRegistry[$name]) as $schemaRef) {
                 $schemaQueue[] = $schemaRef;
             }
         }
@@ -882,7 +884,7 @@ final class DocumentGenerator
                 $schemaBases[$name] = $schemaBaseMap[$name];
             }
 
-            foreach ($this->refs($schemaRegistry[$name], 'schemas') as $nested) {
+            foreach (ComponentNames::referenced($schemaRegistry[$name]) as $nested) {
                 if (! isset($seenSchema[$nested])) {
                     $schemaQueue[] = $nested;
                 }
@@ -922,33 +924,6 @@ final class DocumentGenerator
         }
 
         return array_values(array_unique($names));
-    }
-
-    /**
-     * Component names a node references via `$ref` (`#/components/{$kind}/NAME`), scanned recursively.
-     *
-     * @param  array<array-key, mixed>  $node
-     * @return list<string>
-     */
-    private function refs(array $node, string $kind): array
-    {
-        $prefix = '#/components/'.$kind.'/';
-
-        $refs = [];
-        foreach ($node as $key => $value) {
-            if ($key === '$ref' && is_string($value) && str_starts_with($value, $prefix)) {
-                $refs[] = substr($value, strlen($prefix));
-
-                continue;
-            }
-            if (is_array($value)) {
-                foreach ($this->refs($value, $kind) as $ref) {
-                    $refs[] = $ref;
-                }
-            }
-        }
-
-        return $refs;
     }
 
     /**
