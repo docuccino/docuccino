@@ -27,6 +27,7 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Overlay\OverlayDocument;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Pipeline\Assembler;
+use Docuccino\Core\Pipeline\BuildWorkers;
 use Docuccino\Core\Pipeline\FragmentCache;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Pipeline\OperationFragment;
@@ -35,6 +36,7 @@ use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
 use Docuccino\Core\SpecValidation\Validator;
 use Docuccino\Core\Support\RouteOperationId;
+use Docuccino\Laravel\Engine\LazyTypeEngine;
 use Docuccino\Laravel\Registry\ConfigDiagnostics;
 use Docuccino\Laravel\Registry\DefaultExtensions;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
@@ -61,6 +63,8 @@ final class DocumentGenerator
 {
     private readonly FragmentCache $cache;
 
+    private readonly BuildWorkers $workers;
+
     public function __construct(
         private readonly ExtensionRegistry $registry,
         private readonly Container $container,
@@ -79,8 +83,10 @@ final class DocumentGenerator
         // Foreign text reaches a diagnostic here, and a diagnostic reaches the document. Without a
         // project root the ladder still runs, so the fallback degrades rather than publishing a path.
         private readonly MessagePaths $messagePaths = new MessagePaths(new RootRelativeSourcePathResolver('')),
+        ?BuildWorkers $workers = null,
     ) {
         $this->cache = $cache ?? FragmentCache::disabled();
+        $this->workers = $workers ?? BuildWorkers::none();
     }
 
     /**
@@ -161,8 +167,15 @@ final class DocumentGenerator
         $collecting = gc_enabled();
         gc_disable();
 
+        $scratch = null;
+        /** @var array<string, OperationFragment> $prefetched */
+        $prefetched = [];
+
         try {
-            foreach ($this->descriptors($resolved, $document, $bag) as $descriptor) {
+            $descriptors = $this->descriptors($resolved, $document, $bag);
+            $cache = $this->handOut($descriptors, $document, $documentId, $documentScope, $engine, $resolved, $components, $bag, $fragmentHash, $extensionClasses, $cache, $scratch, $prefetched);
+
+            foreach ($descriptors as $descriptor) {
                 if ($descriptor->fallback) {
                     $bag->add(self::fallbackOmitted($descriptor));
 
@@ -171,7 +184,7 @@ final class DocumentGenerator
 
                 // A route registered for several verbs documents one operation per method.
                 foreach ($descriptor->documentableMethods() as $method) {
-                    $fragment = $this->processRoute($descriptor, $method, $document, $documentId, $documentScope, $engine, $resolved, $components, $bag, $fragmentHash, $extensionClasses, $cache);
+                    $fragment = $this->processRoute($descriptor, $method, $document, $documentId, $documentScope, $engine, $resolved, $components, $bag, $fragmentHash, $extensionClasses, $cache, $prefetched);
                     if ($fragment !== null) {
                         $fragments[] = $fragment;
                         $built[] = [$descriptor, $method, $fragment];
@@ -202,6 +215,10 @@ final class DocumentGenerator
         } finally {
             if ($collecting) {
                 gc_enable();
+            }
+
+            if ($scratch !== null) {
+                BuildWorkers::remove($scratch);
             }
         }
 
@@ -424,6 +441,121 @@ final class DocumentGenerator
     }
 
     /**
+     * Hand this build's cold operations to workers ({@see BuildWorkers}) where there are enough of them to
+     * pay for it, and answer the cache the build then reads every operation through: the configured one,
+     * or — where that stores nothing — a directory of this build's own, named in `$scratch` so it can be
+     * removed. A worker builds an operation through {@see processRoute()}, as this process would.
+     *
+     * @param  list<RouteDescriptor>  $descriptors
+     * @param  list<string>  $extensionClasses
+     * @param  array<string, OperationFragment>  $prefetched  filled with every fragment already warm, by key
+     *
+     * @param-out  string|null  $scratch
+     */
+    private function handOut(
+        array $descriptors,
+        DocumentConfig $document,
+        string $documentId,
+        string $documentScope,
+        TypeEngine $engine,
+        ResolvedExtensions $resolved,
+        ComponentRegistry $components,
+        DiagnosticCollector $bag,
+        string $fragmentHash,
+        array $extensionClasses,
+        FragmentCache $cache,
+        ?string &$scratch,
+        array &$prefetched,
+    ): FragmentCache {
+        // A build that may not fork at all — outside a console build, or with no pcntl — has nothing to count.
+        if (! $this->workers->mayFork()) {
+            return $cache;
+        }
+
+        /** @var array<string, list<array{RouteDescriptor, string}>> $units */
+        $units = [];
+        $operations = 0;
+        foreach ($descriptors as $descriptor) {
+            if ($descriptor->fallback) {
+                continue;
+            }
+
+            foreach ($descriptor->documentableMethods() as $method) {
+                // What is warm is kept, not just counted: the loop restores it from here rather than
+                // reading every fragment a second time.
+                $key = self::fragmentKey($cache, $descriptor, $method, $documentScope, $fragmentHash, $extensionClasses);
+                $warm = $cache->get($key);
+
+                if ($warm !== null) {
+                    $prefetched[$key] = $warm;
+
+                    continue;
+                }
+
+                $units[self::unitOf($descriptor)][] = [$descriptor, $method];
+                $operations++;
+            }
+        }
+
+        $count = $this->workers->for($operations);
+        if ($count < 2) {
+            return $cache;
+        }
+
+        // One booted analyser for every worker to inherit. An engine that would not boot answers nothing
+        // that may be stored, so no worker could leave the build anything to read back.
+        if ($engine instanceof LazyTypeEngine) {
+            $engine->prepare();
+        }
+        if (self::degraded($engine)) {
+            return $cache;
+        }
+
+        $target = $cache;
+        if (! $cache->enabled()) {
+            $scratch = BuildWorkers::directory('fragments');
+            if ($scratch === null) {
+                return $cache;
+            }
+
+            $target = $cache->writingTo($scratch);
+        }
+
+        // The biggest units first, so the last one claimed is a short one; ties keep their name order.
+        ksort($units, SORT_STRING);
+        uasort($units, static fn (array $a, array $b): int => count($b) <=> count($a));
+
+        $this->workers->run($count, array_values($units), function (array $job) use ($document, $documentId, $documentScope, $engine, $resolved, $components, $bag, $fragmentHash, $extensionClasses, $target): void {
+            [$descriptor, $method] = $job;
+            $this->processRoute($descriptor, $method, $document, $documentId, $documentScope, $engine, $resolved, $components, $bag, $fragmentHash, $extensionClasses, $target);
+        }, $scratch);
+
+        return $target;
+    }
+
+    /**
+     * What a worker claims whole: every route of one controller, whose operations share the walk of its
+     * file and most of what that file calls. Every closure route falls in one unit, since the action names
+     * each of them `Closure` — which suits the usual case, a routes file of them sharing one walk.
+     */
+    private static function unitOf(RouteDescriptor $descriptor): string
+    {
+        return explode('@', $descriptor->action ?? '')[0];
+    }
+
+    /**
+     * A route operation's fragment-cache key — one recipe for the build's loop and for what {@see handOut()}
+     * finds warm, or a warm operation would count as cold and be forked for. The method is part of it: GET
+     * query vs POST body are different fragments with different operation identities.
+     *
+     * @param  list<string>  $extensionClasses
+     */
+    private static function fragmentKey(FragmentCache $cache, RouteDescriptor $descriptor, string $method, string $documentScope, string $fragmentHash, array $extensionClasses): string
+    {
+        return $cache->key($descriptor->cacheSignature().'|'.$method, $documentScope, $fragmentHash, $extensionClasses);
+    }
+
+    /**
      * The discovered routes, deduped by everything that makes one route a different route: method, URI
      * and the host it is bound to. Two resolvers reporting the same route collapse; two routes that
      * differ only by host do NOT — they are two operations, and the host-less one sorts first so which
@@ -459,6 +591,7 @@ final class DocumentGenerator
      * @param  list<string>  $extensionClasses
      * @param  FragmentCache  $cache  this document's cache, which is the disabled one when an extension
      *                                the whole signature is keyed on could not be hashed
+     * @param  array<string, OperationFragment>  $prefetched  fragments already read back, by key ({@see handOut()})
      */
     private function processRoute(
         RouteDescriptor $descriptor,
@@ -473,6 +606,7 @@ final class DocumentGenerator
         string $fragmentHash,
         array $extensionClasses,
         FragmentCache $cache,
+        array $prefetched = [],
     ): ?OperationFragment {
         $path = OasPath::of($descriptor->uri);
         // Naming the specific method keeps multi-method routes' diagnostics distinct.
@@ -481,10 +615,8 @@ final class DocumentGenerator
         // identity reads the same string the node ends up carrying instead of deriving a second one.
         $operationId = $this->identity->operationId($documentId, $method, $path, $descriptor->domain);
 
-        // The method is part of the cache key: GET query vs POST body are different fragments with
-        // different operation identities.
-        $cacheKey = $cache->key($descriptor->cacheSignature().'|'.$method, $documentScope, $fragmentHash, $extensionClasses);
-        $cached = $cache->get($cacheKey);
+        $cacheKey = self::fragmentKey($cache, $descriptor, $method, $documentScope, $fragmentHash, $extensionClasses);
+        $cached = $prefetched[$cacheKey] ?? $cache->get($cacheKey);
         if ($cached !== null) {
             // Warm hit: restore components without waking the type engine (design §10), then stamp
             // through the same call the cold path below uses, so warm ids are cold ids.

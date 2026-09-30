@@ -131,8 +131,12 @@ Spike A perf reference: ~0.4s wall / ~92 MB for container + one controller; dete
 - Entry set = route-referenced action files only; everything else lazy via
   `ReflectionProvider` (autoloader-backed). On-demand descent into callee bodies,
   memoized per file, bounded (depth default 4, per-action file budget 40).
-- Analysis runs in the calling process, one container per build. Order never affects bytes:
-  every result is canonically serialized and the pipeline consumes routes in canonical order.
+- Analysis runs in the calling process and in the workers it forks (below), one container per build. Order never affects bytes:
+  every result is canonically serialized, the build assembles routes in canonical order, and an answer never
+  depends on what the same process was asked before it — which workers need, since each asks in the order it
+  claims its units. The fixture group holds the real engine to that across forks of one boot
+  (`ForkedWorkerOrderTest`: every action of fourteen controllers, analysed and traced in order, backwards,
+  and one controller per fork).
 - Per-action try/catch → `UnknownT(reason)` + warning diagnostic. Engine boot failure → fatal
   diagnostic + `NullTypeEngine` fallback (docblock/attribute-only docs still build). The failure rides
   on the returned engine (`Core\Inference\ReportsBootFailure`), because a host may defer the build to
@@ -149,14 +153,58 @@ Spike A perf reference: ~0.4s wall / ~92 MB for container + one controller; dete
   every PSR-4 root it maps, descend the `autoload` half of the same map, which
   `engine.project_paths` narrows where an application writes it (§6c).
 
-**Removed: the parent/worker pool.** A parent orchestrator plus K worker processes (Symfony
-Process, NDJSON of already-translated results, recycling on route count and RSS watermark,
-bisection on a poison action) was built and never wired into a build. It does not pay: each worker
-cold-compiles its own PHPStan container (~500 ms) and keeps its own memo, so a callee reached on
-two workers is analysed twice — on the fixture app, total analysis is 814 ms, less than one extra
-container boot. Parallelism only wins somewhere north of a few hundred routes, and the fragment
-cache plus the lazy engine already cover the incremental case that motivated it. Reach for git
-history, not a rewrite, if route counts ever make it pay.
+**Forked workers, at the fragment level.** A console build with enough uncached operations boots the
+engine, then forks workers that share them out (`Core\Pipeline\BuildWorkers`; the adapter's
+`ConsoleBuildWorkers` supplies the limit and the process hooks). A console build is a process started to
+run a Docuccino command (`ConsoleBuild`): `Artisan::call()` from a job, a request or another command starts
+one inside a process that serves other work, whose open transaction a fork's closed connections would
+silently end, so it neither forks nor moves that process's memory ceiling. A worker claims a UNIT at a time, first
+come — a controller's routes together, since they share the walk of its file and most of what it calls —
+and builds each operation exactly as the build would, into the fragment cache it inherited. Where the
+configured store keeps nothing, that is a directory of the build's own. The build then runs its usual loop
+and restores every fragment through the warm path. So the document is the serial one by the invariant the
+fragment cache already rests on (warm equals cold), with no protocol of its own to get wrong. Whatever a
+worker did not store, because it died or because the operation may not be stored, the build makes itself.
+
+Why this pays where the removed engine-level pool did not (git history has it: NDJSON of translated
+answers between a parent and K workers, each of which cold-compiled its own container):
+
+- a fork inherits the booted container, the primed analysed set and the booted application, so a worker
+  starts with no compile and no boot at all;
+- a worker exchanges nothing but finished fragments, so there are no answers to serialise mid-analysis;
+- the size of the work is no longer the fixture app's (814 ms of analysis in total). A real application's
+  222-operation cold build, with PHPStan's container compiled, measured 18.3s in one process, then 13.9s,
+  9.5s and 7.7s with 2, 4 and 8 workers in a prototype of this design, byte-identical at every count. The
+  design as built, at its automatic 8, measured 6.8s (median of three), and 12 workers were no faster.
+
+What it costs: a callee reached from two workers is analysed in both, which is why the automatic count
+stops at 8 (`WorkerCount::MAX`) and at one worker per 8 uncached operations (`BuildWorkers::MIN_OPERATIONS`).
+Each worker runs under the build's own `memory_limit`, so in a container with a cgroup memory limit the
+automatic count starts no more workers than fit beside the build at that ceiling each — measured on that
+222-operation build, the build peaked at 240 MB RSS and its largest worker at 269 MB, and nothing stops a
+worker growing to the whole ceiling, past which the kernel kills a process, the build's own included. A
+count that was written but cannot be used (`0`, `false`, `'4'`) builds in one process: an off switch has to
+fail closed.
+
+The hazards of forking are settled around the fork rather than hoped away, and every one of them leans on
+the same invariant: what a worker leaves unbuilt, the build makes itself, so a worker may always just stop.
+
+- A worker ends with `SIGKILL`, so it never runs the build's shutdown work, and some extensions hang a
+  forked child in module shutdown (grpc without `grpc.enable_fork_support`, reproduced here: a forked child
+  that exits normally, or dies of a fatal error, never ends).
+- A worker that dies of a FATAL error still runs the shutdown functions it inherited — nothing can stop PHP
+  running them — so the worker registers one of its own that runs after them and ends it there, before
+  module shutdown, with PHP's own display and logging of the error switched off. The host silences what it
+  inherited: the adapter wraps the worker's exception handler in one that reports and renders nothing, since
+  Laravel's shutdown handler hands a fatal to it — wraps rather than replaces, because a build reads the
+  handler's render callbacks and a reader walks a decorator to the handler it holds — and the out-of-memory
+  notice speaks only in the process that armed it. What is left is a host shutdown function that never returns, which would hold
+  the build waiting on that worker; nothing measured does, so the wait has no deadline to get wrong.
+- The adapter closes its database and Redis connections before forking, since two processes on one socket
+  corrupt both. A host that cannot settle the process that way, and a machine that refuses a fork
+  (`EAGAIN` warns, and Laravel makes a warning an exception), leave the build to work alone.
+- A worker whose build has gone — killed by a timeout, `docuccino:watch`'s among them — stops at its next
+  operation rather than finishing the cold build, and takes the claims and the scratch store with it.
 
 ## 4. Boundary (contract in docuccino/core; zero PHPStan imports)
 

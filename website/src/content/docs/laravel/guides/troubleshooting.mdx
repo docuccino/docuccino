@@ -109,7 +109,9 @@ memory_limit = 2G
 Both levers only ever **raise** the ceiling — a process already running with more is left alone, and `-1`
 is rejected — and `--memory-limit` wins over `engine.memory_limit`. Neither touches a web request, so a
 viewer whose `source` is `generate` runs under whatever the server gives it; on a large codebase serve it
-from `artifact` or a warm [`cache`](/laravel/guides/viewer/#source-modes) instead.
+from `artifact` or a warm [`cache`](/laravel/guides/viewer/#source-modes) instead. Nor does either touch a
+process the command was called in with `Artisan::call()` — a queue worker, a request, another command —
+since that process serves other work: raise its own limit, or run the command as a process of its own.
 
 <Aside type="caution" title="A partial document is the worse failure">
 If the fatal lands late in the run you can be left with a document that was written before the
