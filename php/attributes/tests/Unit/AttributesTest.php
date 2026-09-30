@@ -164,7 +164,7 @@ it('instantiates every attribute with its documented defaults', function (string
 function defaultArgs(string $class): array
 {
     return match ($class) {
-        QueryParameter::class, PathParameter::class, HeaderParameter::class,
+        PathParameter::class, HeaderParameter::class,
         CookieParameter::class, BodyParameter::class, Group::class,
         IgnoreParam::class, ResponseHeader::class => ['name'],
         OperationId::class, SchemaId::class => ['id'],
@@ -184,6 +184,14 @@ function defaultArgs(string $class): array
         default => [],
     };
 }
+
+it('lets a query declaration leave its name to the position that supplies one', function (): void {
+    // A Spatie Query Builder custom filter class is named by its `AllowedFilter` registration, so a
+    // declaration there has nothing to name — and a required name made the form an author writes there
+    // one PHP refuses to construct. Absent stays distinguishable from written: null, never ''.
+    expect((new QueryParameter(type: 'int'))->name)->toBeNull()
+        ->and((new QueryParameter('page'))->name)->toBe('page');
+});
 
 it('collects Hidden variadic args into a string list', function (): void {
     $hidden = new Hidden('one', 'two');

@@ -423,8 +423,8 @@ own code takes, so its parameter publishes an explicit **empty schema** — unco
 pinned to a `type` the filter's code could contradict. Each one the finished document still
 publishes untyped is reported ([`query-builder.untyped-filter`](/laravel/reference/diagnostics/)),
 because an unconstrained parameter reaches a generated client as an untyped value: add
-`#[QueryParameter(type: 'string')]` to the filter class, or to the action, and it carries a type
-again. Anything else that types the same parameter — a validation rule on the filter key, a
+`#[QueryParameter(type: 'string')]` to the filter class, or `#[QueryParameter(name: 'filter[search]', type: 'string')]`
+to the action, and it carries a type again. Anything else that types the same parameter — a validation rule on the filter key, a
 `#[QueryParameter]` on the action — settles it just as well, and silences the report with it.
 
 ### Filter factories (a `ListFilters`-style helper)
@@ -701,15 +701,15 @@ AllowedFilter::exact('status')->default('sent')->nullable();
 
 For a `custom` filter, Docuccino reads the column from a single `$query->where(...)` in the class's
 `__invoke` — just like a callback. When the body is more involved, document the parameter with a
-`#[QueryParameter]` **on the filter class itself**. Its `name` argument is ignored in this position
-(the parameter's name is the one you gave `AllowedFilter::custom`); `type`, `format`, `description`,
-`example`, and `default` are applied to the filter's parameter:
+`#[QueryParameter]` **on the filter class itself**. It needs no `name` here — the parameter's name is
+the one you gave `AllowedFilter::custom`, and a name you write anyway is ignored. `type`, `format`,
+`description`, `example`, and `default` are applied to the filter's parameter:
 
 <Tabs>
 	<TabItem label="Your code">
 	```php
 	// app/Filters/PopularityFilter.php
-	#[QueryParameter(name: 'ignored', type: 'int', description: 'Minimum popularity score.', example: 42)]
+	#[QueryParameter(type: 'int', description: 'Minimum popularity score.', example: 42)]
 	final class PopularityFilter implements Filter
 	{
 	    public function __invoke(Builder $query, mixed $value, string $property): void
@@ -740,7 +740,7 @@ For a `custom` filter, Docuccino reads the column from a single `$query->where(.
 `type` accepts a scalar name (`int`, `string`, `bool`, `float`) or a backed-enum class-string, which
 documents that enum's values. `format` composes exactly as it does at route level: it applies after
 `type` — an explicit format wins over one the type implied — and it works alone, riding the default
-string schema, so `#[QueryParameter(name: 'ignored', format: 'uuid')]` documents
+string schema, so `#[QueryParameter(format: 'uuid')]` documents
 `type: string, format: uuid`. The class attribute is an override of inference, not the last word: a
 `#[QueryParameter('filter[popular]')]` on the controller action still wins over it, so a caller can
 refine a shared filter per endpoint — and a backed-enum argument written at a factory call site
@@ -770,7 +770,7 @@ So a filter enforcing a rule at runtime can publish that rule once, for every en
 	<TabItem label="Your code">
 	```php
 	// app/Filters/UuidFilter.php — rejects anything that isn't a UUID with a 422
-	#[QueryParameter(name: 'ignored', format: 'uuid', description: 'Matches one record by its public id.')]
+	#[QueryParameter(format: 'uuid', description: 'Matches one record by its public id.')]
 	final class UuidFilter implements Filter
 	{
 	    public function __invoke(Builder $query, mixed $value, string $property): void
