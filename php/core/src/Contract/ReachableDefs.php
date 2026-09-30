@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Contract;
 
+use Closure;
 use Opis\JsonSchema\JsonPointer;
 
 /**
@@ -11,7 +12,16 @@ use Opis\JsonSchema\JsonPointer;
  * a pointer from the root, decoded by the validator's own parser, so an escaped or percent-encoded
  * segment names exactly the member it will resolve to. A schema that names another any other way — an
  * anchor, a base URI, a relative pointer, a template, a dynamic reference — gets null, which means every
- * `$def` has to travel with it. Instance data is read as if it were schema, which can only over-count.
+ * `$def` has to travel with it.
+ *
+ * A `$ref` counts only where the validator follows one ({@see SchemaMembers}): never as the name of a
+ * property, never inside a value a schema states. A member that names a schema another way counts
+ * wherever it stands, instance data included, because the validator registers an id or an anchor
+ * wherever it walks.
+ *
+ * Read in two layouts, because a pointer into the root outside `$defs` means different things in each:
+ * the schema itself where the root is the rest of it ({@see of()}), and nothing it can know where it is
+ * one `$def` among others ({@see within()}).
  *
  * @internal
  */
@@ -27,57 +37,107 @@ final class ReachableDefs
 
     /**
      * The `$defs` names a schema references directly, or null where it references anything some other way.
+     * A pointer into the root anywhere but `$defs` names nothing to add: in a root the schema is the rest
+     * of, that is the schema itself.
      *
      * @return list<string>|null
      */
     public static function of(mixed $schema): ?array
     {
+        return self::walk($schema, rootIsSelf: true);
+    }
+
+    /**
+     * As {@see of()}, for a schema stored as one `$def` among others: there a pointer into the root outside
+     * `$defs` names whatever the root is, which the schema cannot know, so it gets null too.
+     *
+     * @return list<string>|null
+     */
+    public static function within(mixed $schema): ?array
+    {
+        return self::walk($schema, rootIsSelf: false);
+    }
+
+    /**
+     * The `$defs` member a pointer into `$defs` names, read as {@see of()} reads it; null for any other reference.
+     */
+    public static function defNamed(string $ref): ?string
+    {
+        $name = self::named($ref);
+
+        return is_string($name) ? $name : null;
+    }
+
+    /**
+     * @return list<string>|null
+     */
+    private static function walk(mixed $schema, bool $rootIsSelf): ?array
+    {
         $names = [];
-        $pending = [$schema];
 
-        while ($pending !== []) {
-            $current = array_pop($pending);
-            $object = is_object($current);
-            $members = $object ? get_object_vars($current) : (is_array($current) ? $current : []);
+        return self::collect($schema, SchemaMembers::SCHEMA, $rootIsSelf, $names) ? $names : null;
+    }
 
-            foreach ($members as $member => $value) {
-                if ($object && in_array($member, self::ADDRESSING, true)) {
-                    return null;
+    /**
+     * Adds to `$names` each `$defs` name `$node`, read as `$in`, references — false the moment it names a
+     * schema some other way.
+     *
+     * @param  list<string>  $names
+     */
+    private static function collect(mixed $node, string $in, bool $rootIsSelf, array &$names): bool
+    {
+        if (is_array($node)) {
+            foreach ($node as $item) {
+                if (! self::collect($item, SchemaMembers::item($in), $rootIsSelf, $names)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        foreach (is_object($node) ? get_object_vars($node) : [] as $member => $value) {
+            $member = (string) $member;
+
+            if (in_array($member, self::ADDRESSING, true)) {
+                return false;
+            }
+
+            if (SchemaMembers::isReference($member, $in)) {
+                $name = is_string($value) ? self::named($value) : false;
+
+                if ($name === false || ($name === null && ! $rootIsSelf)) {
+                    return false;
                 }
 
-                if ($object && $member === '$ref') {
-                    $name = is_string($value) ? self::named($value) : false;
-
-                    if ($name === false) {
-                        return null;
-                    }
-
-                    if ($name !== null) {
-                        $names[] = $name;
-                    }
-
-                    continue;
+                if ($name !== null) {
+                    $names[] = $name;
                 }
 
-                if (is_object($value) || is_array($value)) {
-                    $pending[] = $value;
-                }
+                continue;
+            }
+
+            if (! self::collect($value, SchemaMembers::member($member, $in), $rootIsSelf, $names)) {
+                return false;
             }
         }
 
-        return $names;
+        return true;
     }
 
     /**
      * Every name reachable from `$names`, following each `$def`'s own references — or null, meaning all of
-     * them, where any on the way cannot be read. A name `$reaches` does not hold is skipped: that reference
-     * resolves to nothing whatever travels with it.
+     * them, where any on the way cannot be read. A name no `$def` holds is skipped: that reference resolves
+     * to nothing whatever travels with it. `$complete` makes such a name an answer of null instead, for a
+     * caller that needs every reference to land. `$reaches` is asked about the names reached and no other,
+     * so a caller can read each `$def` the first time one is.
      *
      * @param  list<string>|null  $names
-     * @param  array<array-key, list<string>|null>  $reaches  each `$def`'s own {@see of()}
+     * @param  Closure(string): (list<string>|false|null)  $reaches  a `$def`'s own {@see of()} or {@see within()},
+     *                                                               or false where no `$def` has the name
      * @return array<array-key, true>|null
      */
-    public static function closure(?array $names, array $reaches): ?array
+    public static function closure(?array $names, Closure $reaches, bool $complete = false): ?array
     {
         if ($names === null) {
             return null;
@@ -88,12 +148,21 @@ final class ReachableDefs
         while ($names !== []) {
             $name = array_pop($names);
 
-            if (isset($reachable[$name]) || ! array_key_exists($name, $reaches)) {
+            if (isset($reachable[$name])) {
+                continue;
+            }
+
+            $next = $reaches($name);
+
+            if ($next === false) {
+                if ($complete) {
+                    return null;
+                }
+
                 continue;
             }
 
             $reachable[$name] = true;
-            $next = $reaches[$name];
 
             if ($next === null) {
                 return null;

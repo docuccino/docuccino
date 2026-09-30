@@ -119,6 +119,8 @@ use Illuminate\Routing\MiddlewareNameResolver;
 use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\Router;
 use Illuminate\Testing\TestResponse;
+use Opis\JsonSchema\Resolvers\SchemaResolver;
+use Opis\JsonSchema\Uri;
 use Opis\JsonSchema\ValidationResult;
 use Opis\JsonSchema\Validator;
 use PhpParser\Node;
@@ -3938,7 +3940,7 @@ function reachableDefsDocument(array $subject, array $extra = []): ContractIndex
     ]);
 }
 
-/** A validator that remembers the root schema of every check it is handed. */
+/** A validator that remembers the root schema of every check it is handed, and every document it resolves. */
 function recordingSchemaValidators(): object
 {
     return new class
@@ -3946,21 +3948,46 @@ function recordingSchemaValidators(): object
         /** @var list<mixed> */
         public array $roots = [];
 
+        /** @var list<string> every document a validator had to go and find, in the order it did */
+        public array $resolved = [];
+
+        /** @var list<Validator> every validator the checks asked for, in the order they did */
+        public array $validators = [];
+
+        /** How many validators the checks asked for. */
+        public int $created = 0;
+
         public function factory(): Closure
         {
-            return fn (): Validator => new class($this) extends Validator
-            {
-                public function __construct(private readonly object $recorder)
-                {
-                    parent::__construct();
-                }
+            return function (): Validator {
+                $this->created++;
 
-                public function validate($data, $schema, ?array $globals = null, ?array $slots = null): ValidationResult
+                return $this->validators[] = new class($this) extends Validator
                 {
-                    $this->recorder->roots[] = $schema;
+                    public function __construct(private readonly object $recorder)
+                    {
+                        parent::__construct();
 
-                    return parent::validate($data, $schema, $globals, $slots);
-                }
+                        $this->setResolver(new class($recorder) extends SchemaResolver
+                        {
+                            public function __construct(private readonly object $recorder) {}
+
+                            public function resolve(Uri $uri)
+                            {
+                                $this->recorder->resolved[] = (string) $uri;
+
+                                return parent::resolve($uri);
+                            }
+                        });
+                    }
+
+                    public function validate($data, $schema, ?array $globals = null, ?array $slots = null): ValidationResult
+                    {
+                        $this->recorder->roots[] = $schema;
+
+                        return parent::validate($data, $schema, $globals, $slots);
+                    }
+                };
             };
         }
     };
@@ -3974,6 +4001,75 @@ function recordingSchemaValidators(): object
 function reachableDefsSubject(): array
 {
     return ['paths', '/things', 'get', 'responses', '200', 'content', 'application/json', 'schema'];
+}
+
+/**
+ * Where the validator follows a `$ref`, stated from the validator rather than from anything that walks a
+ * schema here: for every keyword that can hold one, a schema with `REF` standing where a reference would,
+ * an instance that makes the validator read that place, and what it does with a reference there — true
+ * where it follows it, false where it is part of a value, null where the validator reads no schema there
+ * at all. Every map is entered through a name spelled like a keyword, which is where readers go wrong.
+ *
+ * @return array<string, array{mixed, mixed, bool|null}>
+ */
+function validatorReferencePositions(): array
+{
+    return [
+        '$ref' => ['REF', 1, true],
+        'contains' => [['contains' => 'REF'], [1], true],
+        'prefixItems' => [['prefixItems' => ['REF']], [1], true],
+        'items' => [['items' => 'REF'], [1], true],
+        // Kept for 2019-09, and read only beside an `items` list, which 2020-12 no longer allows.
+        'additionalItems' => [['prefixItems' => [true], 'additionalItems' => 'REF'], [1, 2], null],
+        // Decoded only for draft-06 and draft-07.
+        'contentSchema' => [['type' => 'string', 'contentMediaType' => 'application/json', 'contentSchema' => 'REF'], '{}', null],
+        'dependencies' => [['dependencies' => ['default' => 'REF']], (object) ['default' => 1], true],
+        'dependentSchemas' => [['dependentSchemas' => ['default' => 'REF']], (object) ['default' => 1], true],
+        'propertyNames' => [['propertyNames' => 'REF'], (object) ['a' => 1], true],
+        'properties' => [['properties' => ['default' => 'REF']], (object) ['default' => 1], true],
+        'patternProperties' => [['patternProperties' => ['default' => 'REF']], (object) ['default' => 1], true],
+        'additionalProperties' => [['additionalProperties' => 'REF'], (object) ['a' => 1], true],
+        'if' => [['if' => 'REF', 'then' => false], 1, true],
+        'then' => [['if' => true, 'then' => 'REF'], 1, true],
+        'else' => [['if' => false, 'else' => 'REF'], 1, true],
+        'anyOf' => [['anyOf' => ['REF']], 1, true],
+        'allOf' => [['allOf' => ['REF']], 1, true],
+        'oneOf' => [['oneOf' => ['REF']], 1, true],
+        'not' => [['not' => 'REF'], 1, true],
+        'unevaluatedProperties' => [['unevaluatedProperties' => 'REF'], (object) ['a' => 1], true],
+        'unevaluatedItems' => [['unevaluatedItems' => 'REF'], [1], true],
+        '$defs' => [['$ref' => '#/$defs/default', '$defs' => ['default' => 'REF']], 1, true],
+        'definitions' => [['$ref' => '#/definitions/default', 'definitions' => ['default' => 'REF']], 1, true],
+        // The validator's own vocabulary: a fallback schema per slot, and the slots a pragma sets for it.
+        '$slots' => [['$slots' => ['default' => 'REF']], 1, true],
+        '$pragma' => [['$pragma' => ['slots' => ['default' => 'REF']], '$slots' => ['default' => true]], 1, true],
+        'const' => [['const' => 'REF'], 1, false],
+        'enum' => [['enum' => ['REF']], 1, false],
+        'default' => [['properties' => ['a' => ['default' => 'REF']]], (object) [], false],
+        'example' => [['example' => 'REF'], 1, false],
+        'examples' => [['examples' => ['REF']], 1, false],
+        'x-extension' => [['x-extension' => 'REF'], 1, false],
+    ];
+}
+
+/**
+ * {@see ReachableDefs::closure()}'s lookup over a table of each def's references, answering false for a
+ * name the table does not hold.
+ *
+ * @param  array<array-key, list<string>|null>  $reaches
+ * @return Closure(string): (list<string>|false|null)
+ */
+function reachesFrom(array $reaches): Closure
+{
+    return static fn (string $name): array|false|null => array_key_exists($name, $reaches) ? $reaches[$name] : false;
+}
+
+/**
+ * One of {@see validatorReferencePositions()}'s schemas, with a reference to `$pointer` standing at `REF`.
+ */
+function atReferencePosition(mixed $schema, string $pointer): mixed
+{
+    return json_decode(str_replace('"REF"', (string) json_encode(['$ref' => $pointer]), (string) json_encode($schema)), false);
 }
 
 /**
