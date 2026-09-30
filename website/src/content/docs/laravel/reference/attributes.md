@@ -404,7 +404,9 @@ A read route (`GET`, `HEAD`) documents its validation rules as query parameters 
 request body, so a declaration on a request class only reaches something where the type is accepted at
 a write verb somewhere. A class every route reads at a read verb raises
 [`attribute.schema-class-unusable`](/laravel/reference/diagnostics/#attributes); one shared by a read
-route and a write route is doing its job on the write one, and nothing is said about it.
+route and a write route is doing its job on the write one, and nothing is said about it. A declaration
+whose arguments its constructor rejects is broken at every verb, so it raises
+[`attribute.unreadable`](/laravel/reference/diagnostics/#attributes) whichever routes accept the class.
 
 ### `#[RuleSchema]`
 
