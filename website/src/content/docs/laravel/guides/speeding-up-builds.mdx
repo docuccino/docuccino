@@ -49,7 +49,7 @@ state of inference. If the engine package isn't installed, a warm build still wa
 `engine.not-installed` — that verdict comes from reading your environment, not from asking the
 analyzer.
 
-## A cold build shares the work
+## A build shares the work
 
 When there are operations to analyze, the build forks workers to share them — one for each CPU the
 process may use, up to eight, and never more than one for every eight uncached operations. Each worker
@@ -58,6 +58,11 @@ fragment store, so the document is byte-identical to the one a single process wr
 turn on: every console build with the `pcntl` extension does it, whether or not `cache.enabled` is true. A
 console build is a process started to run the command — `Artisan::call()` from a queued job, a controller or
 another command builds inside the process it was called from, which serves other work, and never forks it.
+
+An export shares what comes after too. Once the document exists, its schema check and each target's
+emit run in workers of their own, so an export of four targets waits for the slowest of them rather than
+all of them in turn. The files are still written in the order the targets are listed, and the output is
+the same.
 
 ```yaml
 # docuccino.yaml

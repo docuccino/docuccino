@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Pipeline;
 
+use Closure;
 use Docuccino\Core\Content\ContentCompiler;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
@@ -34,6 +35,7 @@ use Docuccino\Core\Pipeline\OperationFragment;
 use Docuccino\Core\Pipeline\OperationPipeline;
 use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
+use Docuccino\Core\SpecValidation\ValidationError;
 use Docuccino\Core\SpecValidation\Validator;
 use Docuccino\Core\Support\RouteOperationId;
 use Docuccino\Laravel\Engine\LazyTypeEngine;
@@ -92,12 +94,16 @@ final class DocumentGenerator
     /**
      * @param  list<class-string|object>  $configExtensions
      * @param  list<OverlayDocument>  $overlays
+     * @param  (Closure(UirDocument): void)|null  $meanwhile  what the caller does with the finished document
+     *                                                        while it is checked against its schema: handed
+     *                                                        it once, before that check has answered
      */
     public function generate(
         DocumentConfig $document,
         TypeEngine $engine,
         array $configExtensions = [],
         array $overlays = [],
+        ?Closure $meanwhile = null,
     ): GenerationResult {
         $resolved = $this->registry->resolve($this->container, DefaultExtensions::all($document), $configExtensions);
 
@@ -234,16 +240,37 @@ final class DocumentGenerator
         );
         $bag->addAll($assembly->diagnostics);
 
-        $validation = $this->validator->validate($assembly->document);
-        foreach ($validation->errors as $error) {
-            $bag->add(new Diagnostic(
-                severity: Severity::Error,
-                code: 'document.schema-invalid',
-                message: trim($error->pointer.' '.$error->message),
-            ));
+        $published = UirDocument::fromArray($assembly->document);
+        foreach ($this->schemaErrors($assembly->document, $published, $meanwhile) as $message) {
+            $bag->add(new Diagnostic(severity: Severity::Error, code: 'document.schema-invalid', message: $message));
         }
 
-        return new GenerationResult(UirDocument::fromArray($assembly->document), $bag->sorted(), $assembly->schemaSources);
+        return new GenerationResult($published, $bag->sorted(), $assembly->schemaSources);
+    }
+
+    /**
+     * What each of the document's schema errors says, found beside what `$meanwhile` does with the document
+     * when there is anything ({@see BuildWorkers::later()}).
+     *
+     * @param  array<string, mixed>  $document
+     * @param  (Closure(UirDocument): void)|null  $meanwhile
+     * @return list<string>
+     */
+    private function schemaErrors(array $document, UirDocument $published, ?Closure $meanwhile): array
+    {
+        $check = fn (): array => array_map(
+            static fn (ValidationError $error): string => trim($error->pointer.' '.$error->message),
+            $this->validator->validate($document)->errors,
+        );
+
+        if ($meanwhile === null) {
+            return $check();
+        }
+
+        $errors = $this->workers->later($check);
+        $meanwhile($published);
+
+        return $errors();
     }
 
     /**

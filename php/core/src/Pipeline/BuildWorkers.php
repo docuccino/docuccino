@@ -8,10 +8,11 @@ use Closure;
 use Throwable;
 
 /**
- * Hands a cold build's operations to forked copies of this process, which build them into the fragment cache
- * the build then restores every operation from — so a worker adds time and nothing else, since a warm build
- * already equals a cold one (design §3). The invariant everything here leans on: what a worker leaves
- * unbuilt, for whatever reason it stopped, the build makes itself, so a worker may always simply stop.
+ * Hands a build's work to forked copies of this process: a cold build's operations ({@see run()}), and whole
+ * tasks whose answers come back as data ({@see later()}). A worker adds time and nothing else, since a warm
+ * build already equals a cold one and a task reads nothing that changes before its answer is asked for, so it
+ * answers the same wherever and whenever it runs (design §3). What a worker leaves undone, for whatever reason
+ * it stopped, the build does itself, so a worker may always simply stop.
  *
  * @internal
  */
@@ -23,11 +24,17 @@ final class BuildWorkers
     /** The host's limit, asked once: it may read the machine to answer. */
     private ?int $limitAnswer = null;
 
+    /** Workers {@see later()} has started and not yet reaped. */
+    private int $live = 0;
+
+    private int $answered = 0;
+
     /**
      * @param  Closure(): int  $limit  the most workers this build may use; 1 means build everything here
-     * @param  (Closure(): void)|null  $beforeFork  run in this process once, before the first worker is
-     *                                              forked; one that throws leaves the build to work alone
-     * @param  (Closure(): void)|null  $inWorker  run in each worker once, before it claims anything
+     * @param  (Closure(): void)|null  $beforeFork  run in this process before it forks: once for {@see run()}'s
+     *                                              workers, and before each worker {@see later()} starts; one
+     *                                              that throws leaves the build to work alone
+     * @param  (Closure(): void)|null  $inWorker  run in each worker once, before it does anything else
      */
     public function __construct(
         private readonly Closure $limit,
@@ -64,6 +71,28 @@ final class BuildWorkers
     }
 
     /**
+     * `$task` started in a worker of its own, at most one fewer than the limit at once, and what answers for it:
+     * the worker's answer where it gave a whole one, the task run here otherwise — at the first ask either way.
+     *
+     * @template T of array<mixed>|scalar|null
+     *
+     * @param  Closure(): T  $task
+     * @return Closure(): T
+     */
+    public function later(Closure $task): Closure
+    {
+        $answer = self::forkable() && $this->live < $this->limit() - 1 ? $this->start($task) : null;
+
+        return ($answer ?? new TaskAnswer($task))->__invoke(...);
+    }
+
+    /** How many of {@see later()}'s answers came from the worker started for each, rather than being made here. */
+    public function answered(): int
+    {
+        return $this->answered;
+    }
+
+    /**
      * Build every job, across `$count` workers, and return once each has exited.
      *
      * @template T
@@ -86,6 +115,9 @@ final class BuildWorkers
             }
 
             $parent = posix_getpid();
+            $inWorker = $this->inWorker;
+            $life = static fn () => self::serve($parent, $claims, $scratch, $units, $build, $inWorker);
+
             $workers = [];
             for ($i = 0; $i < $count; $i++) {
                 $pid = self::fork();
@@ -94,7 +126,7 @@ final class BuildWorkers
                 }
 
                 if ($pid === 0) {
-                    self::work($parent, $claims, $scratch, $units, $build, $this->inWorker);
+                    self::work($life);
                 }
 
                 $workers[] = $pid;
@@ -141,6 +173,49 @@ final class BuildWorkers
         return $this->limitAnswer ??= ($this->limit)();
     }
 
+    /**
+     * The answer to `$task` from a worker started for it, or null where none could be started: the host could
+     * not settle the process, no channel could be opened to it, or the machine refused the fork.
+     *
+     * @template T of array<mixed>|scalar|null
+     *
+     * @param  Closure(): T  $task
+     * @return TaskAnswer<T>|null
+     */
+    private function start(Closure $task): ?TaskAnswer
+    {
+        $channel = $this->settled() ? @stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP) : false;
+        if ($channel === false) {
+            return null;
+        }
+
+        [$ours, $theirs] = $channel;
+        // Neither end gives up, whatever `default_socket_timeout` says: the build waits for a worker as long as
+        // its task takes, as it waits for one under run(), and a worker's answer waits for the build to ask.
+        stream_set_timeout($ours, -1);
+        stream_set_timeout($theirs, -1);
+
+        $inWorker = $this->inWorker;
+        $life = static fn () => self::send($theirs, $ours, $task, $inWorker);
+
+        $pid = self::fork();
+        if ($pid === 0) {
+            self::work($life);
+        }
+
+        fclose($theirs);
+        if ($pid === -1) {
+            return null;
+        }
+
+        $this->live++;
+
+        return new TaskAnswer($task, $pid, $ours, function (bool $used): void {
+            $this->live--;
+            $this->answered += $used ? 1 : 0;
+        });
+    }
+
     /** Whether the host settled this process for a fork; one that could not has the build work alone. */
     private function settled(): bool
     {
@@ -165,18 +240,15 @@ final class BuildWorkers
     }
 
     /**
-     * One worker's life: claim units until none are left, build each, and end without running any of this
+     * One worker's life, whichever kind: made quiet, then `$life`, then an end without running any of this
      * process's shutdown work — the worker is a copy of the build, so that is the build's to run, once.
      *
-     * @template T
-     *
-     * @param  list<list<T>>  $units
-     * @param  Closure(T): void  $build
+     * @param  Closure(): void  $life
      */
-    private static function work(int $parent, string $claims, ?string $scratch, array $units, Closure $build, ?Closure $inWorker): never
+    private static function work(Closure $life): never
     {
         self::quiet();
-        self::serve($parent, $claims, $scratch, $units, $build, $inWorker);
+        $life();
         self::end();
     }
 
@@ -194,8 +266,8 @@ final class BuildWorkers
     }
 
     /**
-     * Everything a worker does short of ending: the host's hook, then units until none are left or the build
-     * it was forked from is gone — in which case it takes away what that build no longer can.
+     * Everything a worker under {@see run()} does short of ending: the host's hook, then units until none are
+     * left or the build it was forked from is gone — in which case it takes away what that build no longer can.
      *
      * @template T
      *
@@ -219,6 +291,30 @@ final class BuildWorkers
             if ($scratch !== null) {
                 self::remove($scratch);
             }
+        }
+    }
+
+    /**
+     * Everything a worker under {@see later()} does short of ending: the host's hook, the task, and its answer
+     * sent whole ({@see TaskAnswer::frame()}). A task that throws sends nothing, which the build answers for.
+     *
+     * @param  resource  $channel
+     * @param  resource  $buildEnd  the build's end of the channel, which the worker lets go of first: held, it
+     *                              would keep a worker whose build has gone waiting to send for good
+     * @param  Closure(): mixed  $task
+     */
+    private static function send(mixed $channel, mixed $buildEnd, Closure $task, ?Closure $inWorker): void
+    {
+        fclose($buildEnd);
+
+        try {
+            if ($inWorker !== null) {
+                $inWorker();
+            }
+
+            fwrite($channel, TaskAnswer::frame(serialize($task())));
+        } catch (Throwable) {
+            // A worker may always stop.
         }
     }
 

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Pipeline\BuildWorkers;
+use Docuccino\Core\Pipeline\TaskAnswer;
 
 /*
  * Workers are forked copies of the build, so what one did is only visible through what it left behind:
@@ -406,4 +407,262 @@ it('asks the host for its limit once, however often the build asks about workers
     $workers->for(8);
 
     expect($asked)->toBe(1);
+});
+
+/*
+ * later(): a task in a worker of its own, answered at the first ask. Each task answers with the process it ran
+ * in, and counts its runs in a variable of this process — which a worker has only a copy of, so a count above
+ * zero here is a task this process ran itself. What `answered()` says is held to both.
+ */
+
+it('answers what a task returned, from a worker of its own', function (): void {
+    $runs = 0;
+    $workers = new BuildWorkers(static fn (): int => 2);
+    $answer = $workers->later(static function () use (&$runs): string {
+        $runs++;
+
+        return (string) getmypid();
+    });
+
+    expect($answer())->not->toBe((string) getmypid())
+        ->and($runs)->toBe(0)
+        ->and($workers->answered())->toBe(1);
+});
+
+it('carries an answer as the data it is, and makes nothing a worker sends into an object here', function (): void {
+    $answer = (new BuildWorkers(static fn (): int => 2))->later(static fn (): array => [
+        'text' => "a\0b",
+        'list' => [1, -2, true, false, null, 0.1],
+        'nested' => ['keys' => ['7' => 'seven', 'x' => []]],
+        // Nothing a task should return, and what a worker's answer would carry if one did: it arrives as the
+        // incomplete object PHP makes of a class it may not revive, with nothing of it run here.
+        'object' => new ArrayIterator(['revived' => true]),
+    ]);
+
+    $answered = $answer();
+
+    expect(array_diff_key($answered, ['object' => true]))->toBe([
+        'text' => "a\0b",
+        'list' => [1, -2, true, false, null, 0.1],
+        'nested' => ['keys' => ['7' => 'seven', 'x' => []]],
+    ])->and($answered['object'])->toBeInstanceOf(__PHP_Incomplete_Class::class);
+});
+
+it('carries an answer far larger than the channel between the processes holds', function (): void {
+    $answer = (new BuildWorkers(static fn (): int => 2))->later(static fn (): string => str_repeat("0123456789abcdef\0", 500_000));
+
+    expect($answer())->toBe(str_repeat("0123456789abcdef\0", 500_000));
+});
+
+it('runs a task here when its answer is asked for, where no worker may be forked', function (): void {
+    // So a caller that starts several before asking for any, and does something with each answer in turn,
+    // does in one process what it does with workers: the first answer's work done before the second task.
+    $order = [];
+    $workers = BuildWorkers::none();
+    $answer = $workers->later(static function () use (&$order): string {
+        $order[] = 'task';
+
+        return (string) getmypid();
+    });
+    $order[] = 'started';
+
+    expect($answer())->toBe((string) getmypid())
+        ->and($order)->toBe(['started', 'task'])
+        ->and($workers->answered())->toBe(0);
+});
+
+it('keeps one worker fewer than its limit running, and runs the rest here', function (): void {
+    $workers = new BuildWorkers(static fn (): int => 3);
+    $where = static fn (): string => (string) getmypid();
+
+    $first = $workers->later($where);
+    $second = $workers->later($where);
+    $third = $workers->later($where);
+
+    expect($first())->not->toBe((string) getmypid())
+        ->and($second())->not->toBe((string) getmypid())
+        ->and($third())->toBe((string) getmypid())
+        ->and($workers->answered())->toBe(2);
+
+    // Waiting for one frees its place.
+    expect($workers->later($where)())->not->toBe((string) getmypid());
+});
+
+it('runs a task here when the host cannot settle the process for a fork', function (): void {
+    $workers = new BuildWorkers(
+        static fn (): int => 2,
+        beforeFork: static fn () => throw new RuntimeException('a connection that would not close'),
+        inWorker: fn () => file_put_contents($this->out.'/worker-'.getmypid(), ''),
+    );
+
+    expect($workers->later(static fn (): string => (string) getmypid())())->toBe((string) getmypid())
+        ->and(glob($this->out.'/worker-*'))->toBe([]);
+});
+
+it('runs a task here when its worker dies before answering, and only once however often it is asked', function (): void {
+    $runs = 0;
+    $workers = new BuildWorkers(static fn (): int => 2, inWorker: static fn () => posix_kill(posix_getpid(), SIGKILL));
+    $answer = $workers->later(static function () use (&$runs): string {
+        $runs++;
+
+        return 'answered';
+    });
+
+    expect($answer())->toBe('answered')
+        ->and($answer())->toBe('answered')
+        ->and($runs)->toBe(1)
+        ->and($workers->answered())->toBe(0);
+});
+
+it('throws here what a task throws, since the task is then run here', function (): void {
+    $answer = (new BuildWorkers(static fn (): int => 2))->later(static fn (): string => throw new RuntimeException('no answer'));
+
+    expect($answer)->toThrow(RuntimeException::class, 'no answer');
+});
+
+it('waits for its worker however long the task takes, whatever the socket timeout', function (): void {
+    // An application may lower `default_socket_timeout`. A read that gave up at it would find no answer from
+    // a worker still working, and run here the task that worker then finishes as well.
+    $timeout = (string) ini_get('default_socket_timeout');
+    ini_set('default_socket_timeout', '1');
+
+    try {
+        $runs = 0;
+        $answer = (new BuildWorkers(static fn (): int => 2))->later(static function () use (&$runs): string {
+            $runs++;
+            usleep(1_500_000);
+
+            return (string) getmypid();
+        });
+        $answered = $answer();
+    } finally {
+        ini_set('default_socket_timeout', $timeout);
+    }
+
+    expect($answered)->not->toBe((string) getmypid())
+        ->and($runs)->toBe(0);
+});
+
+it('keeps a worker\'s answer waiting however long the build takes to ask, whatever the socket timeout', function (): void {
+    // The other end of the channel: an answer larger than the channel holds waits in the worker until the build
+    // reads it, and a write that gave up meanwhile would leave the build half an answer. Where PHP polls a
+    // stalled write with that timeout (php-src's socket writer does, and Linux's poll waits there), it would.
+    $timeout = (string) ini_get('default_socket_timeout');
+    ini_set('default_socket_timeout', '1');
+
+    try {
+        $runs = 0;
+        $answer = (new BuildWorkers(static fn (): int => 2))->later(static function () use (&$runs): string {
+            $runs++;
+
+            return str_repeat((string) getmypid().'.', 500_000);
+        });
+        usleep(1_500_000);
+        $answered = $answer();
+    } finally {
+        ini_set('default_socket_timeout', $timeout);
+    }
+
+    expect($answered)->not->toStartWith((string) getmypid().'.')
+        ->and(strlen($answered))->toBeGreaterThan(1_000_000)
+        ->and($runs)->toBe(0);
+});
+
+it('ends and reaps a worker whose answer nobody asks for, and frees its place', function (): void {
+    // A build that throws before it asks — an emit, a file write — lets go of the answer unasked.
+    $workers = new BuildWorkers(static fn (): int => 2);
+    $started = $this->out.'/started';
+    $answer = $workers->later(static function () use ($started): string {
+        file_put_contents($started, (string) getmypid());
+        usleep(200_000);
+
+        return (string) getmypid();
+    });
+
+    $deadline = microtime(true) + 10;
+    while (! is_file($started) && microtime(true) < $deadline) {
+        usleep(10_000);
+    }
+    $pid = (int) file_get_contents($started);
+
+    unset($answer);
+
+    // Not a child of this process any more: reaped, rather than left for this process to accumulate.
+    expect($pid)->toBeGreaterThan(0)
+        ->and(pcntl_waitpid($pid, $status, WNOHANG))->toBe(-1)
+        // …and its place is free: the next task gets a worker of its own.
+        ->and($workers->later(static fn (): string => (string) getmypid())())->not->toBe((string) getmypid());
+});
+
+it('leaves a worker be when a process forked after it lets go of its answer', function (): void {
+    // A process forked from the build holds a copy of every answer the build is waiting on. Letting go of one
+    // there is not the build letting go of it, and ending the worker would end the build's own.
+    $workers = new BuildWorkers(static fn (): int => 3);
+    $answer = $workers->later(static function (): string {
+        usleep(300_000);
+
+        return (string) getmypid();
+    });
+
+    $sibling = pcntl_fork();
+    if ($sibling === 0) {
+        unset($answer);
+        posix_kill(posix_getpid(), SIGKILL);
+    }
+    pcntl_waitpid($sibling, $status);
+
+    expect($answer())->not->toBe((string) getmypid())
+        ->and($workers->answered())->toBe(1);
+});
+
+it('reads an answer cut short as no answer at all, and makes it here', function (): void {
+    // What a worker dying mid-answer leaves on the channel: the length of the whole, and less than that.
+    foreach (['cut short' => pack('J', 100).'short', 'no length' => 'abc', 'nothing' => ''] as $sent) {
+        [$ours, $theirs] = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP) ?: throw new RuntimeException('no channel');
+        $pid = pcntl_fork();
+        if ($pid === 0) {
+            fwrite($theirs, $sent);
+            posix_kill(posix_getpid(), SIGKILL);
+        }
+        fclose($theirs);
+
+        $used = null;
+        $answer = new TaskAnswer(static fn (): string => 'made here', $pid, $ours, static function (bool $whole) use (&$used): void {
+            $used = $whole;
+        });
+
+        expect($answer())->toBe('made here')
+            ->and($used)->toBeFalse()
+            ->and(pcntl_waitpid($pid, $status, WNOHANG))->toBe(-1);
+    }
+});
+
+it('sends a task\'s answer as data behind its length, and nothing at all for a task that throws', function (): void {
+    // What a worker sends, driven here in one process through reflection, as the claim loop is above. The build's
+    // end stands in here for the copy of it a worker holds, which the worker lets go of before anything else.
+    $send = new ReflectionMethod(BuildWorkers::class, 'send');
+    $order = [];
+    $sent = static function (Closure $task, ?Closure $inWorker = null) use ($send, &$order): string {
+        [$ours, $theirs] = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP) ?: throw new RuntimeException('no channel');
+        $buildEnd = fopen('php://memory', 'r') ?: throw new RuntimeException('no stream');
+        $send->invoke(null, $theirs, $buildEnd, $task, $inWorker);
+        $order[] = is_resource($buildEnd) ? 'held' : 'let go';
+        fclose($theirs);
+
+        return (string) stream_get_contents($ours);
+    };
+
+    expect($sent(static fn (): array => ['answer']))->toBe(pack('J', strlen(serialize(['answer']))).serialize(['answer']))
+        ->and($sent(static fn (): string => ''))->toBe(TaskAnswer::frame(serialize('')))
+        ->and($sent(static fn (): string => throw new RuntimeException('no answer')))->toBe('')
+        // The host's hook first, then the task: a hook that throws leaves nothing sent either.
+        ->and($sent(static function () use (&$order): string {
+            $order[] = 'task';
+
+            return 'answer';
+        }, static function () use (&$order): void {
+            $order[] = 'hook';
+        }))->toBe(TaskAnswer::frame(serialize('answer')))
+        ->and($sent(static fn (): string => 'answer', static fn () => throw new RuntimeException('a hook that failed')))->toBe('')
+        ->and($order)->toBe(['let go', 'let go', 'let go', 'hook', 'task', 'let go', 'let go']);
 });
