@@ -117,6 +117,7 @@ use Illuminate\Routing\MiddlewareNameResolver;
 use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\Router;
 use Illuminate\Testing\TestResponse;
+use Opis\JsonSchema\ValidationResult;
 use Opis\JsonSchema\Validator;
 use PhpParser\Node;
 use PhpParser\NodeTraverser;
@@ -3669,6 +3670,69 @@ function contractIndexShape(ContractIndex $index): array
     }
 
     return $shape;
+}
+
+/**
+ * A document whose one response schema is `$subject`, beside a chain Middle → Leaf that fails on a
+ * string `n`, and a component nothing reaches.
+ *
+ * @param  array<string, mixed>  $subject
+ * @param  array<string, mixed>  $extra  more components, by name
+ */
+function reachableDefsDocument(array $subject, array $extra = []): ContractIndex
+{
+    return ContractIndex::fromArray([
+        'openapi' => '3.2.0',
+        'info' => ['title' => 't', 'version' => '1'],
+        'paths' => ['/things' => ['get' => ['responses' => ['200' => [
+            'description' => 'ok',
+            'content' => ['application/json' => ['schema' => $subject]],
+        ]]]]],
+        'components' => ['schemas' => [
+            'Middle' => ['type' => 'object', 'properties' => ['leaf' => ['$ref' => '#/components/schemas/Leaf']]],
+            'Leaf' => ['type' => 'object', 'properties' => ['n' => ['type' => 'integer']], 'required' => ['n']],
+            'Unreached' => ['type' => 'object', 'properties' => ['z' => ['type' => 'string']]],
+            ...$extra,
+        ]],
+    ]);
+}
+
+/** A validator that remembers the root schema of every check it is handed. */
+function recordingSchemaValidators(): object
+{
+    return new class
+    {
+        /** @var list<mixed> */
+        public array $roots = [];
+
+        public function factory(): Closure
+        {
+            return fn (): Validator => new class($this) extends Validator
+            {
+                public function __construct(private readonly object $recorder)
+                {
+                    parent::__construct();
+                }
+
+                public function validate($data, $schema, ?array $globals = null, ?array $slots = null): ValidationResult
+                {
+                    $this->recorder->roots[] = $schema;
+
+                    return parent::validate($data, $schema, $globals, $slots);
+                }
+            };
+        }
+    };
+}
+
+/**
+ * The pointer segments of {@see reachableDefsDocument()}'s response schema.
+ *
+ * @return list<string>
+ */
+function reachableDefsSubject(): array
+{
+    return ['paths', '/things', 'get', 'responses', '200', 'content', 'application/json', 'schema'];
 }
 
 /**

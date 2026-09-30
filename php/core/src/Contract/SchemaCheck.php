@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Contract;
 
+use Closure;
 use Docuccino\Core\Draft\SchemaKeywords;
 use Opis\JsonSchema\Errors\ErrorFormatter;
 use Opis\JsonSchema\Errors\ValidationError;
@@ -18,6 +19,12 @@ use stdClass;
  * references rewritten to `#/$defs/X`, so a `$ref` resolves without inlining anything — recursive model
  * schemas stay recursive. Opis reports the schema path it failed on, so the mapping back is exact even
  * inside a `oneOf` branch, which a hand walk of the instance pointer could only guess at.
+ *
+ * Only the components the subject can REACH travel with it ({@see ReachableDefs}): the validator walks
+ * everything it is handed before it validates anything, so handing every check the whole of
+ * `components/schemas` made each one cost the document rather than the schema. A `$def` nothing can
+ * reach decides nothing, and where the subject names a schema some way this cannot follow, every one of
+ * them travels as before.
  *
  * Subjects arrive from wherever the caller had them — an artifact somebody hand-edited, a draft nothing
  * canonicalised — so an object-valued keyword holding an empty array is repaired on the way in
@@ -43,7 +50,26 @@ final class SchemaCheck
      */
     private const array INSTANCE_KEYWORDS = ['const', 'default', 'enum', 'example', 'examples'];
 
-    public function __construct(private readonly ContractIndex $index) {}
+    /**
+     * Every component schema rewritten for `$defs` ({@see rewrite()}), once per index rather than once per
+     * check. Shared by every check: the validator writes to the instance it validates, never to a schema
+     * it is handed.
+     *
+     * @var array<array-key, mixed>|null
+     */
+    private ?array $defs = null;
+
+    /** @var array<array-key, list<string>|null> each component's own {@see ReachableDefs::of()} */
+    private array $reaches = [];
+
+    /**
+     * @param  (Closure(): OpisValidator)|null  $validators  where each check's validator comes from; overridable
+     *                                                       so what a check hands it can be observed
+     */
+    public function __construct(
+        private readonly ContractIndex $index,
+        private readonly ?Closure $validators = null,
+    ) {}
 
     /**
      * @param  list<string>  $schemaSegments  document pointer segments addressing the schema to check
@@ -58,7 +84,7 @@ final class SchemaCheck
             return [];
         }
 
-        $validator = new OpisValidator;
+        $validator = $this->validators === null ? new OpisValidator : ($this->validators)();
         $validator->setMaxErrors(self::MAX_ERRORS);
 
         $result = $validator->validate($data, $this->root($subject));
@@ -100,9 +126,9 @@ final class SchemaCheck
     }
 
     /**
-     * The subject with the document's component schemas alongside it as `$defs`. A subject that already
-     * declares `$defs` keeps its own entries — its names shadow the component names, which is what a
-     * lexical `$defs` would do anyway.
+     * The subject with the component schemas it can reach alongside it as `$defs` ({@see componentDefs()}).
+     * A subject that already declares `$defs` keeps its own entries — its names shadow the component
+     * names, which is what a lexical `$defs` would do anyway.
      */
     private function root(object|bool $subject): object|bool
     {
@@ -123,7 +149,7 @@ final class SchemaCheck
             }
         }
 
-        $defs = $this->componentDefs();
+        $defs = $this->componentDefs($rewritten);
 
         if (isset($root->{'$defs'}) && is_object($root->{'$defs'})) {
             foreach (get_object_vars($root->{'$defs'}) as $name => $value) {
@@ -138,23 +164,36 @@ final class SchemaCheck
         return $root;
     }
 
-    private function componentDefs(): stdClass
+    /** The component schemas `$subject` can reach, in document order — every one of them where that cannot be read. */
+    private function componentDefs(mixed $subject): stdClass
     {
+        $defs = $this->defs();
+        $reachable = ReachableDefs::closure(ReachableDefs::of($subject), $this->reaches);
+
+        return (object) ($reachable === null ? $defs : array_intersect_key($defs, $reachable));
+    }
+
+    /**
+     * @return array<array-key, mixed>
+     */
+    private function defs(): array
+    {
+        if ($this->defs !== null) {
+            return $this->defs;
+        }
+
         $graph = $this->index->graph();
         $components = $graph->components ?? null;
         $schemas = is_object($components) ? ($components->schemas ?? null) : null;
 
-        $defs = new stdClass;
+        $defs = [];
 
-        if (! is_object($schemas)) {
-            return $defs;
+        foreach (is_object($schemas) ? get_object_vars($schemas) : [] as $name => $schema) {
+            $defs[$name] = $this->rewrite($schema);
+            $this->reaches[$name] = ReachableDefs::of($defs[$name]);
         }
 
-        foreach (get_object_vars($schemas) as $name => $schema) {
-            $defs->{$name} = $this->rewrite($schema);
-        }
-
-        return $defs;
+        return $this->defs = $defs;
     }
 
     /**
