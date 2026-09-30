@@ -309,6 +309,15 @@ members — so it names its own: `PaginationLink` for the link object, and
 `DataPaginationMeta`/`DataCursorPaginationMeta` for the two metas. Those describe themselves the same
 way.
 
+A paginated collection of JSON:API resources is a page too. Laravel's own `JsonApiResource` sends the
+same envelope, so its pages point at the same `links` and `meta` components, with the document's
+`included` and `jsonapi` members beside them. A
+[`timacdonald/json-api`](/laravel/packages/timacdonald-json-api/) page leaves out the links there is no
+page for instead of sending them as `null`, so its links are their own components:
+`AvailablePaginationLinks`, `AvailableSimplePaginationLinks` and `AvailableCursorPaginationLinks`. A
+cursor page with no page on either side has no links left, which is sent as an empty list `[]`, so
+`AvailableCursorPaginationLinks` allows that too.
+
 ### Media types
 
 A response is `application/json` unless the payload itself says otherwise. A first-party JSON:API
