@@ -136,6 +136,12 @@ them.
   two classes) reached through `::collection()` and
   `toResourceCollection()`, plus `@method` tags over real methods and over macros; and
   `app/Http/Requests/AccountRequest.php`, a FormRequest typing `user()` with a `@method` tag.
+- `app/Http/Controllers/KeyedCollectionController.php` — Eloquent collections returned bare and through
+  `response()->json()`: as fetched, queried, plucked and mapped; filtered and sorted, with and without
+  `values()`; handed in as a parameter; keyed by a string closure (`keyBy`, `mapWithKeys`); keyed or
+  grouped by an attribute name — every key type Larastan's collection stubs give — and the rows of
+  `app/Models/Ledger.php`, a model whose untyped `newCollection()` keys them by id and which Larastan types
+  as the framework's collection.
 - `app/Timeline/` — a `@phpstan-sealed` interface (`TimelineEntry`) over two final readonly classes
   whose constructors fix a backed-enum `type`, and `app/Http/Controllers/TimelineController.php`
   answering with a `list<TimelineEntry>` payload and a union of the two classes.

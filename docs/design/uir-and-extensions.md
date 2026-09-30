@@ -2228,6 +2228,35 @@ the reason is that the vague answer here is not cheap: it is paid on almost ever
 the document. A `MapT` whose key type is itself int-capable is the recorded escape hatch if that ever
 needs revisiting — the ambiguity survives in the DType, it is only the schema mapper that resolves it.
 
+A Laravel collection (`Illuminate\Support\Enumerable`) is the one type that reads its key the other way.
+It is sent as `json_encode` of the array it holds, keys included, and none of the three reasons above
+holds for it: its type is never the spelling of a list. Larastan types `filter()`, `sortBy()` and
+`unique()` exactly as it types `values()`, and those keep the int keys of what they drop or move, which are
+sent as an object. A string key proves nothing either way: an empty collection is sent as `[]`, and PHP
+turns a numeric-string key back into an int, so `keyBy(fn () => (string) $id)` over ids `0…n-1` is a list.
+So the adapter's `EnumerableTypeToSchema` publishes every collection, whatever its key type, as
+`type: [array, object]` of its items (`Support\EitherKeyed`, the same shape a resource collection that keeps
+its keys publishes).
+
+No list is proven from the expression either, though one could be in principle. A query's rows, or a
+`values()`, are a list only if nothing the application wrote touches them on the way, and most of what
+can is out of sight at the call site: a model's configured collection class, which every `new static` a
+call like `values()` makes is built as again, and which Larastan does not name; a global scope, or its
+`extend()`, registering callbacks on the base query or the builder; a builder macro shadowing a forwarded
+method; a connection whose query class is its own. A sound proof would read the booted app's registries
+for each and key the cache on them, and the measured benefit is at most five returns: across twelve local
+applications, seven returns in controllers, resources and actions end in `get()` or `all()`, five of them
+started from a model, since an API returns resources. That would be a mechanism sized to what could be
+true rather than to what was counted, so the either-shape stands for every collection.
+
+The items are claimed only where the collection is sent as the array it holds. An override of `all()`,
+`jsonSerialize()`, `toJson()` or `getIterator()` sends what the override returns, so it is published as an
+unconstrained schema. For an Eloquent collection the class read is the one its items' model configures —
+`$collectionClass` or `#[CollectedBy]` anywhere in its hierarchy, traits included — and one whose
+`newCollection()` is its own, or whose model cannot be read, is no answer: the static type names the
+framework's collection whatever the model builds. `->all()` and `->toArray()` on a collection hand back a
+plain array again, under the rule above.
+
 A constant shape decides the same question from its keys instead: `ArrayShapeT::$isList` is true when the
 keys are the `0..n` sequence, derived in the constructor as well as taken from PHPStan's list accessory,
 so a docblock tuple (`array{string, int}`) can never be documented as an object with `"0"`/`"1"` property
