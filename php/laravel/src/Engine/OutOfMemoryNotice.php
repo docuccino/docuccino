@@ -7,7 +7,7 @@ namespace Docuccino\Laravel\Engine;
 use Docuccino\Core\Config\ConfigFile;
 
 /**
- * Turns an out-of-memory fatal during in-process inference into an explanation. PHP can't catch memory
+ * Turns an out-of-memory fatal during a console build into an explanation. PHP can't catch memory
  * exhaustion, so a shutdown handler is the only place left to say anything: it recognises the fatal by
  * message and names both levers — the ceiling itself, and how wide the analyser is sent. The second is a
  * key the shipped template leaves commented out, and its default is WIDER than the `['app']` that used to
@@ -56,10 +56,10 @@ final class OutOfMemoryNotice
 
         return <<<TEXT
 
-            Docuccino ran out of memory while analyzing your code.
+            Docuccino ran out of memory building your documentation.
 
-            In-process inference runs PHPStan inside this process, so it is bound by this process's
-            memory_limit (currently {$limit}). Two levers:
+            The build runs inside this process, in-process inference and PHPStan with it, so it is
+            bound by this process's memory_limit (currently {$limit}). Two levers:
 
               * Raise the ceiling — set engine.memory_limit in {$file} (e.g. '2G'), or pass
                 --memory-limit=2G to this command.

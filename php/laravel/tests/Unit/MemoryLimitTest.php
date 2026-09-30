@@ -161,21 +161,37 @@ it('is not marked a console build by somebody else\'s command', function (): voi
         ->and(app(TypeEngineFactory::class)->mayTuneProcess())->toBeFalse();
 });
 
-it('defers the ceiling with the engine it belongs to, and takes it no earlier', function (): void {
-    // The engine package IS installed here and this factory MAY tune the process, so an eager one
-    // would have raised the ceiling, created the analyser's scratch directory and booted PHPStan
-    // before the deferred engine is asked a single question. Deferring moves the whole of that —
-    // still ahead of any analysis, since it all lives in the one make() the first question triggers.
+it('raises the ceiling for a console build before the engine exists, and boots nothing', function (): void {
+    // The ceiling is the build's, not only the analyser's. A build whose every fragment is warm never asks
+    // the engine a question, and holding a large document outgrows PHP's default on its own — measured on a
+    // real application's 222-operation document, a warm export peaks near 150 MB with nothing analysed.
+    // Settled where the analyser boots, the same command succeeded cold and died warm. The boot itself
+    // still waits for a question: no scratch directory, no PHPStan.
     $tmp = sys_get_temp_dir().'/docuccino-deferred-'.bin2hex(random_bytes(6));
     $before = ini_get('memory_limit');
 
-    $factory = new TypeEngineFactory(basePath: base_path(), tmpDir: $tmp, engine: new EnginePackage, console: true);
-    $engine = $factory->deferred(['mode' => 'in-process', 'memory_limit' => '9999M']);
+    try {
+        $factory = new TypeEngineFactory(basePath: base_path(), tmpDir: $tmp, engine: new EnginePackage, console: true);
+        $engine = $factory->deferred(['mode' => 'in-process', 'memory_limit' => '9999M']);
 
-    expect($factory->mayTuneProcess())->toBeTrue()
-        ->and($engine)->toBeInstanceOf(LazyTypeEngine::class)
-        ->and(ini_get('memory_limit'))->toBe($before)
-        ->and(is_dir($tmp))->toBeFalse();
+        expect($factory->mayTuneProcess())->toBeTrue()
+            ->and($engine)->toBeInstanceOf(LazyTypeEngine::class)
+            ->and(ini_get('memory_limit'))->toBe('9999M')
+            ->and(is_dir($tmp))->toBeFalse();
+    } finally {
+        ini_set('memory_limit', $before);
+    }
+});
+
+it('leaves the process ceiling alone when a deferred build may not tune it', function (): void {
+    // The viewer resolves a deferred engine on every `.json` request, and a web request must not move the
+    // ceiling the process serves every other request under.
+    $before = ini_get('memory_limit');
+
+    (new TypeEngineFactory(basePath: base_path(), tmpDir: storage_path('docuccino'), engine: new EnginePackage))
+        ->deferred(['mode' => 'in-process', 'memory_limit' => '9999M']);
+
+    expect(ini_get('memory_limit'))->toBe($before);
 });
 
 it('leaves the process ceiling alone when it may not tune it', function (): void {
