@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Composer\InstalledVersions;
+use Composer\Semver\VersionParser;
 use Docuccino\Core\Canonical\Canonicalizer;
 use Docuccino\Core\Contract\CheckResult;
 use Docuccino\Core\Contract\ContractChecker;
@@ -103,6 +105,7 @@ use Docuccino\Laravel\Tests\TestCase;
 use Docuccino\Laravel\Watch\BuildRunner;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Http\Kernel as HttpKernelContract;
+use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\ApplicationBuilder;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Foundation\Exceptions\Handler;
@@ -4824,4 +4827,16 @@ function declarationSource(ReflectionClass|ReflectionFunctionAbstract $of): stri
     $lines = file((string) $of->getFileName()) ?: [];
 
     return implode('', array_slice($lines, (int) $of->getStartLine() - 1, (int) $of->getEndLine() - (int) $of->getStartLine() + 1));
+}
+
+/**
+ * Whether the installed timacdonald/json-api sends a resource as its JSON:API resource object, stated from
+ * the releases rather than asked of the integration: Laravel before 12.45 sends a resource's toArray(); from
+ * 12.45 it sends what resolveResourceData() returns, which the package declares (returning toArray()) only
+ * from v1.0.0-beta.10 — an older release is sent as its attributes alone.
+ */
+function timacdonaldSendsResourceObjects(): bool
+{
+    return version_compare(Application::VERSION, '12.45.0', '<')
+        || InstalledVersions::satisfies(new VersionParser, 'timacdonald/json-api', '>=1.0.0-beta.10');
 }

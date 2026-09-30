@@ -6,9 +6,9 @@ description: Document timacdonald/json-api resources as JSON:API documents — i
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 Activates automatically when [`timacdonald/json-api`](https://github.com/timacdonald/json-api) is
-installed. This is the package Laravel 13's first-party JSON:API resources were upstreamed from, so
-if you're on an earlier Laravel — or simply prefer the package — your resources are documented
-identically.
+installed. This is the package Laravel's first-party JSON:API resources (added in Laravel 12.45) were
+upstreamed from, so if you're on an earlier Laravel — or simply prefer the package — your resources are
+documented the same way.
 
 ## What it documents
 
@@ -24,7 +24,9 @@ from the same methods the framework's first-party resources expose:
 
 Endpoints returning one of these resources (or a collection of them) also gain the JSON:API `include`
 and `fields` query parameters, and the response is served as the JSON:API media type
-`application/vnd.api+json`.
+`application/vnd.api+json`. A paginated collection is documented as a
+[page](/laravel/documenting/responses/#pagination), whose `links` list only the pages that exist, as the
+package sends them — an empty list `[]` on a cursor page with none either side.
 
 <Tabs>
 	<TabItem label="Your code">
@@ -95,7 +97,10 @@ what lets a collection reference the same object per item and wrap the envelope 
 // A collection return — one `data` wrap around an array of resource objects
 {
   "type": "object",
-  "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/CustomerResource" } } },
+  "properties": {
+    "data": { "type": "array", "items": { "$ref": "#/components/schemas/CustomerResource" } },
+    "included": { "type": "array", "items": { "$ref": "#/components/schemas/JsonApiResourceObject" } }
+  },
   "required": ["data"]
 }
 ```
@@ -105,15 +110,33 @@ type — the type keys are runtime data, so they're modeled with `additionalProp
 
 ## Relationships and `included`
 
-`toRelationships()` and the compound-document `included` array are **not** emitted. Both packages
-express relationships as closures — `'author' => fn () => new AuthorResource($this->author)` — and a
-static read of a closure can't produce JSON:API's `{ data: { type, id } }` linkage object. Emitting a
-guess there would document a shape the resource never returns, so both members are left out until the
-linkage can be modeled from real relationship resolution.
+`toRelationships()` is **not** emitted. Both packages express relationships as closures —
+`'author' => fn () => new AuthorResource($this->author)` — and a static read of a closure can't produce
+JSON:API's `{ data: { type, id } }` linkage object. Emitting a guess there would document a shape the
+resource never returns, so the member is left out until the linkage can be modeled from real
+relationship resolution.
 
-The `include` parameter is still documented, because the endpoint really does accept it. Describe what
-the `included` array holds with a docblock or an
+Every document does list the compound-document `included` array, since an endpoint that accepts
+`include` sends one whenever a related resource is loaded. Which resources land in it depends on the
+request, so each entry is published as a generic resource object — a shared `JsonApiResourceObject`
+component with a string `id` and `type`. Describe it more precisely with a docblock or an
 [`#[Response]`](/laravel/reference/attributes/#response) attribute if your consumers need it.
+
+## The `jsonapi` object
+
+When your app registers a server implementation at boot, every document gains a top-level `jsonapi`
+object:
+
+```php
+// app/Providers/AppServiceProvider.php
+JsonApiResource::resolveServerImplementationUsing(
+    fn () => new ServerImplementation('1.1', ['copyright' => 'Acme Inc.']),
+);
+```
+
+Docuccino publishes it as `{ version, meta? }`. The callback runs per request and may return nothing,
+so the member is published as optional. Registering or removing the callback rebuilds the cached
+documentation on the next run.
 
 `links` is handled specially for the same reason: `toLinks()` returns `Link` objects keyed by relation,
 which a flat analysis can't see through — so when you override it, Docuccino emits the link-object
@@ -132,13 +155,28 @@ shape rather than trying to read your keys:
 
 ## Which one runs
 
-If your app is on Laravel 13 with the first-party JSON:API resources, that support handles them;
-this integration handles the `timacdonald/json-api` base class. Both feed the same document builder,
-so you can migrate from the package to the framework resources without your documentation changing.
+Laravel's first-party JSON:API resources (Laravel 12.45 and later) are handled by the framework
+support; this integration handles the `timacdonald/json-api` base class. Both feed the same document
+builder, so moving from the package to the framework resources leaves the documented resource objects
+unchanged. Two things differ, because the two send them differently: the package's `links` are
+`{ href, meta? }` link objects where the framework sends what `toLinks()` returns, and a page of the
+package's resources leaves out the links there is no page for, where the framework sends them as
+`null`. Docuccino documents each as it is sent.
 
 A timacdonald resource is also an Illuminate `JsonResource`, but the plain
 [API Resources](/laravel/documenting/schemas/#api-resources) mapper deliberately declines it — you'll
 never get a flat `toArray()` shape for a JSON:API resource by accident.
+
+## Package versions
+
+Laravel 12.45 changed how a resource is sent: the response carries what the resource's
+`resolveResourceData()` returns. The package declares that method, returning its resource object, from
+v1.0.0-beta.10. With an older release on Laravel 12.45 or later, your resources are sent as their
+attributes alone — no `id`, no `type` — so Docuccino documents each one, and each entry in
+`included`, as an object whose shape it doesn't claim, and warns with
+`timacdonald-json-api.resource-object-not-sent`. Upgrading the package puts the resource objects back.
+A resource that overrides `resolveResourceData()` itself is documented the same way on any release,
+since the override decides what is sent.
 
 ## Configuration
 

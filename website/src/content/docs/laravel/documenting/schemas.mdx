@@ -90,10 +90,21 @@ A resource whose `$forceWrapping` is on is wrapped even when its `toArray()` alr
 key, as Laravel does. That includes a first-party JSON:API resource, whose document then arrives under
 a second `data`.
 
-Laravel 13's first-party JSON:API resources are supported too: `toAttributes()`,
-`toRelationships()`, `toLinks()` and `toMeta()` build the resource object, and the `include` and
-`fields[TYPE]` query parameters those routes accept are added automatically. Pre-13 apps get identical
-output from the [timacdonald/json-api](/laravel/packages/timacdonald-json-api/) integration.
+Laravel's first-party JSON:API resources are supported too: `toAttributes()`, `toLinks()` and
+`toMeta()` build the resource object, each published as the method returns it, and the `include` and
+`fields[TYPE]` query parameters those routes accept are added automatically. Every document also lists
+the `included` array of related resource objects, and the `jsonapi` object when you set one at boot:
+
+```php
+// app/Providers/AppServiceProvider.php
+JsonApiResource::configure(version: '1.1', meta: ['copyright' => 'Acme Inc.']);
+```
+
+While it is configured, `jsonapi` is published as a required member with exactly the keys you passed,
+on single resources and collections alike. Changing it rebuilds the cached documentation on the next
+run. The first-party resources arrived in Laravel 12.45; on an earlier release, the
+[timacdonald/json-api](/laravel/packages/timacdonald-json-api/) integration documents that package's
+resources the same way.
 
 ## Eloquent models
 
