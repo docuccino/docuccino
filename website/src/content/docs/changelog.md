@@ -13,6 +13,49 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.20.4
+
+### Features
+
+- **core**: tell tooling a blank string on a nullable field is read as null ([#591](https://github.com/docuccino/docuccino/pull/591))
+- **laravel**: publish every URL form of a route with optional segments, and host constraints on server variables ([#586](https://github.com/docuccino/docuccino/pull/586))
+- **core**: publish a case-insensitive regex, and \s and Unicode properties under /u, as a pattern ([#582](https://github.com/docuccino/docuccino/pull/582))
+- **laravel**: publish a request object one field partitions as a union of its shapes ([#579](https://github.com/docuccino/docuccino/pull/579))
+- **laravel**: publish route parameter constraints on the path parameter ([#574](https://github.com/docuccino/docuccino/pull/574))
+
+### Bug fixes
+
+- **core**: read a $ref an example states as the value it is, not as a reference ([#608](https://github.com/docuccino/docuccino/pull/608))
+- **laravel**: give a warm build the memory ceiling a cold one gets ([#598](https://github.com/docuccino/docuccino/pull/598))
+- **laravel**: publish a returned collection as the array or object it is sent as ([#595](https://github.com/docuccino/docuccino/pull/595))
+- **laravel**: publish every top-level member of a JSON:API document, pages included, and first-party links as sent ([#594](https://github.com/docuccino/docuccino/pull/594))
+- **core**: report an attribute PHP cannot construct where nothing would have read it, once per class ([#593](https://github.com/docuccino/docuccino/pull/593))
+- **laravel**: publish a resource response as Laravel sends it under #[Collects], preserved keys and $forceWrapping ([#590](https://github.com/docuccino/docuccino/pull/590))
+- **laravel**: let a custom filter class omit its #[QueryParameter] name, and report every Docuccino attribute PHP cannot construct ([#589](https://github.com/docuccino/docuccino/pull/589))
+- **laravel**: validate a copied header on the header in laravel-actions and inline validation ([#585](https://github.com/docuccino/docuccino/pull/585))
+- **inference-phpstan**: locate closures and methods where reflection places them, not at the parser start line ([#584](https://github.com/docuccino/docuccino/pull/584))
+- **laravel**: publish the data a with() data key is merged into as what Laravel sends ([#583](https://github.com/docuccino/docuccino/pull/583))
+- bump devalue from 5.9.0 to 5.9.2 in /website ([#506](https://github.com/docuccino/docuccino/pull/506))
+- **laravel**: document a copied header's rules on the header, not the body ([#578](https://github.com/docuccino/docuccino/pull/578))
+- **core**: publish a key the constructor assigns on only some paths as optional ([#577](https://github.com/docuccino/docuccino/pull/577))
+- **laravel**: publish the collection a resource's newCollection() builds, and no forward error for a @method over a real method ([#576](https://github.com/docuccino/docuccino/pull/576))
+- **inference-phpstan**: publish an (object) cast as the object it sends ([#575](https://github.com/docuccino/docuccino/pull/575))
+- **core**: publish a reference as its pointer alone, and check every Reference Object on every build ([#573](https://github.com/docuccino/docuccino/pull/573))
+- **laravel**: describe and name an error at any registered status by its reason phrase ([#572](https://github.com/docuccino/docuccino/pull/572))
+- **laravel**: publish the alpha rules and a flagged regex no narrower than the server ([#571](https://github.com/docuccino/docuccino/pull/571))
+
+### Performance
+
+- **core**: run a document's lints beside the rest of its build ([#607](https://github.com/docuccino/docuccino/pull/607))
+- **laravel**: check an export's document against its schema while its targets are written, side by side ([#606](https://github.com/docuccino/docuccino/pull/606))
+- **core**: write canonical JSON through json_encode wherever the bytes are the same ([#605](https://github.com/docuccino/docuccino/pull/605))
+- **core**: canonicalise a document without rebuilding its member handlers at every node ([#604](https://github.com/docuccino/docuccino/pull/604))
+- **core**: parse each component schema once for all of a document's checks ([#602](https://github.com/docuccino/docuccino/pull/602))
+- **laravel**: share a cold build's operations between forked workers ([#601](https://github.com/docuccino/docuccino/pull/601))
+- **laravel**: pause the cycle collector while operations build ([#600](https://github.com/docuccino/docuccino/pull/600))
+- **inference-phpstan**: size the walk-recording budget to the memory ceiling ([#599](https://github.com/docuccino/docuccino/pull/599))
+- **core**: check a payload against the component schemas it can reach, not every one ([#597](https://github.com/docuccino/docuccino/pull/597))
+
 ## v0.20.3
 
 ### Features
