@@ -51,7 +51,10 @@ function buildOutcome(GenerationResult $result): array
     ];
 }
 
-/** A build with `$workers` at most, counting the forks: beforeFork runs once per build that handed work out. */
+/**
+ * A build with `$workers` at most, counting the forks: beforeFork runs once for the operations a build hands
+ * out, and once more for the worker its lints run in.
+ */
 function buildWith(int $workers, TypeEngine $engine, int &$forked = 0): GenerationResult
 {
     app()->instance(TypeEngine::class, $engine);
@@ -96,7 +99,7 @@ it('builds with three workers the document one process builds, with the cache of
     $forked = 0;
     $parallel = buildOutcome(buildWith(3, $engine, $forked));
 
-    expect($forked)->toBe(1)
+    expect($forked)->toBe(2)
         // The workers answered every operation: nothing was left for this process to ask the engine about.
         ->and($engine->asked)->toBe(0)
         ->and($parallel)->toBe($serial);
@@ -112,17 +115,18 @@ it('builds with three workers the document one process builds, into the configur
     $forked = 0;
     $parallel = buildOutcome(buildWith(3, $engine, $forked));
 
-    // …and what the workers stored is the store's: the next build is warm, and forks nothing.
+    // …and what the workers stored is the store's: the next build is warm, so its lints' worker is the only
+    // one it starts.
     $again = 0;
     $warm = buildOutcome(buildWith(3, countingEngine(WorkbenchEngine::make()), $again));
 
-    expect($forked)->toBe(1)
+    expect($forked)->toBe(2)
         // Every operation came back out of the store the workers wrote: had they written anywhere else, this
         // process would have built them all again and the document would still have come out the same.
         ->and($engine->asked)->toBe(0)
         ->and($parallel)->toBe($serial)
         ->and(glob($this->scratch.'/fragments/*.json'))->not->toBeEmpty()
-        ->and($again)->toBe(0)
+        ->and($again)->toBe(1)
         ->and($warm)->toBe($serial);
 });
 
@@ -148,7 +152,7 @@ it('leaves a fallback route out of the work it hands out, as the build it hands 
     $forked = 0;
     $parallel = buildWith(3, WorkbenchEngine::make(), $forked);
 
-    expect($forked)->toBe(1)
+    expect($forked)->toBe(2)
         ->and(buildOutcome($parallel))->toBe(buildOutcome($serial))
         ->and(diagnosticsCoded($parallel->diagnostics, 'route.fallback-omitted'))->toHaveCount(1);
 });
@@ -165,11 +169,11 @@ it('leaves nothing of its own behind in the temporary directory', function (): v
     buildWith(3, WorkbenchEngine::make(), $forked);
 
     // Workers ran, so both directories were made: a build that forked nothing would pass the last line too.
-    expect($forked)->toBe(1)
+    expect($forked)->toBe(2)
         ->and($leftovers())->toBe($before);
 });
 
-it('keeps to one process when too few operations are cold to share', function (): void {
+it('builds its operations in one process when too few are cold to share', function (): void {
     setBuild('cache.enabled', true);
     setBuild('cache.path', $this->scratch.'/fragments');
     // The same engine class both times: which engine answers is part of every fragment's key.
@@ -185,12 +189,13 @@ it('keeps to one process when too few operations are cold to share', function ()
     $forked = 0;
     $again = buildOutcome(buildWith(3, $engine, $forked));
 
-    expect($forked)->toBe(0)
+    // The lints' worker, and none for the operations.
+    expect($forked)->toBe(1)
         ->and($engine->asked)->toBeGreaterThan(0)
         ->and($again)->toBe($serial);
 });
 
-it('keeps to one process when the engine it would have shared will not boot', function (): void {
+it('builds its operations in one process when the engine it would have shared will not boot', function (): void {
     // Booted ahead of the fork so every worker inherits one analyser; one that failed to boot answers nothing
     // a fragment may be filed under, so no worker could leave the build anything to read back.
     $failed = static fn (): TypeEngine => new LazyTypeEngine(
@@ -202,7 +207,8 @@ it('keeps to one process when the engine it would have shared will not boot', fu
     $forked = 0;
     $again = buildOutcome(buildWith(3, $failed(), $forked));
 
-    expect($forked)->toBe(0)
+    // The lints' worker, and none for the operations.
+    expect($forked)->toBe(1)
         ->and($again)->toBe($serial);
 });
 
