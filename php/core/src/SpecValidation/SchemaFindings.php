@@ -10,7 +10,7 @@ use Opis\JsonSchema\JsonPointer;
 use Opis\JsonSchema\Validator;
 
 /**
- * Turns an opis validation into readable findings, one line each:
+ * Turns an opis validation into {@see Finding}s, each reading as one line:
  * `<data pointer> <keyword>: <message> (schema <schema pointer>)`.
  *
  * Every schema oracle reports through this, because `isValid()` failing says only "false is not true" —
@@ -23,7 +23,7 @@ final class SchemaFindings
     /**
      * Every way $instance fails the schema registered at $uri. Empty means valid.
      *
-     * @return list<string>
+     * @return list<Finding>
      */
     public static function of(Validator $validator, mixed $instance, string $uri): array
     {
@@ -37,22 +37,29 @@ final class SchemaFindings
 
         foreach ((new ErrorFormatter)->formatKeyed(
             $error,
-            static fn (OpisValidationError $e): string => sprintf(
-                '%s: %s (schema %s)',
+            static fn (OpisValidationError $e): Finding => new Finding(
+                self::root(self::pointer($e->data()->fullPath())),
                 $e->keyword(),
                 (new ErrorFormatter)->formatErrorMessage($e),
                 self::pointer($e->schema()->info()->path()),
             ),
             static fn (OpisValidationError $e): string => self::pointer($e->data()->fullPath()),
-        ) as $pointer => $messages) {
-            foreach (is_array($messages) ? $messages : [$messages] as $message) {
-                // The formatter above answers a string at every position; anything else would be opis
-                // handing back something it never builds, so it is encoded rather than dropped.
-                $findings[] = ($pointer === '' ? '/' : $pointer).' '.(is_string($message) ? $message : (string) json_encode($message));
+        ) as $found) {
+            // One position answers one finding, or a list of them where opis reports several there.
+            foreach (is_array($found) ? $found : [$found] as $finding) {
+                if ($finding instanceof Finding) {
+                    $findings[] = $finding;
+                }
             }
         }
 
         return $findings;
+    }
+
+    /** The document root reads as `/`, which is what a person looks for; JSON Pointer spells it `''`. */
+    private static function root(string $pointer): string
+    {
+        return $pointer === '' ? '/' : $pointer;
     }
 
     /**
