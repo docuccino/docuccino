@@ -49,7 +49,10 @@ Top level:
   standalone file, and `SchemaSelfContainmentTest` holds the two equal and the references inside.
 - UIR spec semver is independent of PHP packages; both schema URLs embed major.minor.
   Consumers MUST ignore unknown `x-docuccino` members (additive = minor; shape/identity change =
-  major + new schema URLs).
+  major + new schema URLs). One minor has broken "an older document validates against the newer
+  schema": 2.1 moved a use's node off its `$ref` and onto its operation (`uses`) and refuses the old
+  position, because that position was never valid OpenAPI. Ids did not change, so it stayed a minor;
+  a 2.0 artifact carrying the old position validates against 2.0 only.
 
 ### The empty-object invariant: the JSON values a PHP array cannot spell
 
@@ -593,7 +596,11 @@ wall of phantom breaking changes on a document nobody touched.
 The one node the flat id never lands on is a Reference Object: OpenAPI lets it carry nothing beside
 `$ref` but `summary` and `description` (3.0 not even those), and a strict reader refuses the whole
 document over an extension there. So a use of a shared response or parameter publishes the pointer
-alone and the id stays in the UIR, where the use site carries it nested. The diff loses nothing by
+alone, and its own node — id, provenance, facts — goes onto its operation instead: from UIR 2.1 the full
+artifact carries it under `x-docuccino.uses`, a response keyed by status and a parameter by `in` then
+`name` (read from the component the `$ref` names). A build keeps the node beside the `$ref` until it
+publishes, and every reader puts it back there first (`Document\UseSites`), so a 2.0 artifact, which
+wrote it beside the `$ref`, reads as the same document. The diff loses nothing by
 it: responses pair by status under an operation it paired by id, and a parameter the two sides spell
 with one `in` + `name` under that operation is one parameter whatever id each read for it — an
 exported use of a shared one reads its component's. A Schema Object is the

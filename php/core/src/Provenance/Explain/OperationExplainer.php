@@ -6,6 +6,7 @@ namespace Docuccino\Core\Provenance\Explain;
 
 use Docuccino\Core\Contract\Pointer;
 use Docuccino\Core\Document\DocumentMembers;
+use Docuccino\Core\Document\UseSites;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\Layer;
 use Docuccino\Core\Provenance\OverrodeEntry;
@@ -41,6 +42,9 @@ final class OperationExplainer
      */
     public function explain(array $document, string $path, string $method): array
     {
+        // A use's trail is read beside its `$ref`, whichever form the artifact was written in.
+        $document = UseSites::lower($document);
+
         $operation = Pointer::read($document, ['paths', $path, $method]);
         if (! is_array($operation)) {
             return [];

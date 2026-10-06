@@ -6,6 +6,44 @@ full record either way.
 
 ## v0.21.0
 
+The full artifact (`--format=full`) is now valid OpenAPI everywhere it shares a component. When an
+operation uses a shared response or parameter through a `$ref`, that use's own `x-docuccino` — its id,
+its provenance, its facts — used to sit beside the `$ref`, where OpenAPI does not allow an extension and
+a strict reader refuses the whole document. It now sits on the operation:
+
+```json
+"get": {
+  "x-docuccino": {
+    "id": "op:v1:…",
+    "uses": {
+      "responses": { "404": { "id": "res:v1:…", "provenance": […] } },
+      "parameters": { "header": { "Api-Version": { "id": "par:v1:…" } } }
+    }
+  },
+  "responses": { "404": { "$ref": "#/components/responses/NotFound" } }
+}
+```
+
+The extension spec is 2.1 (`x-docuccino.generator.specVersion`, served at
+`https://spec.docuccino.app/uir/2.1/`), and the 2.1 schema refuses the old position.
+
+### What you do not have to do
+
+- **Nothing to your code or your config.** Regenerate and commit the artifact as usual.
+- **Nothing to your diffs.** Ids did not change, only where they are written, and `docuccino:diff`
+  reads a 2.0 artifact and a 2.1 one as the same document, so a versioning gate pairs across the
+  upgrade by identity with nothing to re-baseline.
+- **Nothing to an OpenAPI export.** `openapi-3.2`, `openapi-3.1` and `openapi-3.0` never carried
+  `x-docuccino`, and are unchanged byte for byte.
+
+### What changes
+
+- **`contentHash` changes once** for a document that shares a response or parameter, because the hash
+  is of the document as published and the published document moved. Ids and diffs are unaffected.
+- **Anything of yours that reads the full artifact directly** finds a use's node under its operation's
+  `x-docuccino.uses` rather than beside the `$ref`: a response by status, a parameter by `in` and then
+  `name`.
+
 ### Code that calls the spec checks
 
 Only if you call `Docuccino\Core\SpecValidation` yourself. Nothing about a generated document changes.

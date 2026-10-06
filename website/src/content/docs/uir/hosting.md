@@ -8,8 +8,8 @@ Every document Docuccino builds names the schema it was written against, inside 
 ```json
 "x-docuccino": {
   "generator": {
-    "specVersion": "2.0.0",
-    "schema": "https://spec.docuccino.app/uir/2.0/schema.json"
+    "specVersion": "2.1.0",
+    "schema": "https://spec.docuccino.app/uir/2.1/schema.json"
   }
 }
 ```
@@ -27,8 +27,8 @@ half that describes it applies on top of *any* OpenAPI document.
 | | |
 | --- | --- |
 | **Dialect** | JSON Schema draft 2020-12 |
-| **Document schema** | `https://spec.docuccino.app/uir/2.0/schema.json` — a valid OpenAPI 3.2 document that additionally satisfies the extension schema |
-| **Extension schema** | `https://spec.docuccino.app/uir/2.0/extension.schema.json` — the `x-docuccino` member alone, strict, applicable to any OpenAPI document |
+| **Document schema** | `https://spec.docuccino.app/uir/2.1/schema.json` — a valid OpenAPI 3.2 document that additionally satisfies the extension schema |
+| **Extension schema** | `https://spec.docuccino.app/uir/2.1/extension.schema.json` — the `x-docuccino` member alone, strict, applicable to any OpenAPI document |
 | **Required root members** | `openapi`, `info`, `paths` — the OpenAPI Object's own, and nothing else |
 | **External references** | The document schema references the extension schema by its absolute `$id`, so a validator needs both files |
 
@@ -49,7 +49,7 @@ The schemas are versioned independently of the Docuccino packages, and the versi
 the URL as `major.minor`:
 
 ```
-https://spec.docuccino.app/uir/2.0/schema.json
+https://spec.docuccino.app/uir/2.1/schema.json
 ```
 
 - **Additive changes** (new optional members) are a **minor** bump, and because the URL carries the
@@ -58,14 +58,17 @@ https://spec.docuccino.app/uir/2.0/schema.json
 - **Structural changes** get a new **major** version, likewise at its own URL.
 
 New members added in a minor revision are optional, so a document that predates them validates against
-the newer schema too. Because the `x-docuccino` subtree is strictly closed to undefined members, growth
+the newer schema too — with one exception. 2.1 moves a use's `x-docuccino` off the `$ref` it sat beside
+and onto its operation, because OpenAPI does not allow an extension on a Reference Object; the 2.1
+schema refuses the old position, so a 2.0 artifact that carries one validates against 2.0 only. Because the `x-docuccino` subtree is strictly closed to undefined members, growth
 happens by versioning the schema — never by readers silently tolerating members they don't recognize.
 
-`x-docuccino.generator.specVersion` (`"2.0.0"`) is the precise version a document was written against;
-the URL carries only `major.minor`, so both `2.0.0` and a later `2.0.1` validate against `/uir/2.0/`.
+`x-docuccino.generator.specVersion` (`"2.1.0"`) is the precise version a document was written against;
+the URL carries only `major.minor`, so both `2.1.0` and a later `2.1.1` validate against `/uir/2.1/`.
 
 | Version | Schemas | Added |
 | --- | --- | --- |
+| 2.1 | [schema.json](https://spec.docuccino.app/uir/2.1/schema.json), [extension.schema.json](https://spec.docuccino.app/uir/2.1/extension.schema.json) | `x-docuccino.uses` on an operation — each shared response or parameter it uses through a `$ref` carries its own id, provenance and facts there instead of beside the `$ref`, so the document is valid OpenAPI wherever it shares a component |
 | 2.0 | [schema.json](https://spec.docuccino.app/uir/2.0/schema.json), [extension.schema.json](https://spec.docuccino.app/uir/2.0/extension.schema.json) | `$schema` and `uir` move off the root into `x-docuccino.generator`, so the document is valid OpenAPI 3.2 exactly as built, and the extension gets a schema of its own |
 | 1.1 | [schema.json](https://spec.docuccino.app/uir/1.1/schema.json) | `x-docuccino.workflows` — declared multi-step sequences over the document's own operations |
 | 1.0 | [schema.json](https://spec.docuccino.app/uir/1.0/schema.json) | The initial document |
@@ -83,7 +86,7 @@ php artisan docuccino:export --format=full --out=docs/api.full.json
 
 # Python — pipx install check-jsonschema
 check-jsonschema \
-  --schemafile https://spec.docuccino.app/uir/2.0/schema.json \
+  --schemafile https://spec.docuccino.app/uir/2.1/schema.json \
   docs/api.full.json
 ```
 
@@ -95,8 +98,8 @@ document schema references. With ajv that is `-r`, and the file declares its own
 nothing further to configure:
 
 ```bash
-curl -O https://spec.docuccino.app/uir/2.0/schema.json
-curl -O https://spec.docuccino.app/uir/2.0/extension.schema.json
+curl -O https://spec.docuccino.app/uir/2.1/schema.json
+curl -O https://spec.docuccino.app/uir/2.1/extension.schema.json
 
 npx ajv-cli validate --spec=draft2020 --strict=false \
   -s schema.json -r extension.schema.json \
