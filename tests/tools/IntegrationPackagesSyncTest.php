@@ -81,7 +81,11 @@ function adapterVendorPackages(): array
         $declaredIn = (new ReflectionClass($name))->getFileName();
 
         // Only vendor code answers the question; the sibling packages resolve to their path repository.
-        if ($declaredIn === false || preg_match('#/vendor/([^/]+/[^/]+)/#', $declaredIn, $matches) !== 1) {
+        // A class served from inside a phar is a copy the tool bundled, not the package that owns the name:
+        // PHPStan's phar carries its own PHP-Parser and Composer classes, and from 2.3 a process that has
+        // loaded it resolves `PhpParser\…` there first — which would credit `phpstan/phpstan`, a package
+        // the adapter may never depend on, with whatever the inference tests happened to load before this.
+        if ($declaredIn === false || str_starts_with($declaredIn, 'phar://') || preg_match('#/vendor/([^/]+/[^/]+)/#', $declaredIn, $matches) !== 1) {
             continue;
         }
 
