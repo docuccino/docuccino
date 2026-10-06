@@ -1647,6 +1647,79 @@ it('leaves a component fact that is not a name exactly as it found it', function
         ->and($doc['paths']['/a']['get']['responses']['404']['x-docuccino']['facts'])->toBe(['component' => ['not' => 'a name']]);
 });
 
+/**
+ * Which members of a published example are stand-ins is a fact about the EXAMPLE, so it lives where the
+ * example is: on the shared component, keyed by the example it describes. A use publishes no example once
+ * its response is shared, so it carries no list.
+ */
+it('records the placeholders of the example a shared component publishes, and none on its uses', function (): void {
+    $body = filledBody(['code' => 'forbidden', 'hint' => 'string'], ['hint']);
+    $doc = errorDoc(['/a' => ['403' => $body], '/b' => ['403' => $body]]);
+
+    $name = substr((string) responseRefAt($doc, '/a', '403'), strlen('#/components/responses/'));
+
+    expect($doc['components']['responses'][$name]['x-docuccino']['facts']['examplePlaceholders'])
+        ->toBe(['application/problem+json' => ['example' => ['hint']]])
+        ->and($doc['paths']['/a']['get']['responses']['403']['x-docuccino']['facts'] ?? [])->not->toHaveKey('examplePlaceholders');
+});
+
+it('keys the placeholders of each example in an examples map by its key', function (): void {
+    // Two arms whose examples neither covers the other publish both, under minted keys.
+    $one = filledBody(['code' => 'forbidden', 'hint' => 'string'], ['hint']);
+    $two = filledBody(['code' => 'denied', 'hint' => 'string'], ['hint']);
+    $doc = errorDoc(['/a' => ['403' => $one], '/b' => ['403' => $two]]);
+
+    $name = substr((string) responseRefAt($doc, '/a', '403'), strlen('#/components/responses/'));
+    $published = $doc['components']['responses'][$name];
+    $keys = array_keys($published['content']['application/problem+json']['examples']);
+
+    expect($keys)->toHaveCount(2)
+        ->and($published['x-docuccino']['facts']['examplePlaceholders'])
+        ->toBe(['application/problem+json' => array_fill_keys($keys, ['hint'])]);
+});
+
+it('is a no-op the second time it runs over a component that records placeholders', function (): void {
+    $body = filledBody(['code' => 'forbidden', 'hint' => 'string'], ['hint']);
+    $once = errorDoc(['/a' => ['403' => $body], '/b' => ['403' => $body]]);
+
+    expect(transformedErrorDoc($once))->toBe($once);
+});
+
+/**
+ * What a claimer said the error is settles on the schema its name names. Where it landed, the schema says it
+ * for every use; where it did not, each use keeps its own sentence as claimedComponentDescription.
+ */
+it('drops a description the shared schema publishes from each use, and keeps one it does not', function (): void {
+    $gone = messageBody('Gone', 'integration:framework-errors');
+
+    $landed = errorDoc(['/a' => ['410' => describedBody('Gone', 'The record was deleted.', $gone)], '/b' => ['410' => describedBody('Gone', 'The record was deleted.', $gone)]]);
+
+    $disputed = errorDoc([
+        '/a' => ['410' => describedBody('Gone', 'The record was deleted.', $gone)], '/b' => ['410' => describedBody('Gone', 'The record was deleted.', $gone)],
+        '/c' => ['410' => describedBody('Gone', 'The record expired.', $gone)], '/d' => ['410' => describedBody('Gone', 'The record expired.', $gone)],
+    ]);
+
+    $facts = static fn (array $doc, string $path): array => $doc['paths'][$path]['get']['responses']['410']['x-docuccino']['facts'] ?? [];
+
+    expect($landed['components']['schemas']['Gone']['description'] ?? null)->toBe('The record was deleted.')
+        ->and($facts($landed, '/a'))->not->toHaveKey('componentDescription')
+        ->and($facts($landed, '/a'))->not->toHaveKey('claimedComponentDescription')
+        // Disputed: the schema publishes neither sentence, so each use says which one it claimed.
+        ->and($disputed['components']['schemas']['Gone'])->not->toHaveKey('description')
+        ->and($facts($disputed, '/a')['claimedComponentDescription'] ?? null)->toBe('The record was deleted.')
+        ->and($facts($disputed, '/c')['claimedComponentDescription'] ?? null)->toBe('The record expired.')
+        ->and($facts($disputed, '/c'))->not->toHaveKey('componentDescription');
+});
+
+it('keeps the description of a claim that never reached a schema', function (): void {
+    // Several representations: the claim names none of the shapes, so its sentence is published nowhere.
+    $body = describedBody('Gone', 'The record was deleted.', twoNamedRepresentationBody());
+    $doc = errorDocWithSchemas(['/a' => ['422' => $body], '/b' => ['422' => $body]], ['ProblemDetailsData' => ['type' => 'object']]);
+
+    expect($doc['paths']['/a']['get']['responses']['422']['x-docuccino']['facts'] ?? [])
+        ->toBe(['claimedComponent' => 'Gone', 'claimedComponentDescription' => 'The record was deleted.']);
+});
+
 it('reports a whole-response name two different bodies contest, rather than picking one', function (): void {
     // An author's name is authoritative and still not magic: two different bodies asking for it is a
     // question only they can settle, and the ladder answers it the way it answers every other contest.

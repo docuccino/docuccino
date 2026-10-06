@@ -47,6 +47,14 @@ final class ResponseDraft
     public const CLAIMED_COMPONENT = 'claimedComponent';
 
     /**
+     * {@see COMPONENT_DESCRIPTION}'s counterpart on a use of a shared response: the sentence its claimer
+     * said the error is, present only where the schema the use resolves to publishes something else —
+     * claimers that disagreed leave the schema with no description at all — or where the claim never
+     * reached a schema. Where the sentence landed, the schema publishes it and this is absent.
+     */
+    public const CLAIMED_COMPONENT_DESCRIPTION = 'claimedComponentDescription';
+
+    /**
      * Frozen beside {@see COMPONENT} when the standing claim names the WHOLE response — every
      * representation the status answers with — rather than the one body its claimer built. Public for the
      * same reason: the shared-error hoist reads it back off the finished document.
