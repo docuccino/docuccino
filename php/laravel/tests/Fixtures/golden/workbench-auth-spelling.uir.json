@@ -64,10 +64,7 @@
                       "symbol": "implicit:auth-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Unauthorized"
-                }
+                ]
               }
             }
           }
@@ -186,10 +183,7 @@
                       "symbol": "implicit:auth-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Unauthorized"
-                }
+                ]
               }
             }
           }
@@ -315,7 +309,7 @@
     "document": {
       "id": "doc:spelling",
       "configHash": "d45f9ec9ecbb16025a4f461fe3930d42d91e02270892c582a516693901e6961b",
-      "contentHash": "e9e7f1e126d549d6d405bf1d8d6b62f32292f473cd0e96ec9cb6755bfad6fdaf"
+      "contentHash": "9b0c2204fa608945fa16e1199e04f73bf2b1660087f7b2fb7d8a610b3e38978f"
     },
     "generator": {
       "name": "docuccino/laravel",

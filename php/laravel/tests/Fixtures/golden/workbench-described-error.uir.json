@@ -252,7 +252,6 @@
                   }
                 ],
                 "facts": {
-                  "component": "ResourceMissing",
                   "componentDescription": "No record matches the identifier in the path."
                 }
               }
@@ -333,7 +332,6 @@
                   }
                 ],
                 "facts": {
-                  "component": "DescribedFailure",
                   "componentDescription": "The request could not be completed."
                 }
               }
@@ -414,7 +412,6 @@
                   }
                 ],
                 "facts": {
-                  "component": "ResourceMissing",
                   "componentDescription": "No record matches the identifier in the path."
                 }
               }
@@ -495,7 +492,6 @@
                   }
                 ],
                 "facts": {
-                  "component": "DescribedFailure",
                   "componentDescription": "The request could not be completed."
                 }
               }
@@ -598,7 +594,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "3c51d316a605014069b0c137b9f7608bc8dc4d68ace1238e3312325140992e93"
+      "contentHash": "fa0b14d41e9d9481699d9b9179f5e828ebcafc6cd2e32aac5bb4b7fbdfad15c7"
     },
     "generator": {
       "name": "docuccino/laravel",

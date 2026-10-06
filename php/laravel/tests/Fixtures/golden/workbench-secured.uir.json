@@ -66,10 +66,7 @@
                       "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               }
             }
           }
@@ -441,10 +438,7 @@
                       "symbol": "implicit:validated-request"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "UnprocessableEntity"
-                }
+                ]
               }
             }
           }
@@ -811,10 +805,7 @@
                       "symbol": "implicit:can-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -1271,10 +1262,7 @@
                       "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               }
             }
           }
@@ -1426,10 +1414,7 @@
                       "symbol": "implicit:can-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -1959,10 +1944,7 @@
                       "symbol": "query-builder:strict-mode"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "BadRequest"
-                }
+                ]
               }
             }
           }
@@ -3210,10 +3192,7 @@
                       "symbol": "implicit:signed-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -3521,10 +3500,7 @@
                       "symbol": "implicit:validated-request"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "UnprocessableEntity"
-                }
+                ]
               }
             }
           }
@@ -3733,10 +3709,7 @@
                       "symbol": "implicit:verified-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -3842,10 +3815,7 @@
                       "symbol": "query-builder:strict-mode"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "BadRequest"
-                }
+                ]
               }
             }
           }
@@ -4997,7 +4967,7 @@
     "document": {
       "id": "doc:secured",
       "configHash": "d89a86d522eb398c0a3d894b165ad3d553ea98b9606eab23fb4d7a6a100fb07f",
-      "contentHash": "ebfdcb921be0465539ad6a8956b9220b856d0a152e01401cf6134d90a1df3f2b"
+      "contentHash": "5ecef6c0b85bb515a30e66464e4bff20309c861eacaf9ffea060bfbb6ae94ec1"
     },
     "generator": {
       "name": "docuccino/laravel",

@@ -56,10 +56,7 @@
                       "symbol": "implicit:route-model-binding"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               }
             }
           }
@@ -212,10 +209,7 @@
                       "symbol": "implicit:route-model-binding"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               }
             }
           }
@@ -320,10 +314,7 @@
                       "symbol": "implicit:route-model-binding"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               }
             }
           }
@@ -428,10 +419,7 @@
                       "symbol": "implicit:route-model-binding"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               }
             }
           }
@@ -582,10 +570,7 @@
                       "symbol": "implicit:route-model-binding"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               }
             }
           }
@@ -702,10 +687,7 @@
                       "symbol": "implicit:route-model-binding"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               }
             }
           }
@@ -871,10 +853,7 @@
                       "symbol": "implicit:route-model-binding"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               }
             }
           }
@@ -1034,10 +1013,7 @@
                       "symbol": "implicit:route-model-binding"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               }
             }
           }
@@ -1198,10 +1174,7 @@
                       "symbol": "implicit:route-model-binding"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               }
             }
           }
@@ -1354,10 +1327,7 @@
                       "symbol": "implicit:route-model-binding"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               }
             }
           }
@@ -1474,10 +1444,7 @@
                       "symbol": "implicit:route-model-binding"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               }
             }
           }
@@ -1680,7 +1647,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "b76a33c03851d6d50b36dda4486a4b999430a7bb147edce74abd51c8233d9fe2"
+      "contentHash": "14602f120a3fc8fd7748f9fb52e3017e241aa3657f0bf2cd2dfa91d0b25b9584"
     },
     "generator": {
       "name": "docuccino/laravel",

@@ -49,10 +49,7 @@
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\DeclaredErrors\\DeclaredErrorsController::first"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "PaymentRequired"
-                }
+                ]
               },
               "404": {
                 "id": "res:v1:c7ljbve556dshy75",
@@ -70,10 +67,7 @@
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\DeclaredErrors\\DeclaredErrorsController::first"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               },
               "408": {
                 "id": "res:v1:4p4ynyb2ipzz623i",
@@ -91,10 +85,7 @@
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\DeclaredErrors\\DeclaredErrorsController::first"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "RequestTimeout"
-                }
+                ]
               },
               "419": {
                 "id": "res:v1:soii25zicroy7i4l",
@@ -129,10 +120,7 @@
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\DeclaredErrors\\DeclaredErrorsController::first"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotImplemented"
-                }
+                ]
               },
               "502": {
                 "id": "res:v1:dehw26najmo7uxho",
@@ -150,10 +138,7 @@
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\DeclaredErrors\\DeclaredErrorsController::first"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "BadGateway"
-                }
+                ]
               },
               "504": {
                 "id": "res:v1:7klnmd3uqla4ms2o",
@@ -171,10 +156,7 @@
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\DeclaredErrors\\DeclaredErrorsController::first"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "GatewayTimeout"
-                }
+                ]
               },
               "599": {
                 "id": "res:v1:ibji4rqin52cmdwv",
@@ -271,10 +253,7 @@
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\DeclaredErrors\\DeclaredErrorsController::second"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "PaymentRequired"
-                }
+                ]
               },
               "404": {
                 "id": "res:v1:irfztaf73jg642qj",
@@ -292,10 +271,7 @@
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\DeclaredErrors\\DeclaredErrorsController::second"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               },
               "408": {
                 "id": "res:v1:dqmsovihgotp36ta",
@@ -313,10 +289,7 @@
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\DeclaredErrors\\DeclaredErrorsController::second"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "RequestTimeout"
-                }
+                ]
               },
               "419": {
                 "id": "res:v1:cchwhclp32uiyjwy",
@@ -351,10 +324,7 @@
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\DeclaredErrors\\DeclaredErrorsController::second"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotImplemented"
-                }
+                ]
               },
               "502": {
                 "id": "res:v1:jxuewft5xt72q4fd",
@@ -372,10 +342,7 @@
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\DeclaredErrors\\DeclaredErrorsController::second"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "BadGateway"
-                }
+                ]
               },
               "504": {
                 "id": "res:v1:o6susvnkza24gbap",
@@ -393,10 +360,7 @@
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\DeclaredErrors\\DeclaredErrorsController::second"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "GatewayTimeout"
-                }
+                ]
               },
               "599": {
                 "id": "res:v1:d23ccsb7dzpss3qs",
@@ -653,7 +617,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "1ac91826f17fc02e7da196115ff0523548ac09eb02ba9a1b67e318920eecb90e",
-      "contentHash": "7e3997e1716e37625696b6dc8ed995df3c840eaa9b3e0a87198a2f5dcfc99631"
+      "contentHash": "42bb1046d0bd6f8210e5ba65246624d4d38a7089fe50a1bb2a59ef77a6eb8552"
     },
     "generator": {
       "name": "docuccino/laravel",

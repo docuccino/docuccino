@@ -56,10 +56,7 @@
                       "symbol": "implicit:signed-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -289,10 +286,7 @@
                       "symbol": "implicit:signed-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -522,10 +516,7 @@
                       "symbol": "implicit:signed-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -755,10 +746,7 @@
                       "symbol": "implicit:signed-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -988,10 +976,7 @@
                       "symbol": "implicit:signed-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -1221,10 +1206,7 @@
                       "symbol": "implicit:signed-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -1454,10 +1436,7 @@
                       "symbol": "implicit:signed-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -1687,10 +1666,7 @@
                       "symbol": "implicit:signed-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -1938,10 +1914,7 @@
                       "symbol": "implicit:signed-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -2290,10 +2263,7 @@
                       "symbol": "implicit:signed-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -2465,7 +2435,7 @@
     "document": {
       "id": "doc:signed",
       "configHash": "0bf7778c7517ee69f127464e0d1e2cd803ad6b6180720b3f67557497ae839e7b",
-      "contentHash": "9a2ceeebfa0924138ae565e08942a02e5dcdb4da78816e063114872db43819b5"
+      "contentHash": "dd4913f5f4d3107106e23fef443aa7d087639c5c603cee8c32d73b5c40bc6ca1"
     },
     "generator": {
       "name": "docuccino/laravel",
