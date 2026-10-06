@@ -217,7 +217,32 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "500": {
+                "id": "res:v1:nlexo7kxbdotvf6q",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/LedgerController.php",
+                      "line": 33,
+                      "symbol": "RuntimeException"
+                    }
+                  }
+                ],
+                "facts": {
+                  "component": "InternalServerError"
+                }
+              }
+            }
+          }
         },
         "operationId": "post.api.ledgers.@ledger.reconcile",
         "summary": "Reconcile a ledger.",
@@ -307,27 +332,6 @@
             }
           },
           "500": {
-            "x-docuccino": {
-              "id": "res:v1:nlexo7kxbdotvf6q",
-              "provenance": [
-                {
-                  "producer": "fallback",
-                  "layer": "fallback",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/LedgerController.php",
-                    "line": 33,
-                    "symbol": "RuntimeException"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "InternalServerError"
-              }
-            },
             "$ref": "#/components/responses/InternalServerError"
           }
         }
@@ -364,7 +368,33 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "500": {
+                "id": "res:v1:n7pj5yrjuzst2df5",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Queries/LedgerReviewQuery.php",
+                      "line": 28,
+                      "symbol": "Workbench\\App\\Exceptions\\LedgerRejectedException"
+                    }
+                  }
+                ],
+                "facts": {
+                  "component": "InternalServerError",
+                  "statusUnplaced": true
+                }
+              }
+            }
+          }
         },
         "operationId": "get.api.ledgers.@ledger.review",
         "summary": "Review a ledger.",
@@ -454,28 +484,6 @@
             }
           },
           "500": {
-            "x-docuccino": {
-              "id": "res:v1:n7pj5yrjuzst2df5",
-              "provenance": [
-                {
-                  "producer": "fallback",
-                  "layer": "fallback",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Queries/LedgerReviewQuery.php",
-                    "line": 28,
-                    "symbol": "Workbench\\App\\Exceptions\\LedgerRejectedException"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "InternalServerError",
-                "statusUnplaced": true
-              }
-            },
             "$ref": "#/components/responses/InternalServerError"
           }
         }
@@ -516,13 +524,13 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "dd64fe6b150bcb3bf3e9d66a68758389dcd68a21ee0e7cc7b4760c33fa180ad1"
+      "contentHash": "e96c74d8a06c0ec64d86b314180404ae8cb35d1f9a420c627ee80c3f55a416e9"
     },
     "generator": {
       "name": "docuccino/laravel",
       "version": "0.15.0",
-      "specVersion": "2.0.0",
-      "schema": "https://spec.docuccino.app/uir/2.0/schema.json"
+      "specVersion": "2.1.0",
+      "schema": "https://spec.docuccino.app/uir/2.1/schema.json"
     }
   }
 }
