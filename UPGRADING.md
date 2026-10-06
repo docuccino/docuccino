@@ -43,6 +43,10 @@ The extension spec is 2.1 (`x-docuccino.generator.specVersion`, served at
 - **Anything of yours that reads the full artifact directly** finds a use's node under its operation's
   `x-docuccino.uses` rather than beside the `$ref`: a response by status, a parameter by `in` and then
   `name`.
+- **A shared response's use no longer carries `facts.component`.** It repeated the name of the component
+  its `$ref` points at, and in the cases where they differed it was the name the use had asked for rather
+  than the one it got. The `$ref` now answers which component a use resolves to, and
+  `facts.claimedComponent` appears only where a claim did not land, with the name that was asked for.
 
 ### Code that calls the spec checks
 

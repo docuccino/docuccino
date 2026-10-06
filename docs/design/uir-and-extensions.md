@@ -653,6 +653,13 @@ have — the exact defect this section exists to prevent. So both climb to `NotF
 `components.name-collision` warning names every claimant and the name it got, because the author is the
 only one who can tell the two errors apart and give them a name each.
 
+The claim itself is the build's input, frozen as `facts.component` so the hoist can read it back. Once a
+response is shared it does not stay on the use: the use's `$ref` is the one answer to which component it
+resolves to, and a second copy could only disagree with it. What the `$ref` cannot say is that the use
+asked for something else, so where a claim did not land — a collision, a name that is not a legal one, a
+response offering several representations — the use carries `facts.claimedComponent` with the name it
+asked for, and only then.
+
 ### Shared error components
 
 `Extensions\BuiltIn\SharedErrorResponses` collapses a repeated 4xx/5xx body, in two passes whose

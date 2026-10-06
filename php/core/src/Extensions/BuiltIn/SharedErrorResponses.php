@@ -426,6 +426,41 @@ final class SharedErrorResponses implements DocumentTransformer
     }
 
     /**
+     * A use's own `x-docuccino` as it stands beside the `$ref` to the component $published: its claim,
+     * {@see ResponseDraft::COMPONENT}, gives way to the `$ref`, which is the one answer to which component
+     * the use resolves to. The claim survives only where it did not land, as
+     * {@see ResponseDraft::CLAIMED_COMPONENT} — "asked for this, published under that" — which nothing
+     * else in the document says per use.
+     */
+    private static function useSite(mixed $extension, string $published): mixed
+    {
+        $facts = is_array($extension) ? ($extension['facts'] ?? null) : null;
+
+        $asked = is_array($facts) ? ($facts[ResponseDraft::COMPONENT] ?? null) : null;
+
+        // Only a claim is read here. A `component` that is not a name was written by something this hoist
+        // cannot speak for — an overlay, a hand-written document — so it stays exactly as it was found.
+        if (! is_array($extension) || ! is_array($facts) || ! is_string($asked)) {
+            return $extension;
+        }
+
+        unset($facts[ResponseDraft::COMPONENT]);
+
+        if ($asked !== $published) {
+            $facts[ResponseDraft::CLAIMED_COMPONENT] = $asked;
+        }
+
+        if ($facts === []) {
+            unset($extension['facts']);
+        } else {
+            ksort($facts, SORT_STRING);
+            $extension['facts'] = $facts;
+        }
+
+        return $extension;
+    }
+
+    /**
      * Whether the standing claim says of itself that it names the whole response rather than the one body
      * its claimer built ({@see ResponseDraft::COMPONENT_NAMES_RESPONSE}) — the claimer's own statement,
      * frozen beside the name and travelling with it.
@@ -1185,7 +1220,7 @@ final class SharedErrorResponses implements DocumentTransformer
                         }
 
                         if (array_key_exists(self::PROVENANCE, $body)) {
-                            $reference = [self::PROVENANCE => $body[self::PROVENANCE]] + $reference;
+                            $reference = [self::PROVENANCE => self::useSite($body[self::PROVENANCE], $name)] + $reference;
                         }
 
                         $response = self::place($response, $pointer, $reference);
