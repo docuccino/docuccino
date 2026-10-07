@@ -38,21 +38,21 @@ const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
     // phpdoc type grammar, the contract checker. The floor sits at the measured integer and 98 is out of
     // reach:
-    // Measured 97.80% (15636/15988): 97% of it is 15508.36 statements, 127.64 of margin (0.80pp).
+    // Measured 97.82% (16065/16423): 97% of it is 15930.31 statements, 134.69 of margin (0.82pp).
     // It was ratcheted 96 → 97 back when
     // the figure was 97.51% over a denominator 1189 statements smaller, dipped to 97.39% as core absorbed
     // work at slightly under its own average, and has come back up without the floor needing to move
     // either time — the ordinary shape for a package this size, and why 97 is where it stays.
-    'core' => ['floor' => 97, 'measured' => 97.80],
+    'core' => ['floor' => 97, 'measured' => 97.82],
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/, the
     // contract-testing assertions. The floor sat at 96 while 97 would have been a hair-trigger, and was to
     // ratchet once the figure cleared 97.20% — about 28 statements. It has:
-    // Measured 97.22% (15871/16324): 97% of it is 15834.28 statements, 36.72 of margin (0.22pp).
+    // Measured 97.24% (15945/16398): 97% of it is 15906.06 statements, 38.94 of margin (0.24pp).
     // The margin is thinner than `core`'s, and the risk it carries is a denominator change rather than a
     // lost proof — deleting about 1,200 fully covered adapter statements would drop the ratio under 97 with
     // no change in test quality. The record check further down fires at ten statements either way, so the
     // floor is not the only thing watching this number.
-    'laravel' => ['floor' => 97, 'measured' => 97.22],
+    'laravel' => ['floor' => 97, 'measured' => 97.24],
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
     // which pcov cannot instrument either way. Its behavioural proof is the `fixture` group, not this
@@ -94,11 +94,11 @@ const FLOORS = [
     // analyser follows (`ConstructionEscape`), unit-tested over real probes. It RATCHETED 54 → 55 when
     // reading which body members echo the status and its reason phrase landed there as well — php-parser
     // over a constructor and a status-text read (`ConstructorEchoes`, `StatusTextRead`), unit-tested:
-    // Measured 55.74% (2181/3913): 55% of it is 2152.15 statements, 28.85 of margin; 56 would need 2191.28.
+    // Measured 55.70% (2239/4020): 55% of it is 2211.00 statements, 28.00 of margin; 56 would need 2251.20.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads a few statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 55, 'measured' => 55.74],
+    'inference-phpstan' => ['floor' => 55, 'measured' => 55.70],
 ];
 
 /*
