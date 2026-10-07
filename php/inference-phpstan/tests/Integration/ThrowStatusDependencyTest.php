@@ -47,6 +47,17 @@ it('depends on the file the declaring callee builds the exception in', function 
     'a guard outside it' => ['modularDeclaredStatus', 'LedgerReviewQuery.php', 'LedgerRejectedException.php'],
 ])->group('fixture');
 
+it('depends on the callee whose catch around a closure decided what it publishes', function (string $method, string $callee): void {
+    // The callee's catch around the place it runs the closure takes what the closure throws, so editing that
+    // catch — narrowing it, adding a rethrow — changes what this route publishes. The installed framework's
+    // own helpers file is no different: a `composer update` that changed rescue() would change the answer.
+    expect(throwDependencyNames($method))->toContain($callee);
+})->with([
+    'a helper method' => ['swallowedByHelper', 'Attempts.php'],
+    'a helper function' => ['swallowedByHelperFunction', 'helpers.php'],
+    'the framework\'s rescue()' => ['rescuedClosure', 'helpers.php'],
+])->group('fixture');
+
 it('depends on the file a status constant a DEFAULT names is declared in', function (): void {
     // The private constructor's default is what every instance of this class carries, and the number is
     // written in another file: reflection names the constant off the declaration rather than evaluating

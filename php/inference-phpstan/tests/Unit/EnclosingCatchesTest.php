@@ -57,6 +57,12 @@ it('names the classes every catch around an offset takes', function (string $cod
     'a rethrow inside a nested function' => ['try { here(); } catch (A $e) { function f($e) { throw $e; } }', ['A']],
     'a rethrow inside a nested class' => ['try { here(); } catch (A $e) { $o = new class { function m($e) { throw $e; } }; }', ['A']],
     'after the try' => ['try { x(); } catch (A) {} here();', []],
+    // A catch that throws its own variable lets out everything it caught, on whichever path does it.
+    'a rethrowing catch' => ['try { here(); } catch (A $e) { report($e); throw $e; }', []],
+    'a catch rethrowing on one path' => ['try { here(); } catch (A $e) { if ($x) { throw $e; } }', []],
+    'a rethrowing catch beside one that swallows' => ['try { here(); } catch (A $e) { throw $e; } catch (B $e) {}', ['B']],
+    'a catch throwing something else' => ['try { here(); } catch (A $e) { throw new B($e); }', ['A']],
+    'a catch with no variable' => ['try { here(); } catch (A) { throw $e; }', ['A']],
     // A function's body runs wherever it is called from, so a try around where it is WRITTEN takes nothing.
     'inside a closure in the try' => ['try { $f = function () { here(); }; } catch (A) {}', []],
     'inside an anonymous class in the try' => ['try { $o = new class { function m() { here(); } }; } catch (A) {}', []],
