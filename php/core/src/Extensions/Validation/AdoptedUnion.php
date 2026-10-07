@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Extensions\Validation;
 
+use Docuccino\Core\Diff\RefinementMove;
+use Docuccino\Core\Diff\SchemaRefinement;
 use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Extensions\Schema\DiscriminatedUnion;
 
@@ -12,7 +14,9 @@ use Docuccino\Core\Extensions\Schema\DiscriminatedUnion;
  * `#[BodyParameter]` names a component whose members are told apart by the partition's tag, with exactly
  * the partition's values, the field publishes that component — the type a client already has — and what
  * the rules prove beyond it rides beside the `$ref` as one refinement per tag value, plus the empty object
- * a tagged member cannot describe. Where the declaration states a keyword, it wins.
+ * a tagged member cannot describe. Beside the `$ref` the declaration and the refinement both hold, so what
+ * is published is what both accept: a declared bound looser than the rules' gets the rules' beside it, and a
+ * null the rules refuse is not offered.
  *
  * The refinements stay request-side on purpose: the component is shared with every response that sends the
  * type, and a bound the server enforces on input is no promise about output. The full rule is in
@@ -22,17 +26,17 @@ use Docuccino\Core\Extensions\Schema\DiscriminatedUnion;
  */
 final readonly class AdoptedUnion
 {
-    private const string PREFIX = '#/components/schemas/';
-
     /**
      * @param  array<string, mixed>|null  $schema  the adopted field, or null where the declaration cannot adopt
      * @param  list<string>  $wider  where the rules accept more than the declaration, worded for the author
      * @param  string|null  $mismatch  why a declared tagged union could not adopt the partition, for the author
+     * @param  list<string>  $unlisted  the members the rules require that the declared type does not list
      */
     private function __construct(
         public ?array $schema,
         public array $wider = [],
         public ?string $mismatch = null,
+        public array $unlisted = [],
     ) {}
 
     /**
@@ -67,13 +71,18 @@ final readonly class AdoptedUnion
 
         $refinements = [];
         $wider = [];
+        $unlisted = [];
         $refines = false;
         foreach ($branches as $branch) {
             $value = DiscriminatedUnion::pinned($branch)[$tag];
             $at = [];
-            $refinement = self::objectDelta($branch, $byValue[$value], $schemas, $path, $at, $tag);
+            $missing = [];
+            $refinement = self::objectDelta($branch, $byValue[$value], $schemas, $path, $at, $missing, $tag);
             foreach ($at as $field) {
                 $wider[] = sprintf('`%s` where `%s` is %s', $field, $tag, $value);
+            }
+            foreach ($missing as $field) {
+                $unlisted[] = sprintf('`%s` where `%s` is %s', $field, $tag, $value);
             }
             $refines = $refines || $refinement !== [];
             $refinements[] = self::pinnedTo($tag, $value, $refinement);
@@ -84,11 +93,24 @@ final readonly class AdoptedUnion
         }
 
         $adopted = ['$ref' => $ref] + ($refines ? ['anyOf' => $refinements] : []);
-        $others = [...($empty ? [DiscriminatedUnion::EMPTY_OBJECT] : []), ...($nullable ? [['type' => 'null']] : [])];
+        // A null the declaration admits and the rules refuse is one the server answers with a 422.
+        $others = [...($empty ? [DiscriminatedUnion::EMPTY_OBJECT] : []), ...($nullable && self::admitsNull($standing) ? [['type' => 'null']] : [])];
         $rest = array_diff_key($declared, ['$ref' => true, 'anyOf' => true]);
         $schema = $others === [] ? $adopted + $rest : ['anyOf' => [$adopted, ...$others]] + $rest;
 
-        return new self(SchemaKeywords::declaredOver($schema, $standing), array_values(array_unique($wider)));
+        return new self(SchemaKeywords::declaredOver($schema, $standing), array_values(array_unique($wider)), unlisted: $unlisted);
+    }
+
+    /**
+     * Whether a declared field names a union of components {@see over()} could adopt a partition by — the
+     * same reading, so what is split for a declaration to adopt is what it can adopt.
+     *
+     * @param  array<string, mixed>  $declared
+     * @param  array<string, array<string, mixed>>  $schemas
+     */
+    public static function namesUnion(array $declared, array $schemas): bool
+    {
+        return self::union($declared, $schemas) !== null;
     }
 
     /**
@@ -111,7 +133,7 @@ final readonly class AdoptedUnion
                 continue;
             }
 
-            if ($member === DiscriminatedUnion::EMPTY_OBJECT) {
+            if (DiscriminatedUnion::isEmptyObject($member)) {
                 $empty = true;
 
                 continue;
@@ -124,7 +146,7 @@ final readonly class AdoptedUnion
             $branches[] = $member;
         }
 
-        return self::tags($branches) === [] ? null : [$branches, $empty];
+        return DiscriminatedUnion::tags($branches) === [] ? null : [$branches, $empty];
     }
 
     /**
@@ -158,7 +180,7 @@ final readonly class AdoptedUnion
             return null;
         }
 
-        $body = self::body($refs[0], $schemas);
+        $body = DiscriminatedUnion::component($refs[0], $schemas);
         $listed = $body === null ? null : ($body['anyOf'] ?? $body['oneOf'] ?? null);
         if (! is_array($listed) || count($listed) < 2) {
             return null;
@@ -166,7 +188,7 @@ final readonly class AdoptedUnion
 
         $members = [];
         foreach ($listed as $member) {
-            $resolved = is_array($member) && count($member) === 1 && is_string($member['$ref'] ?? null) ? self::body($member['$ref'], $schemas) : null;
+            $resolved = is_array($member) && count($member) === 1 && is_string($member['$ref'] ?? null) ? DiscriminatedUnion::component($member['$ref'], $schemas) : null;
             if ($resolved === null) {
                 return null;
             }
@@ -178,37 +200,6 @@ final readonly class AdoptedUnion
     }
 
     /**
-     * @param  array<string, array<string, mixed>>  $schemas
-     * @return array<mixed>|null
-     */
-    private static function body(string $ref, array $schemas): ?array
-    {
-        return str_starts_with($ref, self::PREFIX) ? ($schemas[substr($ref, strlen(self::PREFIX))] ?? null) : null;
-    }
-
-    /**
-     * The properties every body pins to a value no other body shares, by name.
-     *
-     * @param  list<array<mixed>>  $bodies
-     * @return list<string>
-     */
-    private static function tags(array $bodies): array
-    {
-        if (count($bodies) < 2) {
-            return [];
-        }
-
-        $pinned = array_map(DiscriminatedUnion::pinned(...), $bodies);
-        $candidates = array_map(strval(...), array_keys(array_intersect_key(...$pinned)));
-        sort($candidates, SORT_STRING);
-
-        return array_values(array_filter(
-            $candidates,
-            static fn (string $tag): bool => count(array_unique(array_column($pinned, $tag))) === count($pinned),
-        ));
-    }
-
-    /**
      * The tag the rules split by that the declared members are told apart by too, with the same values.
      *
      * @param  list<array<mixed>>  $branches
@@ -216,7 +207,7 @@ final readonly class AdoptedUnion
      */
     private static function sharedTag(array $branches, array $members): ?string
     {
-        foreach (array_intersect(self::tags($branches), self::tags($members)) as $tag) {
+        foreach (array_intersect(DiscriminatedUnion::tags($branches), DiscriminatedUnion::tags($members)) as $tag) {
             if (self::values($branches, $tag) === self::values($members, $tag)) {
                 return $tag;
             }
@@ -253,7 +244,7 @@ final readonly class AdoptedUnion
      */
     private static function toldApartBy(array $bodies): string
     {
-        $tags = self::tags($bodies);
+        $tags = DiscriminatedUnion::tags($bodies);
         if ($tags === []) {
             return 'no property its members each fix to a value of their own';
         }
@@ -264,15 +255,17 @@ final readonly class AdoptedUnion
     /**
      * What one rule branch says about its object that the declared member does not: the refinements of
      * each member they share, every member the declaration lacks, and the members the rules require that
-     * it leaves optional. `$skip` is the tag, which the declared member already pins.
+     * it leaves optional — a required one it lacks noted in `$unlisted`. `$skip` is the tag, which the
+     * declared member already pins.
      *
      * @param  array<mixed>  $rules
      * @param  array<mixed>  $declared
      * @param  array<string, array<string, mixed>>  $schemas
      * @param  list<string>  $wider
+     * @param  list<string>  $unlisted  the required members the declaration lacks
      * @return array<string, mixed>
      */
-    private static function objectDelta(array $rules, array $declared, array $schemas, string $path, array &$wider, ?string $skip = null): array
+    private static function objectDelta(array $rules, array $declared, array $schemas, string $path, array &$wider, array &$unlisted, ?string $skip = null): array
     {
         $ruleMembers = is_array($rules['properties'] ?? null) ? $rules['properties'] : [];
         $declaredMembers = is_array($declared['properties'] ?? null) ? $declared['properties'] : [];
@@ -287,7 +280,7 @@ final readonly class AdoptedUnion
             $at = $path.'.'.$name;
             $mine = $declaredMembers[$name] ?? null;
             $delta = is_array($mine)
-                ? self::delta($schema, self::resolved($mine, $schemas), $schemas, $at, $wider)
+                ? self::delta($schema, self::resolved($mine, $schemas), $schemas, $at, $wider, $unlisted)
                 : array_diff_key($schema, array_flip(SchemaKeywords::annotations()));
 
             if ($delta !== []) {
@@ -300,22 +293,30 @@ final readonly class AdoptedUnion
             is_array($rules['required'] ?? null) ? $rules['required'] : [],
             static fn (mixed $name): bool => is_string($name) && $name !== $skip && ! in_array($name, $stated, true),
         ));
+        foreach ($required as $name) {
+            if (! array_key_exists($name, $declaredMembers)) {
+                $unlisted[] = $path.'.'.$name;
+            }
+        }
 
         return ($properties === [] ? [] : ['properties' => $properties]) + ($required === [] ? [] : ['required' => $required]);
     }
 
     /**
-     * The refinements one rule schema adds to the declared schema of the same member — a refinement the
-     * declaration neither states nor rules out ({@see SchemaKeywords::survivor()}) — through its items and
-     * members. A declared type the rules accept more than is noted in `$wider`.
+     * The refinements one rule schema adds to the declared schema of the same member, through its items and
+     * members: one the declaration does not state, where its type does not rule it out
+     * ({@see SchemaKeywords::survivor()}), and one it states looser — beside a `$ref` both hold, so the rules'
+     * tighter bound is what the server enforces. A declared type or bound the rules accept more than is noted
+     * in `$wider`.
      *
      * @param  array<mixed>  $rules
      * @param  array<mixed>  $declared
      * @param  array<string, array<string, mixed>>  $schemas
      * @param  list<string>  $wider
+     * @param  list<string>  $unlisted
      * @return array<string, mixed>
      */
-    private static function delta(array $rules, array $declared, array $schemas, string $path, array &$wider): array
+    private static function delta(array $rules, array $declared, array $schemas, string $path, array &$wider, array &$unlisted): array
     {
         /** @var array<string, mixed> $declared */
         if (self::accepts($rules, $declared) === false) {
@@ -325,24 +326,62 @@ final readonly class AdoptedUnion
         $out = [];
         foreach ($rules as $keyword => $value) {
             $keyword = (string) $keyword;
-            $survivor = SchemaKeywords::isRefinement($keyword) && ! array_key_exists($keyword, $declared) ? SchemaKeywords::survivor($declared, $keyword, $value) : null;
+            if (! SchemaKeywords::isRefinement($keyword)) {
+                continue;
+            }
+
+            [$narrower, $looser] = array_key_exists($keyword, $declared) ? self::compared($keyword, $value, $declared[$keyword]) : [false, true];
+            if ($narrower) {
+                $wider[] = $path;
+            }
+
+            $survivor = $looser ? SchemaKeywords::survivor(array_diff_key($declared, [$keyword => true]), $keyword, $value) : null;
             if ($survivor !== null) {
                 $out[$keyword] = $survivor[0];
             }
         }
 
         if (is_array($rules['items'] ?? null) && is_array($declared['items'] ?? null)) {
-            $items = self::delta($rules['items'], self::resolved($declared['items'], $schemas), $schemas, $path.'.*', $wider);
+            $items = self::delta($rules['items'], self::resolved($declared['items'], $schemas), $schemas, $path.'.*', $wider, $unlisted);
             if ($items !== []) {
                 $out['items'] = $items;
             }
         }
 
         if (is_array($rules['properties'] ?? null) && is_array($declared['properties'] ?? null)) {
-            $out += self::objectDelta($rules, $declared, $schemas, $path, $wider);
+            $out += self::objectDelta($rules, $declared, $schemas, $path, $wider, $unlisted);
         }
 
         return $out;
+    }
+
+    /**
+     * Whether a declared value of a refinement keyword refuses a value the rules' accepts, and whether the
+     * rules' refuses one the declared value accepts. Two value lists are compared by their members, a bound
+     * by its direction ({@see SchemaRefinement::move()}); two values nothing orders are not called narrower,
+     * and the rules' is kept beside the declared one, both being true of what the server takes.
+     *
+     * @return array{0: bool, 1: bool}
+     */
+    private static function compared(string $keyword, mixed $rules, mixed $declared): array
+    {
+        if ($rules === $declared) {
+            return [false, false];
+        }
+
+        if ($keyword === 'enum' || $keyword === 'const') {
+            $ruled = $keyword === 'enum' ? (is_array($rules) ? $rules : []) : [$rules];
+            $stated = $keyword === 'enum' ? (is_array($declared) ? $declared : []) : [$declared];
+            $outside = static fn (array $values, array $of): bool => array_filter($values, static fn (mixed $value): bool => ! in_array($value, $of, true)) !== [];
+
+            return [$outside($ruled, $stated), $outside($stated, $ruled)];
+        }
+
+        return match (SchemaRefinement::move($keyword, [$keyword => $rules], [$keyword => $declared])) {
+            RefinementMove::Narrowed => [true, false],
+            RefinementMove::Widened => [false, true],
+            default => [false, true],
+        };
     }
 
     /**
@@ -379,7 +418,7 @@ final readonly class AdoptedUnion
     {
         $ref = $schema['$ref'] ?? null;
 
-        return is_string($ref) ? (self::body($ref, $schemas) ?? $schema) : $schema;
+        return is_string($ref) ? (DiscriminatedUnion::component($ref, $schemas) ?? $schema) : $schema;
     }
 
     /**

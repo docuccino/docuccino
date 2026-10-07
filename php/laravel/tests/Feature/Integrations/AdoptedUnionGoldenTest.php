@@ -16,6 +16,8 @@ use Docuccino\Laravel\Tests\Fixtures\AdoptedUnion\AnswerController;
 use Docuccino\Laravel\Tests\Fixtures\AdoptedUnion\AnswerRequest;
 use Docuccino\Laravel\Tests\Fixtures\AdoptedUnion\CountAnswer;
 use Docuccino\Laravel\Tests\Fixtures\AdoptedUnion\DeclaredAnswerRequest;
+use Docuccino\Laravel\Tests\Fixtures\AdoptedUnion\DescribedAnswerRequest;
+use Docuccino\Laravel\Tests\Fixtures\AdoptedUnion\ExtendedAnswerRequest;
 use Docuccino\Laravel\Tests\Fixtures\AdoptedUnion\LastAnswer;
 use Docuccino\Laravel\Tests\Fixtures\AdoptedUnion\LettersAnswer;
 use Docuccino\Laravel\Tests\Fixtures\AdoptedUnion\MeasureAnswer;
@@ -55,6 +57,8 @@ $engine = static function (): TypeEngine {
         traceOverrides: [
             AnswerRequest::class.'::rules' => $rules,
             DeclaredAnswerRequest::class.'::rules' => $rules,
+            DescribedAnswerRequest::class.'::rules' => $rules,
+            ExtendedAnswerRequest::class.'::rules' => TraceScript::forMethod((string) (new ReflectionClass(ExtendedAnswerRequest::class))->getFileName(), ExtendedAnswerRequest::class, 'rules'),
         ],
     );
 };
@@ -197,4 +201,43 @@ it('builds the adopted union warm as cold, notes included', function () use ($en
     $warm = assertWarmEqualsCold($routes('storeDeclared', 'storeTyped', 'last'), $routes('storeDeclared', 'storeTyped', 'last'), $engine);
 
     expect(diagnosticsCoded($warm->diagnostics, 'attribute.body-parameter-narrower'))->toHaveCount(2);
+});
+
+it('keeps the rules\' own union where a declaration names no union to adopt it by', function () use ($engine, $routes): void {
+    // A description alone states no type, so it has nothing to adopt the object by: the object keeps the
+    // union a build without the declaration publishes, its members named for the request as ever — the
+    // names a client generator turns into types do not move because a description was written.
+    $schemas = emittedArray(localityBuild($routes('storeDescribed'), $engine))['components']['schemas'];
+    $answer = $schemas['DescribedAnswerRequest']['properties']['answer'];
+
+    expect($answer['description'] ?? null)->toBe('The answer, in the shape its kind takes.')
+        ->and($answer['anyOf'][0]['discriminator']['mapping'] ?? null)->toBe([
+            'count' => '#/components/schemas/DescribedAnswerRequestAnswerCount',
+            'letters' => '#/components/schemas/DescribedAnswerRequestAnswerLetters',
+            'measure' => '#/components/schemas/DescribedAnswerRequestAnswerMeasure',
+        ]);
+});
+
+it('publishes what the declaration and the rules both accept, and names what the declared type does not list', function () use ($engine, $routes, $body, $field): void {
+    $result = localityBuild($routes('storeExtended'), $engine);
+    $properties = $body(emittedArray($result), 'storeExtended')['properties'];
+
+    // `answer` is `required` and not nullable, so the server answers a null — and an empty object — with a
+    // 422: neither is offered, though the declaration admits null. `count` also requires a `reason` no
+    // answer class has; the refinement publishes it, and the author is told a typed client cannot send it.
+    expect($field($properties['answer']))->toBe([
+        '$ref' => '#/components/schemas/Answer',
+        'anyOf' => [
+            ['properties' => ['kind' => ['const' => 'count'], 'reason' => ['type' => 'string']], 'required' => ['reason']],
+            ['properties' => ['kind' => ['const' => 'measure'], 'steps' => ['maxItems' => 20]]],
+            ['properties' => ['kind' => ['const' => 'letters'], 'letters' => ['items' => ['maxLength' => 8], 'maxItems' => 20, 'minItems' => 1]]],
+        ],
+    ])
+        // A declaration over a plain field keeps the bounds still true of its type, and drops the value
+        // list it cannot hold — with the names and the example that described those values.
+        ->and($field($properties['level']))->toBe(['type' => 'integer'])
+        ->and($field($properties['ratio']))->toEqual(['type' => 'number', 'minimum' => 0, 'maximum' => 1, 'example' => 1])
+        ->and(array_map(static fn ($d): string => $d->message, diagnosticsCoded($result->diagnostics, 'attribute.body-parameter-unlisted')))->toBe([
+            '#[BodyParameter(name: "answer")] declares a type that does not list `answer.reason` where `kind` is count, which the rules require — the document publishes it beside the type, but a client built from the type alone has no field to send it in.',
+        ]);
 });

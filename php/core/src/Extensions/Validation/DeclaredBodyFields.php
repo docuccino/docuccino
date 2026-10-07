@@ -45,7 +45,7 @@ use Docuccino\Core\TypeGrammar\TypeStringParser;
  * server takes as null does not stop being one for having a key documented inside it.
  *
  * @phpstan-type BodyPathRefusal array{container: string, says: string, shared: bool}
- * @phpstan-type AdoptionNote array{mismatch: string|null, wider: list<string>}
+ * @phpstan-type AdoptionNote array{mismatch: string|null, wider: list<string>, unlisted: list<string>}
  * @phpstan-type BodyFieldsResult array{0: array<string, mixed>, 1: bool, 2: list<Diagnostic>}
  */
 final class DeclaredBodyFields
@@ -133,7 +133,7 @@ final class DeclaredBodyFields
             return false;
         }
 
-        $note = ['mismatch' => null, 'wider' => []];
+        $note = ['mismatch' => null, 'wider' => [], 'unlisted' => []];
         $property = $this->property($declaration, $converter);
         // Read after the declared type is converted, which is what registers the components it names.
         $schemas = $components?->schemas() ?? [];
@@ -207,6 +207,22 @@ final class DeclaredBodyFields
             );
         }
 
+        if ($note['unlisted'] !== []) {
+            $notes[] = new Diagnostic(
+                severity: Severity::Info,
+                code: 'attribute.body-parameter-unlisted',
+                message: sprintf(
+                    '#[BodyParameter(name: "%s")]%s declares a type that does not list %s, which the rules require — the document publishes it beside the type, but a client built from the type alone has no field to send it in.',
+                    $declaration->name,
+                    self::on($site),
+                    implode(', ', $note['unlisted']),
+                ),
+                source: $source,
+                routeSignature: $routeSignature,
+                help: 'Add the member to the declared class, or drop the rule that requires it.',
+            );
+        }
+
         return $notes;
     }
 
@@ -214,6 +230,22 @@ final class DeclaredBodyFields
     private static function on(?string $site): string
     {
         return $site === null ? '' : ' on '.$site;
+    }
+
+    /**
+     * Whether a declaration's type names a union of components — the one shape a tagged object can be
+     * adopted by ({@see AdoptedUnion::namesUnion()}) — read through the conversion that will write it.
+     */
+    public function namesUnion(BodyParameter $declaration, TypeSchemaConverter $converter, ComponentRegistry $components): bool
+    {
+        if ($declaration->type === null) {
+            return false;
+        }
+
+        $property = $this->property($declaration, $converter);
+
+        // Read after the declared type is converted, which is what registers the components it names.
+        return AdoptedUnion::namesUnion($property, $components->schemas());
     }
 
     /**
@@ -350,6 +382,7 @@ final class DeclaredBodyFields
         $adopted = AdoptedUnion::over($property, $existing, $schemas, $declaration->name);
         if ($adopted !== null && $adopted->schema !== null) {
             $note['wider'] = $adopted->wider;
+            $note['unlisted'] = $adopted->unlisted;
 
             return $adopted->schema;
         }

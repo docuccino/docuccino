@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Draft;
 
+use Docuccino\Core\Extensions\Schema\EnumDecoration;
+
 /**
  * What the JSON Schema keywords MEAN, in the one place anything that reads a schema asks. Seven
  * questions live here: the classification {@see SchemaDraft::declareShape()} reasons over — shape,
@@ -113,6 +115,11 @@ final class SchemaKeywords
      *
      * @var array<string, list<string>>
      */
+    /** The keywords whose value is one instance, and the ones whose value lists instances ({@see survivor()}). */
+    private const array VALUES = ['const', 'example', 'default'];
+
+    private const array VALUE_LISTS = ['enum', 'examples'];
+
     private const array REFINEMENTS = [
         'format' => ['string', 'integer', 'number'],
         'enum' => [],
@@ -383,7 +390,8 @@ final class SchemaKeywords
      * where it is superseded ({@see isSuperseded()}). An `enum` or a `const` lists values, and a value the
      * declared type cannot hold is one the declaration says cannot be sent — left standing, `type: integer`
      * beside `enum: ["1", "2"]` is a schema no request satisfies. So an `enum` keeps the values the declared
-     * type holds and goes only when none is left; a `const` it cannot hold goes. A declaration naming no
+     * type holds and goes only when none is left; a `const` it cannot hold goes. An `example`, `examples` or
+     * `default` is a value too, and one the type cannot hold is no example of it. A declaration naming no
      * type of its own — a `$ref`, a composition — cannot be read for this, and leaves the list standing.
      *
      * @param  array<string, mixed>  $declaration
@@ -396,22 +404,89 @@ final class SchemaKeywords
         }
 
         $types = self::declaredTypes($declaration);
-        if (array_key_exists($keyword, $declaration) || $types === [] || ! in_array($keyword, ['enum', 'const'], true)) {
+        $list = in_array($keyword, self::VALUE_LISTS, true);
+        if (array_key_exists($keyword, $declaration) || $types === [] || (! $list && ! in_array($keyword, self::VALUES, true))) {
             return [$standing];
         }
 
         $holds = static fn (mixed $value): bool => array_intersect(self::instanceTypes($value), $types) !== [];
 
-        if ($keyword === 'const') {
+        if (! $list) {
             return $holds($standing) ? [$standing] : null;
         }
 
-        $kept = array_values(array_filter(is_array($standing) ? $standing : [], $holds));
+        if (! is_array($standing) || ! array_is_list($standing)) {
+            return [$standing];
+        }
+
+        $kept = array_values(array_filter($standing, $holds));
         if ($kept === []) {
             return null;
         }
 
         return [$kept === $standing ? $standing : $kept];
+    }
+
+    /**
+     * What of every standing keyword survives a declared shape, keyword => {@see survivor()}'s answer — and
+     * the decorations positional over an `enum` ({@see EnumDecoration::KEYS}) narrowed with it, or gone with
+     * it, since a name left beside no value, or beside another value, names nothing true.
+     *
+     * @param  array<string, mixed>  $declaration
+     * @param  array<array-key, mixed>  $standing
+     * @return array<string, array{0: mixed}|null>
+     */
+    public static function survivors(array $declaration, array $standing): array
+    {
+        $out = [];
+        foreach ($standing as $keyword => $value) {
+            $out[(string) $keyword] = self::survivor($declaration, (string) $keyword, $value);
+        }
+
+        $enum = $standing['enum'] ?? null;
+        if (! is_array($enum) || ! array_key_exists('enum', $out) || $out['enum'] === [$enum]) {
+            return $out;
+        }
+
+        $kept = $out['enum'] === null || ! is_array($out['enum'][0]) ? [] : $out['enum'][0];
+        foreach (EnumDecoration::KEYS as $key) {
+            if (array_key_exists($key, $out) && ! array_key_exists($key, $declaration)) {
+                $out[$key] = self::decorationOf($standing[$key], array_values($enum), $kept);
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * One enum decoration narrowed to the values kept: a list by position, a description map by value.
+     *
+     * @param  list<mixed>  $enum
+     * @param  array<mixed>  $kept
+     * @return array{0: mixed}|null
+     */
+    private static function decorationOf(mixed $decoration, array $enum, array $kept): ?array
+    {
+        if (is_array($decoration) && array_is_list($decoration) && count($decoration) === count($enum)) {
+            $narrowed = [];
+            foreach ($enum as $i => $value) {
+                if (in_array($value, $kept, true)) {
+                    $narrowed[] = $decoration[$i];
+                }
+            }
+
+            return $narrowed === [] ? null : [$narrowed];
+        }
+
+        if (is_array($decoration) || $decoration instanceof \stdClass) {
+            $keys = array_map(static fn (mixed $value): string => is_scalar($value) ? (string) $value : '', $kept);
+            // Keyed by value, so a numeric value's key is an int — and a map of them reads as a list.
+            $narrowed = array_filter((array) $decoration, static fn (int|string $key): bool => in_array((string) $key, $keys, true), ARRAY_FILTER_USE_KEY);
+
+            return $narrowed === [] ? null : [array_is_list($narrowed) ? (object) $narrowed : $narrowed];
+        }
+
+        return null;
     }
 
     /**
@@ -425,12 +500,12 @@ final class SchemaKeywords
      */
     public static function declaredOver(array $declaration, array $standing): array
     {
-        $shape = self::statesShape($declaration);
+        $survivors = self::statesShape($declaration) ? self::survivors($declaration, $standing) : null;
 
         $out = [];
         foreach ($standing as $keyword => $value) {
             $keyword = (string) $keyword;
-            $survivor = $shape ? self::survivor($declaration, $keyword, $value) : [$value];
+            $survivor = $survivors === null ? [$value] : $survivors[$keyword];
             if (array_key_exists($keyword, $declaration)) {
                 $out[$keyword] = $declaration[$keyword];
             } elseif ($survivor !== null) {

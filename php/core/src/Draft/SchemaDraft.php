@@ -85,12 +85,12 @@ final class SchemaDraft
     public function declareShape(array $schema, Contribution $by): void
     {
         if (SchemaKeywords::statesShape($schema)) {
-            foreach ($this->guard->resolved() as $keyword => $standing) {
-                $survivor = SchemaKeywords::survivor($schema, (string) $keyword, $standing);
+            $standing = $this->guard->resolved();
+            foreach (SchemaKeywords::survivors($schema, $standing) as $keyword => $survivor) {
                 if ($survivor === null) {
-                    $this->guard->apply((string) $keyword, Remove::value(), $by);
-                } elseif ($survivor[0] !== $standing) {
-                    $this->guard->apply((string) $keyword, $survivor[0], $by);
+                    $this->guard->apply($keyword, Remove::value(), $by);
+                } elseif ($survivor[0] !== $standing[$keyword]) {
+                    $this->guard->apply($keyword, $survivor[0], $by);
                 }
             }
 

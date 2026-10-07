@@ -169,7 +169,7 @@ final class RecoveredRequest
         $context->recordDependencyFiles(DeclarationFiles::of($sourceClass));
         $this->observe($sourceClass, $context);
 
-        $adopted = self::adoptedPaths($context, $result, $sourceClass);
+        $adopted = $this->adoptedPaths($context, $result, $sourceClass);
         $held = array_values(array_filter(
             self::declaredOn($sourceClass, $context)[0],
             static fn (BodyParameter $declaration): bool => self::underAny($declaration->name, $adopted),
@@ -190,21 +190,27 @@ final class RecoveredRequest
     }
 
     /**
-     * The paths of the tagged objects a `#[BodyParameter]` on this route names — on the action or on the
-     * request type — which are split in place for it to adopt ({@see TaggedBranches::adoptable()}).
+     * The paths of the tagged objects a `#[BodyParameter]` on this route names as a union of components — on
+     * the action or on the request type — which are split in place for it to adopt
+     * ({@see TaggedBranches::adoptable()}). A declaration naming anything else adopts nothing, so the object
+     * it names keeps its own union, named as it would be with no declaration at all.
      *
      * @return list<string>
      */
-    private static function adoptedPaths(RouteContext $context, ValidationSchema $result, ?string $sourceClass): array
+    private function adoptedPaths(RouteContext $context, ValidationSchema $result, ?string $sourceClass): array
     {
         if ($result->variants === [] || ! self::documentsBody($context)) {
             return [];
         }
 
-        $names = array_map(
-            static fn (BodyParameter $declaration): string => $declaration->name,
-            [...$context->attributes->all(BodyParameter::class), ...self::declaredOn($sourceClass, $context)[0]],
-        );
+        $declarations = [...$context->attributes->all(BodyParameter::class), ...self::declaredOn($sourceClass, $context)[0]];
+        $names = [];
+        foreach ($declarations as $declaration) {
+            // Converted only where it names an object it could adopt, so no other declaration is read twice.
+            if (TaggedBranches::adoptable($result->variants, [$declaration->name]) !== [] && $this->fields->namesUnion($declaration, $context->requestConverter(), $context->components)) {
+                $names[] = $declaration->name;
+            }
+        }
 
         return TaggedBranches::adoptable($result->variants, $names);
     }
@@ -409,7 +415,7 @@ final class RecoveredRequest
     private function bodySchema(RouteContext $context, ValidationSchema $result, ?string $sourceClass): array
     {
         $class = self::hoistedClass($context, $sourceClass);
-        $adopted = self::adoptedPaths($context, $result, $sourceClass);
+        $adopted = $this->adoptedPaths($context, $result, $sourceClass);
         if ($result->variants === [] || ($class === null && $adopted === [])) {
             return [$result->withoutVariants()->schema, []];
         }

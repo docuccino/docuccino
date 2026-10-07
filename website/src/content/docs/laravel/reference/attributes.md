@@ -335,7 +335,8 @@ The rest of the declaration works the same way over a field your rules already d
 wins, and what it doesn't say stays where it is still true. A `type:` replaces the shape the rules
 recovered, but a limit that still applies to the declared type — a `max:100` on a string declared
 `string`, an `email` format, the `in:` values the type can hold — stays, along with the rules'
-description. A limit of another type goes with the shape that carried it. Leaving `type:` off states no
+description. A limit of another type goes with the shape that carried it, and so does an example or a
+default the declared type can't hold. Leaving `type:` off states no
 shape at all, so a declaration with only a `description:` adds the description and changes nothing
 else; on a field the rules didn't document, it is a string.
 

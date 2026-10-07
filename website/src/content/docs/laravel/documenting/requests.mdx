@@ -1064,10 +1064,15 @@ public function store(StoreOrderRequest $request): OrderResource { /* … */ }
 `max:40`, a `min:1` on a list, a member the class doesn't have — rides beside the `$ref` as one refinement
 per tag value, on the request only: the `Payment` component is the one your responses send too, and a
 limit the server enforces on input is no promise about output. The empty object your rules accept is kept
-beside it, since no tagged member can describe one. Where the declaration says something the rules don't
-— an `int` where the rule is `numeric` — the declaration wins, and
+beside it, since no tagged member can describe one. Where the class and the rules both limit a field,
+both limits hold, so a `max:50` rule beside a class's longer limit is published too; a `null` the type
+admits but the rules refuse isn't offered. Where the declaration accepts less than the rules — an `int`
+where the rule is `numeric`, a shorter list of values than an `in:` rule allows — the declaration wins, and
 [`attribute.body-parameter-narrower`](/laravel/reference/diagnostics/#attributes) tells you the published
-type refuses something the server accepts.
+type refuses something the server accepts. A field the rules require that the class doesn't have is
+published beside the `$ref`, and
+[`attribute.body-parameter-unlisted`](/laravel/reference/diagnostics/#attributes) tells you a client built
+from the class alone can't send it.
 
 The declared type has to be the same partition: a union of classes that each fix the same field to a
 value of their own, with exactly the values your rules split by. One told apart by another field, or over
