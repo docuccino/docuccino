@@ -170,6 +170,18 @@ class RespondCallbacks
         return fn (Response $response, Throwable $e): Response => $response instanceof JsonResponse ? ProblemEnvelope::from($response, $e) : $response;
     }
 
+    /** A JSON error rebuilt as problem+json into the variable it arrived in, which is then handed back. */
+    public function jsonRebound(): callable
+    {
+        return function (Response $response): Response {
+            if ($response instanceof JsonResponse) {
+                $response = response($response->getContent(), $response->getStatusCode(), ['Content-Type' => ProblemEnvelope::CONTENT_TYPE]);
+            }
+
+            return $response;
+        };
+    }
+
     /** A redirect passed through by its class, negated in parentheses; everything else reshaped. */
     public function redirectGuarded(): callable
     {

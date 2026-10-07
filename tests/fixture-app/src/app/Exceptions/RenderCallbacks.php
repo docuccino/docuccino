@@ -46,4 +46,16 @@ class RenderCallbacks
     {
         return fn (\Throwable $e): ?JsonResponse => $e instanceof OrderConflictException ? response()->json(['error' => 'conflict'], 423) : null;
     }
+
+    /** A catch-all that swaps a conflict for a generic error before building its one response from it. */
+    public function conflictRebound(): callable
+    {
+        return function (\Throwable $e): JsonResponse {
+            if ($e instanceof OrderConflictException) {
+                $e = new \RuntimeException('The order changed while you were editing it.');
+            }
+
+            return response()->json(['error' => $e->getMessage()], 409);
+        };
+    }
 }

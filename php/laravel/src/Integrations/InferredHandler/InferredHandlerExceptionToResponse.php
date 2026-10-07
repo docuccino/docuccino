@@ -30,6 +30,8 @@ use Docuccino\Laravel\Integrations\Support\AppRenderedErrors;
 #[ExtensionOrder(priority: Priorities::FIRST)]
 final class InferredHandlerExceptionToResponse implements ExceptionToResponse
 {
+    public const PRODUCER = 'integration:inferred-handler';
+
     public function __construct(private readonly ExceptionRenderers $renderers) {}
 
     public function supports(ThrownException $exception, RouteContext $context): bool
@@ -39,7 +41,7 @@ final class InferredHandlerExceptionToResponse implements ExceptionToResponse
 
     public function producer(): string
     {
-        return 'integration:inferred-handler';
+        return self::PRODUCER;
     }
 
     public function toResponse(

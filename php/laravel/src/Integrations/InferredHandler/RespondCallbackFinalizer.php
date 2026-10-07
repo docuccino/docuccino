@@ -29,7 +29,7 @@ final class RespondCallbackFinalizer implements ErrorResponseFinalizer
 
     public function producer(): string
     {
-        return 'integration:inferred-handler';
+        return InferredHandlerExceptionToResponse::PRODUCER;
     }
 
     public function finalization(ThrownException $exception, ResponseDraft $rendered, RouteContext $context): Finalization

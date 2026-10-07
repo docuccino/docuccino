@@ -236,10 +236,12 @@ it('states what a scope proves about each call as the one constant it answers', 
     $scope = $this->createStub(Scope::class);
     $scope->method('getType')->willReturn($type);
 
-    $conditions = ParameterUse::conditionsAt($scope, $calls);
+    $conditions = ParameterUse::conditionsAt($scope, $calls, ['request']);
 
     expect(array_map(static fn (CallCondition $c): array => $c->toArray(), $conditions))
-        ->toBe($value === null ? [] : [['parameter' => 'request', 'method' => 'is', 'arguments' => ['api/*'], 'value' => $value]]);
+        ->toBe($value === null ? [] : [['parameter' => 'request', 'method' => 'is', 'arguments' => ['api/*'], 'value' => $value]])
+        // Rebound before the return, the scope's answer is about whatever it was rebound to.
+        ->and(ParameterUse::conditionsAt($scope, $calls, ['response']))->toBe([]);
 })->with([
     'proven true' => [new ConstantBooleanType(true), true],
     'proven false' => [new ConstantBooleanType(false), false],
@@ -281,10 +283,43 @@ it('states what a scope proves about each instanceof test as the one boolean it 
     $scope->method('getType')->willReturn($type);
     $scope->method('resolveName')->willReturn(JsonResponse::class);
 
-    expect(array_map(static fn (TypeCondition $c): array => $c->toArray(), ParameterUse::typeConditionsAt($scope, $tests)))
-        ->toBe($value === null ? [] : [['parameter' => 'response', 'class' => JsonResponse::class, 'value' => $value]]);
+    expect(array_map(static fn (TypeCondition $c): array => $c->toArray(), ParameterUse::typeConditionsAt($scope, $tests, ['response'])))
+        ->toBe($value === null ? [] : [['parameter' => 'response', 'class' => JsonResponse::class, 'value' => $value]])
+        // Rebound before the return, the scope's answer is about whatever it was rebound to.
+        ->and(ParameterUse::typeConditionsAt($scope, $tests, ['e']))->toBe([]);
 })->with([
     'proven an instance' => [new ConstantBooleanType(true), true],
     'proven not one' => [new ConstantBooleanType(false), false],
     'not proven' => [new BooleanType, null],
+]);
+
+it('holds a parameter as handed only where nothing that can run first could bind its name to another value', function (string $code, bool $held): void {
+    $parsed = (new ParserFactory)->createForNewestSupportedVersion()->parse('<?php $f = function ($response, $e) {'.$code.'};') ?? [];
+    $closure = (new NodeFinder)->findFirstInstanceOf($parsed, Node\Expr\Closure::class);
+    assert($closure instanceof Node\Expr\Closure);
+    $returns = (new NodeFinder)->findInstanceOf($closure->stmts, Node\Stmt\Return_::class);
+
+    expect(ParameterUse::heldAt($returns[count($returns) - 1], ['response', 'e'], array_values($closure->stmts)))
+        ->toBe($held ? ['response', 'e'] : ['e']);
+})->with([
+    'never written' => ['if ($response instanceof JsonResponse) { return back(); } return $response;', true],
+    'rebuilt into the same name' => ['if ($response instanceof JsonResponse) { $response = response(\'\', 404); } return $response;', false],
+    'rebuilt in a branch the return is not in' => ['if ($response instanceof JsonResponse) { $response = response(\'\', 404); return $response; } else { return back(); }', true],
+    'rebuilt after the return' => ['if ($e) { return back(); } $response = response(\'\'); return $response;', false],
+    'unset' => ['unset($response); return back();', false],
+    'a foreach binding' => ['foreach ($e as $response) {} return back();', false],
+    'destructured into' => ['[$response] = $e; return back();', false],
+    'a catch binding' => ['try { return back(); } catch (\\Throwable $response) {} return back();', false],
+    // A reference taken may write it later.
+    'captured by reference' => ['$f = function () use (&$response) {}; return back();', false],
+    'a reference in an array' => ['$all = [&$response]; return back();', false],
+    // Evaluated as part of the return, so after the scope the return is read in.
+    'an argument to the return itself' => ['return Problem::from($response, $e);', true],
+    // A callee taking it by reference is not seen, which would read every `report($e)` as a rebinding.
+    'an argument before the return' => ['report($response); return back();', true],
+    'captured by value' => ['$f = function () use ($response) {}; return back();', true],
+    'an array item by value' => ['$all = [$response]; return back();', true],
+    // A call on it is the scope's to forget; the name still holds the object it was handed.
+    'written through a call' => ['$response->setStatusCode(500); return back();', true],
+    'written through a property' => ['$response->headers = null; return back();', true],
 ]);

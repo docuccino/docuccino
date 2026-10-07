@@ -506,6 +506,15 @@ JsonResponse) return $response;` however the guard is spelled). What a call MEAN
 parameter holds at run time, stay the adapter's. A `match` arm is read in the return's own scope, which has
 narrowed nothing, so a guard spelled as an arm condition proves neither kind of fact.
 
+A scope answers about the value a name holds THERE, so every one of those facts — a call's answer, a class
+test, and the narrowed parameter's own type — is read only for a parameter nothing that can run first has
+rebound (`ParameterUse::heldAt()`): a write `LocalWrites` names, or a reference taken with `use (&…)` or
+`[&…]`. Behind `if ($response instanceof JsonResponse) { $response = response(…); } return $response;` the
+scope says "not a JsonResponse" of the rebuilt value, and read as a fact about the one handed in it made the
+callback's only return unreachable. A rebound parameter narrows nothing, so its site is open to every type.
+A write through the value is not a rebinding: PHPStan forgets a call's remembered answer once another call
+may have written to its receiver. A callee taking an argument by reference is not seen, as in `LocalWrites`.
+
 An exception MAPPER (`$exceptions->map()`) is read with `CallableRef::$returnsExceptions`: the sites are
 harvested exactly as for a post-processor, and each one that does not hand the parameter back is also read
 into `ActionAnalysis::$throws` as the throw of what it builds — `ThrowAnalyzer::returned()` wraps the

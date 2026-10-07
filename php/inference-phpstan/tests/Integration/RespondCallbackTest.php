@@ -161,6 +161,16 @@ it('proves the class a guard on the rendered response tests, however the guard i
     'a parenthesised negation of another class' => ['redirectGuarded', 'Illuminate\\Http\\RedirectResponse', true, 'Illuminate\\Http\\RedirectResponse'],
 ])->group('fixture');
 
+it('records no class fact about a response the callback rebinds before it returns', function (): void {
+    $sites = respondReturns('jsonRebound', 'Illuminate\\Auth\\AuthenticationException');
+
+    // At the return the variable holds the rebuilt response or the one it was handed, and the guard reads
+    // the first as not a JsonResponse: a fact about the variable, not about what the callback was handed.
+    expect($sites)->toHaveCount(1)
+        ->and($sites[0]->returnsParameter)->toBeNull()
+        ->and($sites[0]->typeConditions)->toBe([]);
+})->group('fixture');
+
 it('records no class fact where the callback tests none', function (string $method): void {
     foreach (respondReturns($method, 'Illuminate\\Auth\\AuthenticationException') as $site) {
         expect($site->typeConditions)->toBe([]);
@@ -210,4 +220,28 @@ it('reads each branch of a ternary render callback as the answer for the types t
     // Collapsed to the one type both branches share, this was a nullable response that is neither.
     'the tested type' => ['App\\Exceptions\\OrderConflictException', 'Illuminate\\Http\\JsonResponse'],
     'any other type, handed back to the framework' => ['App\\Exceptions\\OutOfStockException', NullT::class],
+])->group('fixture');
+
+it('reads a return reached after the exception is swapped as reachable by every type, the swapped one too', function (string $thrown, bool $every): void {
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
+        'app/Exceptions/RenderCallbacks.php',
+        '',
+        '',
+        line: exceptionsFixtureLine('RenderCallbacks.php', 'function conflictRebound(') + 2,
+        param: 'e',
+        narrowType: $thrown,
+        every: $every,
+    ));
+
+    // At the return the variable holds the generic error or an exception that is not a conflict. Read as
+    // the type the callback was handed, that made the one return unreachable for the very type it swaps.
+    expect($analysis->returns)->toHaveCount(1)
+        ->and(($analysis->returns[0]->type instanceof ClassT ? ($analysis->returns[0]->type->typeArgs[1] ?? null) : null)?->toArray())
+        ->toBe(['kind' => 'literal', 'base' => 'int', 'value' => 409]);
+})->with([
+    'the type it swaps' => ['App\\Exceptions\\OrderConflictException'],
+    'any other type' => ['App\\Exceptions\\OutOfStockException'],
+])->with([
+    'the one answer chosen' => [false],
+    'every answer reached' => [true],
 ])->group('fixture');

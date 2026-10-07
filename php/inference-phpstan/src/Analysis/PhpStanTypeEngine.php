@@ -499,13 +499,13 @@ final class PhpStanTypeEngine implements TypeEngine
 
             if ($expands && $expr instanceof Node\Expr\Ternary && $expr->if !== null) {
                 foreach ($this->branches($expr, $scope, $callable->file) as [$branch, $branchScope]) {
-                    $sites[] = $this->site($branch, $branch, $branchScope, $this->paramGuard($param, $branchScope), $body, $probes, $every);
+                    $sites[] = $this->site($branch, $branch, $branchScope, $param, null, $body, $probes, $every);
                 }
 
                 continue;
             }
 
-            $sites[] = $this->site($expr, $returnNode, $scope, $this->paramGuard($param, $scope), $body, $probes, $every);
+            $sites[] = $this->site($expr, $returnNode, $scope, $param, null, $body, $probes, $every);
         }
 
         if ($param === null || $narrowTo === null) {
@@ -589,25 +589,32 @@ final class PhpStanTypeEngine implements TypeEngine
     }
 
     /**
-     * @param  list<list<string>>  $guard
+     * A parameter bound to another value before `$positioned` is reached narrows nothing there: what the
+     * scope, or an arm's test of it, says is about the value bound since, so the site is open to every type.
+     *
+     * @param  list<list<string>>|null  $guard  null for the guard `$param`'s type in `$scope` states
      * @param  Probes  $probes
      * @return NarrowedSite
      */
-    private function site(?Node\Expr $expr, Node $positioned, Scope $scope, array $guard, CallableBody $body, array $probes, bool $every, bool $typesParameter = true): array
+    private function site(?Node\Expr $expr, Node $positioned, Scope $scope, ?string $param, ?array $guard, CallableBody $body, array $probes, bool $every, bool $typesParameter = true): array
     {
         $shape = $this->siteShape($expr, $scope);
+        $held = $every || $param !== null
+            ? ParameterUse::heldAt($positioned, array_values(array_unique([...$body->parameters, ...($param === null ? [] : [$param])])), $body->nodes)
+            : [];
+        $rebound = $param !== null && ! in_array($param, $held, true);
 
         return [
             'pos' => SourceOrder::of($positioned),
             'line' => $positioned->getStartLine(),
             'type' => $shape['type'],
             'component' => $shape['component'],
-            'guard' => $guard,
+            'guard' => $rebound ? [] : ($guard ?? $this->paramGuard($param, $scope)),
             'delegates' => $this->isDelegation($shape['type']),
             'echoes' => $every ? ParameterUse::echoed($expr, $body->parameters, $body->nodes) : null,
-            'conditions' => $every ? ParameterUse::conditionsAt($scope, $probes['calls']) : [],
-            'typeConditions' => $every ? ParameterUse::typeConditionsAt($scope, $probes['tests']) : [],
-            'scope' => $typesParameter ? $scope : null,
+            'conditions' => ParameterUse::conditionsAt($scope, $probes['calls'], $held),
+            'typeConditions' => ParameterUse::typeConditionsAt($scope, $probes['tests'], $held),
+            'scope' => $typesParameter && ! $rebound ? $scope : null,
             'expr' => $expr,
             'foldScope' => $scope,
         ];
@@ -645,7 +652,7 @@ final class PhpStanTypeEngine implements TypeEngine
         foreach ($match->arms as $arm) {
             $guard = $arm->conds === null || $param === null ? [] : $this->armInstanceofGuards($arm->conds, $param, $scope);
             // The return's scope, not the arm's: it has not narrowed the parameter, so only the guard speaks.
-            $sites[] = $this->site($arm->body, $arm->body, $scope, $guard, $body, $probes, $every, typesParameter: false);
+            $sites[] = $this->site($arm->body, $arm->body, $scope, $param, $guard, $body, $probes, $every, typesParameter: false);
         }
 
         return $sites;

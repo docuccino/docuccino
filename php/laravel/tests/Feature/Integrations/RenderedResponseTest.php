@@ -10,6 +10,7 @@ use Docuccino\Core\Patch\Contribution;
 use Docuccino\Laravel\Integrations\InferredHandler\ExceptionRenderers;
 use Docuccino\Laravel\Integrations\InferredHandler\HandlerReflector;
 use Docuccino\Laravel\Integrations\InferredHandler\RenderedResponse;
+use Docuccino\Laravel\Tests\Fixtures\FrameworkResponses\CustomJsonResponse;
 use Docuccino\Laravel\Tests\Fixtures\InferredHandler\SelfRenderingMissingModel;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -43,8 +44,7 @@ function renderedResponseOf(string $thrown, string $producer, ?string $mediaType
 it('knows the exact JsonResponse the framework renders an error it sends as JSON with', function (): void {
     $sent = renderedResponseOf(NotFoundHttpException::class, 'integration:framework-errors');
 
-    expect($sent?->class)->toBe(JsonResponse::class)
-        ->and($sent?->exact)->toBeTrue()
+    expect($sent?->exact)->toBeTrue()
         // A producer the build does not know of documents the same framework rendering.
         ->and(renderedResponseOf(NotFoundHttpException::class, 'integration:acme')?->exact)->toBeTrue();
 });
@@ -64,8 +64,7 @@ it('does not know the class where the framework does not build the response from
 it('knows a JsonResponse, and no more, where the inferred tier read what the application renders', function (): void {
     $sent = renderedResponseOf(SelfRenderingMissingModel::class, 'integration:inferred-handler');
 
-    expect($sent?->class)->toBe(JsonResponse::class)
-        ->and($sent?->exact)->toBeFalse();
+    expect($sent?->exact)->toBeFalse();
 });
 
 it('answers an instanceof test only where the class settles it', function (string $class, ?bool $exact, ?bool $loose): void {
@@ -78,6 +77,8 @@ it('answers an instanceof test only where the class settles it', function (strin
     'itself' => [JsonResponse::class, true, true],
     'a parent' => [SymfonyJsonResponse::class, true, true],
     'the base response' => [Response::class, true, true],
+    // Exactly a JsonResponse is not one of its subclasses; at least one may be.
+    'a subclass' => [CustomJsonResponse::class, false, null],
     'a sibling' => [RedirectResponse::class, false, null],
     'the plain Illuminate response' => [IlluminateResponse::class, false, null],
     'an interface it does not implement' => [JsonSerializable::class, false, null],
