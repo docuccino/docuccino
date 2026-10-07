@@ -2126,7 +2126,10 @@ when a registration path exists and the `emit()` signature settles.
       the Request phase precedes Responses, the request keeps the base name and the response is
       deterministically suffixed (`Name_2`) with the existing `components.name-collision` warning — proven
       live by the workbench `ArticleData` (`#[SchemaName('Article')]`) fixture, used on both sides with
-      divergent shapes.
+      divergent shapes. A shape differs by side where it REACHES one that does — a seal's member, a
+      property's class — and not only where its own keys do (`RequestShape`, applied by `ComponentHoist`
+      for every mapper): a body referencing a request component is a request shape, and one identity
+      holding both publishes whichever side met it first.
     - **Collisions stay Warning, and stay actionable.** Nothing is lost to a collision — both shapes are
       published, and each reference site keeps its own class's `$ref` — so it is not the Error tier, which
       is for a document that is wrong or unbuildable (`route.build-failed`, `document.schema-invalid`,

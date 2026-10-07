@@ -158,8 +158,10 @@ it('publishes a declared union the rules do not match as written, and says why',
     $document = emittedArray($result);
 
     // Told apart by `kind` like the rules, but over other values: there is no shape to refine, so the
-    // declaration stands as written — no bounds, no empty object, which a declaration outranks.
-    expect($field($body($document, 'storeMismatched')['properties']['answer']))->toBe(['anyOf' => [['$ref' => '#/components/schemas/Attachment'], ['type' => 'null']]])
+    // declaration stands as written — no bounds, no empty object, which a declaration outranks. Written as
+    // a client sends it: the link member's title may be left out on the way in, so the union is its own
+    // request shape.
+    expect($field($body($document, 'storeMismatched')['properties']['answer']))->toBe(['anyOf' => [['$ref' => '#/components/schemas/AttachmentRequest'], ['type' => 'null']]])
         ->and(array_map(static fn ($d): string => $d->message, diagnosticsCoded($result->diagnostics, 'attribute.body-parameter-union')))->toBe([
             '#[BodyParameter(name: "answer", type: "Docuccino\Laravel\Tests\Fixtures\TaggedUnion\Attachment|null")] names a tagged union the rules\' one does not match — the rules accept one shape per `kind` (count, letters, measure), and the declared type is told apart by `kind` (file, forwarded, image, link) — so the declared type is published as written, without the bounds the rules put on each shape.',
         ])
