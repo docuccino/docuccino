@@ -10,6 +10,8 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\ListT;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\ScalarT;
+use Docuccino\Core\Inference\DType\StatusMarkerT;
+use Docuccino\Core\Inference\DType\StatusTextMarkerT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
@@ -45,8 +47,9 @@ function respondTypeGuardAnalysis(): ActionAnalysis
     $problem = new ClassT(JsonResponse::class, [
         new ArrayShapeT([
             new ArrayShapeField('type', new LiteralT('about:blank')),
-            new ArrayShapeField('title', ScalarT::string()),
-            new ArrayShapeField('status', ScalarT::int()),
+            // The callback reads both off the rendered response: the reason phrase and the code it is sent with.
+            new ArrayShapeField('title', new StatusTextMarkerT(ScalarT::string(), new LiteralT('Error'))),
+            new ArrayShapeField('status', new StatusMarkerT),
             new ArrayShapeField('errors', new ListT(new UnknownT('mixed')), optional: true),
         ]),
         new UnknownT('status not folded'),
