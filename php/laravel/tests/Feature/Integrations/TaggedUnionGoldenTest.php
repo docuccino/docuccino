@@ -119,17 +119,16 @@ it('emits tagged unions of plain classes byte-identical to their committed golde
     expect($downlevel['components']['schemas']['ImageAttachment']['properties']['kind'])->toEqual(['type' => 'string', 'enum' => ['image']])
         ->and($downlevel['components']['schemas']['Attachment']['discriminator']['propertyName'])->toBe('kind');
 
-    // 3.0 has no null type either: the null branch becomes `nullable` on the node, beside the tagged
-    // oneOf — the closest 3.0 spelling, but 3.0.3's `nullable` adds null only beside a `type`, so a 3.0
-    // reader may take it as the oneOf alone. That loose reading is named, as it is for any composition.
+    // 3.0 has no null type either, and its `nullable` adds null only beside a `type`: so the null branch
+    // stays beside the tagged oneOf, spelled as a type a one-value enum narrows to null.
     $maybe = $downlevel['paths']['/api/zz-attachments/maybe']['get']['responses']['200']['content']['application/json']['schema'];
     $report = (new OpenApi30DownlevelEmitter)->emitWithReport($result->document)->report;
-    expect($maybe['nullable'])->toBeTrue()
-        ->and($maybe['discriminator']['propertyName'])->toBe('kind')
-        ->and($maybe['oneOf'])->toHaveCount(2)
-        ->and($maybe)->not->toHaveKey('anyOf')
+    expect($maybe['anyOf'][0]['discriminator']['propertyName'])->toBe('kind')
+        ->and($maybe['anyOf'][0]['oneOf'])->toHaveCount(2)
+        ->and($maybe['anyOf'][1])->toBe(['type' => 'object', 'enum' => [null], 'nullable' => true])
+        ->and($maybe)->not->toHaveKey('nullable')
         ->and(array_map(static fn ($d): string => $d->message, diagnosticsCoded($report->diagnostics, 'downlevel.nullable-composition')))
-        ->toBe(['Moved the `{type: null}` branch at #/paths/~1api~1zz-attachments~1maybe/get/responses/200/content/application~1json/schema/anyOf onto the parent as `nullable: true`, which OpenAPI 3.0 reads loosely beside a composition.']);
+        ->toBe(['Rewrote the `{type: null}` branch at #/paths/~1api~1zz-attachments~1maybe/get/responses/200/content/application~1json/schema/anyOf as `{type: object, nullable: true, enum: [null]}`; OpenAPI 3.0 has no `null` type, and its `nullable` takes effect only beside one.']);
 });
 
 it('publishes the sealed parent the same whether or not a route reaches its member first', function (): void {

@@ -182,6 +182,13 @@ it('accepts the tagged bodies the server accepts, but for the one narrowing it r
 
 it('accepts null for the answer, as the server does', function () use ($engine, $routes): void {
     expect(requestRuleVerdicts(DeclaredAnswerRequest::class, ['answer' => null], $routes('storeTyped'), $engine))->toBe([true, true]);
+
+    // The 3.0 document too, read as 3.0 reads it — where `nullable` beside no `type` would admit nothing.
+    $downlevel = (new OpenApi30DownlevelEmitter)->emit(localityBuild($routes('storeTyped'), $engine)->document);
+    expect(openApi30Admits($downlevel, '/components/schemas/DeclaredAnswerRequest', ['answer' => null]))->toBeTrue()
+        ->and(openApi30Admits($downlevel, '/components/schemas/DeclaredAnswerRequest', ['answer' => new stdClass]))->toBeTrue()
+        ->and(openApi30Admits($downlevel, '/components/schemas/DeclaredAnswerRequest', ['answer' => ['kind' => 'count', 'value' => 3]]))->toBeTrue()
+        ->and(openApi30Admits($downlevel, '/components/schemas/DeclaredAnswerRequest', ['answer' => 'yes']))->toBeFalse();
 });
 
 it('publishes a declared union the rules do not match as written, and says why', function () use ($engine, $routes, $body, $field): void {
