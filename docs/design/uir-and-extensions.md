@@ -2221,7 +2221,8 @@ Opt-in because `constantValueOf` is shared and a fabricated descriptor is worse 
 mechanics, limits and the callback-scope reason for deferring are in the inference doc §4.
 
 `DType` closed set: `ScalarT, LiteralT, ArrayShapeT, ListT/MapT, UnionT, IntersectionT,
-ClassT(fqcn, typeArgs), EnumT(cases), CallableT, NullT/VoidT/NeverT, StatusMarkerT, UnknownT(reason)`.
+ClassT(fqcn, typeArgs), EnumT(cases), CallableT, NullT/VoidT/NeverT, StatusMarkerT, StatusTextMarkerT,
+UnknownT(reason)`.
 `NullTypeEngine` in core answers UnknownT for everything (keeps pipeline total).
 
 ### The `array<K, V>` key rule (`ListT` vs `MapT`)
@@ -2299,7 +2300,9 @@ because it must survive SERIALIZATION: the marker sits inside the `ArrayShapeT` 
 adapter — a side-channel could not cross that boundary. DType consumers are `supports()`
 chains rather than exhaustive `match`es over kind, so adding it broke no totality; the fallback mapper
 maps it honestly to a bare `integer` (no fabricated `const`/example) for the case where nothing resolves
-it.
+it. `StatusTextMarkerT` is its sibling — "this member is the reason phrase of that status" — and carries the
+type the member was read as plus the `??` literal it falls back to; its mapper publishes that type
+unchanged, because the seam resolves the phrase for the example alone.
 
 ## 9. Config shape (docuccino/laravel)
 

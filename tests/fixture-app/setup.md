@@ -162,7 +162,9 @@ them.
   Beside them `LockedProblem` under an `AttributedProblem` that fills by name, `SilentNotice` overriding
   the helper its inherited `NoticeProblem` constructor calls, and two unsets the analyser does not track:
   `UntitledNotice` after its parent constructor, `RetractedNotice` after its own assignment. What the engine reads off each
-  constructor is what decides which keys a response always carries.
+  constructor is what decides which keys a response always carries. `HttpProblem` is the final
+  `about:blank` problem a `respond()` callback builds in place (`RespondCallbacks::problemObject()`), its
+  `status` read off the rendered response and its `title` the status text at that status.
 
 ### Closures located by line
 

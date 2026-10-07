@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Analysis;
 
+use Closure;
 use Docuccino\Core\Inference\ArgumentSlots;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
@@ -13,7 +14,9 @@ use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\NeverT;
 use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\PayloadStatusT;
+use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\StatusMarkerT;
+use Docuccino\Core\Inference\DType\StatusTextMarkerT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
@@ -29,6 +32,7 @@ use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
 use Docuccino\Inference\PhpStan\Translation\TypeTranslator;
 use PhpParser\Node;
 use PHPStan\Analyser\Scope;
+use PHPStan\Reflection\ParameterReflection;
 use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\Type\ObjectType;
 use PHPStan\Type\Type;
@@ -80,6 +84,9 @@ final class ResponseShapeRefiner
     /** Peels `->setStatusCode(…)`/`->header(…)` off a response so the shape is read where it was built. */
     private readonly FluentResponseChain $fluentChain;
 
+    /** Reads which members of an object body its constructor takes off its parameters. */
+    private readonly ConstructorEchoes $echoes;
+
     /**
      * The object whose application-written `toResponse()` is being read, and the class that wrote it: inside
      * that body, `parent::toResponse()` is the framework rendering THIS object ({@see parentRendering()}).
@@ -101,6 +108,11 @@ final class ResponseShapeRefiner
         $this->budget = new DescentBudget($maxDepth, $fileBudget);
         $this->declarations = new ComponentDeclarations($reflectionProvider);
         $this->fluentChain = new FluentResponseChain($reflectionProvider, $translator);
+        $this->echoes = new ConstructorEchoes(function (string $file): void {
+            if ($this->appFilter->isProjectFile($file)) {
+                $this->touch($file);
+            }
+        });
         $this->enumFolder = new EnumAccessorFolder(
             $this->fileAnalyzer,
             $this->appFilter,
@@ -119,7 +131,7 @@ final class ResponseShapeRefiner
     /** Null when nothing better than the bare type is recoverable. */
     public function refine(Node\Expr $expr, Scope $scope): ?RefinedResponse
     {
-        return $this->refineExpr($expr, $scope, [], 0);
+        return $this->refineExpr($expr, $scope, self::ownParameters($scope), 0);
     }
 
     /**
@@ -133,18 +145,36 @@ final class ResponseShapeRefiner
      */
     public function refineArms(Node\Expr $expr, Scope $scope): ?array
     {
-        return $this->armsOf($expr, $scope, 0);
+        return $this->armsOf($expr, $scope, 0, self::ownParameters($scope));
     }
 
     /**
+     * The parameters of the function the analysed return is written in. Nothing calls that function from
+     * inside the analysis, so an accessor on one never binds; what it still answers is whether two reads in
+     * one body are the same value — how a member is known to echo the status sent beside it.
+     *
+     * @return list<string>
+     */
+    private static function ownParameters(Scope $scope): array
+    {
+        $closure = $scope->getAnonymousFunctionReflection();
+        $parameters = $closure !== null
+            ? $closure->getParameters()
+            : ($scope->getFunction()?->getVariants()[0]->getParameters() ?? []);
+
+        return array_map(static fn (ParameterReflection $parameter): string => $parameter->getName(), $parameters);
+    }
+
+    /**
+     * @param  list<string>  $paramNames
      * @return non-empty-list<RefinedResponse>|null
      */
-    private function armsOf(Node\Expr $expr, Scope $scope, int $depth): ?array
+    private function armsOf(Node\Expr $expr, Scope $scope, int $depth, array $paramNames = []): ?array
     {
         if ($expr instanceof Node\Expr\MethodCall) {
             $chain = $this->fluentChain->peel($expr, $scope);
             if ($chain !== null) {
-                return ResponseArms::allLaid($this->armsOf($chain['receiver'], $scope, $depth) ?? [new RefinedResponse], $chain);
+                return ResponseArms::allLaid($this->armsOf($chain['receiver'], $scope, $depth, $paramNames) ?? [new RefinedResponse], $chain);
             }
 
             $render = $this->rendering($expr, $scope);
@@ -153,7 +183,7 @@ final class ResponseShapeRefiner
             }
         }
 
-        $refined = $this->refineExpr($expr, $scope, [], $depth);
+        $refined = $this->refineExpr($expr, $scope, $paramNames, $depth);
 
         return $refined === null ? null : [$refined];
     }
@@ -484,10 +514,12 @@ final class ResponseShapeRefiner
 
         $payload = null;
         $provenance = [];
+        $statusTexts = [];
         $body = $args->at(0);
         if ($body !== null) {
             $payload = $this->payloadOf($scope->getType($body));
             $provenance = $this->payloadProvenance($body, $scope, $paramNames);
+            $statusTexts = $this->statusTextProvenance($body, $scope, $paramNames);
         }
 
         // Symfony's 200 is what a call that provably passed NO status gets. A status sitting in a spread
@@ -505,7 +537,97 @@ final class ResponseShapeRefiner
 
         // A member reading the same accessor as the status echoes the status: the factory marks it, so a
         // call site folding the status folds the member too, and an unfolded one still fills at doc time.
-        return RefinedResponse::fromConstructor($payload, $status, $statusSource, $contentType, $provenance);
+        $refined = RefinedResponse::fromConstructor($payload, $status, $statusSource, $contentType, $provenance, $statusTexts);
+
+        $echoes = $body === null || ! $payload instanceof ClassT ? null : $this->constructedEchoes($body, $payload, $statusSource, $scope, $paramNames);
+
+        return $echoes === null ? $refined : $refined->withPayloadMembers($echoes, []);
+    }
+
+    /**
+     * The members of an object body built right here (`new JsonResponse(new Problem($response), …)`) that
+     * its constructor reads off what the status is read off too ({@see ConstructorEchoes}): the status
+     * itself, or its reason phrase. Each is the status-echo marker an array body's member gets inline, keyed
+     * by the member's own name; a member echoing anything else says nothing about the status and is left
+     * to the schema. Null where no member echoes it.
+     *
+     * @param  list<string>  $paramNames
+     */
+    private function constructedEchoes(Node\Expr $body, ClassT $payload, ?ParamAccessor $statusSource, Scope $scope, array $paramNames): ?ArrayShapeT
+    {
+        if ($body instanceof Node\Expr\Variable && is_string($body->name)) {
+            $body = ($this->locals($scope))($body->name) ?? $body;
+        }
+        if ($statusSource === null
+            || ! $body instanceof Node\Expr\New_
+            || ! $body->class instanceof Node\Name
+            || $scope->resolveName($body->class) !== $payload->fqcn
+        ) {
+            return null;
+        }
+
+        $args = ConstructorArgs::named($body, $this->constructorParameterNames($payload->fqcn));
+        $fields = [];
+        foreach ($this->echoes->of($payload->fqcn) as $member => $echo) {
+            $arg = $args[$echo['accessor']->param] ?? null;
+            $read = $arg === null ? null : AccessorExtractor::rehome($arg, $echo['accessor'], $paramNames);
+            if ($read === null || ! $read->equals($statusSource)) {
+                continue;
+            }
+
+            $fields[] = new ArrayShapeField($member, $echo['text'] ? new StatusTextMarkerT(ScalarT::string(), $echo['fallback']) : new StatusMarkerT);
+        }
+
+        return $fields === [] ? null : new ArrayShapeT($fields);
+    }
+
+    /**
+     * Each member of an inline body that reads the status-text table ({@see StatusTextRead}), with the
+     * accessor its key reads — read the way a member's own value is ({@see payloadProvenance()}), so the
+     * two meet in {@see RefinedResponse::fromConstructor()} on one grammar.
+     *
+     * @param  list<string>  $paramNames
+     * @return array<string, array{ParamAccessor, ?LiteralT}>
+     */
+    private function statusTextProvenance(Node\Expr $body, Scope $scope, array $paramNames): array
+    {
+        $array = $this->bodyArrayLiteral($body, $scope);
+        if ($array === null) {
+            return [];
+        }
+
+        $locals = $this->locals($scope);
+        $found = [];
+        foreach ($array->items as $item) {
+            if (! $item->key instanceof Node\Scalar\String_) {
+                continue;
+            }
+            $read = StatusTextRead::of(
+                $item->value,
+                static fn (Node\Name $name): string => $scope->resolveName($name),
+                fn (Node\Expr $fallback): ?LiteralT => $this->constLiteralOf($fallback, $scope),
+            );
+            $accessor = $read === null ? null : AccessorExtractor::fromExpr($read['key'], $paramNames, $locals);
+            if ($accessor !== null) {
+                $found[$item->key->value] = [$accessor, $read['fallback']];
+            }
+        }
+
+        return $found;
+    }
+
+    /**
+     * The one expression each local of the scope's function was assigned, for an accessor read through it
+     * ({@see AccessorExtractor::fromExpr()}); null for a local written in any other way, or more than once.
+     *
+     * @return Closure(string): ?Node\Expr
+     */
+    private function locals(Scope $scope): Closure
+    {
+        $key = FileAnalyzer::scopeKey($scope);
+        $assignments = $key === null ? [] : ($this->fileAnalyzer->localAssignments($scope->getFile())[$key] ?? []);
+
+        return static fn (string $name): ?Node\Expr => ($assignments[$name] ?? null)[0] ?? null;
     }
 
     /**
@@ -518,7 +640,7 @@ final class ResponseShapeRefiner
     {
         $array = $this->bodyArrayLiteral($expr, $scope);
 
-        return $array === null ? [] : AccessorExtractor::provenanceFromArray($array, $paramNames);
+        return $array === null ? [] : AccessorExtractor::provenanceFromArray($array, $paramNames, $this->locals($scope));
     }
 
     /**
@@ -587,8 +709,9 @@ final class ResponseShapeRefiner
         }
 
         $provenance = $arguments['body'] === null ? [] : $this->payloadProvenance($arguments['body'], $scope, $paramNames);
+        $statusTexts = $arguments['body'] === null ? [] : $this->statusTextProvenance($arguments['body'], $scope, $paramNames);
 
-        return RefinedResponse::fromConstructor($refined->payload, null, $source, $refined->contentType, $provenance);
+        return RefinedResponse::fromConstructor($refined->payload, null, $source, $refined->contentType, $provenance, $statusTexts);
     }
 
     /**
@@ -858,7 +981,7 @@ final class ResponseShapeRefiner
             $literal = $sensitive === null ? $this->constLiteralOf($value, $scope) : null;
             $optional = false;
             if ($literal === null && $sensitive === null) {
-                $accessor = AccessorExtractor::fromExpr($value, $paramNames);
+                $accessor = AccessorExtractor::fromExpr($value, $paramNames, $this->locals($scope));
                 if ($accessor !== null) {
                     $provenance[$name] = $accessor;
                 }
@@ -1060,7 +1183,7 @@ final class ResponseShapeRefiner
             return [$codes, null];
         }
 
-        return [null, AccessorExtractor::fromExpr($expr, $paramNames)];
+        return [null, AccessorExtractor::fromExpr($expr, $paramNames, $this->locals($scope))];
     }
 
     /**

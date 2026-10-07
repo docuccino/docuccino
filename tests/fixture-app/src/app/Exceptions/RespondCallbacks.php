@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Exceptions;
 
+use App\Problems\HttpProblem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -192,5 +193,45 @@ class RespondCallbacks
 
             return $response;
         };
+    }
+
+    /** The problem built as an object from the rendered response, sent with its status and headers. */
+    public function problemObject(): callable
+    {
+        return function (Response $response, Throwable $e, Request $request): Response {
+            if (! $request->is('api/*')) {
+                return $response;
+            }
+
+            return (new JsonResponse(new HttpProblem($response), $response->getStatusCode(), $response->headers->all()))
+                ->header('Content-Type', 'application/problem+json');
+        };
+    }
+
+    /** The reason phrase read inline off the status it is sent with, through the subclass the table is inherited by. */
+    public function statusTextInline(): callable
+    {
+        return fn (Response $response): Response => new JsonResponse([
+            'title' => JsonResponse::$statusTexts[$response->getStatusCode()],
+            'status' => $response->getStatusCode(),
+        ], $response->getStatusCode());
+    }
+
+    /** A reason phrase looked up by a code that is not the status the response is sent with. */
+    public function statusTextOtherKey(): callable
+    {
+        return fn (Response $response, Throwable $e): Response => new JsonResponse([
+            'title' => Response::$statusTexts[$e->getCode()] ?? 'Error',
+            'status' => $response->getStatusCode(),
+        ], $response->getStatusCode());
+    }
+
+    /** The reason phrase of the status the response was built with, and then another status sent. */
+    public function statusTextRestated(): callable
+    {
+        return fn (Response $response): Response => (new JsonResponse([
+            'title' => Response::$statusTexts[$response->getStatusCode()] ?? 'Error',
+            'status' => $response->getStatusCode(),
+        ], $response->getStatusCode()))->setStatusCode(500);
     }
 }

@@ -11,7 +11,9 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\PayloadStatusT;
+use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\StatusMarkerT;
+use Docuccino\Core\Inference\DType\StatusTextMarkerT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Inference\PhpStan\Support\ScalarFold;
@@ -39,7 +41,9 @@ use Docuccino\Inference\PhpStan\Support\ScalarFold;
  * the fact worth carrying — an argument passed at this call site is in this response's body whatever the
  * schema says about optionality — so an argument that isn't supplied at a hop leaves the map entirely
  * rather than widening. An argument that renders as an omission marker instead of a value supplies the key
- * only sometimes: its field is marked OPTIONAL, which says exactly that and claims nothing more.
+ * only sometimes: its field is marked OPTIONAL, which says exactly that and claims nothing more. An object
+ * built right where the response is carries, instead, the members its constructor writes from the status
+ * the response is sent with — status markers keyed by property ({@see ConstructorEchoes}).
  *
  * `$component` travels beside all of that rather than inside the shape: it names the body rather than
  * describing it ({@see withComponent()}).
@@ -223,11 +227,15 @@ final readonly class RefinedResponse
 
     /**
      * Marks any member reading the same accessor as the status with a {@see StatusMarkerT} — the
-     * call-independent fact that the member echoes the response status.
+     * call-independent fact that the member echoes the response status — and any member reading the
+     * status-text table AT that accessor with a {@see StatusTextMarkerT}, the fact that it is the reason
+     * phrase of whatever status the response is sent with. A table read at any other key is left as read.
      *
      * @param  array<string, ParamAccessor>  $payloadParamProvenance  member key → accessor
+     * @param  array<string, array{ParamAccessor, ?LiteralT}>  $statusTexts  member key → the accessor the
+     *                                                                       table is read at, and the `??` fallback
      */
-    public static function fromConstructor(?DType $payload, LiteralT|UnionT|null $status, ?ParamAccessor $statusSource, ?string $contentType, array $payloadParamProvenance): self
+    public static function fromConstructor(?DType $payload, LiteralT|UnionT|null $status, ?ParamAccessor $statusSource, ?string $contentType, array $payloadParamProvenance, array $statusTexts = []): self
     {
         if ($statusSource !== null && $payload instanceof ArrayShapeT) {
             foreach ($payloadParamProvenance as $key => $accessor) {
@@ -235,9 +243,39 @@ final readonly class RefinedResponse
                     $payload = self::replaceFieldType($payload, $key, new StatusMarkerT);
                 }
             }
+            foreach ($statusTexts as $key => [$accessor, $fallback]) {
+                if ($accessor->equals($statusSource)) {
+                    $payload = $payload->mapFieldTypes(
+                        static fn (DType $current, string|int $fieldKey): DType => (string) $fieldKey === (string) $key ? new StatusTextMarkerT($current, $fallback) : $current,
+                    );
+                }
+            }
         }
 
         return new self($payload, $status, $statusSource, $contentType, false, $payloadParamProvenance);
+    }
+
+    /**
+     * The body as it reads once something AFTER it states the status — a chain's `->setStatusCode()`: a
+     * member echoing the status the response was built with no longer echoes the one it is sent with, so
+     * each echo widens to what it was read as rather than taking a status it was never given.
+     */
+    public function withoutStatusEchoes(): self
+    {
+        $payload = $this->payload instanceof ArrayShapeT
+            ? $this->payload->mapFieldTypes(static fn (DType $type): DType => match (true) {
+                $type instanceof StatusMarkerT => ScalarT::int(),
+                $type instanceof StatusTextMarkerT => $type->type,
+                default => $type,
+            })
+            : $this->payload;
+        $members = $this->payloadMembers?->mapFieldTypes(
+            static fn (DType $type): DType => $type instanceof StatusMarkerT || $type instanceof StatusTextMarkerT
+                ? new UnknownT('echoed a status a later call replaced')
+                : $type,
+        );
+
+        return new self($payload, $this->status, $this->statusSource, $this->contentType, $this->delegates, $this->payloadParamProvenance, $members, $this->component, $this->statusOfPayload, $this->statusUnread);
     }
 
     /** Key and optionality preserved; unchanged when the key is absent. */

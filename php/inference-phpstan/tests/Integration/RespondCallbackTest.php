@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\CallCondition;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\NullT;
+use Docuccino\Core\Inference\DType\StatusTextMarkerT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\TypeCondition;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
@@ -245,3 +248,61 @@ it('reads a return reached after the exception is swapped as reachable by every 
     'the one answer chosen' => [false],
     'every answer reached' => [true],
 ])->group('fixture');
+
+/** The kind of each member of a body as the engine recovered it, with the `??` a reason phrase carries. */
+function echoedMembers(DType $body): array
+{
+    $members = [];
+    foreach ($body instanceof ArrayShapeT ? $body->fields : [] as $field) {
+        $members[(string) $field->key] = $field->type instanceof StatusTextMarkerT
+            ? [$field->type->kind(), $field->type->type->kind(), $field->type->fallback?->value]
+            : $field->type->kind();
+    }
+
+    return $members;
+}
+
+it('reads a member as the reason phrase of the status the response is sent with, however the key reaches it', function (string $method, array $expected): void {
+    $sites = array_values(array_filter(
+        respondReturns($method, 'Illuminate\\Validation\\ValidationException'),
+        static fn (ReturnSite $site): bool => $site->type instanceof ClassT && $site->type->fqcn === 'Illuminate\\Http\\JsonResponse',
+    ));
+    expect($sites)->toHaveCount(1);
+
+    $type = $sites[0]->type;
+    expect($type)->toBeInstanceOf(ClassT::class)
+        ->and(echoedMembers($type->typeArgs[0]))->toBe($expected);
+})->with([
+    // Through the helper, where the status is named in a local before both the body and the response read it.
+    'a local both read' => ['everywhere', ['type' => 'literal', 'title' => ['statusText', 'scalar', 'Error'], 'status' => 'statusMarker', 'errors' => 'list']],
+    'read inline, through a class inheriting the table' => ['statusTextInline', ['title' => ['statusText', 'scalar', null], 'status' => 'statusMarker']],
+    // The phrase of a code nothing says is the one sent: the member is the string it was read as.
+    'a key that is not the status' => ['statusTextOtherKey', ['title' => 'scalar', 'status' => 'statusMarker']],
+    // `->setStatusCode(500)` replaced the status both members read.
+    'a status restated after the body' => ['statusTextRestated', ['title' => 'scalar', 'status' => 'scalar']],
+])->group('fixture');
+
+it('reads the members an object body built in place echoes of the status it is sent with', function (): void {
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
+        'app/Exceptions/RespondCallbacks.php',
+        '',
+        '',
+        line: exceptionsFixtureLine('RespondCallbacks.php', 'public function problemObject(') + 2,
+        param: 'e',
+        narrowType: 'Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException',
+        every: true,
+    ));
+    $sites = array_values(array_filter(
+        $analysis->returns,
+        static fn (ReturnSite $site): bool => $site->type instanceof ClassT && $site->type->fqcn === 'Illuminate\\Http\\JsonResponse',
+    ));
+    expect($sites)->toHaveCount(1);
+
+    $type = $sites[0]->type;
+    expect($type)->toBeInstanceOf(ClassT::class)
+        ->and($type->typeArgs[0] ?? null)->toEqual(new ClassT('App\\Problems\\HttpProblem'))
+        ->and($type->typeArgs[2] ?? null)->toEqual(new LiteralT('application/problem+json'))
+        ->and(echoedMembers($type->typeArgs[3] ?? new ArrayShapeT([])))->toBe(['status' => 'statusMarker', 'title' => ['statusText', 'scalar', 'Error']])
+        // What the members were read out of keys the fragment: the class's constructor.
+        ->and(array_map(basename(...), $analysis->dependencyFiles))->toContain('HttpProblem.php');
+})->group('fixture');

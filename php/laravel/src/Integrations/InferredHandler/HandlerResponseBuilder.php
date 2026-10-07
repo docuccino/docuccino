@@ -16,6 +16,7 @@ use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\NeverT;
 use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\StatusMarkerT;
+use Docuccino\Core\Inference\DType\StatusTextMarkerT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ReturnSite;
@@ -23,9 +24,11 @@ use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Support\BoundedNumber;
 use Docuccino\Core\Support\FormatSamples;
+use Docuccino\Core\Support\ReasonPhrase;
 use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
 use Docuccino\Laravel\Support\ErrorComponentDiagnostic;
 use Docuccino\Laravel\Support\FrameworkClasses;
+use Illuminate\Http\Response;
 use stdClass;
 
 /**
@@ -35,7 +38,8 @@ use stdClass;
  * the payload schema through the route's converter.
  *
  * The example carries only members that folded to a literal — a {@see StatusMarkerT} member among them,
- * resolved to this response's status, so the 403 arm says `403` — and required members that didn't fold
+ * resolved to this response's status, so the 403 arm says `403`, and a {@see StatusTextMarkerT} one
+ * resolved to its reason phrase ({@see resolveStatusTexts()}) — and required members that didn't fold
  * are filled with type-derived placeholders so the example is a valid instance of the schema beside it
  * ({@see example()} for why that fill is confined to examples and nothing else). A status that didn't fold
  * falls back to the one the body states, and only then to the exception's own hint ({@see foldStatus()}).
@@ -137,7 +141,7 @@ final class HandlerResponseBuilder
                 foreach ($schema as $keyword => $value) {
                     $draft->content($media)->set($keyword, $value, $contribution);
                 }
-                [$example, $placeholders] = self::example($payload, $schema, (int) $status, $context, $members);
+                [$example, $placeholders] = self::example(self::resolveStatusTexts($payload, (int) $status), $schema, (int) $status, $context, self::resolveMemberEchoes($members, (int) $status));
                 if ($example !== [] && self::satisfies($example, self::resolveSchema($schema, $context))) {
                     $draft->setExample($media, $example, $placeholders);
                 }
@@ -356,6 +360,53 @@ final class HandlerResponseBuilder
         return $payload->mapFieldTypes(
             static fn (DType $type): DType => $type instanceof StatusMarkerT ? new LiteralT($status) : $type,
         );
+    }
+
+    /**
+     * Each top-level reason-phrase member pinned to the phrase this response's status is sent with, for the
+     * EXAMPLE alone: the schema beside it is shared by every status the body answers, so it keeps the type
+     * the member was read as ({@see StatusTextMarkerT}). A member this cannot name stays a marker, which the
+     * example fills from the schema like any member nothing folded.
+     */
+    private static function resolveStatusTexts(DType $payload, int $status): DType
+    {
+        if (! $payload instanceof ArrayShapeT) {
+            return $payload;
+        }
+
+        return $payload->mapFieldTypes(
+            static fn (DType $type): DType => $type instanceof StatusTextMarkerT ? self::statusText($type, $status) ?? $type : $type,
+        );
+    }
+
+    /**
+     * The members an object body echoes of its status, pinned the way an array body's are: the status
+     * itself, and its reason phrase — or, where no phrase can be named, a member known present and unread.
+     *
+     * @param  array<string, DType>  $members
+     * @return array<string, DType>
+     */
+    private static function resolveMemberEchoes(array $members, int $status): array
+    {
+        return array_map(static fn (DType $type): DType => match (true) {
+            $type instanceof StatusMarkerT => new LiteralT($status),
+            $type instanceof StatusTextMarkerT => self::statusText($type, $status) ?? new UnknownT('no reason phrase for this status'),
+            default => $type,
+        }, $members);
+    }
+
+    /**
+     * What a reason-phrase member holds under `$status`: the phrase the status-text table gives it — the
+     * table the response is SENT with, read from the installed framework, which the app's `composer.lock`
+     * keys; not {@see ReasonPhrase}, whose words describe a response rather than
+     * reproduce one — else the `??` fallback the code wrote, else nothing known.
+     */
+    private static function statusText(StatusTextMarkerT $marker, int $status): ?LiteralT
+    {
+        // Symfony's `$statusTexts`, which every framework response class inherits rather than redeclares.
+        $phrase = Response::$statusTexts[$status] ?? null;
+
+        return is_string($phrase) ? new LiteralT($phrase) : $marker->fallback;
     }
 
     /**
@@ -648,7 +699,9 @@ final class HandlerResponseBuilder
      * to the schema — described there, and illustrated only if the schema says every response carries it.
      *
      * Keyed by CONSTRUCTOR ARGUMENT name. A Data class whose properties are remapped on the way out simply
-     * matches nothing here, and the example falls back to the schema's required members.
+     * matches nothing here, and the example falls back to the schema's required members. The one exception
+     * is a member the constructor writes from the status the response is sent with — the status, or its
+     * reason phrase — which is keyed by the property it writes, since no argument names it.
      *
      * @return array<string, DType>
      */
