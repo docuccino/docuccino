@@ -56,10 +56,7 @@
                       "symbol": "implicit:validated-request"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "UnprocessableEntity"
-                }
+                ]
               }
             }
           }
@@ -529,10 +526,7 @@
                       "symbol": "implicit:validated-request"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "UnprocessableEntity"
-                }
+                ]
               }
             }
           }
@@ -884,10 +878,7 @@
                       "symbol": "implicit:validated-request"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "UnprocessableEntity"
-                }
+                ]
               }
             }
           }
@@ -1573,10 +1564,7 @@
                       "symbol": "implicit:validated-request"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "UnprocessableEntity"
-                }
+                ]
               }
             }
           }
@@ -1915,7 +1903,7 @@
     "document": {
       "id": "doc:request-headers",
       "configHash": "8e5e2466af4663164a35bad43c1a9854d9a97c1104924d91d324209e3f0659bd",
-      "contentHash": "1b2b4c576f42f962bc0ad79ad908815a052721427c3bd39b181815e649c3e844"
+      "contentHash": "37579b0814c55fedfed91da310ce311db39ca55a9da28cc908371359e0205265"
     },
     "generator": {
       "name": "docuccino/laravel",

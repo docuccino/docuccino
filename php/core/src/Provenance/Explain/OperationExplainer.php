@@ -7,6 +7,7 @@ namespace Docuccino\Core\Provenance\Explain;
 use Docuccino\Core\Contract\Pointer;
 use Docuccino\Core\Document\DocumentMembers;
 use Docuccino\Core\Document\UseSites;
+use Docuccino\Core\Draft\ResponseDraft;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\Layer;
 use Docuccino\Core\Provenance\OverrodeEntry;
@@ -226,6 +227,14 @@ final class OperationExplainer
     }
 
     /**
+     * What $field holds on $node: a member of the node, a fact it carries, or a member of the component
+     * its `$ref` points at.
+     *
+     * `component` on a use of a shared response is the one field no member states: the claim it records
+     * gives way to the `$ref` once the response is hoisted. So it reads as what the producer asked for —
+     * {@see ResponseDraft::CLAIMED_COMPONENT} where the claim did not land, and the component the `$ref`
+     * names where it did — rather than as a field a layer removed.
+     *
      * @param  array<string, mixed>  $node
      * @param  array<array-key, mixed>  $facts
      * @param  array<array-key, mixed>  $target  the component the node points at, or empty
@@ -236,7 +245,14 @@ final class OperationExplainer
             return $node[$field];
         }
 
-        return $facts[$field] ?? $target[$field] ?? null;
+        $value = $facts[$field] ?? $target[$field] ?? null;
+        $ref = $node['$ref'] ?? null;
+
+        if ($value === null && $field === ResponseDraft::COMPONENT && is_string($ref)) {
+            return $facts[ResponseDraft::CLAIMED_COMPONENT] ?? substr($ref, (int) strrpos($ref, '/') + 1);
+        }
+
+        return $value;
     }
 
     /**

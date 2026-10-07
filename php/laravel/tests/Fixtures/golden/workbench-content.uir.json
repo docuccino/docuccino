@@ -56,10 +56,7 @@
                       "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               }
             }
           }
@@ -431,10 +428,7 @@
                       "symbol": "implicit:validated-request"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "UnprocessableEntity"
-                }
+                ]
               }
             }
           }
@@ -719,10 +713,7 @@
                       "symbol": "implicit:auth-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Unauthorized"
-                }
+                ]
               }
             }
           }
@@ -829,10 +820,7 @@
                       "symbol": "implicit:auth-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Unauthorized"
-                }
+                ]
               },
               "403": {
                 "id": "res:v1:pzsemf2jo6k2c67z",
@@ -850,10 +838,7 @@
                       "symbol": "implicit:can-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -1313,10 +1298,7 @@
                       "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "NotFound"
-                }
+                ]
               }
             }
           }
@@ -1468,10 +1450,7 @@
                       "symbol": "implicit:auth-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Unauthorized"
-                }
+                ]
               },
               "403": {
                 "id": "res:v1:7gfzvqr4post5z7w",
@@ -1489,10 +1468,7 @@
                       "symbol": "implicit:can-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -2025,10 +2001,7 @@
                       "symbol": "query-builder:strict-mode"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "BadRequest"
-                }
+                ]
               }
             }
           }
@@ -3276,10 +3249,7 @@
                       "symbol": "implicit:signed-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -3587,10 +3557,7 @@
                       "symbol": "implicit:validated-request"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "UnprocessableEntity"
-                }
+                ]
               }
             }
           }
@@ -3799,10 +3766,7 @@
                       "symbol": "implicit:auth-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Unauthorized"
-                }
+                ]
               },
               "403": {
                 "id": "res:v1:zqntoi2vjvat7ynr",
@@ -3820,10 +3784,7 @@
                       "symbol": "implicit:verified-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Forbidden"
-                }
+                ]
               }
             }
           }
@@ -3932,10 +3893,7 @@
                       "symbol": "query-builder:strict-mode"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "BadRequest"
-                }
+                ]
               }
             }
           }
@@ -5091,7 +5049,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "5b3e04c541cd00ac0d845576d587b12439154a28681b367b482d7ca66a98b3f6",
-      "contentHash": "916d5747f9eab8606422b97ea558a0bbd11e590e7977ed949e4324950a9ac0f9"
+      "contentHash": "57cbac5a9bc20e706dc3cf8bb10b02120fa9a5b4c2546c9f91854fb5fd02cd71"
     },
     "generator": {
       "name": "docuccino/laravel",

@@ -64,10 +64,7 @@
                       "symbol": "implicit:auth-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Unauthorized"
-                }
+                ]
               },
               "429": {
                 "id": "res:v1:wcx3xicsal2fipxt",
@@ -86,10 +83,7 @@
                       "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "TooManyRequests"
-                }
+                ]
               }
             }
           }
@@ -293,10 +287,7 @@
                       "symbol": "implicit:auth-middleware"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "Unauthorized"
-                }
+                ]
               },
               "429": {
                 "id": "res:v1:6w3tbmn7q6nucgbq",
@@ -315,10 +306,7 @@
                       "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
                     }
                   }
-                ],
-                "facts": {
-                  "component": "TooManyRequests"
-                }
+                ]
               }
             }
           }
@@ -501,7 +489,7 @@
     "document": {
       "id": "doc:inherited",
       "configHash": "cce2a42d4124cc46880ec88e69cec15582e42b7779214f12309684b594ce76a3",
-      "contentHash": "9fe656fd2ff0c5bcd444d594bec0691904a5b96d99d8d7d5928cad7421f3bc7a"
+      "contentHash": "92dee87af8c9bca6c87db2acc8fef67260e2d40403d23ff4016f1a7fcec01543"
     },
     "generator": {
       "name": "docuccino/laravel",
