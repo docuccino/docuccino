@@ -293,24 +293,6 @@
           "steps"
         ]
       },
-      "ShapeKind": {
-        "type": "string",
-        "enum": [
-          "count",
-          "measure",
-          "letters"
-        ],
-        "x-enum-varnames": [
-          "Count",
-          "Measure",
-          "Letters"
-        ],
-        "x-enumNames": [
-          "Count",
-          "Measure",
-          "Letters"
-        ]
-      },
       "UnprocessableEntity": {
         "type": "object",
         "properties": {
