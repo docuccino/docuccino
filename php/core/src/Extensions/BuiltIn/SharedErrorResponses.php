@@ -6,6 +6,7 @@ namespace Docuccino\Core\Extensions\BuiltIn;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
+use Docuccino\Core\Document\UseSites;
 use Docuccino\Core\Draft\ResponseDraft;
 use Docuccino\Core\Extensions\Context\DocumentContext;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
@@ -23,7 +24,9 @@ use Docuccino\Core\Support\Json;
  * error components" has the argument, and §2 "Component naming" the names.
  *
  * Identity survives both rewrites: an operation keeps its own response id and provenance beside the
- * `$ref`, and a hoisted component carries an id minted from the bytes it publishes — never a per-route
+ * `$ref` for the rest of the build — and a published full artifact carries them on the operation instead,
+ * under `x-docuccino.uses` ({@see UseSites}), since OpenAPI does not allow an extension on a Reference
+ * Object — and a hoisted component carries an id minted from the bytes it publishes — never a per-route
  * source, which has no business speaking for the other routes sharing it.
  *
  * What REPEATS decides whether a body is hoisted; what its producer DECLARED
@@ -1134,7 +1137,8 @@ final class SharedErrorResponses implements DocumentTransformer
 
     /**
      * Points every shared body at its component, keeping the body's own provenance beside the `$ref` —
-     * a per-route fact the hoisted component cannot state.
+     * a per-route fact the hoisted component cannot state. That is where the build keeps it; publishing
+     * moves it onto the operation ({@see UseSites}).
      *
      * An arm whose prose is not the prose the component publishes keeps its own beside the `$ref`, where
      * a Reference Object's `summary` and `description` override the ones it points at ({@see spoken()}).

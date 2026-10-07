@@ -6,6 +6,7 @@ namespace Docuccino\Core\SpecValidation;
 
 use Docuccino\Core\Canonical\Canonicalizer;
 use Docuccino\Core\Canonical\CanonicalJsonSerializer;
+use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Spec\UirSpec;
 use Opis\JsonSchema\Exceptions\UnresolvedReferenceException;
 use Opis\JsonSchema\Validator as OpisValidator;
@@ -71,7 +72,8 @@ final class Validator
      */
     public function validate(array $document): ValidationResult
     {
-        $json = $this->serializer->serialize($this->canonicalizer->canonicalize($document));
+        // Validated as it is published: the bytes the full export writes, not the shape a build holds.
+        $json = (new UirEmitter($this->canonicalizer, $this->serializer))->emitArray($document);
 
         $data = json_decode($json, false, flags: JSON_THROW_ON_ERROR);
 

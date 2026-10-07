@@ -37,7 +37,32 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "422": {
+                "id": "res:v1:cy25jrzb7ct7wpby",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/NotesController.php",
+                      "line": 25,
+                      "symbol": "implicit:validated-request"
+                    }
+                  }
+                ],
+                "facts": {
+                  "component": "UnprocessableEntity"
+                }
+              }
+            }
+          }
         },
         "operationId": "get.api.notes.@note",
         "summary": "The same request on a read verb, where its rules become query parameters.",
@@ -439,27 +464,6 @@
         ],
         "responses": {
           "422": {
-            "x-docuccino": {
-              "id": "res:v1:cy25jrzb7ct7wpby",
-              "provenance": [
-                {
-                  "producer": "integration:implicit-response",
-                  "layer": "integration",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/NotesController.php",
-                    "line": 25,
-                    "symbol": "implicit:validated-request"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "UnprocessableEntity"
-              }
-            },
             "$ref": "#/components/responses/UnprocessableEntity"
           }
         }
@@ -506,7 +510,32 @@
                 "symbol": "Workbench\\App\\Http\\Controllers\\NotesController::replayNote"
               }
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "422": {
+                "id": "res:v1:avmh4aoldsel27pw",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/NotesController.php",
+                      "line": 32,
+                      "symbol": "implicit:validated-request"
+                    }
+                  }
+                ],
+                "facts": {
+                  "component": "UnprocessableEntity"
+                }
+              }
+            }
+          }
         },
         "operationId": "put.api.notes.@note",
         "summary": "The same request, with the copied header declared under another case: the declaration stands.",
@@ -790,27 +819,6 @@
         },
         "responses": {
           "422": {
-            "x-docuccino": {
-              "id": "res:v1:avmh4aoldsel27pw",
-              "provenance": [
-                {
-                  "producer": "integration:implicit-response",
-                  "layer": "integration",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/NotesController.php",
-                    "line": 32,
-                    "symbol": "implicit:validated-request"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "UnprocessableEntity"
-              }
-            },
             "$ref": "#/components/responses/UnprocessableEntity"
           }
         }
@@ -857,7 +865,32 @@
                 "symbol": "Workbench\\App\\Http\\Controllers\\NotesController::submitNote"
               }
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "422": {
+                "id": "res:v1:jevp6hkopq7fizzo",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/NotesController.php",
+                      "line": 19,
+                      "symbol": "implicit:validated-request"
+                    }
+                  }
+                ],
+                "facts": {
+                  "component": "UnprocessableEntity"
+                }
+              }
+            }
+          }
         },
         "operationId": "post.api.notes.@note",
         "summary": "Validates headers, a query value and a route parameter its request copies into the input.",
@@ -1146,27 +1179,6 @@
         },
         "responses": {
           "422": {
-            "x-docuccino": {
-              "id": "res:v1:jevp6hkopq7fizzo",
-              "provenance": [
-                {
-                  "producer": "integration:implicit-response",
-                  "layer": "integration",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/NotesController.php",
-                    "line": 19,
-                    "symbol": "implicit:validated-request"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "UnprocessableEntity"
-              }
-            },
             "$ref": "#/components/responses/UnprocessableEntity"
           }
         }
@@ -1542,7 +1554,32 @@
                 "symbol": "Workbench\\App\\Http\\Controllers\\NotesController::tenantNote"
               }
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "422": {
+                "id": "res:v1:3padqc26owwtuqtq",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/NotesController.php",
+                      "line": 38,
+                      "symbol": "implicit:validated-request"
+                    }
+                  }
+                ],
+                "facts": {
+                  "component": "UnprocessableEntity"
+                }
+              }
+            }
+          }
         },
         "operationId": "post.api.tenant-notes",
         "summary": "A header copied into the input only when it was sent.",
@@ -1602,27 +1639,6 @@
         },
         "responses": {
           "422": {
-            "x-docuccino": {
-              "id": "res:v1:3padqc26owwtuqtq",
-              "provenance": [
-                {
-                  "producer": "integration:implicit-response",
-                  "layer": "integration",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/NotesController.php",
-                    "line": 38,
-                    "symbol": "implicit:validated-request"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "UnprocessableEntity"
-              }
-            },
             "$ref": "#/components/responses/UnprocessableEntity"
           }
         }
@@ -1899,13 +1915,13 @@
     "document": {
       "id": "doc:request-headers",
       "configHash": "8e5e2466af4663164a35bad43c1a9854d9a97c1104924d91d324209e3f0659bd",
-      "contentHash": "5f147ae09483e39ca0ca017c7eb33f2a6915b9f5ef8fcf36050bafd95346a53f"
+      "contentHash": "1b2b4c576f42f962bc0ad79ad908815a052721427c3bd39b181815e649c3e844"
     },
     "generator": {
       "name": "docuccino/laravel",
       "version": "0.20.2",
-      "specVersion": "2.0.0",
-      "schema": "https://spec.docuccino.app/uir/2.0/schema.json"
+      "specVersion": "2.1.0",
+      "schema": "https://spec.docuccino.app/uir/2.1/schema.json"
     }
   }
 }

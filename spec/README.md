@@ -24,6 +24,8 @@ Each schema is served as a static file at its exact `$id` URL:
 | 1.1     | <https://spec.docuccino.app/uir/1.1/schema.json> |
 | 2.0     | <https://spec.docuccino.app/uir/2.0/schema.json> |
 | 2.0     | <https://spec.docuccino.app/uir/2.0/extension.schema.json> |
+| 2.1     | <https://spec.docuccino.app/uir/2.1/schema.json> |
+| 2.1     | <https://spec.docuccino.app/uir/2.1/extension.schema.json> |
 
 ## This repository is read-only
 

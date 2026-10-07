@@ -37,7 +37,53 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "400": {
+                "id": "res:v1:2fwqx4q52p2ftyui",
+                "provenance": [
+                  {
+                    "producer": "integration:query-builder",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/IgnoredMembersController.php",
+                      "line": 33,
+                      "symbol": "query-builder:strict-mode"
+                    }
+                  }
+                ],
+                "facts": {
+                  "component": "BadRequest"
+                }
+              },
+              "422": {
+                "id": "res:v1:y6m4r5jfwq6vteps",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/IgnoredMembersController.php",
+                      "line": 33,
+                      "symbol": "implicit:validated-request"
+                    }
+                  }
+                ],
+                "facts": {
+                  "component": "UnprocessableEntity"
+                }
+              }
+            }
+          }
         },
         "operationId": "get.api.ignored-members.list",
         "summary": "List gadgets. The `opaque` filter is the application's own business and not for publication; the\ndate window is published, less the bound the document has no business naming.",
@@ -213,51 +259,9 @@
         ],
         "responses": {
           "400": {
-            "x-docuccino": {
-              "id": "res:v1:2fwqx4q52p2ftyui",
-              "provenance": [
-                {
-                  "producer": "integration:query-builder",
-                  "layer": "integration",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/IgnoredMembersController.php",
-                    "line": 33,
-                    "symbol": "query-builder:strict-mode"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "BadRequest"
-              }
-            },
             "$ref": "#/components/responses/BadRequest"
           },
           "422": {
-            "x-docuccino": {
-              "id": "res:v1:y6m4r5jfwq6vteps",
-              "provenance": [
-                {
-                  "producer": "integration:implicit-response",
-                  "layer": "integration",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/IgnoredMembersController.php",
-                    "line": 33,
-                    "symbol": "implicit:validated-request"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "UnprocessableEntity"
-              }
-            },
             "$ref": "#/components/responses/UnprocessableEntity"
           }
         }
@@ -294,7 +298,53 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "400": {
+                "id": "res:v1:brexbmnjm2zc7zmw",
+                "provenance": [
+                  {
+                    "producer": "integration:query-builder",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/IgnoredMembersController.php",
+                      "line": 59,
+                      "symbol": "query-builder:strict-mode"
+                    }
+                  }
+                ],
+                "facts": {
+                  "component": "BadRequest"
+                }
+              },
+              "422": {
+                "id": "res:v1:wqvemg6wibmxadlb",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/IgnoredMembersController.php",
+                      "line": 59,
+                      "symbol": "implicit:validated-request"
+                    }
+                  }
+                ],
+                "facts": {
+                  "component": "UnprocessableEntity"
+                }
+              }
+            }
+          }
         },
         "operationId": "get.api.ignored-members.repeated",
         "summary": "The same member named twice, in two spellings that do not dedupe. Both did their job: which\ndeclarations matched is decided against the members standing before ANY of them removed anything,\nor the second would report the member the first had just taken away as one that was never there.",
@@ -493,51 +543,9 @@
         ],
         "responses": {
           "400": {
-            "x-docuccino": {
-              "id": "res:v1:brexbmnjm2zc7zmw",
-              "provenance": [
-                {
-                  "producer": "integration:query-builder",
-                  "layer": "integration",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/IgnoredMembersController.php",
-                    "line": 59,
-                    "symbol": "query-builder:strict-mode"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "BadRequest"
-              }
-            },
             "$ref": "#/components/responses/BadRequest"
           },
           "422": {
-            "x-docuccino": {
-              "id": "res:v1:wqvemg6wibmxadlb",
-              "provenance": [
-                {
-                  "producer": "integration:implicit-response",
-                  "layer": "integration",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/IgnoredMembersController.php",
-                    "line": 59,
-                    "symbol": "implicit:validated-request"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "UnprocessableEntity"
-              }
-            },
             "$ref": "#/components/responses/UnprocessableEntity"
           }
         }
@@ -574,7 +582,53 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "400": {
+                "id": "res:v1:7i5a435xppbdfisf",
+                "provenance": [
+                  {
+                    "producer": "integration:query-builder",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/IgnoredMembersController.php",
+                      "line": 45,
+                      "symbol": "query-builder:strict-mode"
+                    }
+                  }
+                ],
+                "facts": {
+                  "component": "BadRequest"
+                }
+              },
+              "422": {
+                "id": "res:v1:bqkcpteobg2yfv6u",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/IgnoredMembersController.php",
+                      "line": 45,
+                      "symbol": "implicit:validated-request"
+                    }
+                  }
+                ],
+                "facts": {
+                  "component": "UnprocessableEntity"
+                }
+              }
+            }
+          }
         },
         "operationId": "get.api.ignored-members.typo",
         "summary": "The same surface with a misspelled member. Nothing is dropped, so the filter the author meant to\nhide is published — which is why the declaration is reported rather than left silent.",
@@ -835,51 +889,9 @@
         ],
         "responses": {
           "400": {
-            "x-docuccino": {
-              "id": "res:v1:7i5a435xppbdfisf",
-              "provenance": [
-                {
-                  "producer": "integration:query-builder",
-                  "layer": "integration",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/IgnoredMembersController.php",
-                    "line": 45,
-                    "symbol": "query-builder:strict-mode"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "BadRequest"
-              }
-            },
             "$ref": "#/components/responses/BadRequest"
           },
           "422": {
-            "x-docuccino": {
-              "id": "res:v1:bqkcpteobg2yfv6u",
-              "provenance": [
-                {
-                  "producer": "integration:implicit-response",
-                  "layer": "integration",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/IgnoredMembersController.php",
-                    "line": 45,
-                    "symbol": "implicit:validated-request"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "UnprocessableEntity"
-              }
-            },
             "$ref": "#/components/responses/UnprocessableEntity"
           }
         }
@@ -981,13 +993,13 @@
     "document": {
       "id": "doc:default",
       "configHash": "216b314eca77e6face97a16874c1d669ffed98a0da8c1a407694f44b90612dd6",
-      "contentHash": "a2b9b8ecb801f569902d13aa7fc51e4f1980ff5804e26cbc21cf33080443f0fd"
+      "contentHash": "2f1fc61ca1e334ba6f3172d5504322174e1b1845dd5285b9564dc3048a4cd9b0"
     },
     "generator": {
       "name": "docuccino/laravel",
       "version": "0.18.0",
-      "specVersion": "2.0.0",
-      "schema": "https://spec.docuccino.app/uir/2.0/schema.json"
+      "specVersion": "2.1.0",
+      "schema": "https://spec.docuccino.app/uir/2.1/schema.json"
     }
   }
 }

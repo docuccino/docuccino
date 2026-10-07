@@ -114,52 +114,23 @@ it('reads a plausible minimum of UIR documents', function (): void {
 });
 
 /**
- * The findings a UIR document owes bar one kind: its own `x-docuccino` beside the `$ref` of a response
- * shared through `components.responses`, which carries that USE's id and provenance.
+ * Every finding a committed UIR document owes against OpenAPI 3.2, with nothing tolerated.
  *
- * OpenAPI 3.2's text says a Reference Object "cannot be extended with additional properties" and that
- * a reader SHALL ignore any it carries; its meta-schema admits them. So a 3.2 reader loses nothing
- * here, while the same member in an EXPORTED artifact — where the 3.1 meta-schema refuses the whole
- * document over it — is a defect: every OpenAPI emitter strips `x-docuccino` and projects nothing
- * beside a reference. Only the member's own name is tolerated, so anything else beside a `$ref` still
- * fails, and the tolerated findings are counted below so the tolerance cannot outlive the
- * shape it describes.
+ * A use of a shared response or parameter keeps its own `x-docuccino` on its operation, under `uses`
+ * (UIR 2.1), rather than beside its `$ref`, where OpenAPI does not allow an extension and a strict reader
+ * refuses the whole document. So the one shape this check used to tolerate is no longer published, and
+ * a UIR document is a valid OpenAPI 3.2 document exactly as built.
  *
- * @return array{list<string>, list<string>} the findings owed, and the tolerated ones
+ * @return list<string>
  */
 function uirConformanceFindings(string $path): array
 {
-    $owed = [];
-    $tolerated = [];
-
-    foreach (OpenApiMetaSchema::findings('openapi-3.2', committedArtifactGraph($path)) as $finding) {
-        // Read by its parts rather than by its sentence: a use-site extension on a response, and no other.
-        if ($finding->keyword === null
-            && preg_match('~^/paths/.+/responses/[^/]+/x-docuccino$~', $finding->pointer) === 1
-            && $finding->message === 'a Reference Object cannot carry "x-docuccino" beside its $ref') {
-            $tolerated[] = (string) $finding;
-        } else {
-            $owed[] = (string) $finding;
-        }
-    }
-
-    return [$owed, $tolerated];
+    return array_map(strval(...), OpenApiMetaSchema::findings('openapi-3.2', committedArtifactGraph($path)));
 }
 
 it('publishes a UIR document that is a valid OpenAPI 3.2 document', function (string $path, array $expected): void {
-    expect(uirConformanceFindings($path)[0])->toBe($expected);
+    expect(uirConformanceFindings($path))->toBe($expected);
 })->with(conformanceSubjects());
-
-it('tolerates the use-site extension beside a shared response only while the corpus carries one', function (): void {
-    $tolerated = 0;
-    foreach (conformanceSubjects() as [$path]) {
-        $tolerated += count(uirConformanceFindings($path)[1]);
-    }
-
-    // 129 today, across 19 recorded documents. None means the tolerance above describes nothing and
-    // should go.
-    expect($tolerated)->toBeGreaterThan(0);
-});
 
 it('publishes an x-docuccino member that answers to the standalone extension schema', function (string $path): void {
     $document = committedArtifactGraph($path);
