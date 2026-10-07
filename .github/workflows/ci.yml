@@ -8,6 +8,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  # One run per pull request: a stack push fires `pull_request` twice for the same head (synchronize,
+  # and the base branch moving under it), and only the newest commit's verdict matters. Pushes to
+  # main are never cancelled, so every commit there keeps its own result.
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   quality:
     name: >-
