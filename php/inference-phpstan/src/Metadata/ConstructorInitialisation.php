@@ -16,14 +16,9 @@ use Throwable;
 
 /**
  * Whether the constructor a class runs assigns a typed property on every path that completes — what decides
- * whether `json_encode` writes its key. Read off the analyser's tracking of property initialisation at each
- * end of the constructor, so a branch, an early `return` or a never-returning call is judged as PHP runs it,
- * and a `$this->method()` the class declares is followed as the analyser follows it. A path that skips the
- * property is a proof only where nothing the analyser does not follow takes part in building the object
- * ({@see ConstructionEscape}); anything else is left unanswered. The analyser tracks a property only in the
- * constructor of the class declaring it, so a constructor that runs `parent::__construct()` on every
- * completing path ({@see ReachedStatements}) takes the parent constructor's answer, read the same way and
- * recursively, unless it assigns the property itself after the call.
+ * whether `json_encode` writes its key. Read off the analyser's initialisation tracking, through
+ * `parent::__construct()` where every completing path runs it: `docs/design/inference-embedding.md`
+ * §Which keys a constructed object always carries.
  *
  * @internal
  */
@@ -77,6 +72,11 @@ final class ConstructorInitialisation
         $statements = $body->getStatements();
         if (! $this->escape->dispatches($class, $declaring, $statements)) {
             return null;
+        }
+
+        // A path through an unset leaves the key out, whatever assigned it first.
+        if ($this->escape->unsets($class, $declaring, $property->getName(), $statements)) {
+            return false;
         }
 
         return $owner === $declaring->getName()
@@ -145,13 +145,12 @@ final class ConstructorInitialisation
             }
         }
 
-        $parent = $declaring->getParentClass();
-        $constructor = $parent === false ? null : $parent->getConstructor();
-        if ($call === null || $constructor === null) {
+        $parent = ReachedStatements::parentConstructorClass($declaring);
+        if ($call === null || $parent === null) {
             return null;
         }
 
-        $inherited = $this->ran($class, $constructor->getDeclaringClass(), $property);
+        $inherited = $this->ran($class, $parent, $property);
         if ($inherited !== false) {
             return $inherited;
         }

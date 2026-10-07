@@ -6,6 +6,7 @@ namespace Docuccino\Inference\PhpStan\Metadata;
 
 use PhpParser\Node;
 use PhpParser\NodeFinder;
+use ReflectionClass;
 
 /**
  * The top-level statements of a constructor that every path completing it runs: those before the first
@@ -50,6 +51,19 @@ final class ReachedStatements
             && $statement->expr->var->name->toString() === $name
             ? $statement->expr->expr
             : null;
+    }
+
+    /**
+     * The class declaring the constructor `parent::__construct()` runs, written in `$declaring`.
+     *
+     * @param  ReflectionClass<object>  $declaring
+     * @return ReflectionClass<object>|null
+     */
+    public static function parentConstructorClass(ReflectionClass $declaring): ?ReflectionClass
+    {
+        $parent = $declaring->getParentClass();
+
+        return $parent === false ? null : $parent->getConstructor()?->getDeclaringClass();
     }
 
     /** The call, where the statement is `parent::__construct(…);`. */

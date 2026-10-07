@@ -80,6 +80,26 @@ it('exempts the parent constructor answered for elsewhere and nothing else', fun
 ]);
 
 /*
+ * The analyser tracks no unset, so a path through one leaves out a key it reports assigned. Read in the
+ * constructor and in each helper it follows, by name or through a dynamic name that may be this one.
+ */
+it('says whether the constructor or a followed helper unsets the property', function (string $body, bool $unsets): void {
+    $probe = new ReflectionClass(EscapeProbe::class);
+
+    expect((new ConstructionEscape)->unsets($probe, $probe, 'title', escapeProbeBody($body)))->toBe($unsets);
+})->with([
+    'an unset by name' => ['unset($this->title);', true],
+    'one of several unset' => ['unset($this->type, $this->title);', true],
+    'an unset in a branch' => ['if (PHP_INT_SIZE > 4) { unset($this->title); }', true],
+    'a dynamic name' => ['unset($this->{"ti"."tle"});', true],
+    'a followed helper unsetting it' => ['$this->retract();', true],
+    'another property unset' => ['unset($this->type);', false],
+    'another object\'s member unset' => ['$x = new \\stdClass; unset($x->title);', false],
+    'a followed helper that only assigns' => ['$this->named();', false],
+    'nothing unset' => ['$this->title = "x";', false],
+]);
+
+/*
  * The analyser reads the constructor's class's own helper; a subclass that overrides it runs another body.
  * A private helper is never overridden, so its call runs the parent's whatever the subclass declares.
  */

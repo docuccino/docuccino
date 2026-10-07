@@ -44,6 +44,7 @@ it('answers whether every completing constructor path assigns the property', fun
     'a member assigned after the parent constructor' => ['ExplainedProblem', ['type' => true, 'title' => true, 'status' => true, 'detail' => true]],
     // A path that never runs the parent's constructor builds an object it says nothing about.
     'a parent constructor run in a branch' => ['DeferredProblem', ['type' => null, 'title' => null, 'status' => null, 'detail' => null]],
+    'a return ahead of the parent constructor' => ['EarlyReturnProblem', ['type' => null, 'title' => null, 'status' => null, 'detail' => null]],
     'a parent constructor that writes members by name' => ['LockedProblem', ['title' => null, 'detail' => null]],
     // The class being built overrides the helper the analysed constructor calls, so that body is not the one
     // PHP runs — while the class declaring it, built as itself, is answered as before.
@@ -58,6 +59,12 @@ it('answers whether every completing constructor path assigns the property', fun
     // nothing there — while what those paths do assign stays proved.
     'a dynamic write inside a helper' => ['FilledProblem', ['title' => null, 'status' => null]],
     'a parent constructor that assigns the subclass\'s members' => ['PaymentProblem', ['type' => true, 'title' => null, 'balance' => null]],
+    // What the parent assigns stays assigned — readonly cannot be written again — but a member its paths may
+    // skip can still be filled by name afterwards.
+    'a dynamic write after the parent constructor' => ['RefilledProblem', ['type' => true, 'title' => true, 'status' => true, 'detail' => null]],
+    // A member assigned on every path and then unset on one is left out on that one; the analyser tracks no unset.
+    'an unset after the parent constructor' => ['UntitledNotice', ['title' => false, 'detail' => true]],
+    'an unset after its own assignment' => ['RetractedNotice', ['title' => true, 'detail' => false]],
     // Only the class can run a private constructor, so its named constructors decide what an instance holds.
     'a named constructor assigning after a private one' => ['RateLimitProblem', ['title' => true, 'retryAfter' => null]],
 ])->group('fixture');

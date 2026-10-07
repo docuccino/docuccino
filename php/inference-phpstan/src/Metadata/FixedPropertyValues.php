@@ -26,8 +26,8 @@ use Throwable;
 /**
  * The value a property holds on every instance of its class, where PHP guarantees the class fixes it: a
  * readonly property a final class's constructor assigns once, from a literal — itself or through the
- * `parent::__construct()` it always runs — and that nothing its hierarchy declares can re-initialise on a copy. Rule, and what a source read cannot see, in full:
- * `docs/design/uir-and-extensions.md` §Discriminated unions.
+ * `parent::__construct()` it always runs — and that nothing its hierarchy declares can re-initialise on a
+ * copy. Rule, and what a source read cannot see, in full: `docs/design/uir-and-extensions.md` §Discriminated unions.
  *
  * @internal
  */
@@ -96,10 +96,9 @@ final class FixedPropertyValues
             }
 
             if (ReachedStatements::parentConstruct($statement) !== null) {
-                $parent = $declaring->getParentClass();
-                $inherited = $parent === false ? null : $parent->getConstructor();
+                $parent = ReachedStatements::parentConstructorClass($declaring);
 
-                return $inherited === null ? null : $this->assignedBy($inherited->getDeclaringClass(), $property);
+                return $parent === null ? null : $this->assignedBy($parent, $property);
             }
         }
 

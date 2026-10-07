@@ -18,14 +18,8 @@ use Throwable;
 
 /**
  * Whether anything the analyser does not follow may assign a property before a caller holds the object —
- * what makes a constructor path that skips it prove nothing. The analyser follows one level of
- * `$this->method()` into a method the constructor's class declares (its own or a trait's) and that the class
- * being built has not overridden, and nothing else: not a call made from inside that method, not
- * `self::`/`static::`/`parent::`, not `$this` handed on as an argument, aliased, used in a closure or written
- * through a dynamic `$this->{$name}`, not the property passed as an argument (it may be by reference). Any of
- * those, or a constructor only the class can call — whose named constructors then decide what an instance
- * holds — leaves the skip unproved. A `parent::__construct()` whose work the caller answers for separately is
- * the one call exempted, and then the property is an inherited one the analyser tracks no write to at all.
+ * what makes a constructor path that skips it prove nothing. What it follows, and what it does not:
+ * `docs/design/inference-embedding.md` §Which keys a constructed object always carries.
  *
  * @internal
  */
@@ -83,6 +77,40 @@ final class ConstructionEscape
             && $node->name instanceof Identifier
             && self::declares($declaring, $node->name->toString())
             && ! self::runs($class, $declaring, $node->name->toString())) === null;
+    }
+
+    /**
+     * Whether the statements, or a `$this->method()` of `$declaring`'s they call that a `$class` runs, unset
+     * the property — by name or through a dynamic `$this->{$name}`. The analyser tracks no unset.
+     *
+     * @param  ReflectionClass<object>  $class
+     * @param  ReflectionClass<object>  $declaring
+     * @param  array<Node>  $statements
+     */
+    public function unsets(ReflectionClass $class, ReflectionClass $declaring, string $property, array $statements): bool
+    {
+        $bodies = [$statements];
+        foreach ((new NodeFinder)->findInstanceOf($statements, Expr\MethodCall::class) as $call) {
+            if (self::isThis($call->var) && $call->name instanceof Identifier
+                && self::declares($declaring, $call->name->toString()) && self::runs($class, $declaring, $call->name->toString())
+            ) {
+                $bodies[] = $this->methodBody($declaring, $call->name->toString()) ?? [];
+            }
+        }
+
+        foreach ($bodies as $body) {
+            foreach ((new NodeFinder)->findInstanceOf($body, Node\Stmt\Unset_::class) as $unset) {
+                foreach ($unset->vars as $var) {
+                    if ($var instanceof Expr\PropertyFetch && self::isThis($var->var)
+                        && (! $var->name instanceof Identifier || $var->name->toString() === $property)
+                    ) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

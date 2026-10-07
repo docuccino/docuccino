@@ -690,6 +690,32 @@ The `casts()` **method** form (Laravel 11+) is not yet folded into the floor cas
 analysis, unlike the reflected `$casts` property) — tracked as AUDIT-eloquent gap #2 (separate M
 effort); the `$casts` property form is recovered today.
 
+### Which keys a constructed object always carries
+
+`json_encode` leaves out a typed property nothing assigned, so whether a response carries the key is
+whether every path that completes the constructor assigned it (`Metadata\ConstructorInitialisation`). The
+answer is read off PHPStan's tracking of property initialisation at each end of the constructor — so a
+branch, an early `return` or a never-returning call is judged as PHP runs it — and a path that throws
+builds no object, so it leaves nothing out.
+
+PHPStan tracks a property only in the constructor of the class DECLARING it. A constructor that runs
+`parent::__construct()` as a top-level statement nothing before it can `return`/`goto` past
+(`ReachedStatements`) takes the parent constructor's answer, read the same way and recursively, unless it
+assigns the property itself after the call. A call in a branch is not composed: nothing is claimed. PHPStan
+tracks no `unset()` either, so an unset of the property — in the constructor or a helper it follows, by name
+or through a dynamic `$this->{$name}` — answers that a path may leave it out.
+
+A skipping path is a proof only where nothing PHPStan does not follow takes part in building the object
+(`Metadata\ConstructionEscape`). It follows one level of `$this->method()` into a method the constructor's
+class declares (its own or a trait's) and that the class being built does not override, and nothing else:
+not a call made from inside that method, not `self::`/`static::`/`parent::`, not `$this` handed on as an
+argument, aliased, used in a closure or written through a dynamic `$this->{$name}`, not the property passed
+as an argument (it may be by reference). Any of those, or a constructor only the class can call — whose
+named constructors then decide what an instance holds — leaves the skip unproved. A composed
+`parent::__construct()` is the one call exempted; the property is then an inherited one PHPStan tracks no
+write to at that level, so any use of it there leaves the parent's skip unproved too. An analysed
+constructor whose helper the class being built overrides is not the body PHP runs, and is not answered.
+
 ## 6. Exception flow (3 layers)
 
 1. PHPStan throw points (free). **Noise rule (corrected): drop `!isExplicit()` points**
