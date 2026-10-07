@@ -18,6 +18,7 @@ use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
+use Docuccino\Core\Inference\TypeCondition;
 
 /**
  * What an engine hands back is a SERIALIZABLE model: every result crosses a process boundary as JSON
@@ -247,21 +248,27 @@ it('round-trips the parameter a return hands back and the calls proven at it, an
             new CallCondition('request', 'is', ['api/*', 'hooks/*'], false),
             new CallCondition('response', 'getStatusCode', [], 419),
         ],
+        typeConditions: [
+            new TypeCondition('response', 'Illuminate\\Http\\JsonResponse', false),
+            new TypeCondition('e', 'RuntimeException', true),
+        ],
     );
     $payload = $site->toArray();
 
     expect(ReturnSite::fromArray($payload)->toArray())->toBe($payload)
         ->and(ReturnSite::fromArray($payload)->conditions[1]->value)->toBe(419)
+        ->and(ReturnSite::fromArray($payload)->typeConditions)->toEqual($site->typeConditions)
         // Absent keys, not empty ones, so an analysis carrying neither serializes as it always did.
         ->and((new ReturnSite(ScalarT::string(), new SourceLocation('')))->toArray())->toBe(['type' => ScalarT::string()->toArray(), 'location' => (new SourceLocation(''))->toArray()]);
 });
 
 it('carries both facts onto a declaration made further out on the call path', function (): void {
-    $site = new ReturnSite(ScalarT::string(), new SourceLocation('/app/x.php', 3), returnsParameter: 'response', conditions: [new CallCondition('request', 'is', ['api/*'], true)]);
+    $site = new ReturnSite(ScalarT::string(), new SourceLocation('/app/x.php', 3), returnsParameter: 'response', conditions: [new CallCondition('request', 'is', ['api/*'], true)], typeConditions: [new TypeCondition('response', 'Illuminate\\Http\\JsonResponse', true)]);
     $moved = $site->withComponent(new ComponentDeclaration('Problem', 'App\\Renderer::render'));
 
     expect($moved->returnsParameter)->toBe('response')
-        ->and($moved->conditions)->toBe($site->conditions);
+        ->and($moved->conditions)->toBe($site->conditions)
+        ->and($moved->typeConditions)->toBe($site->typeConditions);
 });
 
 it('degrades a malformed call condition around the members it can still read', function (): void {
@@ -269,6 +276,13 @@ it('degrades a malformed call condition around the members it can still read', f
     $decoded = CallCondition::fromArray(['parameter' => 1, 'method' => [], 'arguments' => ['api/*', 3], 'value' => ['x']]);
 
     expect($decoded->toArray())->toBe(['parameter' => '1', 'method' => '', 'arguments' => ['api/*'], 'value' => false]);
+});
+
+it('degrades a malformed type condition around the members it can still read', function (): void {
+    // Only a real `true` holds: a truthy string is not a proof the parameter is an instance.
+    $decoded = TypeCondition::fromArray(['parameter' => 1, 'class' => [], 'value' => 'yes']);
+
+    expect($decoded->toArray())->toBe(['parameter' => '1', 'class' => '', 'value' => false]);
 });
 
 it('keys a callable analysed for every reachable return apart from one analysed for the first', function (): void {

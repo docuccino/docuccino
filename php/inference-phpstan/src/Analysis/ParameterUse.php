@@ -7,6 +7,7 @@ namespace Docuccino\Inference\PhpStan\Analysis;
 use Docuccino\Core\Inference\CallCondition;
 use Docuccino\Core\Inference\LocalWrites;
 use Docuccino\Core\Inference\ReturnSite;
+use Docuccino\Core\Inference\TypeCondition;
 use Docuccino\Inference\PhpStan\Support\SourceOrder;
 use PhpParser\Node;
 use PhpParser\NodeFinder;
@@ -14,8 +15,8 @@ use PHPStan\Analyser\Scope;
 
 /**
  * Reads what a callable body does with its own parameters: which parameter a return hands back unchanged
- * ({@see ReturnSite::$returnsParameter}), and which literal-argument calls on a parameter a return's scope
- * proves. How "unchanged" is judged is in docs/design/inference-embedding.md §4b.
+ * ({@see ReturnSite::$returnsParameter}), and which literal-argument calls on a parameter, and which
+ * `instanceof` tests of one, a return's scope proves. How "unchanged" is judged is in docs/design/inference-embedding.md §4b.
  *
  * @internal
  */
@@ -102,6 +103,59 @@ final class ParameterUse
             $values = $scope->getType($call)->getConstantScalarValues();
             if (count($values) === 1 && $values[0] !== null) {
                 $conditions[] = new CallCondition($parameter, $call->name->toString(), $arguments, $values[0]);
+            }
+        }
+
+        return $conditions;
+    }
+
+    /**
+     * Every `instanceof` test of a parameter against a named class — the other kind of question a return
+     * site's scope can answer outright. Source order, one per distinct parameter and class.
+     *
+     * @param  list<string>  $parameters
+     * @param  list<Node>  $body
+     * @return list<Node\Expr\Instanceof_>
+     */
+    public static function typeTests(array $parameters, array $body): array
+    {
+        $tests = [];
+        foreach ((new NodeFinder)->findInstanceOf($body, Node\Expr\Instanceof_::class) as $test) {
+            if (! $test->expr instanceof Node\Expr\Variable
+                || ! is_string($test->expr->name)
+                || ! in_array($test->expr->name, $parameters, true)
+                || ! $test->class instanceof Node\Name
+            ) {
+                continue;
+            }
+
+            $tests[$test->expr->name."\0".$test->class->toLowerString()] ??= $test;
+        }
+
+        $tests = array_values($tests);
+        usort($tests, static fn (Node\Expr\Instanceof_ $a, Node\Expr\Instanceof_ $b): int => SourceOrder::of($a) <=> SourceOrder::of($b));
+
+        return $tests;
+    }
+
+    /**
+     * What `$scope` proves about each test: the ones it types as exactly true or exactly false. However the
+     * guard is spelled — negated, parenthesised, turned around, a ternary — the scope it leaves is the answer.
+     *
+     * @param  list<Node\Expr\Instanceof_>  $tests  from {@see typeTests()}
+     * @return list<TypeCondition>
+     */
+    public static function typeConditionsAt(Scope $scope, array $tests): array
+    {
+        $conditions = [];
+        foreach ($tests as $test) {
+            if (! $test->expr instanceof Node\Expr\Variable || ! is_string($test->expr->name) || ! $test->class instanceof Node\Name) {
+                continue;
+            }
+
+            $answer = $scope->getType($test);
+            if ($answer->isTrue()->yes() || $answer->isFalse()->yes()) {
+                $conditions[] = new TypeCondition($test->expr->name, $scope->resolveName($test->class), $answer->isTrue()->yes());
             }
         }
 

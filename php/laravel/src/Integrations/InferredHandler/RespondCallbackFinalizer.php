@@ -22,7 +22,10 @@ use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
  */
 final class RespondCallbackFinalizer implements ErrorResponseFinalizer
 {
-    public function __construct(private readonly HandlerReflector $reflector) {}
+    public function __construct(
+        private readonly HandlerReflector $reflector,
+        private readonly ExceptionRenderers $renderers,
+    ) {}
 
     public function producer(): string
     {
@@ -133,11 +136,13 @@ final class RespondCallbackFinalizer implements ErrorResponseFinalizer
             return ['finalization' => Finalization::Keeps, 'unread' => true] + $plan;
         }
 
+        $sent = RenderedResponse::of($exception, $rendered, $this->renderers);
+
         $echoes = false;
         $rewrites = [];
         $statuses = [];
         foreach ($analysis->returns as $site) {
-            if (! RespondConditions::reachable($site->conditions, $callback, $context, $rendered)) {
+            if (! RespondConditions::reachable([...$site->conditions, ...$site->typeConditions], $callback, $context, $rendered, $sent)) {
                 continue;
             }
 

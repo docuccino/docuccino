@@ -500,7 +500,11 @@ parameter at each non-`match` site decides reachability too, since after `if ($e
 it says "anything but an A", which no guard of required classes spells. Each site also carries the
 parameter it returns unchanged (`ReturnSite::$returnsParameter`) and the literal-argument parameter calls
 whose value the site's scope proves (`CallCondition`; PHPStan remembers `$request->is('api/*')` narrowed
-inside the branch that tested it). What a call MEANS stays the adapter's.
+inside the branch that tested it), and the `instanceof` tests of a parameter the scope answers outright
+(`TypeCondition`; `$response instanceof JsonResponse` is false behind `if (! $response instanceof
+JsonResponse) return $response;` however the guard is spelled). What a call MEANS, and what class the
+parameter holds at run time, stay the adapter's. A `match` arm is read in the return's own scope, which has
+narrowed nothing, so a guard spelled as an arm condition proves neither kind of fact.
 
 An exception MAPPER (`$exceptions->map()`) is read with `CallableRef::$returnsExceptions`: the sites are
 harvested exactly as for a post-processor, and each one that does not hand the parameter back is also read

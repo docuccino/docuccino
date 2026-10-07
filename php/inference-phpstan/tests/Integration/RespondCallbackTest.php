@@ -8,6 +8,7 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\ReturnSite;
+use Docuccino\Core\Inference\TypeCondition;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 
 /**
@@ -138,6 +139,33 @@ it('reads a pass-through that only adds a header as unchanged, and one that rety
     // The helper sets the media type and the body on the very object returned, so it is not unchanged.
     'handed to a helper that rewrites it' => ['decoratedInPlace', null],
 ])->group('fixture');
+
+it('proves the class a guard on the rendered response tests, however the guard is spelled', function (string $method, string $class, bool $rewriteFirst, string $echoed): void {
+    $facts = array_map(static fn (ReturnSite $site): array => [
+        'type' => $site->type instanceof ClassT ? $site->type->fqcn : $site->type->kind(),
+        'echoes' => $site->returnsParameter,
+        'typeConditions' => array_map(static fn (TypeCondition $c): array => $c->toArray(), $site->typeConditions),
+    ], respondReturns($method, 'Illuminate\\Auth\\AuthenticationException'));
+
+    $test = static fn (bool $holds): array => [['parameter' => 'response', 'class' => $class, 'value' => $holds]];
+    $rewrite = ['type' => 'Illuminate\\Http\\JsonResponse', 'echoes' => null, 'typeConditions' => $test($class === 'Illuminate\\Http\\JsonResponse')];
+    $echo = ['type' => $echoed, 'echoes' => 'response', 'typeConditions' => $test($class !== 'Illuminate\\Http\\JsonResponse')];
+
+    // Source order: the early return's pass-through comes first, a ternary's and a turned-around guard's last.
+    expect($facts)->toBe($rewriteFirst ? [$rewrite, $echo] : [$echo, $rewrite]);
+})->with([
+    'a negated guard returning early' => ['jsonGuarded', 'Illuminate\\Http\\JsonResponse', false, 'Symfony\\Component\\HttpFoundation\\Response'],
+    'the guard turned around' => ['jsonGuardedReversed', 'Illuminate\\Http\\JsonResponse', true, 'Symfony\\Component\\HttpFoundation\\Response'],
+    'the guard as a ternary' => ['jsonGuardedTernary', 'Illuminate\\Http\\JsonResponse', true, 'Symfony\\Component\\HttpFoundation\\Response'],
+    // Handed back where it IS the class tested, so its type is that class.
+    'a parenthesised negation of another class' => ['redirectGuarded', 'Illuminate\\Http\\RedirectResponse', true, 'Illuminate\\Http\\RedirectResponse'],
+])->group('fixture');
+
+it('records no class fact where the callback tests none', function (string $method): void {
+    foreach (respondReturns($method, 'Illuminate\\Auth\\AuthenticationException') as $site) {
+        expect($site->typeConditions)->toBe([]);
+    }
+})->with(['pathGated', 'earlyReturn', 'everywhere'])->group('fixture');
 
 it('reads the response a catch hands back after a helper that threw as not the one it was handed', function (): void {
     $facts = array_map(respondFacts(...), respondReturns('reshapedElseHandedBack', 'Illuminate\\Auth\\AuthenticationException'));

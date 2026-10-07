@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Inference\CallCondition;
+use Docuccino\Core\Inference\TypeCondition;
 use Docuccino\Inference\PhpStan\Analysis\ParameterUse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -246,4 +247,44 @@ it('states what a scope proves about each call as the one constant it answers', 
     'not proven' => [new BooleanType, null],
     'one of two' => [new UnionType([new ConstantIntegerType(419), new ConstantIntegerType(503)]), null],
     'a null, which states nothing' => [new NullType, null],
+]);
+
+it('collects the instanceof tests of a parameter against a named class, once each, in source order', function (): void {
+    [, $parameters, $body] = parameterUseBody(<<<'PHP'
+        if (! $response instanceof \Illuminate\Http\JsonResponse) { return $response; }
+        if ($e instanceof \RuntimeException || ! ($response instanceof \Illuminate\Http\JsonResponse)) { return $response; }
+        if ($local instanceof \Illuminate\Http\RedirectResponse) { return $response; }
+        if ($response instanceof $class) { return $response; }
+        if ($response->headers instanceof \Countable) { return $response; }
+        return $response instanceof \Illuminate\Http\RedirectResponse ? $response : back();
+    PHP);
+
+    $tests = array_map(
+        static fn (Node\Expr\Instanceof_ $test): string => ($test->expr instanceof Node\Expr\Variable && is_string($test->expr->name) ? $test->expr->name : '?')
+            .' instanceof '.($test->class instanceof Node\Name ? $test->class->toString() : '?'),
+        ParameterUse::typeTests($parameters, $body),
+    );
+
+    // Not a local, not a class held in a variable, not a value reached through the parameter.
+    expect($tests)->toBe([
+        'response instanceof Illuminate\\Http\\JsonResponse',
+        'e instanceof RuntimeException',
+        'response instanceof Illuminate\\Http\\RedirectResponse',
+    ]);
+});
+
+it('states what a scope proves about each instanceof test as the one boolean it answers', function (Type $type, ?bool $value): void {
+    [, $parameters, $body] = parameterUseBody('if (! $response instanceof JsonResponse) { return $response; } return $response;');
+    $tests = ParameterUse::typeTests($parameters, $body);
+
+    $scope = $this->createStub(Scope::class);
+    $scope->method('getType')->willReturn($type);
+    $scope->method('resolveName')->willReturn(JsonResponse::class);
+
+    expect(array_map(static fn (TypeCondition $c): array => $c->toArray(), ParameterUse::typeConditionsAt($scope, $tests)))
+        ->toBe($value === null ? [] : [['parameter' => 'response', 'class' => JsonResponse::class, 'value' => $value]]);
+})->with([
+    'proven an instance' => [new ConstantBooleanType(true), true],
+    'proven not one' => [new ConstantBooleanType(false), false],
+    'not proven' => [new BooleanType, null],
 ]);
