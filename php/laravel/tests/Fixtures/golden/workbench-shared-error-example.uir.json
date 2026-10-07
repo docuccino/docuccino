@@ -150,15 +150,7 @@
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\SharedErrors\\PortalController::exports"
                     }
                   }
-                ],
-                "facts": {
-                  "examplePlaceholders": {
-                    "application/problem+json": [
-                      "detail",
-                      "type"
-                    ]
-                  }
-                }
+                ]
               }
             }
           }
@@ -385,7 +377,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "f293fa220039c0ec0171707c0a71005caeca4a4c3744861b9c14b0c55021df00"
+      "contentHash": "2b3967533e983273122b404b212c113d7584875ccc1630a8dafcfd8689feb3ae"
     },
     "generator": {
       "name": "docuccino/laravel",

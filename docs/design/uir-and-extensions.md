@@ -660,6 +660,13 @@ asked for something else, so where a claim did not land — a collision, a name 
 response offering several representations — the use carries `facts.claimedComponent` with the name it
 asked for, and only then.
 
+The two facts that travel with a claim follow it. `componentDescription` leaves a use whose sentence the
+schema publishes and stays as `claimedComponentDescription` where it does not — claimers that disagreed
+leave the schema with none. `examplePlaceholders`, the members of an example filled from a declared type,
+is about the example, so once the example is the component's the list is too: on the shared response,
+keyed by `example` or by the key in its `examples` map, holding only what every arm publishing those
+bytes filled.
+
 ### Shared error components
 
 `Extensions\BuiltIn\SharedErrorResponses` collapses a repeated 4xx/5xx body, in two passes whose

@@ -47,6 +47,11 @@ The extension spec is 2.1 (`x-docuccino.generator.specVersion`, served at
   its `$ref` points at, and in the cases where they differed it was the name the use had asked for rather
   than the one it got. The `$ref` now answers which component a use resolves to, and
   `facts.claimedComponent` appears only where a claim did not land, with the name that was asked for.
+- **The same goes for `facts.componentDescription`:** it leaves a use whose sentence the shared schema
+  publishes, and stays as `facts.claimedComponentDescription` where it does not.
+- **`facts.examplePlaceholders` moves to the shared response component**, keyed by the example it
+  describes — `example`, or the key in an `examples` map — because that is where the example is
+  published. A use of a shared response no longer carries it.
 
 ### Code that calls the spec checks
 
