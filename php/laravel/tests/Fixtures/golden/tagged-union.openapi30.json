@@ -90,22 +90,32 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "oneOf": [
+                  "anyOf": [
                     {
-                      "$ref": "#/components/schemas/ImageAttachment"
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/ImageAttachment"
+                        },
+                        {
+                          "$ref": "#/components/schemas/LinkAttachment"
+                        }
+                      ],
+                      "discriminator": {
+                        "mapping": {
+                          "image": "#/components/schemas/ImageAttachment",
+                          "link": "#/components/schemas/LinkAttachment"
+                        },
+                        "propertyName": "kind"
+                      }
                     },
                     {
-                      "$ref": "#/components/schemas/LinkAttachment"
+                      "type": "object",
+                      "enum": [
+                        null
+                      ],
+                      "nullable": true
                     }
-                  ],
-                  "discriminator": {
-                    "mapping": {
-                      "image": "#/components/schemas/ImageAttachment",
-                      "link": "#/components/schemas/LinkAttachment"
-                    },
-                    "propertyName": "kind"
-                  },
-                  "nullable": true
+                  ]
                 }
               }
             }

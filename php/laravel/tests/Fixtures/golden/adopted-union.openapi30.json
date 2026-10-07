@@ -89,9 +89,15 @@
                       {
                         "type": "object",
                         "maxProperties": 0
+                      },
+                      {
+                        "type": "object",
+                        "enum": [
+                          null
+                        ],
+                        "nullable": true
                       }
-                    ],
-                    "nullable": true
+                    ]
                   },
                   "note": {
                     "description": "Shown beside the answer.",
@@ -233,9 +239,15 @@
               {
                 "type": "object",
                 "maxProperties": 0
+              },
+              {
+                "type": "object",
+                "enum": [
+                  null
+                ],
+                "nullable": true
               }
-            ],
-            "nullable": true
+            ]
           },
           "note": {
             "type": "string",
@@ -252,12 +264,18 @@
         "type": "object",
         "properties": {
           "answer": {
-            "allOf": [
+            "anyOf": [
               {
                 "$ref": "#/components/schemas/Answer"
+              },
+              {
+                "type": "object",
+                "enum": [
+                  null
+                ],
+                "nullable": true
               }
-            ],
-            "nullable": true
+            ]
           }
         },
         "required": [
