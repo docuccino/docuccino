@@ -87,8 +87,9 @@ it('states the corpus size wherever the product quotes it', function (): void {
         $text = (string) file_get_contents(dirname(__DIR__, 2).'/'.$relPath);
         $stated = [];
         // Only the phrasings that name THIS corpus: §6c's "115 actions across ... every modular
-        // controller" is a different denominator and says so.
-        preg_match_all('/(\d+) (?:throw actions|actions on two controllers)/', $text, $found);
+        // controller" is a different denominator and says so. Any whitespace between the words, because
+        // prose wraps: a phrasing broken across two lines is still quoting the corpus.
+        preg_match_all('/(\d+)\s+(?:throw\s+actions|actions\s+on\s+two\s+controllers)/', $text, $found);
         foreach ($found[1] as $number) {
             $stated[] = (int) $number;
         }

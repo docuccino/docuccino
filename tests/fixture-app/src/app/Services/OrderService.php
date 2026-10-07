@@ -17,6 +17,7 @@ use RuntimeException;
  *
  * Both call reserve() (a second level) which throws RuntimeException with no
  * @throws, so the deepest exception is only recoverable by descending 2 levels.
+ * placeLeniently() is place() with that second level caught.
  */
 class OrderService
 {
@@ -47,6 +48,23 @@ class OrderService
         }
 
         $this->reserve($productId, $qty);
+    }
+
+    /**
+     * The same body again, with the second level's failure caught here and
+     * reported rather than let out — so only OutOfStockException escapes.
+     */
+    public function placeLeniently(int $productId, int $qty): void
+    {
+        if ($qty <= 0) {
+            throw new OutOfStockException('nothing to place');
+        }
+
+        try {
+            $this->reserve($productId, $qty);
+        } catch (RuntimeException $e) {
+            report($e);
+        }
     }
 
     /**

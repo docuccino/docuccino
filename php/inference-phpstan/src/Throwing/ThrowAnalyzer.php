@@ -20,7 +20,6 @@ use PhpParser\Node;
 use PHPStan\Analyser\Scope;
 use PHPStan\Node\ClosureReturnStatementsNode;
 use PHPStan\Node\MethodReturnStatementsNode;
-use PHPStan\Node\ReturnStatementsNode;
 use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\Type\Constant\ConstantIntegerType;
 use PHPStan\Type\NeverType;
@@ -39,6 +38,9 @@ use Throwable;
  *      RESOLVED callee, so a name-keyed guess never overrules a body we can read ({@see applyRegistry}).
  *   3. Bounded descent (depth 3) into project callees with no `@throws`, cycle-guarded. The vendor-file
  *      gate, not depth, does the real containment.
+ *
+ * Every layer drops what a `catch` on the path takes, read off the source ({@see EnclosingCatches}) rather
+ * than off a point's type, which for an undeclared call differs by PHPStan minor.
  *
  * A status comes from {@see KnownThrowers} where a name-keyed entry has one, and otherwise from what an
  * `HttpException` subclass sets on itself ({@see HttpExceptionStatus}) or, for a class that sets none, from
@@ -108,7 +110,7 @@ final class ThrowAnalyzer
         $this->unreadStatuses = new UnreadStatuses;
         $this->skippedDescents = new SkippedDescents($this->declaredFilter);
 
-        $raw = $this->analyzeMethod($node, $node->getStatements(), $selfLabel, 0, [], []);
+        $raw = $this->analyzeMethod($node, $selfLabel, 0, [], [], []);
 
         return $this->deduped($raw);
     }
@@ -175,22 +177,24 @@ final class ThrowAnalyzer
     }
 
     /**
-     * @param  array<Node\Stmt>  $body  the statements `$methodNode` is the result of
+     * `$caught` is every class a `catch` on the path here names — the catches around each call descended
+     * through, and around each closure's call — since what this body raises reaches those catches first.
+     *
      * @param  list<string>  $visited
      * @param  list<Frame>  $priorChain
+     * @param  list<string>  $caught
      * @return list<ThrownException>
      */
     private function analyzeMethod(
-        ReturnStatementsNode $methodNode,
-        array $body,
+        MethodReturnStatementsNode|ClosureReturnStatementsNode $methodNode,
         string $selfLabel,
         int $depth,
         array $visited,
         array $priorChain,
+        array $caught,
     ): array {
         $results = [];
-        $tries = CatchSites::in($body);
-        /** @var array<string, true> $pointed calls with a throw point of their own, by {@see CatchSites::key()} */
+        /** @var array<string, true> $pointed calls with a throw point of their own, by start and end offset */
         $pointed = [];
 
         foreach ($methodNode->getStatementResult()->getThrowPoints() as $throwPoint) {
@@ -204,16 +208,18 @@ final class ThrowAnalyzer
                 continue;
             }
 
-            $pointed[CatchSites::key($node)] = true;
+            $pointed[$node->getStartFilePos().':'.$node->getEndFilePos()] = true;
+
             $scope = $this->fileAnalyzer->stableScope($throwPoint->getScope());
             $explicit = $throwPoint->isExplicit();
             $calleeName = $this->calleeResolver->name($node);
             $callee = $this->calleeResolver->resolve($node, $scope);
             $frame = $this->frame($selfLabel, $scope, $node);
+            $caughtHere = [...$caught, ...$this->catchesAround($methodNode, $node, $scope)];
 
             // Layer 3': a closure handed to the callee. Ahead of the layers because they each `continue`,
             // and because the callee's own answer says nothing about what the closure it runs throws.
-            foreach ($this->applyClosures($node, $scope, $selfLabel, $depth, $visited, $priorChain, $frame, $tries->around($node)) as $result) {
+            foreach ($this->applyClosures($node, $scope, $selfLabel, $depth, $visited, $priorChain, $frame, $caughtHere) as $result) {
                 $results[] = $result;
             }
 
@@ -231,16 +237,18 @@ final class ThrowAnalyzer
             }
 
             // Layer 2: KnownThrowers registry, keyed on the callee name — for callees we cannot read.
-            $registryResult = $this->applyRegistry($calleeName, $callee, $node, $scope, $type, $explicit, $priorChain, $frame);
-            if ($registryResult !== null) {
-                $results[] = $registryResult;
+            $registryResults = $this->applyRegistry($calleeName, $callee, $node, $scope, $type, $explicit, $priorChain, $frame, $caughtHere);
+            if ($registryResults !== null) {
+                foreach ($registryResults as $result) {
+                    $results[] = $result;
+                }
 
                 continue;
             }
 
             // Layer 1: explicit concrete type (literal throw, @throws, stub).
             if ($explicit && ! $this->isBareThrowable($type)) {
-                foreach ($this->applyExplicit($callee, $node, $scope, $type, $priorChain, $frame) as $result) {
+                foreach ($this->applyExplicit($callee, $node, $scope, $type, $priorChain, $frame, $caughtHere) as $result) {
                     $results[] = $result;
                 }
 
@@ -249,7 +257,7 @@ final class ThrowAnalyzer
 
             // Layer 3: implicit bare Throwable — descend, or drop it as noise.
             if (! $explicit) {
-                foreach ($this->applyDescent($callee, $depth, $visited, $priorChain, $frame) ?? [] as $result) {
+                foreach ($this->applyDescent($callee, $depth, $visited, $priorChain, $frame, $caughtHere) ?? [] as $result) {
                     $results[] = $result;
                 }
             }
@@ -257,13 +265,13 @@ final class ThrowAnalyzer
 
         // Layer 3' again, for a call inside a `try` that has no point of its own to carry it.
         $scope = $this->fileAnalyzer->stableScope($methodNode->getStatementResult()->getScope());
-        foreach ($tries->guarded() as $call) {
-            if (isset($pointed[CatchSites::key($call)])) {
+        foreach (EnclosingCatches::guardedCalls($methodNode) as $call) {
+            if (isset($pointed[$call->getStartFilePos().':'.$call->getEndFilePos()])) {
                 continue;
             }
 
-            $frame = $this->frame($selfLabel, $scope, $call);
-            foreach ($this->applyClosures($call, $scope, $selfLabel, $depth, $visited, $priorChain, $frame, $tries->around($call)) as $result) {
+            $caughtHere = [...$caught, ...$this->catchesAround($methodNode, $call, $scope)];
+            foreach ($this->applyClosures($call, $scope, $selfLabel, $depth, $visited, $priorChain, $this->frame($selfLabel, $scope, $call), $caughtHere) as $result) {
                 $results[] = $result;
             }
         }
@@ -273,6 +281,8 @@ final class ThrowAnalyzer
 
     /**
      * @param  list<Frame>  $priorChain
+     * @param  list<string>  $caught
+     * @return list<ThrownException>|null null where the registry has no say, empty where a catch took its answer
      */
     private function applyRegistry(
         ?string $calleeName,
@@ -283,7 +293,8 @@ final class ThrowAnalyzer
         bool $explicit,
         array $priorChain,
         Frame $frame,
-    ): ?ThrownException {
+        array $caught,
+    ): ?array {
         if ($calleeName === null) {
             return null;
         }
@@ -307,6 +318,10 @@ final class ThrowAnalyzer
             return null;
         }
 
+        if ($this->isCaught($thrower->exceptionFqcn, $caught)) {
+            return [];
+        }
+
         // The registry answers null for one entry shape only — one that folds its status from an argument
         // ({@see KnownThrower}'s two constructors leave a fixed-status entry nothing to fail at) — so that
         // fold is the reason, and the file the fold READ is what says whether anyone can act on it — the
@@ -321,13 +336,13 @@ final class ThrowAnalyzer
         // Certain when PHPStan corroborated the same concrete type; likely when we rescued a bare-Throwable.
         $corroborated = $explicit && in_array($thrower->exceptionFqcn, $type->getObjectClassNames(), true);
 
-        return new ThrownException(
+        return [new ThrownException(
             $thrower->exceptionFqcn,
             $read,
             [...$priorChain, $frame],
             $corroborated ? ThrowConfidence::Certain : ThrowConfidence::Likely,
             ThrowDisposition::Signal,
-        );
+        )];
     }
 
     /**
@@ -375,6 +390,7 @@ final class ThrowAnalyzer
 
     /**
      * @param  list<Frame>  $priorChain
+     * @param  list<string>  $caught
      * @return list<ThrownException>
      */
     private function applyExplicit(
@@ -384,6 +400,7 @@ final class ThrowAnalyzer
         Type $type,
         array $priorChain,
         Frame $frame,
+        array $caught,
     ): array {
         // php-parser v5 models `throw` only as an expression.
         $isLiteral = $node instanceof Node\Expr\Throw_;
@@ -405,6 +422,10 @@ final class ThrowAnalyzer
 
         $results = [];
         foreach ($this->concreteClasses($type) as $class) {
+            if ($this->isCaught($class, $caught)) {
+                continue;
+            }
+
             $resolution = $this->statusForType($class, $callee, $node, $scope, $frame);
             $results[] = new ThrownException(
                 $class,
@@ -421,6 +442,7 @@ final class ThrowAnalyzer
     /**
      * @param  list<string>  $visited
      * @param  list<Frame>  $priorChain
+     * @param  list<string>  $caught
      * @return list<ThrownException>|null null when there is nothing to descend into
      */
     private function applyDescent(
@@ -429,6 +451,7 @@ final class ThrowAnalyzer
         array $visited,
         array $priorChain,
         Frame $frame,
+        array $caught,
     ): ?array {
         // Depth first, and that ORDER is the notice's actionability below: a hop the budget would have
         // stopped at anyway is not one widening the scope recovers, so it must not be reported as one.
@@ -468,11 +491,11 @@ final class ThrowAnalyzer
 
         return $this->analyzeMethod(
             $childNode,
-            $childNode->getStatements(),
             $childLabel,
             $depth + 1,
             [...$visited, $key],
             [...$priorChain, $frame],
+            $caught,
         );
     }
 
@@ -491,12 +514,9 @@ final class ThrowAnalyzer
      * written in the body the analysis is already reading, and refusing it would drop a real error from a
      * route whose action a package happens to ship.
      *
-     * The catches around the call are in force over what the closure throws, which PHPStan cannot apply:
-     * the closure's points belong to the closure's own body, not to the `try` the call sits in.
-     *
      * @param  list<string>  $visited
      * @param  list<Frame>  $priorChain
-     * @param  list<Node\Stmt\Catch_>  $catches
+     * @param  list<string>  $caught
      * @return list<ThrownException>
      */
     private function applyClosures(
@@ -507,7 +527,7 @@ final class ThrowAnalyzer
         array $visited,
         array $priorChain,
         Frame $frame,
-        array $catches,
+        array $caught,
     ): array {
         if ($depth >= $this->maxDepth
             || ! $node instanceof Node\Expr\CallLike
@@ -530,39 +550,17 @@ final class ThrowAnalyzer
             // has already descended into, which is what that list is.
             foreach ($this->analyzeMethod(
                 $closure,
-                $closure->getClosureExpr()->stmts,
                 $selfLabel.'::{closure}',
                 $depth + 1,
                 $visited,
                 [...$priorChain, $frame],
+                $caught,
             ) as $result) {
-                if (! $this->caught($result->exceptionFqcn, $catches, $scope)) {
-                    $results[] = $result;
-                }
+                $results[] = $result;
             }
         }
 
         return $results;
-    }
-
-    /**
-     * Whether one of the catches takes the class. A class the analyser cannot place is not taken: keeping a
-     * response a catch might have stopped is the vaguer claim, dropping one it did not is the false one.
-     *
-     * @param  list<Node\Stmt\Catch_>  $catches
-     */
-    private function caught(string $fqcn, array $catches, Scope $scope): bool
-    {
-        $thrown = new ObjectType($fqcn);
-        foreach ($catches as $catch) {
-            foreach ($catch->types as $type) {
-                if ((new ObjectType($scope->resolveName($type)))->isSuperTypeOf($thrown)->yes()) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     /** The harvested closure one argument is — written at the call, or held in a local behind it. */
@@ -573,6 +571,46 @@ final class ThrowAnalyzer
         return $written instanceof Node\Expr\Closure
             ? ($this->fileAnalyzer->closures($scope->getFile())[$written->getStartFilePos()] ?? null)
             : null;
+    }
+
+    /**
+     * The classes the catches around one throw point name, resolved where they are written
+     * ({@see EnclosingCatches}).
+     *
+     * @return list<string>
+     */
+    private function catchesAround(MethodReturnStatementsNode|ClosureReturnStatementsNode $body, Node $node, Scope $scope): array
+    {
+        return array_map(
+            static fn (Node\Name $name): string => $scope->resolveName($name),
+            EnclosingCatches::of($body, $node),
+        );
+    }
+
+    /**
+     * Whether a catch on the path takes every instance of `$fqcn` — PHP's own rule, an instance of a class
+     * the catch names. A class either side of the test this build cannot reflect takes nothing, so an
+     * exception it cannot place is kept rather than dropped: a catch NARROWER than the thrown class takes
+     * only some of its instances, and the rest still leave.
+     *
+     * @param  list<string>  $caught
+     */
+    private function isCaught(string $fqcn, array $caught): bool
+    {
+        if ($caught === [] || ! $this->reflectionProvider->hasClass($fqcn)) {
+            return false;
+        }
+
+        $thrown = $this->reflectionProvider->getClass($fqcn);
+        foreach ($caught as $class) {
+            if ($this->reflectionProvider->hasClass($class)
+                && $thrown->is($this->reflectionProvider->getClass($class)->getName())
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
