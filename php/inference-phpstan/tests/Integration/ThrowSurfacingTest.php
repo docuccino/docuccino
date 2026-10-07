@@ -36,6 +36,11 @@ it('surfaces exactly the expected API errors', function (string $method, array $
     // class at all, and a declaring callee is not descended for what it might throw besides — doing so
     // publishes the very exceptions the action turns into a 200.
     'caught across a declaring call' => ['tryCatchDeclared', ['RuntimeException@500']],
+    // The catch takes what the callee declares and nothing its closure argument throws: the closure is
+    // the action's own code, read whatever became of the call's declared classes.
+    'caught declaring call, closure argument escapes' => ['tryCatchDeclaredClosure', ['OutOfStockException@500', 'RuntimeException@500']],
+    // …and the catch is in force over the closure all the same: what it takes is not published.
+    'caught inside a closure argument' => ['tryCatchClosure', ['RuntimeException@500']],
     // The registry is keyed on a bare method name, so an app's own validate() is exactly where a guess
     // could overrule a truth: the callee is project code we read, so its own exception stands and no
     // ValidationException/422 is invented for it.

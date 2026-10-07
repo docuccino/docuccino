@@ -108,7 +108,7 @@ final class ThrowAnalyzer
         $this->unreadStatuses = new UnreadStatuses;
         $this->skippedDescents = new SkippedDescents($this->declaredFilter);
 
-        $raw = $this->analyzeMethod($node, $selfLabel, 0, [], []);
+        $raw = $this->analyzeMethod($node, $node->getStatements(), $selfLabel, 0, [], []);
 
         return $this->deduped($raw);
     }
@@ -175,30 +175,36 @@ final class ThrowAnalyzer
     }
 
     /**
+     * @param  array<Node\Stmt>  $body  the statements `$methodNode` is the result of
      * @param  list<string>  $visited
      * @param  list<Frame>  $priorChain
      * @return list<ThrownException>
      */
     private function analyzeMethod(
         ReturnStatementsNode $methodNode,
+        array $body,
         string $selfLabel,
         int $depth,
         array $visited,
         array $priorChain,
     ): array {
         $results = [];
+        $tries = CatchSites::in($body);
+        /** @var array<string, true> $pointed calls with a throw point of their own, by {@see CatchSites::key()} */
+        $pointed = [];
 
         foreach ($methodNode->getStatementResult()->getThrowPoints() as $throwPoint) {
             $node = $throwPoint->getNode();
             $type = $throwPoint->getType();
 
-            // A call whose every declared class a narrow catch took. PHPStan keeps the point (from 2.3) so an
-            // enclosing `try` still sees the undeclared residue, and that residue is not ours to read: a
-            // declaring callee is never descended. Descending anyway publishes the very throws the catch took.
+            // A call whose every declared class a catch took names nothing that escapes it, and a declaring
+            // callee is never descended for what it might throw besides. Its closure arguments still run:
+            // they are read below with the calls a catch left no point for at all.
             if ($type instanceof NeverType) {
                 continue;
             }
 
+            $pointed[CatchSites::key($node)] = true;
             $scope = $this->fileAnalyzer->stableScope($throwPoint->getScope());
             $explicit = $throwPoint->isExplicit();
             $calleeName = $this->calleeResolver->name($node);
@@ -207,7 +213,7 @@ final class ThrowAnalyzer
 
             // Layer 3': a closure handed to the callee. Ahead of the layers because they each `continue`,
             // and because the callee's own answer says nothing about what the closure it runs throws.
-            foreach ($this->applyClosures($node, $scope, $selfLabel, $depth, $visited, $priorChain, $frame) as $result) {
+            foreach ($this->applyClosures($node, $scope, $selfLabel, $depth, $visited, $priorChain, $frame, $tries->around($node)) as $result) {
                 $results[] = $result;
             }
 
@@ -246,6 +252,19 @@ final class ThrowAnalyzer
                 foreach ($this->applyDescent($callee, $depth, $visited, $priorChain, $frame) ?? [] as $result) {
                     $results[] = $result;
                 }
+            }
+        }
+
+        // Layer 3' again, for a call inside a `try` that has no point of its own to carry it.
+        $scope = $this->fileAnalyzer->stableScope($methodNode->getStatementResult()->getScope());
+        foreach ($tries->guarded() as $call) {
+            if (isset($pointed[CatchSites::key($call)])) {
+                continue;
+            }
+
+            $frame = $this->frame($selfLabel, $scope, $call);
+            foreach ($this->applyClosures($call, $scope, $selfLabel, $depth, $visited, $priorChain, $frame, $tries->around($call)) as $result) {
+                $results[] = $result;
             }
         }
 
@@ -449,6 +468,7 @@ final class ThrowAnalyzer
 
         return $this->analyzeMethod(
             $childNode,
+            $childNode->getStatements(),
             $childLabel,
             $depth + 1,
             [...$visited, $key],
@@ -471,8 +491,12 @@ final class ThrowAnalyzer
      * written in the body the analysis is already reading, and refusing it would drop a real error from a
      * route whose action a package happens to ship.
      *
+     * The catches around the call are in force over what the closure throws, which PHPStan cannot apply:
+     * the closure's points belong to the closure's own body, not to the `try` the call sits in.
+     *
      * @param  list<string>  $visited
      * @param  list<Frame>  $priorChain
+     * @param  list<Node\Stmt\Catch_>  $catches
      * @return list<ThrownException>
      */
     private function applyClosures(
@@ -483,6 +507,7 @@ final class ThrowAnalyzer
         array $visited,
         array $priorChain,
         Frame $frame,
+        array $catches,
     ): array {
         if ($depth >= $this->maxDepth
             || ! $node instanceof Node\Expr\CallLike
@@ -505,16 +530,39 @@ final class ThrowAnalyzer
             // has already descended into, which is what that list is.
             foreach ($this->analyzeMethod(
                 $closure,
+                $closure->getClosureExpr()->stmts,
                 $selfLabel.'::{closure}',
                 $depth + 1,
                 $visited,
                 [...$priorChain, $frame],
             ) as $result) {
-                $results[] = $result;
+                if (! $this->caught($result->exceptionFqcn, $catches, $scope)) {
+                    $results[] = $result;
+                }
             }
         }
 
         return $results;
+    }
+
+    /**
+     * Whether one of the catches takes the class. A class the analyser cannot place is not taken: keeping a
+     * response a catch might have stopped is the vaguer claim, dropping one it did not is the false one.
+     *
+     * @param  list<Node\Stmt\Catch_>  $catches
+     */
+    private function caught(string $fqcn, array $catches, Scope $scope): bool
+    {
+        $thrown = new ObjectType($fqcn);
+        foreach ($catches as $catch) {
+            foreach ($catch->types as $type) {
+                if ((new ObjectType($scope->resolveName($type)))->isSuperTypeOf($thrown)->yes()) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /** The harvested closure one argument is — written at the call, or held in a local behind it. */

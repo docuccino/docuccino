@@ -168,6 +168,45 @@ class ThrowsController extends Controller
     }
 
     /**
+     * Case 8'': the same catch around a declaring call that runs a closure the
+     * action hands it. The catch takes the guard's own exception and nothing
+     * the closure throws, so the order service's two escape the action.
+     */
+    public function tryCatchDeclaredClosure(OrderService $orders, bool $offline): JsonResponse
+    {
+        try {
+            $this->whileProbeReachable($offline, function () use ($orders): void {
+                $orders->place(1, 5);
+            });
+        } catch (\App\Exceptions\ExportOfflineException $e) {
+            return response()->json(['caught' => $e->getMessage()]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''': a catch that takes what the CLOSURE throws. The call keeps a
+     * throw point of its own, and the exception the closure raises is still
+     * one the action turns into a 200; only the literal RuntimeException
+     * escapes.
+     */
+    public function tryCatchClosure(ConnectionInterface $connection, bool $flag): JsonResponse
+    {
+        try {
+            $connection->transaction(function () use ($flag): void {
+                if ($flag) {
+                    throw new \App\Exceptions\OutOfStockException('caught path');
+                }
+            });
+        } catch (\App\Exceptions\OutOfStockException $e) {
+            return response()->json(['caught' => $e->getMessage()]);
+        }
+
+        throw new \RuntimeException('escaping path');
+    }
+
+    /**
      * Case 10: a domain exception that IS an HTTP status, pinned in its own
      * parent::__construct() through a private constructor's default — the
      * static-factory idiom, where the default is the only value any instance

@@ -40,4 +40,24 @@ trait GuardsProbeState
             throw ExportOfflineException::tooLarge();
         }
     }
+
+    /**
+     * A guard that runs the work it is handed once the probe is reachable. It declares only its own
+     * exception: what the work throws is the caller's closure, not something this method can promise.
+     *
+     * @template TResult
+     *
+     * @param  callable(): TResult  $work
+     * @return TResult
+     *
+     * @throws ExportOfflineException
+     */
+    private function whileProbeReachable(bool $offline, callable $work): mixed
+    {
+        if ($offline) {
+            throw ExportOfflineException::unavailable();
+        }
+
+        return $work();
+    }
 }
