@@ -16,8 +16,6 @@ use Docuccino\Laravel\Integrations\Support\PaginatedResponseBody;
 use Docuccino\Laravel\Integrations\Support\PaginationTerminalVisitor;
 use Docuccino\Laravel\Support\FrameworkClasses;
 use Docuccino\Laravel\Support\IgnoredResponses;
-use ReflectionMethod;
-use Throwable;
 
 /**
  * Documents the envelope a resource-collection response is sent in. Since the static return type is
@@ -49,7 +47,7 @@ final class PaginatedResourceResponsesExtension implements OperationExtension
             $context->trace($visitor);
 
             if ($visitor->paginates && $visitor->kind !== null) {
-                PaginatedResponseBody::wrap($operation, $context, $collection, $visitor->kind, $by);
+                PaginatedResponseBody::wrap($operation, $context, $collection, $visitor->kind, $by, $visitor->builtByLaravel());
 
                 return;
             }
@@ -66,7 +64,10 @@ final class PaginatedResourceResponsesExtension implements OperationExtension
     private function restatePlainList(OperationDraft $operation, RouteContext $context, Contribution $by): void
     {
         $collection = self::collectionReturn($context);
-        if ($collection === null || ! $operation->hasResponse('200') || ! self::declaresWith($collection->fqcn)) {
+        if ($collection === null
+            || ! $operation->hasResponse('200')
+            || in_array(ResourceReflector::declaringClass($collection->fqcn, 'with'), [null, ResourceReflector::JSON_RESOURCE], true)
+        ) {
             return;
         }
 
@@ -96,7 +97,7 @@ final class PaginatedResourceResponsesExtension implements OperationExtension
         foreach ($context->analysis()->returns as $return) {
             $type = FrameworkClasses::selfRendered($return->type);
             if (! $type instanceof ClassT
-                || ! (ResourceReflector::isAnonymousCollection($type->fqcn) || ResourceReflector::isNamedCollection($type->fqcn))
+                || ! ResourceReflector::isCollection($type->fqcn)
                 || ($collection !== null && $collection->canonicalKey() !== $type->canonicalKey())
             ) {
                 return null;
@@ -105,15 +106,5 @@ final class PaginatedResourceResponsesExtension implements OperationExtension
         }
 
         return $collection;
-    }
-
-    /** Whether the collection's `with()` is one the application wrote, the only kind that can branch. */
-    private static function declaresWith(string $fqcn): bool
-    {
-        try {
-            return (new ReflectionMethod($fqcn, 'with'))->getDeclaringClass()->getName() !== ResourceReflector::JSON_RESOURCE;
-        } catch (Throwable) {
-            return false;
-        }
     }
 }

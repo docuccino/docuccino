@@ -9,8 +9,8 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 /**
- * Lists of collections whose `with()` branches on the paginator they may wrap: a plain list, a page, and a
- * page built by hand, which no paginating terminal names.
+ * Lists of collections whose `with()` branches on the paginator they may wrap: a plain list, a page, a page
+ * an application's own terminal builds, and a page built by hand, which no paginating terminal names.
  */
 final class EnvelopeBranchController
 {
@@ -45,5 +45,10 @@ final class EnvelopeBranchController
     public function listed(Collection $users): AnonymousResourceCollection
     {
         return CatalogueResource::collection($users);
+    }
+
+    public function gazetteListed(): AnonymousResourceCollection
+    {
+        return GazetteResource::collection([]);
     }
 }

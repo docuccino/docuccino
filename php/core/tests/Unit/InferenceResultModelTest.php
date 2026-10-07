@@ -304,3 +304,18 @@ it('keys a callable narrowing a property of $this apart from one narrowing a par
         ->and($property->symbol())->not->toBe($page->symbol())
         ->and($property->target())->toBe($parameter->target());
 });
+
+it('refuses a callable narrowing a parameter and a property of $this at once', function (): void {
+    // Each would be the subject on its own; together nothing says which the narrowing is of.
+    new CallableRef('/app/Http/Resources/Listed.php', 'App\\Listed', 'with', 0, 'request', 'Illuminate\\Support\\Collection', narrowProperty: 'resource');
+})->throws(InvalidArgumentException::class, 'App\\Listed::with narrows either a parameter or a property of $this, not both.');
+
+it('names the subject a callable narrows as source spells it', function (?string $parameter, ?string $property, ?string $subject): void {
+    $ref = new CallableRef('/app/Listed.php', 'App\\Listed', 'with', 0, $parameter, 'App\\Thing', narrowProperty: $property);
+
+    expect($ref->narrowedSubject())->toBe($subject);
+})->with([
+    'a parameter' => ['e', null, '$e'],
+    'a property of $this' => [null, 'resource', '$this->resource'],
+    'nothing' => [null, null, null],
+]);

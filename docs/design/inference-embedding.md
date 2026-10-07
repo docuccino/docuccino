@@ -535,7 +535,8 @@ built from or the base collection Laravel collected a list into — so a branch 
 way a renderer's branch on the thrown exception does. As for an exception, the guard reads the narrowed
 class as EXACT (`NarrowingGuard::satisfiedBy()` is an `is_a` of that class): `Collection` satisfies no
 `instanceof Paginator`, although PHPStan's own `ObjectType` answers "maybe" for a non-final class against
-an interface. That is only sound because the host names the class the value really is.
+an interface. That is only sound because the host names the class the value really is — so a page built by a
+configured terminal, whose class is the application's, has its `with()` read whole.
 
 An exception MAPPER (`$exceptions->map()`) is read with `CallableRef::$returnsExceptions`: the sites are
 harvested exactly as for a post-processor, and each one that does not hand the parameter back is also read

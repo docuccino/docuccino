@@ -29,6 +29,7 @@ use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\CursorPaginator;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\Router;
 use Opis\JsonSchema\Validator;
 
@@ -80,6 +81,7 @@ beforeEach(function (): void {
             EnvelopeBranchController::class.'::digest' => $returns(DigestCollection::class, DigestResource::class),
             EnvelopeBranchController::class.'::digestPages' => $returns(DigestCollection::class, DigestResource::class),
             EnvelopeBranchController::class.'::listed' => $returns(ListedCollection::class, CatalogueResource::class),
+            EnvelopeBranchController::class.'::gazetteListed' => $returns(GazetteCollection::class, GazetteResource::class),
             GazetteCollection::class.'::with' => $sites([$parentWith, $gazetteMeta]),
             DigestCollection::class.'::with' => $sites([$digestCounted, $empty, $digestSource]),
             ListedCollection::class.'::with' => $sites([$shape([
@@ -97,14 +99,17 @@ beforeEach(function (): void {
             EnvelopeBranchController::class.'::digest' => $plainWalk('digest', DigestCollection::class, 'users', 'Illuminate\\Database\\Eloquent\\Collection'),
             EnvelopeBranchController::class.'::digestPages' => TraceScript::forChain('$q->cursorPaginate(15)', 'Illuminate\\Database\\Eloquent\\Builder'),
             EnvelopeBranchController::class.'::listed' => $plainWalk('listed', ListedCollection::class, 'users', 'Illuminate\\Database\\Eloquent\\Collection'),
+            EnvelopeBranchController::class.'::gazetteListed' => TraceScript::forChain('$q->paginateList(15)', 'Illuminate\\Database\\Eloquent\\Builder'),
         ],
     );
 
-    $this->routes = static function (Router $router): void {
-        foreach (['gazette', 'gazettePages', 'gazetteBuilt', 'digest', 'digestPages', 'listed'] as $method) {
+    $this->only = static fn (string ...$methods): Closure => static function (Router $router) use ($methods): void {
+        foreach ($methods as $method) {
             $router->get('api/zz-envelopes/'.$method, [EnvelopeBranchController::class, $method]);
         }
     };
+    $this->methods = ['gazette', 'gazettePages', 'gazetteBuilt', 'digest', 'digestPages', 'listed'];
+    $this->routes = ($this->only)(...$this->methods);
 
     $this->body = static fn (array $document, string $method): array => $document['paths']['/api/zz-envelopes/'.$method]['get']['responses']['200']['content']['application/json']['schema'];
 
@@ -197,4 +202,55 @@ it('keys each envelope on the collection whose with() it reads, and a warm build
         ->and($warm->diagnostics)->toEqual($cold->diagnostics)
         ->and(fragmentEntries($dir)['get /api/zz-envelopes/gazette']['dependencies'])->toContain($fixtures.'/GazetteCollection.php')
         ->and(fragmentEntries($dir)['get /api/zz-envelopes/gazettePages']['dependencies'])->toContain($fixtures.'/GazetteCollection.php');
+});
+
+it('emits the same bytes whichever order the routes are registered in', function (): void {
+    $forward = (new UirEmitter)->emit(localityBuild($this->routes, $this->engine)->document);
+    $reversed = (new UirEmitter)->emit(localityBuild(($this->only)(...array_reverse($this->methods)), $this->engine)->document);
+
+    expect($reversed)->toBe($forward);
+});
+
+it('publishes each route and the components it reaches as that route built alone does', function (): void {
+    $all = emittedArray(localityBuild($this->routes, $this->engine));
+
+    $checked = 0;
+    foreach ($this->methods as $method) {
+        $alone = emittedArray(localityBuild(($this->only)($method), $this->engine));
+        $path = '/api/zz-envelopes/'.$method;
+
+        expect($all['paths'][$path])->toBe($alone['paths'][$path]);
+        foreach ($alone['components']['schemas'] as $name => $schema) {
+            expect($all['components']['schemas'][$name] ?? null)->toBe($schema);
+            $checked++;
+        }
+    }
+
+    // A scan that compared nothing would pass forever.
+    expect($checked)->toBeGreaterThan(count($this->methods));
+});
+
+it('reads with() whole for a page an application\'s own terminal builds, whose paginator class it cannot know', function (): void {
+    app()->forgetScopedInstances();
+    /** @var Router $router */
+    $router = app('router');
+    $router->setRoutes(new RouteCollection);
+    ($this->only)('gazetteListed', 'gazettePages')($router);
+    app()->instance(TypeEngine::class, ($this->engine)());
+
+    $document = emittedArray(generateDocument(static function (array $raw): array {
+        $raw['integrations']['query_builder']['pagination_terminals'] = ['paginateList'];
+
+        return $raw;
+    }));
+    $body = ($this->body)($document, 'gazetteListed');
+
+    // Laravel's paginate() builds a LengthAwarePaginator, whose branch adds nothing: the page alone.
+    expect(($this->body)($document, 'gazettePages')['$ref'] ?? null)->toBe('#/components/schemas/GazetteResourcePage')
+        ->and(($this->body)($document, 'gazettePages'))->not->toHaveKeys(['allOf', 'properties']);
+
+    // paginateList may build any class, so both branches count and the plain branch's meta may be sent.
+    expect($body['allOf'][0])->toBe(['$ref' => '#/components/schemas/GazetteResourcePage'])
+        ->and(array_keys($body['allOf'][1]['properties']))->toBe(['meta'])
+        ->and($body['allOf'][1])->not->toHaveKey('required');
 });

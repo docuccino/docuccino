@@ -192,8 +192,8 @@ public function with(Request $request): array
 Each list is documented with the branches it can take. A paginated list gets what the paginator branches
 return, and a list built from an array or an Eloquent collection gets the rest, so the `meta` above is
 required on `OrderResource::collection(Order::all())`. When Docuccino can't tell what a list was built
-from, such as a paginator built by hand or returned by a package, every branch counts and a member that
-only some of them return is optional.
+from, such as a paginator built by hand, returned by a package, or built by a custom pagination method,
+every branch counts and a member that only some of them return is optional.
 
 ### Union return types
 

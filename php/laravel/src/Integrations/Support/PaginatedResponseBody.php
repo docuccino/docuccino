@@ -55,8 +55,12 @@ final class PaginatedResponseBody
      * Rewraps the 200 body in the envelope for `$kind`. No-op when the body can't be located, and no-op
      * when the route drops its 200 — the conversion below is what hoists the item schema, the envelope's
      * links/meta parts and the page component, so the check has to come first ({@see IgnoredResponses}).
+     *
+     * `$builtByLaravel` says the page is the paginator Laravel builds for `$kind`, so the collection's
+     * `with()` is read for that class alone; an application's own terminal may build any class, and its
+     * `with()` is read whole.
      */
-    public static function wrap(OperationDraft $operation, RouteContext $context, ClassT $collection, string $kind, Contribution $by): void
+    public static function wrap(OperationDraft $operation, RouteContext $context, ClassT $collection, string $kind, Contribution $by, bool $builtByLaravel): void
     {
         if (IgnoredResponses::drops($context, '200')) {
             return;
@@ -64,7 +68,7 @@ final class PaginatedResponseBody
 
         // Converted as the page it is: the collection's with() is read for the paginator it wraps.
         $converter = $context->converter();
-        $paginator = WrappedResource::PAGINATORS[$kind] ?? null;
+        $paginator = $builtByLaravel ? WrappedResource::PAGINATORS[$kind] ?? null : null;
         $result = $paginator === null
             ? $converter->toSchema($collection)
             : WrappedResource::during($converter, $paginator, static fn () => $converter->toSchema($collection));
@@ -75,14 +79,14 @@ final class PaginatedResponseBody
 
         $links = PageLinks::of($collection);
         $envelope = PaginationParts::hoist(
-            $context->converter(),
+            $converter,
             PaginationEnvelope::of($kind, $items, $links, CollectionKeys::preserved($collection)),
             PaginationEnvelope::parts($kind, $links),
         );
 
         $item = $collection->typeArgs[0] ?? null;
         $reference = PageComponent::reference(
-            $context->converter(),
+            $converter,
             $kind,
             $item instanceof ClassT ? $item->fqcn : null,
             $items,

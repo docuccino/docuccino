@@ -305,7 +305,7 @@ final class JsonResourceSchema implements TypeToSchema
             return ['properties' => [], 'required' => []];
         }
 
-        $wraps = ResourceReflector::isAnonymousCollection($fqcn) || ResourceReflector::isNamedCollection($fqcn) ? WrappedResource::of($context) : null;
+        $wraps = ResourceReflector::isCollection($fqcn) ? WrappedResource::of($context) : null;
         $object = $declaring === ResourceReflector::JSON_RESOURCE ? null : $this->toArray->analyze($fqcn, 'with', $context, false, $wraps);
         if ($object === null) {
             $context->lowerConfidence(0.8);

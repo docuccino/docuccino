@@ -768,7 +768,7 @@ final class PhpStanTypeEngine implements TypeEngine
             'inference.ambiguous-narrowing',
             sprintf(
                 'More than one return site is reachable when %s narrows to %s in %s; the first in source order was chosen and the recovered shape may be ambiguous.',
-                $callable->narrowProperty !== null ? '$this->'.$callable->narrowProperty : '$'.$callable->narrowParameter,
+                $callable->narrowedSubject(),
                 $narrowTo,
                 $this->label($callable),
             ),
