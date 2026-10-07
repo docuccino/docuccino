@@ -18,6 +18,8 @@ use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TypeCondition;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
+use Docuccino\Laravel\Integrations\InferredHandler\ReceivedException;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -34,25 +36,34 @@ use Workbench\App\Http\Controllers\ValidationController;
  * and passes anything else through by its class — `if (! $response instanceof JsonResponse) { return
  * $response; }`. Every error the framework renders as JSON publishes the rewrite alone: a binding's 404 and a
  * validated request's 422. An `HttpResponseException` sends whatever response it carries, so the guard says
- * nothing about it and its rendered body stands beside the rewrite. Byte-locked, warm as well as cold.
+ * nothing about it and its rendered body stands beside the rewrite. Byte-locked, warm as well as cold; the
+ * scripted analysis is what the real engine recovers from the fixture app's own callback, which the last
+ * test holds it to.
  */
-it('publishes the rewrite alone for every error the framework renders as JSON, byte-identically', function (): void {
-    setBuild('documents.default.routes.include', ['api/*']);
-
-    $callback = static fn (Response $response, Throwable $e, Request $request): Response => $response;
+function respondTypeGuardAnalysis(): ActionAnalysis
+{
     $problem = new ClassT(JsonResponse::class, [
         new ArrayShapeT([
             new ArrayShapeField('type', new LiteralT('about:blank')),
             new ArrayShapeField('title', ScalarT::string()),
             new ArrayShapeField('status', ScalarT::int()),
+            new ArrayShapeField('errors', new ListT(new UnknownT('mixed')), optional: true),
         ]),
         new UnknownT('status not folded'),
         new LiteralT('application/problem+json'),
     ]);
-    $guarded = new ActionAnalysis(returns: [
+
+    return new ActionAnalysis(returns: [
         new ReturnSite(new ClassT(Response::class), new SourceLocation(''), returnsParameter: 'response', typeConditions: [new TypeCondition('response', JsonResponse::class, false)]),
         new ReturnSite($problem, new SourceLocation(''), typeConditions: [new TypeCondition('response', JsonResponse::class, true)]),
     ]);
+}
+
+it('publishes the rewrite alone for every error the framework renders as JSON, byte-identically', function (): void {
+    setBuild('documents.default.routes.include', ['api/*']);
+
+    $callback = static fn (Response $response, Throwable $e, Request $request): Response => $response;
+    $guarded = respondTypeGuardAnalysis();
 
     $callables = [];
     foreach ([ModelNotFoundException::class, ValidationException::class, HttpResponseException::class] as $thrown) {
@@ -83,3 +94,36 @@ it('publishes the rewrite alone for every error the framework renders as JSON, b
         ->and($media('/api/probe-tickets', 'post', '422'))->toBe(['application/problem+json'])
         ->and($media('/api/probe-handoffs', 'get', '409'))->toBe(['application/json', 'application/problem+json']);
 });
+
+it('scripts what the real engine recovers from the fixture app’s own callback', function (string $thrown): void {
+    ensureFixtureAvailable(FixtureRunner::available());
+
+    $source = (string) file_get_contents(FixtureRunner::path('app/Exceptions/RespondCallbacks.php'));
+    $line = 0;
+    foreach (explode("\n", $source) as $index => $text) {
+        if (str_contains($text, 'public function jsonGuarded(')) {
+            $line = $index + 3;
+        }
+    }
+    expect($line)->toBeGreaterThan(3);
+
+    $real = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
+        'app/Exceptions/RespondCallbacks.php',
+        '',
+        '',
+        line: $line,
+        param: 'e',
+        narrowType: ReceivedException::byRespondCallback($thrown) ?? '',
+        every: true,
+    ));
+
+    // Everything but where each return is written.
+    $facts = static fn (ActionAnalysis $analysis): array => array_map(static function (ReturnSite $site): array {
+        $facts = $site->toArray();
+        unset($facts['location']);
+
+        return $facts;
+    }, $analysis->returns);
+
+    expect($facts($real))->toBe($facts(respondTypeGuardAnalysis()));
+})->with([ModelNotFoundException::class, ValidationException::class, HttpResponseException::class])->group('fixture');
