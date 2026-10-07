@@ -133,10 +133,13 @@ function uirConformanceFindings(string $path): array
     $tolerated = [];
 
     foreach (OpenApiMetaSchema::findings('openapi-3.2', committedArtifactGraph($path)) as $finding) {
-        if (preg_match('~^/paths/[^ ]+/responses/[^/ ]+/x-docuccino: a Reference Object cannot carry "x-docuccino" beside its \$ref$~', $finding) === 1) {
-            $tolerated[] = $finding;
+        // Read by its parts rather than by its sentence: a use-site extension on a response, and no other.
+        if ($finding->keyword === null
+            && preg_match('~^/paths/.+/responses/[^/]+/x-docuccino$~', $finding->pointer) === 1
+            && $finding->message === 'a Reference Object cannot carry "x-docuccino" beside its $ref') {
+            $tolerated[] = (string) $finding;
         } else {
-            $owed[] = $finding;
+            $owed[] = (string) $finding;
         }
     }
 
@@ -221,7 +224,7 @@ it('refuses a document carrying a root member OpenAPI does not define', function
         // By NAME rather than by pointer: 3.2 and 3.1 report the key against the root's gate patterns
         // and 3.0 reports it as an additional property of the root, so the member itself is the only
         // part of the message all three versions spell the same way.
-        ->and(OpenApiMetaSchema::findings($format, $document)[0])->toContain($member);
+        ->and((string) OpenApiMetaSchema::findings($format, $document)[0])->toContain($member);
 })->with(rootGateSubjects())->with([
     'the schema URL that moved' => ['$schema', 'https://spec.docuccino.app/uir/2.0/schema.json'],
     'the spec version that moved' => ['uir', '2.0.0'],
@@ -302,7 +305,7 @@ it('refuses the server variable the one divergent fixture declares, which only t
 
     expect(conformanceSubjects()[$relative][1])
         ->toBe(['/servers/0/variables/version required: The required properties (default) are missing (schema /$defs/server-variable)'])
-        ->and(OpenApiMetaSchema::findings('openapi-3.2', committedArtifactGraph($path)))->toBe(conformanceSubjects()[$relative][1]);
+        ->and(array_map(strval(...), OpenApiMetaSchema::findings('openapi-3.2', committedArtifactGraph($path))))->toBe(conformanceSubjects()[$relative][1]);
 
     // And what the emitters do about it, so the two halves of the fact sit together: the enum's own
     // first value stands in, the emission says so, and what it publishes is conformant.

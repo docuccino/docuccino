@@ -191,8 +191,8 @@ final class OpenApiMetaSchema
     }
 
     /**
-     * Every way $instance fails $format's meta-schema, worst-first, one line each:
-     * `<data pointer> <keyword>: <message> (schema <schema pointer>)`. Empty means valid.
+     * Every way $instance fails $format's meta-schema, worst-first, each a {@see Finding} that reads as
+     * one line: `<data pointer> <keyword>: <message> (schema <schema pointer>)`. Empty means valid.
      *
      * $instance must be an object graph — `json_decode` without `true`, or a kind-preserving YAML parse
      * ({@see EmittedDocument::parseYaml()}). Hand it an associative array and every map in the document
@@ -204,7 +204,7 @@ final class OpenApiMetaSchema
      * {@see operationIdFindings()}). That is what a test over the corpus wants — a caller reporting to
      * a PERSON wants the halves apart instead, because they address different people.
      *
-     * @return list<string>
+     * @return list<Finding>
      */
     public static function findings(string $format, mixed $instance): array
     {
@@ -223,7 +223,7 @@ final class OpenApiMetaSchema
      * is usually the application's own, and bucketing the two makes one of them address the wrong
      * person. {@see EmittedSpecCheck} is where that split becomes two diagnostic codes.
      *
-     * @return list<string>
+     * @return list<Finding>
      */
     public static function emitterFindings(string $format, mixed $instance): array
     {
@@ -244,7 +244,7 @@ final class OpenApiMetaSchema
      * The one finding here whose cause is usually the APPLICATION's, which is why it is asked for
      * separately from {@see emitterFindings()} and reported under a code of its own.
      *
-     * @return list<string>
+     * @return list<Finding>
      */
     public static function operationIdFindings(mixed $instance): array
     {
@@ -267,13 +267,11 @@ final class OpenApiMetaSchema
         foreach ($seen as $id => $pointers) {
             if (count($pointers) > 1) {
                 sort($pointers);
-                $findings[] = sprintf('%s operationId: "%s" is used by %s', $pointers[0], $id, implode(', ', $pointers));
+                $findings[] = new Finding($pointers[0], 'operationId', sprintf('"%s" is used by %s', $id, implode(', ', $pointers)));
             }
         }
 
-        sort($findings);
-
-        return $findings;
+        return Finding::sorted($findings);
     }
 
     /**
@@ -297,7 +295,7 @@ final class OpenApiMetaSchema
      * {@see LINK_LITERALS}) are not descended into at all, so a `$ref` written inside an example is data
      * and stays data.
      *
-     * @return list<string>
+     * @return list<Finding>
      */
     public static function referenceFindings(mixed $instance): array
     {
@@ -307,9 +305,8 @@ final class OpenApiMetaSchema
 
         $findings = [];
         self::walkReferences($instance, $instance, '', null, false, $findings);
-        sort($findings);
 
-        return $findings;
+        return Finding::sorted($findings);
     }
 
     /**
@@ -325,7 +322,7 @@ final class OpenApiMetaSchema
      * `webhooks`, `components.pathItems` and callbacks hold a Path Item OR a Reference Object — and a Link
      * Object's `requestBody` is data.
      *
-     * @return list<string>
+     * @return list<Finding>
      */
     public static function referenceSiblingFindings(string $format, mixed $instance): array
     {
@@ -352,7 +349,7 @@ final class OpenApiMetaSchema
                     }
                 }
 
-                $findings[] = sprintf('%s: a Reference Object cannot carry "%s" beside its $ref', JsonPointer::child($pointer, $member), $member);
+                $findings[] = new Finding(JsonPointer::child($pointer, $member), null, sprintf('a Reference Object cannot carry "%s" beside its $ref', $member));
             }
 
             return true;
@@ -360,9 +357,7 @@ final class OpenApiMetaSchema
 
         (new ReferencePositions($check, self::isDraft04($format), $allowed['referencedPathItems']))->document($instance);
 
-        sort($findings);
-
-        return $findings;
+        return Finding::sorted($findings);
     }
 
     /**
@@ -391,7 +386,7 @@ final class OpenApiMetaSchema
      * @param  ?string  $inNameMap  the name map $node is, or null where its keys are keywords
      * @param  bool  $isLink  whether $node is a Link Object, whose two data members {@see LINK_LITERALS}
      *                        names are not descended into
-     * @param  list<string>  $findings
+     * @param  list<Finding>  $findings
      */
     private static function walkReferences(mixed $node, stdClass $root, string $pointer, ?string $inNameMap, bool $isLink, array &$findings): void
     {
@@ -417,7 +412,7 @@ final class OpenApiMetaSchema
 
             if ($inNameMap === null && $key === '$ref') {
                 if (is_string($value) && str_starts_with($value, '#/') && ! self::resolves($root, $value)) {
-                    $findings[] = sprintf('%s $ref: "%s" names nothing this document defines', $at, $value);
+                    $findings[] = new Finding($at, '$ref', sprintf('"%s" names nothing this document defines', $value));
                 }
 
                 continue;
@@ -493,7 +488,7 @@ final class OpenApiMetaSchema
      * redirected by an edit to the file. 3.0 needs none: it carries no `unevaluatedProperties` at all,
      * so its 43 gates were never disabled.
      *
-     * @return list<string>
+     * @return list<Finding>
      */
     public static function keyGateFindings(string $format, mixed $instance): array
     {
@@ -515,16 +510,14 @@ final class OpenApiMetaSchema
             ];
         }
 
-        sort($findings);
-
-        return $findings;
+        return Finding::sorted($findings);
     }
 
     /**
      * Every key of $map that matches none of $patterns, as findings.
      *
      * @param  list<string>  $patterns
-     * @return list<string>
+     * @return list<Finding>
      */
     private static function gateKeys(mixed $map, array $patterns, string $pointer, string $gate): array
     {
@@ -541,11 +534,10 @@ final class OpenApiMetaSchema
                 }
             }
 
-            $findings[] = sprintf(
-                '%s patternProperties: The key "%s" matches none of %s (schema %s)',
+            $findings[] = new Finding(
                 JsonPointer::child($pointer, (string) $key),
-                $key,
-                implode(', ', $patterns),
+                'patternProperties',
+                sprintf('The key "%s" matches none of %s', $key, implode(', ', $patterns)),
                 $gate === 'document' ? '/properties' : '/$defs/'.$gate,
             );
         }
