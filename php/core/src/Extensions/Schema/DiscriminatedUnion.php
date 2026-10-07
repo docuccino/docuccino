@@ -118,7 +118,7 @@ final class DiscriminatedUnion
             return $node;
         }
 
-        $tags = array_map(self::tags(...), $bodies);
+        $tags = array_map(self::pinned(...), $bodies);
         $discriminator = self::discriminator($names, $tags);
         if ($discriminator === null) {
             $shortfall = self::shortfall($names, $bodies, $tags);
@@ -179,12 +179,14 @@ final class DiscriminatedUnion
     }
 
     /**
-     * The properties a body requires and pins to one string, less any PHP would read back as an int key.
+     * The properties a body requires and pins to one string, less any PHP would read back as an int key —
+     * what a member can be told apart by. Public so a reader matching a union against another holds it to
+     * the same reading the discriminator is decided by.
      *
      * @param  array<mixed>  $body
      * @return array<string, string>
      */
-    private static function tags(array $body): array
+    public static function pinned(array $body): array
     {
         $properties = $body['properties'] ?? null;
         $required = $body['required'] ?? null;

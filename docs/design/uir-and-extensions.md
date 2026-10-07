@@ -315,10 +315,50 @@ A branch is minted as `<request stem><path word><value word>` — the request's 
 (`ComponentNames::stem()`), the object's path without `*`, and the value's enum case name (else its
 minted member name) — identified as `<request id>/<path>.<tag>=<value>`. An identity with a `/` in its
 facet contributes no facet of its own: its base already starts from the request's. Both are functions of
-the rules alone. Branches exist only where a component can be named after a class: a body verb, a source
-class, and no operation-level `#[BodyParameter]` patching the body inline. A Spatie Data body is left
+the rules alone. Branches are minted only where a component can be named after a class: a body verb, a
+source class, and no operation-level `#[BodyParameter]` patching the body inline. A Spatie Data body is left
 alone: the order a property's rules reach the validator in is assembled by the package, not written, and
 the proof is about that order.
+
+**Adopting a declared union.** A `#[BodyParameter]` naming the object exactly — on the action or on the
+request type — gets the object split IN PLACE instead (`TaggedBranches::adoptable()`): no branch component
+is registered, since the declaration written next decides what is published there, and it is written over
+the split rather than over the merged object (a type-level one is held back until the split, with any
+declaration under it, so the shallowest-first order is unchanged). An object holding another partition, or
+held by one, is not offered: its branches would copy, or be copied into, the one adopted. A route carrying
+an operation-level declaration therefore proves partitions too, and puts back every one nothing adopts.
+
+`Validation\AdoptedUnion` then decides, off the bodies alone. The declaration adopts the split when it is
+a `$ref` (with or without a `null` beside it) to a component whose body is a union of `$ref`s, and some
+property is pinned — read by `DiscriminatedUnion::pinned()`, the reading the discriminator is decided by —
+to a distinct value in every rule branch and every declared member, over the SAME set of values. The field
+becomes `{$ref, anyOf: [refinement per value]}`, plus the empty object where the rules admit one (a tagged
+member cannot describe it, so the rules add it) and `null` where the DECLARATION admits it (a declaration
+can say that, so it decides). A refinement is `{properties: {<tag>: {const: v}, …}, required?}` holding, per
+member the two share, the refinement keywords the declared member neither states nor rules out
+(`SchemaKeywords::survivor()`), through `items` and nested members and through a `$ref` the declared member
+makes; every member the declaration lacks, less its annotations; and every member the rules require that
+the declared one leaves optional. Where no value carries any of that, the `$ref` stands alone. Pinning the
+tag in each refinement is what makes it exact: a member excluded under one value is accepted and discarded
+there, so a bound applied to every value would refuse a request the server takes.
+
+The refinement sits beside the `$ref`, never in the component, because the component is the type every
+response sending it shares. A bound the server enforces on input is no promise about output, and writing it
+into the shared body would make one route's rules move another route's response — the locality failure in
+its plainest form. Beside the `$ref` it reads, to a generator that ignores `$ref` siblings, as exactly the
+shared type; to a validator, as the server's own limits; and the 3.0 downlevel spells it `allOf: [$ref]`
+beside the `anyOf`, as for any sibling. Where the declared member accepts less than the rule — an integer
+under a `numeric` rule, a field the rules let be null — the declaration still wins, and
+`attribute.body-parameter-narrower` names each place. A declaration naming a tagged union over another tag
+or other values cannot adopt; it is written over the split as any declaration is, and
+`attribute.body-parameter-union` says why. A union spelled inline (`A|B`) is not adopted: refinements
+would have to sit on each member, and a member that is not a bare `$ref` cannot be discriminated.
+
+**Declared fields generally.** Every `#[BodyParameter]` is written over the field it names by the
+declared-shape rule (`SchemaKeywords::declaredOver()`, the array form of `SchemaDraft::declareShape()`), so
+a body field keeps what a parameter or response keeps: the declaration wins what it states, the recovered
+shape it replaces goes, and a refinement the declared type still admits stays. A composition is a stated
+shape like a `type` or `$ref`, and an `enum` keeps only the values the declared type can hold.
 
 ### Morph type columns
 

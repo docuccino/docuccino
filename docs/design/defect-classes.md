@@ -1076,6 +1076,17 @@ string. The same reading claimed too little in the other direction: a property t
 when the value is one of PHP's own and false for the Carbon a Laravel application almost always puts
 there.
 
+A `#[BodyParameter]` is the same shape on the request side. It states a field's TYPE, and the body writer
+read it as the field's whole truth: the declaration went in where the recovered field had been, so every
+bound the rules proved went with it — a `max:100` under a declared `string`, the `in:` values, the limits
+on each shape of a tagged object whose sealed union the declaration named. The rule already existed for
+parameters and responses (`SchemaDraft::declareShape()`: what is still true of the declared type stays),
+and the body was the one site that never asked it. A declaration with no `type:` was the extreme case: it
+states no shape, and was published as `type: string` over whatever the rules had found. Two holes in the
+rule itself surfaced beside it — a composition (`A|B`, a nullable class) was not read as a stated shape, so
+a declared union over an inferred map kept the map's `type: object`, and an `enum` survived a declared type
+that cannot hold its values.
+
 *The tell.* A reader that stops at a declaration and a reader that stops at a VALUE look identical in the
 code — both are an early return with the answer in hand — and only the first is trusting something. Ask
 what sentence the author wrote, and what sentence the code is now acting on. Where they differ, the extra

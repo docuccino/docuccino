@@ -331,6 +331,23 @@ Leaving `required` off is neither: it says nothing, so a field your validation r
 required stays required. That is why the argument is `?bool` — a declaration written to document a
 `type:` must not quietly de-require a field the server insists on.
 
+The rest of the declaration works the same way over a field your rules already documented: what it says
+wins, and what it doesn't say stays where it is still true. A `type:` replaces the shape the rules
+recovered, but a limit that still applies to the declared type — a `max:100` on a string declared
+`string`, an `email` format, the `in:` values the type can hold — stays, along with the rules'
+description. A limit of another type goes with the shape that carried it. Leaving `type:` off states no
+shape at all, so a declaration with only a `description:` adds the description and changes nothing
+else; on a field the rules didn't document, it is a string.
+
+```php
+// rules: 'nickname' => ['required', 'string', 'max:30']
+#[BodyParameter(name: 'nickname', type: 'string', description: 'Display name')]
+// publishes {type: string, maxLength: 30, description: "Display name"}, still required
+```
+
+A `type:` naming a tagged union over an object your rules split by a tag adopts the rules' shapes rather
+than replacing them — see [Tagged unions](/laravel/documenting/requests/#when-you-already-have-the-type).
+
 A declaration also answers for the field in the diagnostics. A field whose rules the build cannot read
 statically is reported as omitted from the request schema — and where a `#[BodyParameter]` names that
 field, a key inside it, or the container above it, the field is the declaration's and the notice stops

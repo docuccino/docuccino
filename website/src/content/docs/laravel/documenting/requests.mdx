@@ -1046,6 +1046,37 @@ however your routes change. If the object is nullable, `null` is allowed beside 
 `required_with` the object itself, an empty object is allowed beside it too, because that's what
 Laravel accepts — unless the object's own rules refuse one, as `required`, `filled` or a `min:1` do.
 
+#### When you already have the type
+
+If the same shapes already exist as classes — a sealed interface the response side publishes, say — name
+it with [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter) and the request uses that type
+instead of minting a second family of shapes a client would have to map by hand:
+
+```php
+/** @phpstan-sealed CardPayment|TransferPayment */
+interface Payment {}
+
+#[BodyParameter(name: 'payment', type: Payment::class)]
+public function store(StoreOrderRequest $request): OrderResource { /* … */ }
+```
+
+`payment` then publishes as a `$ref` to `Payment`. What your rules say that the classes don't — a
+`max:40`, a `min:1` on a list, a member the class doesn't have — rides beside the `$ref` as one refinement
+per tag value, on the request only: the `Payment` component is the one your responses send too, and a
+limit the server enforces on input is no promise about output. The empty object your rules accept is kept
+beside it, since no tagged member can describe one. Where the declaration says something the rules don't
+— an `int` where the rule is `numeric` — the declaration wins, and
+[`attribute.body-parameter-narrower`](/laravel/reference/diagnostics/#attributes) tells you the published
+type refuses something the server accepts.
+
+The declared type has to be the same partition: a union of classes that each fix the same field to a
+value of their own, with exactly the values your rules split by. One told apart by another field, or over
+other values, is published as you wrote it — without the rules' limits — and
+[`attribute.body-parameter-union`](/laravel/reference/diagnostics/#attributes) says what didn't match.
+Name the interface or abstract class rather than spelling the union out (`CardPayment|TransferPayment`):
+the shared type is what a client already has a name for. An object that holds another tagged object, or
+sits inside one, isn't adopted — the declaration is written over it as any declaration is.
+
 The object stays a single schema with "Required when …" notes whenever the rules don't prove one shape
 per value:
 
@@ -1059,7 +1090,8 @@ per value:
 - a tag, or a field it switches, that `prepareForValidation()` copies from a header, query value or route
   parameter, so it isn't the body's to send;
 - a request with no class to name the shapes after (an inline `validate()`), an action carrying its own
-  `#[BodyParameter]`, or rules that become query parameters.
+  `#[BodyParameter]`, or rules that become query parameters — though a declaration naming the object can
+  still adopt it, as above.
 
 ### Types and formats
 
