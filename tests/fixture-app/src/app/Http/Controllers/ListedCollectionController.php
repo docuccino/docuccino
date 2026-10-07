@@ -6,8 +6,11 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\AccountRequest;
 use App\Http\Resources\ArchiveResource;
+use App\Http\Resources\BriefResource;
 use App\Http\Resources\CatalogueResource;
+use App\Http\Resources\DigestResource;
 use App\Http\Resources\DraftResource;
+use App\Http\Resources\GazetteResource;
 use App\Http\Resources\JournalResource;
 use App\Http\Resources\LedgerCollection;
 use App\Http\Resources\LedgerResource;
@@ -18,6 +21,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Resources\Json\ResourceCollection;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 /**
  * Collections of resources whose family overrides `newCollection()`, reached every way Laravel builds
@@ -78,6 +82,56 @@ class ListedCollectionController extends Controller
     public function sketches(): AnonymousResourceCollection
     {
         return SketchResource::collection(User::all());
+    }
+
+    public function gazette(): AnonymousResourceCollection
+    {
+        return GazetteResource::collection(User::all());
+    }
+
+    public function gazettePages(): AnonymousResourceCollection
+    {
+        return GazetteResource::collection(User::query()->paginate());
+    }
+
+    public function gazetteListed(): AnonymousResourceCollection
+    {
+        $users = User::query()->latest()->get();
+
+        return $users->toResourceCollection(GazetteResource::class);
+    }
+
+    public function gazetteArray(): AnonymousResourceCollection
+    {
+        return GazetteResource::collection([User::query()->firstOrFail()]);
+    }
+
+    /**
+     * A page built by hand, which no paginating terminal names.
+     */
+    public function gazetteBuilt(): AnonymousResourceCollection
+    {
+        return GazetteResource::collection(new LengthAwarePaginator(User::all(), User::query()->count(), 15));
+    }
+
+    public function digest(): AnonymousResourceCollection
+    {
+        return DigestResource::collection(User::all());
+    }
+
+    public function digestPages(): AnonymousResourceCollection
+    {
+        return DigestResource::collection(User::query()->cursorPaginate());
+    }
+
+    public function brief(): AnonymousResourceCollection
+    {
+        return BriefResource::collection(collect([User::query()->firstOrFail()]));
+    }
+
+    public function briefPages(): AnonymousResourceCollection
+    {
+        return BriefResource::collection(User::query()->simplePaginate());
     }
 
     public function plain(): AnonymousResourceCollection

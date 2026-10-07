@@ -15,7 +15,8 @@ use Docuccino\Core\Provenance\MessagePaths;
  * source-order first match).
  *
  * `$narrowToEvery` asks for every return the narrowed type can reach rather than the first, as a response
- * post-processor is read ({@see ReturnSite}).
+ * post-processor is read ({@see ReturnSite}). `$narrowProperty` narrows a property of `$this` in place of
+ * a parameter — what a resource collection wraps is `$this->resource`, not an argument.
  */
 final readonly class CallableRef
 {
@@ -30,6 +31,7 @@ final readonly class CallableRef
         // Every reachable return is an exception the framework renders instead (an exception map), read into
         // ActionAnalysis::$throws as a throw of what it builds; a return naming no class comes back UnknownT.
         public bool $returnsExceptions = false,
+        public ?string $narrowProperty = null,
     ) {}
 
     /** A closure located by line rather than a named method. */
@@ -41,7 +43,8 @@ final readonly class CallableRef
     /** A stable label for diagnostics, stub maps, and cache keys. */
     public function symbol(): string
     {
-        $symbol = $this->narrowType !== null ? $this->target().'#'.$this->narrowType : $this->target();
+        $subject = $this->narrowProperty !== null ? '$this->'.$this->narrowProperty.' ' : '';
+        $symbol = $this->narrowType !== null ? $this->target().'#'.$subject.$this->narrowType : $this->target();
 
         if ($this->returnsExceptions) {
             return $symbol.'#exceptions';

@@ -292,3 +292,15 @@ it('keys a callable analysed for every reachable return apart from one analysed 
     expect($every->symbol())->not->toBe($first->symbol())
         ->and($every->target())->toBe($first->target());
 });
+
+it('keys a callable narrowing a property of $this apart from one narrowing a parameter to the same class', function (): void {
+    // A resource collection's with() is read once per envelope, so the narrowed subject is part of the key.
+    $parameter = new CallableRef('/app/Http/Resources/Listed.php', 'App\\Listed', 'with', 0, 'resource', 'Illuminate\\Support\\Collection', narrowToEvery: true);
+    $property = new CallableRef('/app/Http/Resources/Listed.php', 'App\\Listed', 'with', 0, narrowType: 'Illuminate\\Support\\Collection', narrowToEvery: true, narrowProperty: 'resource');
+    $page = new CallableRef('/app/Http/Resources/Listed.php', 'App\\Listed', 'with', 0, narrowType: 'Illuminate\\Pagination\\LengthAwarePaginator', narrowToEvery: true, narrowProperty: 'resource');
+
+    expect($property->symbol())->toBe('App\\Listed::with#$this->resource Illuminate\\Support\\Collection#every')
+        ->and($property->symbol())->not->toBe($parameter->symbol())
+        ->and($property->symbol())->not->toBe($page->symbol())
+        ->and($property->target())->toBe($parameter->target());
+});

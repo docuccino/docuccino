@@ -12,6 +12,7 @@ use Docuccino\Laravel\Integrations\ApiResources\CollectionKeys;
 use Docuccino\Laravel\Integrations\ApiResources\PaginatedResourceResponsesExtension;
 use Docuccino\Laravel\Integrations\ApiResources\ResourceReflector;
 use Docuccino\Laravel\Integrations\ApiResources\ToArrayObject;
+use Docuccino\Laravel\Integrations\ApiResources\WrappedResource;
 use Docuccino\Laravel\Support\FrameworkClasses;
 use Docuccino\Laravel\Support\IgnoredResponses;
 
@@ -61,7 +62,12 @@ final class PaginatedResponseBody
             return;
         }
 
-        $result = $context->converter()->toSchema($collection);
+        // Converted as the page it is: the collection's with() is read for the paginator it wraps.
+        $converter = $context->converter();
+        $paginator = WrappedResource::PAGINATORS[$kind] ?? null;
+        $result = $paginator === null
+            ? $converter->toSchema($collection)
+            : WrappedResource::during($converter, $paginator, static fn () => $converter->toSchema($collection));
         $items = self::itemsSchema($result->schema) ?? self::mergedItems($context, $collection, $result->schema);
         if ($items === null) {
             return;
