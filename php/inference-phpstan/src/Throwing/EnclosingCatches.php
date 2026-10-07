@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Throwing;
 
+use Closure;
 use PhpParser\Node;
 use PHPStan\Node\ClosureReturnStatementsNode;
 use PHPStan\Node\MethodReturnStatementsNode;
@@ -11,42 +12,60 @@ use PHPStan\Node\MethodReturnStatementsNode;
 /**
  * The classes every `catch` around one offset of a body names, read off the source rather than off the
  * analyser's point, whose type for an undeclared call is not PHP's rule: a catch takes anything the try's own
- * statements raise that is an instance of a class it names. A catch that rethrows its own variable takes
- * nothing, a catch or `finally` body is outside its own try, and a nested function or class is a boundary.
+ * statements raise that is an instance of a class it names. A catch or `finally` body is outside its own try,
+ * and a nested function or class is a boundary.
+ *
+ * A catch takes nothing where what it caught may leave it ({@see escapes()}): a `throw` of its variable, or
+ * the variable handed to a call or stored, unless `$keeps` proves that callee keeps it. Reading a throw that
+ * leaves as taken publishes less than the server sends; the other mistake is only vague.
+ *
+ * @phpstan-type Keeps Closure(Node\Expr\CallLike, int): bool
  *
  * @internal
  */
 final class EnclosingCatches
 {
     /**
+     * The methods a `Throwable` is read through without being handed on: final on `Exception` and `Error`,
+     * so no class can make one of them throw the exception it is called on.
+     */
+    public const ACCESSORS = ['getmessage', 'getcode', 'getfile', 'getline', 'gettrace', 'getprevious', 'gettraceasstring'];
+
+    /** Reads of a variable that name no use of it: by position, or every local at once. */
+    private const OPAQUE_READS = ['func_get_args', 'func_get_arg', 'get_defined_vars', 'compact', 'extract'];
+
+    /**
+     * @param  Keeps|null  $keeps
      * @return list<Node\Name> empty where the offset is unknown
      */
-    public static function of(MethodReturnStatementsNode|ClosureReturnStatementsNode $body, Node $node): array
+    public static function of(MethodReturnStatementsNode|ClosureReturnStatementsNode $body, Node $node, ?Closure $keeps = null): array
     {
-        return self::around(self::statements($body), $node->getStartFilePos());
+        return self::around(self::statements($body), $node->getStartFilePos(), $keeps);
     }
 
     /**
-     * The `throw`s by which a catch around the node rethrows what it caught. The analyser drops a point under
-     * a catch wide enough to take all it can name, so where a rethrow cannot spell what it lets out, nothing
-     * else says so.
+     * The places a catch around the node lets out what it caught ({@see escapes()}). The analyser drops a
+     * point under a catch wide enough to take all it can name, so where a rethrow cannot spell what it lets
+     * out, nothing else says so.
      *
-     * @return list<Node\Expr\Throw_>
+     * @param  Keeps|null  $keeps
+     * @return list<Node\Expr\Throw_|Node\Expr\CallLike|Node\Expr\Assign|Node\Expr\AssignRef>
      */
-    public static function rethrowsAround(MethodReturnStatementsNode|ClosureReturnStatementsNode $body, Node $node): array
+    public static function rethrowsAround(MethodReturnStatementsNode|ClosureReturnStatementsNode $body, Node $node, ?Closure $keeps = null): array
     {
-        return self::rethrowsAt(self::statements($body), $node->getStartFilePos());
+        return self::rethrowsAt(self::statements($body), $node->getStartFilePos(), $keeps);
     }
 
     /**
      * @param  array<Node>  $nodes
-     * @return list<Node\Expr\Throw_>
+     * @param  Keeps|null  $keeps
+     * @return list<Node\Expr\Throw_|Node\Expr\CallLike|Node\Expr\Assign|Node\Expr\AssignRef>
      */
-    public static function rethrowsAt(array $nodes, int $offset): array
+    public static function rethrowsAt(array $nodes, int $offset, ?Closure $keeps = null): array
     {
         $rethrows = [];
         foreach (self::catchesAt($nodes, $offset) as $catch) {
-            foreach (self::rethrows($catch) as $rethrow) {
+            foreach (self::escapes($catch, $keeps) as $rethrow) {
                 $rethrows[] = $rethrow;
             }
         }
@@ -82,13 +101,14 @@ final class EnclosingCatches
 
     /**
      * @param  array<Node>  $nodes
+     * @param  Keeps|null  $keeps
      * @return list<Node\Name>
      */
-    public static function around(array $nodes, int $offset): array
+    public static function around(array $nodes, int $offset, ?Closure $keeps = null): array
     {
         $names = [];
         foreach (self::catchesAt($nodes, $offset) as $catch) {
-            if (self::rethrows($catch) === []) {
+            if (self::escapes($catch, $keeps) === []) {
                 foreach ($catch->types as $type) {
                     $names[] = $type;
                 }
@@ -160,13 +180,81 @@ final class EnclosingCatches
     }
 
     /**
-     * Every `throw` of the very exception the catch caught, on any path: what leaves through one is whatever
-     * the try raised, so the catch has taken none of it. A closure written in the body may hold the variable
-     * too, and is read; a function or class cannot, and is not.
+     * Whether the nodes read a variable as a value that may be handed on — anything but the receiver of one
+     * of the {@see ACCESSORS} or the left of an `instanceof` — or read their locals in a way that names none.
+     * The one grammar for both sides of a hand-off: what a catch passes on, and what the callee it is passed
+     * to does with the parameter. A closure written in the nodes is read, since it sees the variable through
+     * `use` or as an arrow function; a function or class is not.
      *
-     * @return list<Node\Expr\Throw_>
+     * @param  array<Node>  $nodes
      */
-    private static function rethrows(Node\Stmt\Catch_ $catch): array
+    public static function readsWhole(array $nodes, string $name): bool
+    {
+        foreach ($nodes as $node) {
+            if (self::readWhole($node, $name)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function readWhole(Node $node, string $name): bool
+    {
+        if ($node instanceof Node\Stmt\Function_ || $node instanceof Node\Stmt\ClassLike) {
+            return false;
+        }
+
+        if ($node instanceof Node\Expr\Variable) {
+            return $node->name === $name || ! is_string($node->name);
+        }
+
+        if ($node instanceof Node\Expr\FuncCall && $node->name instanceof Node\Name
+            && in_array($node->name->toLowerString(), self::OPAQUE_READS, true)
+        ) {
+            return true;
+        }
+
+        $skip = null;
+        if (($node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\NullsafeMethodCall)
+            && $node->name instanceof Node\Identifier
+            && in_array($node->name->toLowerString(), self::ACCESSORS, true)
+            && self::isVariable($node->var, $name)
+        ) {
+            $skip = $node->var;
+        } elseif ($node instanceof Node\Expr\Instanceof_ && self::isVariable($node->expr, $name)) {
+            $skip = $node->expr;
+        }
+
+        foreach ($node->getSubNodeNames() as $sub) {
+            $child = $node->{$sub};
+            foreach (is_array($child) ? $child : [$child] as $item) {
+                if ($item instanceof Node && $item !== $skip && self::readWhole($item, $name)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static function isVariable(Node $node, string $name): bool
+    {
+        return $node instanceof Node\Expr\Variable && $node->name === $name;
+    }
+
+    /**
+     * Every place the very exception the catch caught may leave it, on any path: a `throw` of its variable,
+     * a call it is passed to (unless `$keeps` proves that callee never lets it out), and an assignment that
+     * stores it for something else to throw. What leaves through one is whatever the try raised, so the catch
+     * has taken none of it. A `new` is not a hand-off: the wrapping idiom, `throw new B(previous: $e)`, lets
+     * out what it builds. A closure written in the body may hold the variable too, and is read; a function
+     * or class cannot, and is not.
+     *
+     * @param  Keeps|null  $keeps
+     * @return list<Node\Expr\Throw_|Node\Expr\CallLike|Node\Expr\Assign|Node\Expr\AssignRef>
+     */
+    private static function escapes(Node\Stmt\Catch_ $catch, ?Closure $keeps): array
     {
         if ($catch->var === null || ! is_string($catch->var->name)) {
             return [];
@@ -174,25 +262,27 @@ final class EnclosingCatches
 
         $found = [];
         foreach ($catch->stmts as $statement) {
-            self::collectRethrows($statement, $catch->var->name, $found);
+            self::collectEscapes($statement, $catch->var->name, $keeps, $found);
         }
 
         return $found;
     }
 
     /**
-     * @param  list<Node\Expr\Throw_>  $found
+     * @param  Keeps|null  $keeps
+     * @param  list<Node\Expr\Throw_|Node\Expr\CallLike|Node\Expr\Assign|Node\Expr\AssignRef>  $found
      */
-    private static function collectRethrows(Node $node, string $name, array &$found): void
+    private static function collectEscapes(Node $node, string $name, ?Closure $keeps, array &$found): void
     {
         if ($node instanceof Node\Stmt\Function_ || $node instanceof Node\Stmt\ClassLike) {
             return;
         }
 
-        if ($node instanceof Node\Expr\Throw_
-            && $node->expr instanceof Node\Expr\Variable
-            && $node->expr->name === $name
-        ) {
+        if ($node instanceof Node\Expr\Throw_ && self::isVariable($node->expr, $name)) {
+            $found[] = $node;
+        } elseif (($node instanceof Node\Expr\Assign || $node instanceof Node\Expr\AssignRef) && self::readWhole($node->expr, $name)) {
+            $found[] = $node;
+        } elseif ($node instanceof Node\Expr\CallLike && ! $node instanceof Node\Expr\New_ && self::handsOn($node, $name, $keeps)) {
             $found[] = $node;
         }
 
@@ -200,10 +290,35 @@ final class EnclosingCatches
             $child = $node->{$sub};
             foreach (is_array($child) ? $child : [$child] as $item) {
                 if ($item instanceof Node) {
-                    self::collectRethrows($item, $name, $found);
+                    self::collectEscapes($item, $name, $keeps, $found);
                 }
             }
         }
+    }
+
+    /**
+     * Whether a call is handed the variable by any argument a callee could let it out of: one that IS the
+     * variable is kept only where `$keeps` says so, and one that merely holds it never is.
+     *
+     * @param  Keeps|null  $keeps
+     */
+    private static function handsOn(Node\Expr\CallLike $call, string $name, ?Closure $keeps): bool
+    {
+        if ($call->isFirstClassCallable()) {
+            return false;
+        }
+
+        foreach ($call->getArgs() as $position => $argument) {
+            if (! self::readWhole($argument->value, $name)) {
+                continue;
+            }
+
+            if ($argument->unpack || ! self::isVariable($argument->value, $name) || $keeps === null || ! $keeps($call, $position)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @return array<Node\Stmt> */

@@ -734,8 +734,14 @@ constructor whose helper the class being built overrides is not the body PHP run
    by PHPStan minor. A class either side cannot reflect is kept, and a catch narrower than the thrown
    class takes nothing, since it may take only some instances. A catch that can rethrow its own variable
    (`catch (\Throwable $e) { DB::rollBack(); throw $e; }`) takes nothing either: the rethrow lets out
-   whatever the try raised, which its `$e` — typed as the catch for an undeclared call — cannot spell. Where
-   the analyser left such a call or `throw` no point, because the catch took all it could name, the point
+   whatever the try raised, which its `$e` — typed as the catch for an undeclared call — cannot spell. A
+   catch that HANDS its variable on — to a call (`$this->fail($e)`, `report($e)`, `throw_if($x, $e)`) or
+   into an assignment — is read the same way, since a helper that rethrows is as common as a `throw $e`;
+   a `new` is not a hand-off (`throw new B(previous: $e)` lets out B). The one exception is a hand-off the
+   build can prove harmless: an application method whose body reads the parameter only through
+   `Throwable`'s final accessors (`getMessage()`, `getCode()`, …), by the same grammar
+   (`EnclosingCatches::readsWhole()`); anything it cannot read, vendor `report()` included, lets it out.
+   Where the analyser left such a call or `throw` no point, because the catch took all it could name, the point
    it would have made outside the try is re-read (`ThrowAnalyzer::pointOutsideTry()`): the callee's
    `@throws`, or a bare `Throwable` to descend into. Every class whose ancestry the test read — thrown and
    caught — joins the dependency set, dropped or kept, since re-parenting either changes the answer.
@@ -800,7 +806,7 @@ document CARRIES, and `project_paths` bounds that on purpose; the declaring-call
 the error the document already carries SAYS, so its gate is the application's own source — the same scope
 every other status read uses, for the priming reason below. That is what lets a modular guard state its
 status as plainly as one in `app/`. Measured over one build of the fixture's throw corpus when it held 57
-(it holds 80 actions on two controllers now, and every one added since depends only on files those already
+(it holds 85 actions on two controllers now, and every one added since depends only on files those already
 did), the analysed-file count is 163 with the read and 163 without, so no recorded walk is discarded; the cost is two
 extra live file walks (25 against 23), one per callee body whose `throw` states a status —
 `app/Services/ManifestDeclaredQuery.php` and `modules/Billing/LedgerReviewQuery.php` — and no measurable
@@ -877,7 +883,7 @@ list and the read declines anyway — measured against Symfony's own `ConflictHt
 `__construct` has zero statements — while asking for it primes that file, grows the analysed set and
 discards every walk the replay layer had recorded. That argument is about PRIMING, so it reaches vendor and
 stops there: a primed root is already in the analysed set, its bodies intact, and reading one grows nothing.
-Measured over one build of the fixture app's throw corpus when it held 58 (it holds 80 throw actions now,
+Measured over one build of the fixture app's throw corpus when it held 58 (it holds 85 throw actions now,
 and every one added since depends only on files those already did), the analysed-file count is the same whether the status reads are scoped to the
 application or to the descend paths — so nothing recorded is discarded — and the wider scope costs one extra live file walk, for an exception class nothing else opened. (The
 absolute counts this paragraph used to give were taken against a smaller corpus than the one above it, and

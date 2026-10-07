@@ -1510,7 +1510,9 @@ went out past the catch on both minors — and the point's type, which 2.3 write
 2.2 as plain `Throwable`, looked like the fix and would have published by minor. The source reader then
 repeated the mistake one level up: it counted every catch as taking what it names, and a catch that
 rethrows its own variable takes nothing — `catch (\Exception $e) { report($e); throw $e; }` around an
-undeclared call published nothing at all, because the rethrow's `$e` is typed as the catch.
+undeclared call published nothing at all, because the rethrow's `$e` is typed as the catch. And the same
+again one call away: a catch that hands `$e` to a helper that rethrows it (`$this->fail($e)`) has no
+`throw` of its own to see, and was read as taking everything it names.
 
 *The tell.* A decision keyed on a point's or a type's exact shape where the fact behind it is written in
 the source — a `catch`, a `try`, a branch — in a form no minor can change.
@@ -1522,4 +1524,5 @@ shape one minor added so both publish what the older one did (the `never` point)
 
 *The tests that recognise it.* `ThrowSurfacingTest`'s catch rows, run against both minors on CI's fixture
 matrix (`pre-2210` and `newest`); `caughtDeclaredWithResidue` fails on 2.3 alone when the `never` skip is
-removed, and the `caughtRolledBack*` rows fail when a rethrowing catch is read as taking anything. `EnclosingCatchesTest` holds the reader to PHP's rule a row at a time.
+removed, the `caughtRolledBack*` rows fail when a rethrowing catch is read as taking anything, and the
+`caughtHandedTo*` / `caughtAndReported` rows when a hand-off is. `EnclosingCatchesTest` holds the reader to PHP's rule a row at a time.

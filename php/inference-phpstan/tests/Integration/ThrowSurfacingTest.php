@@ -66,6 +66,15 @@ it('surfaces exactly the expected API errors', function (string $method, array $
     'rolled back and rethrown, declared' => ['caughtRolledBackDeclared', ['OutOfStockException@500']],
     'rolled back and rethrown, a throw in the try' => ['caughtRolledBackLiteral', ['OutOfStockException@500', 'RuntimeException@500']],
     'rethrown on one path' => ['caughtSometimesRethrown', ['OutOfStockException@500', 'RuntimeException@500']],
+    // A catch that hands what it caught to a call lets it out unless the callee is shown to keep it: a helper
+    // that rethrows is as common as a `throw $e`, and the catch alone cannot tell the two apart. report()
+    // passes it on to the exception handler, which no read here can follow, so it keeps nothing back.
+    'caught and handed to report()' => ['caughtAndReported', ['OutOfStockException@500', 'RuntimeException@500']],
+    'caught and handed to a helper that rethrows' => ['caughtHandedToRethrower', ['OutOfStockException@500', 'RuntimeException@500']],
+    'caught around a declaring call, handed to a helper that rethrows' => ['caughtDeclaredHandedToRethrower', ['OutOfStockException@500']],
+    'caught and handed to a static helper that rethrows' => ['caughtHandedToStaticRethrower', ['OutOfStockException@500', 'RuntimeException@500']],
+    // …and a helper whose body reads it only for its message keeps it, so the catch takes what it names.
+    'caught and handed to a helper that only logs' => ['caughtHandedToLogger', ['LogicException@500']],
     // A class either side of the test cannot reflect is kept: a catch whose class no file declares takes
     // nothing, and a thrown class no file declares cannot be shown to be an instance of the catch.
     'a catch of an unknown class' => ['caughtUnknownClass', ['OutOfStockException@500', 'RuntimeException@500']],
@@ -97,6 +106,12 @@ it('depends on the file of a class a catch took', function (string $method): voi
     'caught by its own class' => ['caughtUndeclared'],
     'caught by a base class' => ['caughtUndeclaredByParent'],
 ])->group('fixture');
+
+it('depends on the file of a helper a catch was shown to keep its exception by', function (): void {
+    // The helper's body is what lets the catch take anything at all, so editing it to rethrow has to reach
+    // a warm build.
+    expect(throwDependencyNames('caughtHandedToLogger'))->toContain('ProbeGuards.php');
+})->group('fixture');
 
 it('invalidates a cached fragment when a class a catch took is edited', function (): void {
     /** @var list<string> $dependencies */

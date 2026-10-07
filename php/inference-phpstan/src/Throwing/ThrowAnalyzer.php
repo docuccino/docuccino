@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Throwing;
 
+use Closure;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Inference\Frame;
 use Docuccino\Core\Inference\SourceLocation;
@@ -242,7 +243,7 @@ final class ThrowAnalyzer
             // A catch took every class the analyser could name here and then rethrows, so what was raised
             // still leaves. Where the rethrow names a class the analyser narrowed its variable to, its own
             // point says so; where it names none, the site is read as the point it makes outside the try.
-            $point = $this->owedToRethrow($methodNode, $site, $pointed) ? $this->pointOutsideTry($site, $scope) : null;
+            $point = $this->owedToRethrow($methodNode, $site, $pointed, $scope) ? $this->pointOutsideTry($site, $scope) : null;
             if ($point !== null) {
                 [$type, $explicit] = $point;
                 foreach ($this->applyLayers($site, $scope, $type, $explicit, $depth, $visited, $priorChain, $frame, $caughtHere) as $result) {
@@ -255,14 +256,18 @@ final class ThrowAnalyzer
     }
 
     /**
-     * Whether a catch around the node rethrows by a `throw` that names no class of its own — no point, or a
-     * bare `Throwable` one.
+     * Whether a catch around the node lets out what it caught by something that names no class of its own —
+     * a `throw` with no point or a bare `Throwable` one, or a hand-off to a callee that may rethrow it.
      *
      * @param  array<string, Type>  $pointed
      */
-    private function owedToRethrow(MethodReturnStatementsNode|ClosureReturnStatementsNode $body, Node $node, array $pointed): bool
+    private function owedToRethrow(MethodReturnStatementsNode|ClosureReturnStatementsNode $body, Node $node, array $pointed, Scope $scope): bool
     {
-        foreach (EnclosingCatches::rethrowsAround($body, $node) as $rethrow) {
+        foreach (EnclosingCatches::rethrowsAround($body, $node, $this->keeps($scope)) as $rethrow) {
+            if (! $rethrow instanceof Node\Expr\Throw_) {
+                return true;
+            }
+
             $type = $pointed[self::key($rethrow)] ?? null;
             if ($type === null || $this->isBareThrowable($type)) {
                 return true;
@@ -270,6 +275,41 @@ final class ThrowAnalyzer
         }
 
         return false;
+    }
+
+    /**
+     * Whether the callee a catch hands its exception to provably keeps it: an application method whose body
+     * reads the parameter only through {@see EnclosingCatches::ACCESSORS}, by {@see EnclosingCatches::readsWhole()}
+     * — the grammar the catch's own hand-off is read with. Anything this build cannot read lets it out. The
+     * callee's files decide the answer either way, so they are dependencies whenever it resolves.
+     *
+     * @return Closure(Node\Expr\CallLike, int): bool
+     */
+    private function keeps(Scope $scope): Closure
+    {
+        return function (Node\Expr\CallLike $call, int $position) use ($scope): bool {
+            $callee = $this->calleeResolver->resolve($call, $scope);
+            if ($callee === null || ! $this->projectFilter->isProjectFile($callee->file)) {
+                return false;
+            }
+
+            $this->dependOn([$callee->file, $callee->writtenIn()]);
+            $body = $this->fileAnalyzer->method($callee->file, $callee->class, $callee->method);
+            $argument = $call->getArgs()[$position] ?? null;
+            if ($body === null || $argument === null) {
+                return false;
+            }
+
+            $bound = null;
+            foreach (($body->getMethodReflection()->getVariants()[0] ?? null)?->getParameters() ?? [] as $index => $parameter) {
+                if ($argument->name === null ? $index === $position : $parameter->getName() === $argument->name->toString()) {
+                    $bound = $parameter;
+                }
+            }
+
+            return $bound !== null && ! $bound->isVariadic() && $bound->passedByReference()->no()
+                && ! EnclosingCatches::readsWhole($body->getStatements(), $bound->getName());
+        };
     }
 
     /** Start and end offset: a chained call starts where the call it is chained on does. */
@@ -654,7 +694,7 @@ final class ThrowAnalyzer
     {
         return array_map(
             static fn (Node\Name $name): string => $scope->resolveName($name),
-            EnclosingCatches::of($body, $node),
+            EnclosingCatches::of($body, $node, $this->keeps($scope)),
         );
     }
 

@@ -283,7 +283,8 @@ in the file being walked, and an array return is no type the trace follows:
   that only throws makes everything after the call dead code.
 - `app/Services/OrderService.php` — `place()` / `placeDeclared()` / `reserve()`, the 2-level
   throw chain descended by the exception-flow layer; `placeLeniently()`, the same chain with its second
-  level caught inside the callee; and `placeUnknown()`, which throws a class no file declares.
+  level caught inside the callee; `placeUnknown()`, which throws a class no file declares; and `failWith()` /
+  `escalate()`, an instance and a static helper a catch hands what it caught to, which both rethrow it.
 - `app/Services/ExportProbeQuery.php` — a collaborator an action receives by METHOD INJECTION, whose
   `throw` of an unreadable status sits a call away: what the notice about it names has to be this file
   and line, not the action line the route entered by.
@@ -328,7 +329,9 @@ in the file being walked, and an array return is no type the trace follows:
   context), so the answer is the vague-but-true decline with the notice beside it — and the trait's file is
   still a dependency.
 - `app/Support/ProbeGuards.php` — a helper taking two callbacks, so two closures reach one call on ONE
-  line: they are two bodies, and a reader keying closures by line answers the second for both.
+  line: they are two bodies, and a reader keying closures by line answers the second for both. Also
+  `note()`, which logs only the message of the exception a catch hands it — the hand-off a catch may still
+  take through, and the one file that answer is written in.
 
 ### Data + Eloquent model reflection
 

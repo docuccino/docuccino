@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Exceptions\OutOfStockException;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
+use Throwable;
 
 /**
  * Service layer for Spike C's Layer 3 (bounded descent) evaluation.
@@ -18,7 +20,8 @@ use RuntimeException;
  * Both call reserve() (a second level) which throws RuntimeException with no
  * @throws, so the deepest exception is only recoverable by descending 2 levels.
  * placeLeniently() is place() with that second level caught, and
- * placeUnknown() throws a class no file declares.
+ * placeUnknown() throws a class no file declares. failWith() and escalate()
+ * are helpers a catch hands what it caught to, and both let it out again.
  */
 class OrderService
 {
@@ -64,8 +67,26 @@ class OrderService
         try {
             $this->reserve($productId, $qty);
         } catch (RuntimeException $e) {
-            report($e);
+            Log::warning($e->getMessage());
         }
+    }
+
+    /**
+     * Reports what it is handed and lets it out again.
+     */
+    public function failWith(Throwable $e): void
+    {
+        report($e);
+
+        throw $e;
+    }
+
+    /**
+     * The same, as a static helper.
+     */
+    public static function escalate(Throwable $e): void
+    {
+        throw $e;
     }
 
     /**

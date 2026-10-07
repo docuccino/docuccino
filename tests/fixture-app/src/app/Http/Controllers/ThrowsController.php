@@ -21,6 +21,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Spike C — exception-flow analysis targets.
@@ -235,7 +236,7 @@ class ThrowsController extends Controller
         try {
             $orders->placeDeclared(1, 5);
         } catch (\App\Exceptions\OutOfStockException $e) {
-            report($e);
+            Log::warning($e->getMessage());
         }
 
         if ($retry) {
@@ -254,7 +255,7 @@ class ThrowsController extends Controller
         try {
             $orders->place(1, 5);
         } catch (\Exception $e) {
-            report($e);
+            Log::warning($e->getMessage());
         }
 
         if ($retry) {
@@ -272,7 +273,7 @@ class ThrowsController extends Controller
         try {
             $orders->place(1, 5);
         } catch (\Throwable $e) {
-            report($e);
+            Log::warning($e->getMessage());
         }
 
         if ($retry) {
@@ -290,7 +291,7 @@ class ThrowsController extends Controller
         try {
             $orders->place(1, 5);
         } catch (\App\Exceptions\OutOfStockException|\RuntimeException $e) {
-            report($e);
+            Log::warning($e->getMessage());
         }
 
         if ($retry) {
@@ -447,6 +448,88 @@ class ThrowsController extends Controller
     }
 
     /**
+     * Case 8''l: a catch that hands what it caught to the framework's
+     * report(), whose body passes it on to the exception handler — nothing
+     * this build can read shows it is not let out again, so both descended
+     * exceptions leave.
+     */
+    public function caughtAndReported(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\Exception $e) {
+            report($e);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''m: the report-then-rethrow helper — the catch says no
+     * `throw`, and the method it hands the exception to does.
+     */
+    public function caughtHandedToRethrower(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\Exception $e) {
+            $orders->failWith($e);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''n: the same helper around a call that DECLARES what it
+     * throws, so no point survives the catch and the hand-off is all that
+     * says the declared class leaves.
+     */
+    public function caughtDeclaredHandedToRethrower(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->placeDeclared(1, 5);
+        } catch (\App\Exceptions\OutOfStockException $e) {
+            $orders->failWith($e);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''o: a static helper that rethrows what it is handed.
+     */
+    public function caughtHandedToStaticRethrower(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\Exception $e) {
+            OrderService::escalate($e);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''p: a helper that only logs the message of what it is
+     * handed, which its body shows — so the catch still takes both, and the
+     * literal after the try is what survives.
+     */
+    public function caughtHandedToLogger(OrderService $orders, ProbeGuards $guards, bool $retry): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\Exception $e) {
+            $guards->note($e);
+        }
+
+        if ($retry) {
+            throw new \LogicException('retry is not supported');
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
      * Case 8''e: a catch that translates what it caught into another
      * exception, which is what leaves.
      */
@@ -537,7 +620,7 @@ class ThrowsController extends Controller
                 throw \App\Exceptions\ExportUnsupportedException::forFormat('tsv');
             });
         } catch (\App\Exceptions\ExportLockedException $e) {
-            report($e);
+            Log::warning($e->getMessage());
         }
     }
 
