@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\SpecValidation;
 
+use Docuccino\Core\Contract\Pointer;
 use Docuccino\Core\Document\DocumentMembers;
+use Docuccino\Core\Document\PathItem;
 use Docuccino\Core\Emit\Formats;
 use Docuccino\Core\Support\JsonPointer;
 use Opis\JsonSchema\Validator;
@@ -76,14 +78,6 @@ final class OpenApiMetaSchema
             'sha256' => '2385f5bbb8c37878daae73baeabe7f34b2f022a4a8c049329ee61f71796f039c',
         ],
     ];
-
-    /**
-     * The path-item members that hold an Operation Object. `query` is 3.2's addition; naming one version's
-     * method under another is caught by the meta-schema itself, so the union is safe to walk.
-     *
-     * @var list<string>
-     */
-    private const array METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace', 'query'];
 
     /**
      * A Link Object's two members that hold ANY value — a literal body, or a map of literals and runtime
@@ -447,7 +441,7 @@ final class OpenApiMetaSchema
         $node = $root;
 
         foreach (explode('/', substr($ref, 2)) as $token) {
-            $token = str_replace(['~1', '~0'], ['/', '~'], rawurldecode($token));
+            $token = Pointer::unescape(rawurldecode($token));
 
             if ($node instanceof stdClass) {
                 if (! property_exists($node, $token)) {
@@ -625,7 +619,7 @@ final class OpenApiMetaSchema
             $containers = [];
 
             foreach ($pathItems as $pointer => $item) {
-                foreach (self::METHODS as $method) {
+                foreach (PathItem::METHODS as $method) {
                     $operation = $item->{$method} ?? null;
 
                     if (! $operation instanceof stdClass) {

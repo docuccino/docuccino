@@ -329,7 +329,7 @@ final class OperationExplainer
         }
 
         return array_map(
-            static fn (string $segment): string => str_replace(['~1', '~0'], ['/', '~'], $segment),
+            Pointer::unescape(...),
             explode('/', $body),
         );
     }
