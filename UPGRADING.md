@@ -4,6 +4,20 @@ One section per release that asks something of you, newest first. A release not 
 nothing but the version bump — the [changelog](https://docs.docuccino.app/changelog/) carries the
 full record either way.
 
+## v0.21.0
+
+### Code that calls the spec checks
+
+Only if you call `Docuccino\Core\SpecValidation` yourself. Nothing about a generated document changes.
+
+- **A finding is data now.** `OpenApiMetaSchema::findings()` and its siblings return
+  `SpecValidation\Finding` objects instead of strings. Each has `pointer`, `keyword`, `message` and
+  `schemaPointer`, and `(string) $finding` is the line the string used to be.
+- **`ValidationError` is gone.** `ValidationResult::$errors` holds `Finding`s, so `pointer` and `message`
+  read as before; `messages()` now renders each as `<pointer> <keyword>: <message> (schema …)`.
+- **Every failure is reported, not only the first.** Up to 50, then a last finding saying there were
+  more. A document invalid in several places gets one `document.schema-invalid` diagnostic per place.
+
 ## v0.20.0
 
 Docuccino now calls its output what it has always been: an OpenAPI 3.2 document carrying one vendor

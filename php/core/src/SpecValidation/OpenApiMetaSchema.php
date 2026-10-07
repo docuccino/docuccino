@@ -680,7 +680,7 @@ final class OpenApiMetaSchema
             : self::opisWorkarounds($schema);
 
         $validator = new Validator;
-        $validator->setMaxErrors(50);
+        SchemaFindings::collecting($validator);
 
         // An oracle may not touch what it reads. opis applies schema `default`s INTO the instance, so
         // validating a 3.2 document silently gave it a `jsonSchemaDialect` and a `servers` it never
