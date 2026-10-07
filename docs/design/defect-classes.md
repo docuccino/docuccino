@@ -443,6 +443,15 @@ Beside those, class ATTRIBUTES: spatie's attribute collection walks the parent c
 class, and the name-mapping read asked the class DECLARING the property instead — which is neither
 end of the hierarchy — so an inherited property under a mapped subclass published a key no request or
 response carries, in both directions and in both the request body and the response schema.
+The constructor readers are the same misreading pointed at construction. `ConstructorInitialisation`
+answered nothing once the running constructor was a subclass's, and `FixedPropertyValues` pinned nothing
+unless the final class's own constructor wrote the value, so a problem class running
+`parent::__construct()` published `detail` required and lost `type`'s `const`, while the same body written
+into one class did neither. Its mirror sat in the case the reader DID answer: an inherited constructor
+was read with its own class's helpers, so a subclass overriding the `$this->describe()` that constructor
+calls was published as the base's helper built it — a key required that the subclass never sends. Both now
+compose through an unconditional `parent::__construct()` (`ReachedStatements`), and a helper is followed
+only where the class being built runs that declaration (`ConstructionEscape::dispatches()`).
 
 *The tell.* A walk, a scan or a `getFileName()` that stops at the class the question was asked about,
 beside a claim in the docblock that it covers everything the class does. Reflection will not object: it
