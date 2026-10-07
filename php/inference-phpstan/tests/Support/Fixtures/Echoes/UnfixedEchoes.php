@@ -8,8 +8,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Every way a written echo is NOT the value sent: a property anyone may write again, one the constructor may
- * return before writing, a promoted one the argument initialised, and a table read keyed by a property that
- * is not readonly.
+ * return before writing, and a table read keyed by a property that is not readonly. The promoted status is
+ * the one member that IS fixed — the argument lands before the body runs.
  */
 final class UnfixedEchoes
 {

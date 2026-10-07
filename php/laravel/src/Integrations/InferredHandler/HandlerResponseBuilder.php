@@ -39,7 +39,7 @@ use stdClass;
  *
  * The example carries only members that folded to a literal — a {@see StatusMarkerT} member among them,
  * resolved to this response's status, so the 403 arm says `403`, and a {@see StatusTextMarkerT} one
- * resolved to its reason phrase ({@see resolveStatusTexts()}) — and required members that didn't fold
+ * resolved to its reason phrase ({@see pinEcho()}) — and required members that didn't fold
  * are filled with type-derived placeholders so the example is a valid instance of the schema beside it
  * ({@see example()} for why that fill is confined to examples and nothing else). A status that didn't fold
  * falls back to the one the body states, and only then to the exception's own hint ({@see foldStatus()}).
@@ -141,7 +141,9 @@ final class HandlerResponseBuilder
                 foreach ($schema as $keyword => $value) {
                     $draft->content($media)->set($keyword, $value, $contribution);
                 }
-                [$example, $placeholders] = self::example(self::resolveStatusTexts($payload, (int) $status), $schema, (int) $status, $context, self::resolveMemberEchoes($members, (int) $status));
+                $pin = static fn (DType $type): DType => self::pinEcho($type, (int) $status);
+                $examplePayload = $payload instanceof ArrayShapeT ? $payload->mapFieldTypes($pin) : $payload;
+                [$example, $placeholders] = self::example($examplePayload, $schema, (int) $status, $context, array_map($pin, $members));
                 if ($example !== [] && self::satisfies($example, self::resolveSchema($schema, $context))) {
                     $draft->setExample($media, $example, $placeholders);
                 }
@@ -363,36 +365,18 @@ final class HandlerResponseBuilder
     }
 
     /**
-     * Each top-level reason-phrase member pinned to the phrase this response's status is sent with, for the
-     * EXAMPLE alone: the schema beside it is shared by every status the body answers, so it keeps the type
-     * the member was read as ({@see StatusTextMarkerT}). A member this cannot name stays a marker, which the
-     * example fills from the schema like any member nothing folded.
+     * An echo of the status pinned to what it holds under `$status`, for the EXAMPLE: the status itself, or
+     * its reason phrase — or, where no phrase can be named, a member known present and unread, which the
+     * example fills from the schema. The schema keeps a phrase the type it was read as, since it is shared
+     * by every status the body answers ({@see StatusTextMarkerT}).
      */
-    private static function resolveStatusTexts(DType $payload, int $status): DType
+    private static function pinEcho(DType $type, int $status): DType
     {
-        if (! $payload instanceof ArrayShapeT) {
-            return $payload;
-        }
-
-        return $payload->mapFieldTypes(
-            static fn (DType $type): DType => $type instanceof StatusTextMarkerT ? self::statusText($type, $status) ?? $type : $type,
-        );
-    }
-
-    /**
-     * The members an object body echoes of its status, pinned the way an array body's are: the status
-     * itself, and its reason phrase — or, where no phrase can be named, a member known present and unread.
-     *
-     * @param  array<string, DType>  $members
-     * @return array<string, DType>
-     */
-    private static function resolveMemberEchoes(array $members, int $status): array
-    {
-        return array_map(static fn (DType $type): DType => match (true) {
+        return match (true) {
             $type instanceof StatusMarkerT => new LiteralT($status),
             $type instanceof StatusTextMarkerT => self::statusText($type, $status) ?? new UnknownT('no reason phrase for this status'),
             default => $type,
-        }, $members);
+        };
     }
 
     /**
@@ -403,7 +387,8 @@ final class HandlerResponseBuilder
      */
     private static function statusText(StatusTextMarkerT $marker, int $status): ?LiteralT
     {
-        // Symfony's `$statusTexts`, which every framework response class inherits rather than redeclares.
+        // Symfony's `$statusTexts`, which every framework response class inherits rather than redeclares. An
+        // application rewriting the table at boot is not keyed — too rare to build for.
         $phrase = Response::$statusTexts[$status] ?? null;
 
         return is_string($phrase) ? new LiteralT($phrase) : $marker->fallback;

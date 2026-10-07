@@ -12,12 +12,9 @@ use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
-use Docuccino\Core\Inference\MethodDeclaration;
+use Docuccino\Inference\PhpStan\Support\ParsedFiles;
 use PhpParser\Node;
 use PhpParser\NodeFinder;
-use PhpParser\NodeTraverser;
-use PhpParser\NodeVisitor\NameResolver;
-use PhpParser\ParserFactory;
 use ReflectionClass;
 use ReflectionClassConstant;
 use ReflectionProperty;
@@ -33,8 +30,7 @@ use Throwable;
  */
 final class FixedPropertyValues
 {
-    /** @var array<string, list<Node\Stmt>> file → its name-resolved statements */
-    private array $files = [];
+    public function __construct(private readonly ParsedFiles $files = new ParsedFiles) {}
 
     /**
      * The fixed value as a literal, with the files it was copied out of beyond the class's own
@@ -83,13 +79,11 @@ final class FixedPropertyValues
     {
         $owner = $property->getDeclaringClass()->getName();
         $constructor = $declaring->getConstructor();
-        $file = $constructor?->getFileName();
-        if (($owner !== $declaring->getName() && ! $declaring->isSubclassOf($owner)) || $constructor === null || $file === null || $file === false) {
+        if (($owner !== $declaring->getName() && ! $declaring->isSubclassOf($owner)) || $constructor === null) {
             return null;
         }
 
-        $method = MethodDeclaration::in($this->statements($file), $constructor);
-        foreach (ReachedStatements::of($method->stmts ?? []) as $statement) {
+        foreach (ReachedStatements::of($this->files->body($constructor) ?? []) as $statement) {
             $expr = ReachedStatements::assignment($statement, $property->getName());
             if ($expr !== null) {
                 return ['expr' => $expr, 'scope' => $declaring];
@@ -106,11 +100,13 @@ final class FixedPropertyValues
     }
 
     /**
+     * A string or int written as a literal or a class constant, with the files a constant was copied out of.
+     *
      * @param  ReflectionClass<object>  $scope  the class whose constructor the expression is written in
      * @param  ReflectionClass<object>  $class  the class being described
      * @return array{value: string|int, enum: ?string, files: list<string>}|null
      */
-    private static function fold(Node\Expr $expr, ReflectionClass $scope, ReflectionClass $class): ?array
+    public static function fold(Node\Expr $expr, ReflectionClass $scope, ReflectionClass $class): ?array
     {
         if ($expr instanceof Node\Scalar\String_) {
             return ['value' => $expr->value, 'enum' => null, 'files' => []];
@@ -200,7 +196,7 @@ final class FixedPropertyValues
             $file = $scope->getFileName();
             $name = $scope->getName();
             $node = $file === false ? null : (new NodeFinder)->findFirst(
-                $this->statements($file),
+                $this->files->statements($file),
                 static fn (Node $node): bool => $node instanceof Node\Stmt\ClassLike && $node->namespacedName?->toString() === $name,
             );
             if (! $node instanceof Node\Stmt\ClassLike) {
@@ -226,31 +222,5 @@ final class FixedPropertyValues
         }
 
         return false;
-    }
-
-    /** @return list<Node\Stmt> */
-    private function statements(string $file): array
-    {
-        if (isset($this->files[$file])) {
-            return $this->files[$file];
-        }
-
-        try {
-            $code = is_file($file) ? file_get_contents($file) : false;
-            $statements = $code === false ? null : (new ParserFactory)->createForHostVersion()->parse($code);
-        } catch (Throwable) {
-            $statements = null;
-        }
-
-        if ($statements === null) {
-            return $this->files[$file] = [];
-        }
-
-        $traverser = new NodeTraverser(new NameResolver);
-
-        return $this->files[$file] = array_values(array_filter(
-            $traverser->traverse($statements),
-            static fn (Node $node): bool => $node instanceof Node\Stmt,
-        ));
     }
 }

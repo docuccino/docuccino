@@ -363,8 +363,9 @@ the floor in silence. What answers that is the record check above, which fires a
 longer the only thing watching the number, which is what makes keeping its margin affordable. Ratchet to
 97 when the figure clears **97.20%**, about 28 statements, the order of margin the other two floors carry.
 Re-recorded at 97.18% (15,100/15,538) it had not: a floor of 97 would have carried 28.14 statements.
-Re-recorded at 97.22% (15,850/16,303) it has, so the floor ratcheted 96 → 97 with 36.09 statements of
-margin (0.22pp); it now takes deleting about 1,200 fully covered statements to cross it with no lost proof.
+It cleared it at 97.22% (15,850/16,303), when the floor ratcheted 96 → 97 with 36.09 statements of margin
+(0.22pp); the figure since is the table's. It takes deleting about 1,200 fully covered statements to cross
+the floor with no lost proof.
 
 **A floor drop is only ever a documented denominator change**, and there have been two.
 

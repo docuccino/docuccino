@@ -165,6 +165,8 @@ them.
   constructor is what decides which keys a response always carries. `HttpProblem` is the final
   `about:blank` problem a `respond()` callback builds in place (`RespondCallbacks::problemObject()`), its
   `status` read off the rendered response and its `title` the status text at that status.
+  `app/Http/Responses/ApiResponse.php` is the application's own `JsonResponse` subclass, inheriting the
+  status-text table a `respond()` callback reads through it (`RespondCallbacks::statusTextThroughApp()`).
 
 ### Closures located by line
 

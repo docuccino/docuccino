@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Analysis;
 
+use Closure;
 use Docuccino\Core\Inference\ComponentDeclaration;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
@@ -245,9 +246,7 @@ final readonly class RefinedResponse
             }
             foreach ($statusTexts as $key => [$accessor, $fallback]) {
                 if ($accessor->equals($statusSource)) {
-                    $payload = $payload->mapFieldTypes(
-                        static fn (DType $current, string|int $fieldKey): DType => (string) $fieldKey === (string) $key ? new StatusTextMarkerT($current, $fallback) : $current,
-                    );
+                    $payload = self::replaceFieldType($payload, (string) $key, static fn (DType $read): DType => new StatusTextMarkerT($read, $fallback));
                 }
             }
         }
@@ -278,11 +277,15 @@ final readonly class RefinedResponse
         return new self($payload, $this->status, $this->statusSource, $this->contentType, $this->delegates, $this->payloadParamProvenance, $members, $this->component, $this->statusOfPayload, $this->statusUnread);
     }
 
-    /** Key and optionality preserved; unchanged when the key is absent. */
-    private static function replaceFieldType(ArrayShapeT $shape, string $key, DType $type): ArrayShapeT
+    /**
+     * Key and optionality preserved; unchanged when the key is absent. A closure is handed the type it replaces.
+     *
+     * @param  DType|Closure(DType): DType  $type
+     */
+    private static function replaceFieldType(ArrayShapeT $shape, string $key, DType|Closure $type): ArrayShapeT
     {
         return $shape->mapFieldTypes(
-            static fn (DType $current, string|int $fieldKey): DType => (string) $fieldKey === $key ? $type : $current,
+            static fn (DType $current, string|int $fieldKey): DType => (string) $fieldKey !== $key ? $current : ($type instanceof Closure ? $type($current) : $type),
         );
     }
 

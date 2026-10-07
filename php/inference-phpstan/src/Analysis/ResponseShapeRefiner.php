@@ -108,11 +108,7 @@ final class ResponseShapeRefiner
         $this->budget = new DescentBudget($maxDepth, $fileBudget);
         $this->declarations = new ComponentDeclarations($reflectionProvider);
         $this->fluentChain = new FluentResponseChain($reflectionProvider, $translator);
-        $this->echoes = new ConstructorEchoes(function (string $file): void {
-            if ($this->appFilter->isProjectFile($file)) {
-                $this->touch($file);
-            }
-        });
+        $this->echoes = new ConstructorEchoes($this->touchProject(...));
         $this->enumFolder = new EnumAccessorFolder(
             $this->fileAnalyzer,
             $this->appFilter,
@@ -513,13 +509,11 @@ final class ResponseShapeRefiner
             : ArgumentSlots::of($new->getArgs(), $this->constructorParameterNames($class));
 
         $payload = null;
-        $provenance = [];
-        $statusTexts = [];
+        [$provenance, $statusTexts] = [[], []];
         $body = $args->at(0);
         if ($body !== null) {
             $payload = $this->payloadOf($scope->getType($body));
-            $provenance = $this->payloadProvenance($body, $scope, $paramNames);
-            $statusTexts = $this->statusTextProvenance($body, $scope, $paramNames);
+            [$provenance, $statusTexts] = $this->bodyProvenance($body, $scope, $paramNames);
         }
 
         // Symfony's 200 is what a call that provably passed NO status gets. A status sitting in a spread
@@ -555,8 +549,10 @@ final class ResponseShapeRefiner
      */
     private function constructedEchoes(Node\Expr $body, ClassT $payload, ?ParamAccessor $statusSource, Scope $scope, array $paramNames): ?ArrayShapeT
     {
-        if ($body instanceof Node\Expr\Variable && is_string($body->name)) {
-            $body = ($this->locals($scope))($body->name) ?? $body;
+        if ($statusSource !== null && $body instanceof Node\Expr\Variable && is_string($body->name)) {
+            // Built in a local: what its constructor read is the status sent only if nothing since changed it.
+            $assigned = ($this->locals($scope))($body->name);
+            $body = $assigned !== null && $this->readHolds($scope, $assigned->getEndFilePos(), $statusSource->param, $statusSource->kind !== AccessorKind::Identity) ? $assigned : $body;
         }
         if ($statusSource === null
             || ! $body instanceof Node\Expr\New_
@@ -582,22 +578,24 @@ final class ResponseShapeRefiner
     }
 
     /**
-     * Each member of an inline body that reads the status-text table ({@see StatusTextRead}), with the
-     * accessor its key reads — read the way a member's own value is ({@see payloadProvenance()}), so the
-     * two meet in {@see RefinedResponse::fromConstructor()} on one grammar.
+     * Which members of a body read off a parameter, and which read the status-text table at one
+     * ({@see StatusTextRead}) — both off the one array literal and read the same way, so the two meet in
+     * {@see RefinedResponse::fromConstructor()} on one grammar. A body built in a local answers only for the
+     * reads still true where it goes out ({@see readHolds()}).
      *
      * @param  list<string>  $paramNames
-     * @return array<string, array{ParamAccessor, ?LiteralT}>
+     * @return array{array<string, ParamAccessor>, array<string, array{ParamAccessor, ?LiteralT}>}
      */
-    private function statusTextProvenance(Node\Expr $body, Scope $scope, array $paramNames): array
+    private function bodyProvenance(Node\Expr $body, Scope $scope, array $paramNames): array
     {
         $array = $this->bodyArrayLiteral($body, $scope);
         if ($array === null) {
-            return [];
+            return [[], []];
         }
 
         $locals = $this->locals($scope);
-        $found = [];
+        $provenance = AccessorExtractor::provenanceFromArray($array, $paramNames, $locals);
+        $statusTexts = [];
         foreach ($array->items as $item) {
             if (! $item->key instanceof Node\Scalar\String_) {
                 continue;
@@ -606,19 +604,27 @@ final class ResponseShapeRefiner
                 $item->value,
                 static fn (Node\Name $name): string => $scope->resolveName($name),
                 fn (Node\Expr $fallback): ?LiteralT => $this->constLiteralOf($fallback, $scope),
+                $this->touchProject(...),
             );
             $accessor = $read === null ? null : AccessorExtractor::fromExpr($read['key'], $paramNames, $locals);
             if ($accessor !== null) {
-                $found[$item->key->value] = [$accessor, $read['fallback']];
+                $statusTexts[$item->key->value] = [$accessor, $read['fallback']];
             }
         }
 
-        return $found;
+        if ($array === $body) {
+            return [$provenance, $statusTexts];
+        }
+
+        $holds = fn (ParamAccessor $accessor): bool => $this->readHolds($scope, $array->getEndFilePos(), $accessor->param, $accessor->kind !== AccessorKind::Identity);
+
+        return [array_filter($provenance, $holds), array_filter($statusTexts, static fn (array $text): bool => $holds($text[0]))];
     }
 
     /**
      * The one expression each local of the scope's function was assigned, for an accessor read through it
-     * ({@see AccessorExtractor::fromExpr()}); null for a local written in any other way, or more than once.
+     * ({@see AccessorExtractor::fromExpr()}); null for a local written in any other way, or more than once,
+     * and for one naming a read of a variable that something after it may have changed ({@see readHolds()}).
      *
      * @return Closure(string): ?Node\Expr
      */
@@ -627,20 +633,44 @@ final class ResponseShapeRefiner
         $key = FileAnalyzer::scopeKey($scope);
         $assignments = $key === null ? [] : ($this->fileAnalyzer->localAssignments($scope->getFile())[$key] ?? []);
 
-        return static fn (string $name): ?Node\Expr => ($assignments[$name] ?? null)[0] ?? null;
+        return function (string $name) use ($assignments, $scope): ?Node\Expr {
+            $assigned = ($assignments[$name] ?? null)[0] ?? null;
+            $read = $assigned === null ? null : self::variableRead($assigned);
+
+            return $read === null || $this->readHolds($scope, $assigned->getEndFilePos(), ...$read) ? $assigned : null;
+        };
     }
 
     /**
-     * Which body members read off a parameter, so a call site can fold them once it knows the argument.
-     *
-     * @param  list<string>  $paramNames
-     * @return array<string, ParamAccessor> member key → the accessor its value reads from
+     * Whether a read of `$variable` (a member of it) ending at offset `$after` of the scope's function gives
+     * the same value at every later point ({@see FileAnalyzer::readHolds()}).
      */
-    private function payloadProvenance(Node\Expr $expr, Scope $scope, array $paramNames): array
+    private function readHolds(Scope $scope, int $after, string $variable, bool $member): bool
     {
-        $array = $this->bodyArrayLiteral($expr, $scope);
+        $key = FileAnalyzer::scopeKey($scope);
 
-        return $array === null ? [] : AccessorExtractor::provenanceFromArray($array, $paramNames, $this->locals($scope));
+        return $key !== null && $this->fileAnalyzer->readHolds($scope->getFile(), $key, $after, $variable, $member);
+    }
+
+    /**
+     * `[variable, whether through a member]` where the expression, `??` aside, reads one variable: itself, a
+     * property of it, or a method of it.
+     *
+     * @return array{string, bool}|null
+     */
+    private static function variableRead(Node\Expr $expr): ?array
+    {
+        while ($expr instanceof Node\Expr\BinaryOp\Coalesce) {
+            $expr = $expr->left;
+        }
+
+        if ($expr instanceof Node\Expr\Variable) {
+            return is_string($expr->name) ? [$expr->name, false] : null;
+        }
+
+        $variable = $expr instanceof Node\Expr\PropertyFetch || $expr instanceof Node\Expr\MethodCall ? $expr->var : null;
+
+        return $variable instanceof Node\Expr\Variable && is_string($variable->name) ? [$variable->name, true] : null;
     }
 
     /**
@@ -708,8 +738,7 @@ final class ResponseShapeRefiner
             return $refined;
         }
 
-        $provenance = $arguments['body'] === null ? [] : $this->payloadProvenance($arguments['body'], $scope, $paramNames);
-        $statusTexts = $arguments['body'] === null ? [] : $this->statusTextProvenance($arguments['body'], $scope, $paramNames);
+        [$provenance, $statusTexts] = $arguments['body'] === null ? [[], []] : $this->bodyProvenance($arguments['body'], $scope, $paramNames);
 
         return RefinedResponse::fromConstructor($refined->payload, null, $source, $refined->contentType, $provenance, $statusTexts);
     }
@@ -783,6 +812,14 @@ final class ResponseShapeRefiner
         $declaration = $this->declarations->on($callee->class, $callee->method);
 
         return $declaration === null ? $result : $result->withComponent($declaration);
+    }
+
+    /** A file an answer was read out of, recorded where it is the application's own. */
+    private function touchProject(string $file): void
+    {
+        if ($this->appFilter->isProjectFile($file)) {
+            $this->touch($file);
+        }
     }
 
     /** Normalise before it reaches the budget, which counts files by their canonical path. */

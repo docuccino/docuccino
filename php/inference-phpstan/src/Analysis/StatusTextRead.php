@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Inference\PhpStan\Analysis;
 
 use Closure;
+use Docuccino\Core\Extensions\Schema\DeclarationFiles;
 use Docuccino\Core\Inference\DType\LiteralT;
 use PhpParser\Node;
 use ReflectionException;
@@ -29,13 +30,15 @@ final class StatusTextRead
 
     /**
      * The key the table is read at, and the literal a `??` falls back to — null where there is no `??`, or
-     * where what it falls back to does not fold.
+     * where what it falls back to does not fold. Whether the named class reads Symfony's table is answered
+     * by its hierarchy, so each file of it is recorded through `$touch`, the table or not.
      *
      * @param  Closure(Node\Name): string  $resolveName
      * @param  Closure(Node\Expr): ?LiteralT  $fold
+     * @param  Closure(string): void  $touch
      * @return array{key: Node\Expr, fallback: ?LiteralT}|null
      */
-    public static function of(Node\Expr $expr, Closure $resolveName, Closure $fold): ?array
+    public static function of(Node\Expr $expr, Closure $resolveName, Closure $fold, Closure $touch): ?array
     {
         $fallback = null;
         if ($expr instanceof Node\Expr\BinaryOp\Coalesce) {
@@ -49,12 +52,16 @@ final class StatusTextRead
             || ! $expr->var->class instanceof Node\Name
             || ! $expr->var->name instanceof Node\VarLikeIdentifier
             || $expr->var->name->toString() !== self::TABLE
-            || ! self::readsTable($resolveName($expr->var->class))
         ) {
             return null;
         }
 
-        return ['key' => $expr->dim, 'fallback' => $fallback];
+        $class = $resolveName($expr->var->class);
+        foreach (DeclarationFiles::of($class) as $file) {
+            $touch($file);
+        }
+
+        return self::readsTable($class) ? ['key' => $expr->dim, 'fallback' => $fallback] : null;
     }
 
     /** Whether the class's `$statusTexts` is Symfony's own static table, rather than one it redeclares. */

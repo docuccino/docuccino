@@ -42,14 +42,35 @@ final class ReachedStatements
     /** The value a `$this->name = …;` statement assigns, or null where it is not one. */
     public static function assignment(Node\Stmt $statement, string $name): ?Node\Expr
     {
-        return $statement instanceof Node\Stmt\Expression
-            && $statement->expr instanceof Node\Expr\Assign
-            && $statement->expr->var instanceof Node\Expr\PropertyFetch
-            && $statement->expr->var->var instanceof Node\Expr\Variable
-            && $statement->expr->var->var->name === 'this'
-            && $statement->expr->var->name instanceof Node\Identifier
-            && $statement->expr->var->name->toString() === $name
-            ? $statement->expr->expr
+        $written = self::propertyWrite($statement);
+
+        return $written !== null && $written[0] === $name ? $written[1] : null;
+    }
+
+    /**
+     * `[name, value]` where the statement is `$this->name = value;`.
+     *
+     * @return array{string, Node\Expr}|null
+     */
+    public static function propertyWrite(Node\Stmt $statement): ?array
+    {
+        if (! $statement instanceof Node\Stmt\Expression || ! $statement->expr instanceof Node\Expr\Assign) {
+            return null;
+        }
+
+        $name = self::thisProperty($statement->expr->var);
+
+        return $name === null ? null : [$name, $statement->expr->expr];
+    }
+
+    /** The name, where the expression is `$this->name`. */
+    public static function thisProperty(Node\Expr $expr): ?string
+    {
+        return $expr instanceof Node\Expr\PropertyFetch
+            && $expr->var instanceof Node\Expr\Variable
+            && $expr->var->name === 'this'
+            && $expr->name instanceof Node\Identifier
+            ? $expr->name->toString()
             : null;
     }
 

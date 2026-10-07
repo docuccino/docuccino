@@ -306,3 +306,42 @@ it('reads the members an object body built in place echoes of the status it is s
         // What the members were read out of keys the fragment: the class's constructor.
         ->and(array_map(basename(...), $analysis->dependencyFiles))->toContain('HttpProblem.php');
 })->group('fixture');
+
+// A value named before the response's status is replaced is the old status, not the one sent: no member of
+// the body may echo the status it goes out with, however it was named.
+it('reads no echo of the status sent off a value named before that status was replaced', function (string $method, int $slot, array $expected): void {
+    $sites = array_values(array_filter(
+        respondReturns($method),
+        static fn (ReturnSite $site): bool => $site->type instanceof ClassT && $site->type->fqcn === 'Illuminate\\Http\\JsonResponse',
+    ));
+    expect($sites)->toHaveCount(1);
+
+    $type = $sites[0]->type;
+    expect($type)->toBeInstanceOf(ClassT::class)
+        ->and(echoedMembers($type->typeArgs[$slot] ?? new ArrayShapeT([])))->toBe($expected);
+})->with([
+    'a local the body reads' => ['statusTextStale', 0, ['title' => 'scalar', 'status' => 'scalar']],
+    'a body built in a local' => ['statusStaleBody', 0, ['status' => 'scalar']],
+    'an object built in a local' => ['problemStale', 3, []],
+])->group('fixture');
+
+it('keys a phrase read through an application class by that class, whose hierarchy decides it is the table', function (): void {
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
+        'app/Exceptions/RespondCallbacks.php',
+        '',
+        '',
+        line: exceptionsFixtureLine('RespondCallbacks.php', 'public function statusTextThroughApp(') + 2,
+        every: true,
+    ));
+    $sites = array_values(array_filter(
+        $analysis->returns,
+        static fn (ReturnSite $site): bool => $site->type instanceof ClassT && $site->type->fqcn === 'Illuminate\\Http\\JsonResponse',
+    ));
+    expect($sites)->toHaveCount(1);
+
+    $type = $sites[0]->type;
+    expect($type)->toBeInstanceOf(ClassT::class)
+        ->and(echoedMembers($type->typeArgs[0]))->toBe(['title' => ['statusText', 'scalar', 'Error']])
+        // Redeclaring `$statusTexts` there would make it another table: a warm build must notice.
+        ->and(array_map(basename(...), $analysis->dependencyFiles))->toContain('ApiResponse.php');
+})->group('fixture');

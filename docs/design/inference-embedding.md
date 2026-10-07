@@ -425,11 +425,14 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    any class inheriting the table) a `StatusTextMarkerT` carrying the `??` literal. A local assigned
    exactly once reads through to what it was assigned (`$status = $response->getStatusCode()`), one hop,
    and the analysed function's OWN parameters count too: nothing binds them, but two reads of one are
-   still the same value. An object body built in place (`new JsonResponse(new Problem($response), …)`)
+   still the same value. A value named before it is sent — that local, a body array or object built in one
+   — counts only while nothing after it names the variable read except to read a member of it, a property
+   or a method called with no arguments (`FileAnalyzer::readHolds()`): a `$response->setStatusCode(503)` in
+   between, or the response handed anywhere, and it is the old status. An object body built in place (`new JsonResponse(new Problem($response), …)`)
    carries the same two markers in its member map, keyed by property, for each public readonly property
-   its constructor's reached top-level statements write from such a read (`ConstructorEchoes`). A chain's
-   `->setStatusCode()` replaces the status the body echoed, so it widens every marker back to what the
-   member was read as.
+   its constructor's reached top-level statements write from such a read, or promotes from one
+   (`ConstructorEchoes`). A chain's `->setStatusCode()` replaces the status the body echoed, so it widens
+   every marker back to what the member was read as.
 3. **Enum-case accessor folding** (the final hop). When the call site binds a concrete enum case,
    `EnumAccessorFolder` resolves the accessors the callee applied to it: `->value`/`->name` from the
    case by reflection — VENDOR-SAFE, no body analysed; a no-arg `->method()` only for a PROJECT enum, by
