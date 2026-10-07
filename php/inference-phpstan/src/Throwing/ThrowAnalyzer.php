@@ -23,6 +23,7 @@ use PHPStan\Node\MethodReturnStatementsNode;
 use PHPStan\Node\ReturnStatementsNode;
 use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\Type\Constant\ConstantIntegerType;
+use PHPStan\Type\NeverType;
 use PHPStan\Type\ObjectType;
 use PHPStan\Type\Type;
 use Throwable;
@@ -30,8 +31,9 @@ use Throwable;
 /**
  * The 3-layer exception-flow engine (docs/design/inference-embedding.md §6):
  *
- *   1. PHPStan throw points. Drop `!isExplicit()` ones — they're always bare `Throwable`. Do NOT filter on
- *      `canContainAnyThrowable`: nearly every point flags it, signal included.
+ *   1. PHPStan throw points. Drop `!isExplicit()` ones — they're bare `Throwable`, or `never` where a catch
+ *      took every class the callee declares. Do NOT filter on `canContainAnyThrowable`: nearly every point
+ *      flags it, signal included.
  *   2. {@see KnownThrowers}, keyed on callee name — enriches explicit stubbed points with a status, and
  *      rescues still-implicit forwarders (static `findOrFail`) at `likely` confidence. Gated on the
  *      RESOLVED callee, so a name-keyed guess never overrules a body we can read ({@see applyRegistry}).
@@ -189,6 +191,14 @@ final class ThrowAnalyzer
         foreach ($methodNode->getStatementResult()->getThrowPoints() as $throwPoint) {
             $node = $throwPoint->getNode();
             $type = $throwPoint->getType();
+
+            // A call whose every declared class a narrow catch took. PHPStan keeps the point (from 2.3) so an
+            // enclosing `try` still sees the undeclared residue, and that residue is not ours to read: a
+            // declaring callee is never descended. Descending anyway publishes the very throws the catch took.
+            if ($type instanceof NeverType) {
+                continue;
+            }
+
             $scope = $this->fileAnalyzer->stableScope($throwPoint->getScope());
             $explicit = $throwPoint->isExplicit();
             $calleeName = $this->calleeResolver->name($node);

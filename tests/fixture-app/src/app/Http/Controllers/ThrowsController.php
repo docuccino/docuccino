@@ -152,6 +152,22 @@ class ThrowsController extends Controller
     }
 
     /**
+     * Case 8': the same subtraction across a call whose every declared
+     * exception the catch takes. The guard throws nothing it does not
+     * declare, so only the literal RuntimeException escapes the action.
+     */
+    public function tryCatchDeclared(bool $offline, bool $oversized): JsonResponse
+    {
+        try {
+            $this->guardProbeReachable($offline, $oversized);
+        } catch (\App\Exceptions\ExportOfflineException $e) {
+            return response()->json(['caught' => $e->getMessage()]);
+        }
+
+        throw new \RuntimeException('escaping path');
+    }
+
+    /**
      * Case 10: a domain exception that IS an HTTP status, pinned in its own
      * parent::__construct() through a private constructor's default — the
      * static-factory idiom, where the default is the only value any instance
