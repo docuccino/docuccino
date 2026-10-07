@@ -1331,7 +1331,9 @@ the rule class file as a fragment dependency, whether or not it carried the attr
 attribute invalidates. No attribute → the unchanged `validation.rule-unrecoverable` path; closures stay
 opaque by nature.
 
-`--provenance=none|winners|full`, default `winners` for committed artifacts.
+`--provenance=none|winners|full`, default `winners` for committed artifacts. A component only a dropped
+member referred to — a trail's overridden value, a 3.0 artifact's webhooks — is dropped with it
+(`Emit\StrandedComponents`); one nothing referred to in the UIR either is kept.
 Mock hints: `x-docuccino.mock` = `{faker, seedGroup}` on schema properties, written by `#[Mock]` through
 core's `Extensions\Schema\MockHints` — the one reader, called by every class-hoisting mapper (core's DTO
 mapper, spatie Data, API Resource, Eloquent) and by `RecoveredRequest` for a request whose fields are named

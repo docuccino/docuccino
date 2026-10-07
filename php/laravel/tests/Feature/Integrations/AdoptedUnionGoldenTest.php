@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Emit\EmitOptions;
 use Docuccino\Core\Emit\OpenApi30DownlevelEmitter;
 use Docuccino\Core\Emit\OpenApi31DownlevelEmitter;
+use Docuccino\Core\Emit\OpenApi32Emitter;
+use Docuccino\Core\Emit\ProvenanceLevel;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ClassRef;
@@ -128,6 +131,34 @@ it('publishes the declared union over the object the rules split, refined by wha
         '#[BodyParameter(name: "answer")] declares less than the rules accept at `answer.value` where `kind` is count, and the declaration is what is published — so a value the server accepts there reads as invalid.',
     ])
         ->and(diagnosticsCoded($result->diagnostics, 'attribute.body-parameter-union'))->toBe([]);
+});
+
+it('publishes the tag\'s enum only where something still refers to it', function () use ($engine, $routes): void {
+    // The rules name `kind` by the enum's component; the declaration that wins names it by the const each
+    // member fixes. What refers to the enum after that is the trail of the value the declaration
+    // overrode — provenance, which no OpenAPI document carries. So the enum is published beside the trail
+    // and nowhere else: a component nothing refers to is a dead type in every generated client.
+    $document = localityBuild($routes('storeDeclared', 'storeTyped', 'last'), $engine)->document;
+
+    foreach ([new OpenApi32Emitter, new OpenApi31DownlevelEmitter, new OpenApi30DownlevelEmitter] as $emitter) {
+        $published = json_decode($emitter->emit($document), true, flags: JSON_THROW_ON_ERROR);
+
+        expect(unreachableComponents($published))->toBe([])
+            ->and($published['components']['schemas'])->not->toHaveKey('ShapeKind');
+    }
+
+    $full = json_decode((new UirEmitter)->emit($document), true, flags: JSON_THROW_ON_ERROR);
+    $winners = json_decode((new UirEmitter)->emit($document, new EmitOptions(provenance: ProvenanceLevel::Winners)), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($full['components']['schemas'])->toHaveKey('ShapeKind')
+        ->and(unreachableComponents($full))->toBe([])
+        ->and($winners['components']['schemas'])->not->toHaveKey('ShapeKind')
+        ->and(unreachableComponents($winners))->toBe([]);
+
+    // Where the rules' own union is published, its branches refer to the enum, and it stays.
+    $rules = emittedArray(localityBuild($routes('store'), $engine));
+    expect($rules['components']['schemas'])->toHaveKey('ShapeKind')
+        ->and(unreachableComponents($rules))->toBe([]);
 });
 
 it('accepts the tagged bodies the server accepts, but for the one narrowing it reports', function (array|stdClass $answer, bool $accepted, bool $documented) use ($engine, $routes): void {
