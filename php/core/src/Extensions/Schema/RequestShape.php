@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Extensions\Schema;
 
+use Docuccino\Core\Extensions\BuiltIn\ClassTypeToSchema;
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\ClassT;
@@ -67,8 +68,17 @@ final class RequestShape
         }
         $seen[$fqcn] = true;
 
-        return (SealedHierarchy::of($fqcn) === null && self::keysDiffer($fqcn, $context))
+        return (SealedHierarchy::of($fqcn) === null && self::publishedPlain($fqcn, $context) && self::keysDiffer($fqcn, $context))
             || self::reachedFrom($fqcn, $context, $seen);
+    }
+
+    /**
+     * Whether {@see ClassTypeToSchema} is the mapper that publishes the class, so its key rule is the one the
+     * class is published by. Another mapper — a Data class's, a resource's — publishes one shape to both sides.
+     */
+    private static function publishedPlain(string $fqcn, SchemaContext $context): bool
+    {
+        return ! $context instanceof SchemaConverter || $context->mapperFor(new ClassT($fqcn)) instanceof ClassTypeToSchema;
     }
 
     /** @param  array<string, true>  $seen */

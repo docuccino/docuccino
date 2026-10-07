@@ -15,10 +15,13 @@ use Docuccino\Laravel\Tests\Fixtures\TaggedUnion\Attachment;
 use Docuccino\Laravel\Tests\Fixtures\TaggedUnion\FileAttachment;
 use Docuccino\Laravel\Tests\Fixtures\TaggedUnion\ForwardedAttachment;
 use Docuccino\Laravel\Tests\Fixtures\TaggedUnion\ImageAttachment;
+use Docuccino\Laravel\Tests\Fixtures\TaggedUnion\LabelData;
 use Docuccino\Laravel\Tests\Fixtures\TaggedUnion\LinkAttachment;
 use Docuccino\Laravel\Tests\Fixtures\TaggedUnion\Note;
 use Docuccino\Laravel\Tests\Fixtures\TaggedUnion\NoteController;
 use Docuccino\Laravel\Tests\Fixtures\TaggedUnion\PinnedLinkData;
+use Docuccino\Laravel\Tests\Fixtures\TaggedUnion\Tag;
+use Docuccino\Laravel\Tests\Fixtures\TaggedUnion\TagController;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
 
@@ -132,4 +135,26 @@ it('keys the request on every class that decided its shape, the seal included', 
         (string) (new ReflectionClass(Attachment::class))->getFileName(),
         (string) (new ReflectionClass(LinkAttachment::class))->getFileName(),
     );
+});
+
+it('weighs a reached class by the keys its own mapper publishes', function (): void {
+    // A defaulted property makes a PLAIN class two shapes, by the key rule ClassTypeToSchema publishes with.
+    // A Data class is published by its own mapper, one shape to both sides, so holding one is no reason for
+    // a plain class to split — and a split there publishes a `TagRequest` identical to `Tag`.
+    $engine = static function (): TypeEngine {
+        $factory = new ClassMetadataFactory;
+
+        return WorkbenchEngine::make(
+            classOverrides: [Tag::class => $factory->forClass(new ClassRef(Tag::class)), LabelData::class => $factory->forClass(new ClassRef(LabelData::class))],
+            analysisOverrides: [TagController::class.'::show' => new ActionAnalysis(returns: [new ReturnSite(new ClassT(Tag::class), new SourceLocation(''))])],
+        );
+    };
+    $document = emittedArray(localityBuild(static function (Router $router): void {
+        $router->post('api/zz-tags', [TagController::class, 'store']);
+        $router->get('api/zz-tags/show', [TagController::class, 'show']);
+    }, $engine));
+
+    expect($document['paths']['/api/zz-tags']['post']['requestBody']['content']['application/json']['schema']['properties']['tag'])
+        ->toBe(['$ref' => '#/components/schemas/Tag'])
+        ->and(array_keys($document['components']['schemas']))->not->toContain('TagRequest', 'LabelDataRequest');
 });
