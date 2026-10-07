@@ -122,3 +122,16 @@ it('invalidates a cached fragment when a file the status was read from is edited
     // publishes, so editing the guard has to make the entry stale.
     'the guard whose `@throws` surfaced the exception' => ['manifestStatusDeclaredByCallee', 'app/Services/ManifestDeclaredQuery.php'],
 ])->group('fixture');
+
+it('invalidates a cached fragment when the helper a closure is relayed through is edited', function (): void {
+    // The helper hands the work on, so no catch of its own is weighed and the closure's throws are kept. That
+    // answer was decided by the helper's file as much as a catch would have been: edit it to run the work
+    // under `try { $work(); } catch (\Exception) {}` and a cold build takes both — so a warm one must not
+    // serve the fragment that kept them.
+    $analysis = throwsAnalysis('relayedByHelperFunction');
+    /** @var list<string> $dependencies */
+    $dependencies = $analysis['dependencyFiles'];
+
+    expect(signalThrows('relayedByHelperFunction'))->toBe(['OutOfStockException@500', 'RuntimeException@500'])
+        ->and(fragmentAcrossDependencyEdit($dependencies, 'app/Support/helpers.php'))->toBe(['warm' => true, 'staleAfterEdit' => true]);
+})->group('fixture');

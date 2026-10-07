@@ -30,6 +30,14 @@ it('names the catches around every place the callee calls the parameter', functi
     // Every way of reading the parameter that names no place it runs.
     'never called' => ['return 1;', null],
     'passed on' => ['try { g($work); } catch (A) {}', null],
+    // …and the edit that turns a relay into a catch of its own changes the answer, which is why the file
+    // that decided either is a dependency of both.
+    'passed on, bare' => ['g($work);', null],
+    'run under a catch with no variable' => ['try { $work(); } catch (\Exception) {}', [['Exception']]],
+    // A catch that hands what it caught on takes nothing, whatever it hands it to.
+    'handed to a call' => ['try { $work(); } catch (A $e) { report($e); }', [[]]],
+    'handed to a method' => ['try { $work(); } catch (A $e) { $this->fail($e); }', [[]]],
+    'read for its message' => ['try { $work(); } catch (A $e) { log($e->getMessage()); }', [['App\A']]],
     'passed on beside a call' => ['try { $work(); } catch (A) {} g($work);', null],
     'stored' => ['$this->later = $work;', null],
     'reassigned' => ['$work = fn () => 1; try { $work(); } catch (A) {}', null],
@@ -62,3 +70,14 @@ it('binds an argument to its parameter by position or by name', function (string
     'variadic' => ['f(3, fn () => 1, $r, function () {})', null],
     'past the last parameter' => ['f(3, fn () => 1, $r, fn () => 1, function () {})', null],
 ]);
+
+it('reads a framework function by its contract: what its catch hands on keeps what it caught', function (): void {
+    $statements = (new NodeTraverser(new NameResolver))->traverse(
+        (new ParserFactory)->createForHostVersion()->parse('<?php function f(callable $work) { try { $work(); } catch (\Throwable $e) { report($e); return value(null, $e); } }') ?? [],
+    );
+    $function = (new NodeFinder)->findFirstInstanceOf($statements, Node\Stmt\Function_::class);
+    assert($function instanceof Node\Stmt\Function_);
+
+    expect(CalleeCatches::sites($function->stmts, 'work', byContract: true))->toBe([['Throwable']])
+        ->and(CalleeCatches::sites($function->stmts, 'work'))->toBe([[]]);
+});

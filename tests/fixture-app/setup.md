@@ -344,6 +344,10 @@ in the file being walked, and an array return is no type the trace follows:
   line: they are two bodies, and a reader keying closures by line answers the second for both. Also
   `note()`, which logs only the message of the exception a catch hands it — the hand-off a catch may still
   take through, and the one file that answer is written in.
+- `app/Support/Attempts.php` + `app/Support/helpers.php` — helpers that run the work an action hands them
+  under a catch of their own: swallowing it with its message logged, reporting and rethrowing it, handing
+  it to a method that rethrows, taking one class, retrying from the catch — and `relay()`, which hands the
+  work on to another helper, so its own body names no place the work runs.
 
 ### Data + Eloquent model reflection
 

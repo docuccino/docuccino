@@ -664,7 +664,7 @@ final class ThrowAnalyzer
             // its path too; what escapes any one of them escapes. Where they cannot all be named, only the
             // caller's catches apply.
             $inCallee = $this->calleeCatches->around($node, $position, $scope);
-            if ($inCallee !== null) {
+            if ($inCallee['file'] !== null) {
                 $this->dependOn([$inCallee['file']]);
             }
 

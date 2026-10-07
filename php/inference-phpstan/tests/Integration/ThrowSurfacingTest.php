@@ -102,6 +102,11 @@ it('surfaces exactly the expected API errors', function (string $method, array $
     'reported and rethrown by a helper' => ['rethrownByHelper', ['OutOfStockException@500', 'RuntimeException@500']],
     'narrowly swallowed by a helper' => ['narrowlySwallowedByHelper', ['RuntimeException@500']],
     'retried by a helper from its catch' => ['retriedByHelper', ['OutOfStockException@500', 'RuntimeException@500']],
+    // A helper's catch is read by the same rule as the action's: one that hands what it caught to a method
+    // that rethrows it takes nothing. And a helper that hands the work on names no place it runs, so no catch
+    // of its own is weighed.
+    'handed by a helper to a method that rethrows' => ['failedByHelper', ['OutOfStockException@500', 'RuntimeException@500']],
+    'relayed by a helper to another' => ['relayedByHelperFunction', ['OutOfStockException@500', 'RuntimeException@500']],
     // The registry is keyed on a bare method name, so an app's own validate() is exactly where a guess
     // could overrule a truth: the callee is project code we read, so its own exception stands and no
     // ValidationException/422 is invented for it.
