@@ -530,9 +530,10 @@ public function index(): array
 `Attachment` becomes a component holding the `oneOf` and its `discriminator`, and the response is an
 array of `$ref`s to it. An abstract class sealed the same way — or with `@psalm-inheritors` — works
 alike. When exporting OpenAPI 3.0, which has no `const`, each tag goes out as a one-value `enum` and the
-`discriminator` is kept. A nullable union keeps its `anyOf` of the tagged `oneOf` and a null branch,
-written `{type: object, nullable: true, enum: [null]}`: OpenAPI 3.0 has no `null` type, and its
-`nullable` adds `null` only beside a `type`, so this is the one spelling every 3.0 reader takes as null.
+`discriminator` is kept; a nullable union becomes the tagged `oneOf` with `nullable: true` beside it,
+which is how 3.0 code generators read a nullable tagged union. OpenAPI 3.0.3 lets `nullable` add `null`
+only beside a `type`, so a strict 3.0 validator reads that as the `oneOf` alone — the
+`downlevel.nullable-composition` info says so, and the 3.1 export has no such gap.
 
 A request body gets the same union from its validation rules when one field's value decides which of
 the others it carries — see [Tagged unions](/laravel/documenting/requests/#tagged-unions) on the

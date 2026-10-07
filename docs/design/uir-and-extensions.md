@@ -235,9 +235,11 @@ one written inside an example is data.
 A `null` member carries no tag, and a discriminator dispatches on a property every option of its
 `oneOf` carries, so a nullable tagged union is spelled `anyOf: [{oneOf, discriminator}, {type: null}]`
 — never `null` inside the `oneOf`, which a generator building a tagged union from the discriminator
-has no member for. The 3.0 downlevel keeps the `anyOf` and spells the null branch
-`{type: object, nullable: true, enum: [null]}` (`downlevel.nullable-composition`): 3.0.3's `nullable`
-adds null only beside a `type`, so folding it onto the `oneOf` would publish a union that refuses null. The
+has no member for. The 3.0 downlevel folds the null branch into `nullable: true` beside the `oneOf`
+(`downlevel.nullable-composition`), as it wraps a lone nullable `$ref` in `allOf` beside one: the
+spellings 3.0 code generators read as "nullable X", the discriminator left where they read polymorphism
+from. A strict 3.0.3 validator honours `nullable` only beside a `type` and refuses the null there — a
+trade made for the generator, which is what most 3.0 exports are for, and stated where it is made. The
 empty object (`{type: object, maxProperties: 0}`) stays outside the `oneOf` on the same argument: every
 tagged member requires its tag, so none admits `{}`, and a tagged request object whose tag is only
 `required_with` the object accepts exactly that (see below).

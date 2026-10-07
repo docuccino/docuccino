@@ -501,12 +501,22 @@ describe('schema dialect conversions', function (): void {
             ['type' => 'string', 'enum' => ['a', 'b', null], 'nullable' => true],
             [],
         ],
-        // A `$ref` takes no sibling in 3.0, and an `allOf` beside `nullable` still requires the referenced
-        // schema, which refuses null — so the choice stays, with null spelled as 3.0 spells it.
-        'null branch beside a $ref stays a composition' => [
+        // A `$ref` takes no sibling in 3.0, so it is wrapped: `allOf: [{$ref}]` beside `nullable` is what
+        // 3.0 code generators read as a nullable reference, though a strict 3.0.3 validator refuses null.
+        'null branch beside a $ref wraps it nullable' => [
             ['anyOf' => [['$ref' => '#/components/schemas/Other'], ['type' => 'null']]],
-            ['anyOf' => [['$ref' => '#/components/schemas/Other'], ['type' => 'object', 'enum' => [null], 'nullable' => true]]],
+            ['allOf' => [['$ref' => '#/components/schemas/Other']], 'nullable' => true],
             ['downlevel.nullable-composition'],
+        ],
+        'null branch beside a $ref joins an allOf already there' => [
+            ['allOf' => [['type' => 'object']], 'anyOf' => [['$ref' => '#/components/schemas/Other'], ['type' => 'null']]],
+            ['allOf' => [['$ref' => '#/components/schemas/Other'], ['type' => 'object']], 'nullable' => true],
+            ['downlevel.nullable-composition'],
+        ],
+        'null branch beside a $ref with siblings stays a composition' => [
+            ['anyOf' => [['$ref' => '#/components/schemas/Other', 'description' => 'x'], ['type' => 'null']]],
+            ['anyOf' => [['description' => 'x', 'allOf' => [['$ref' => '#/components/schemas/Other']]], ['type' => 'object', 'enum' => [null], 'nullable' => true]]],
+            ['downlevel.nullable-composition', 'downlevel.ref-siblings'],
         ],
         'null branch beside an untyped branch stays a composition' => [
             ['anyOf' => [['enum' => ['a', 'b']], ['type' => 'null']]],
@@ -523,15 +533,25 @@ describe('schema dialect conversions', function (): void {
             ['oneOf' => [['type' => 'string'], ['type' => 'integer'], ['type' => 'object', 'enum' => [null], 'nullable' => true]]],
             ['downlevel.nullable-composition'],
         ],
-        'null branch beside a lone tagged union stays a composition' => [
+        // A discriminator nested under an `anyOf` is not where a generator reads polymorphism from, so the
+        // union merges up, keeping it — with the same strict-validator cost as the `$ref` above.
+        'null branch beside a lone tagged union merges it in nullable' => [
             ['anyOf' => [
                 ['oneOf' => [['$ref' => '#/components/schemas/Other'], ['$ref' => '#/components/schemas/Other']], 'discriminator' => ['propertyName' => 'kind']],
                 ['type' => 'null'],
             ]],
-            ['anyOf' => [
-                ['oneOf' => [['$ref' => '#/components/schemas/Other'], ['$ref' => '#/components/schemas/Other']], 'discriminator' => ['propertyName' => 'kind']],
-                ['type' => 'object', 'enum' => [null], 'nullable' => true],
+            ['oneOf' => [['$ref' => '#/components/schemas/Other'], ['$ref' => '#/components/schemas/Other']], 'discriminator' => ['propertyName' => 'kind'], 'nullable' => true],
+            ['downlevel.nullable-composition'],
+        ],
+        'null branch beside a tagged union the parent collides with stays a composition' => [
+            ['discriminator' => ['propertyName' => 'x'], 'anyOf' => [
+                ['oneOf' => [['$ref' => '#/components/schemas/Other']], 'discriminator' => ['propertyName' => 'kind']],
+                ['type' => 'null'],
             ]],
+            ['anyOf' => [
+                ['oneOf' => [['$ref' => '#/components/schemas/Other']], 'discriminator' => ['propertyName' => 'kind']],
+                ['type' => 'object', 'enum' => [null], 'nullable' => true],
+            ], 'discriminator' => ['propertyName' => 'x']],
             ['downlevel.nullable-composition'],
         ],
         'null branch beside a lone anyOf stays a composition' => [
@@ -749,8 +769,12 @@ function downlevel30Scan(array $document): array
         }
 
         // 3.0.3 onwards, `nullable` adds null to the `type` beside it; with none it says nothing, and the
-        // null it was written to admit is refused.
-        if (array_key_exists('nullable', $node) && ! is_string($node['type'] ?? null)) {
+        // null it was written to admit is refused — but for the two spellings generators read as "nullable
+        // X", beside a wrapped `$ref` or a discriminated union, which are kept on purpose and pinned above.
+        $first = is_array($node['allOf'] ?? null) ? ($node['allOf'][0] ?? null) : null;
+        $idiom = (is_array($first) && array_keys($first) === ['$ref'])
+            || (isset($node['discriminator']) && (isset($node['oneOf']) || isset($node['anyOf'])));
+        if (array_key_exists('nullable', $node) && ! is_string($node['type'] ?? null) && ! $idiom) {
             $rejections[] = $pointer.'/nullable has no type';
         }
 
@@ -897,18 +921,57 @@ it('admits null in 3.0 exactly where the source does', function (array $schema):
     'a null-only type array' => [['type' => ['null']]],
     'a nullable multi type' => [['type' => ['string', 'integer', 'null']]],
     'a nullable multi type beside a composition' => [['type' => ['string', 'integer', 'null'], 'anyOf' => [['type' => 'string'], ['type' => 'integer']]]],
-    'a $ref or null' => [['anyOf' => [['$ref' => '#/components/schemas/Other'], ['type' => 'null']]]],
     'a $ref, an empty object or null' => [['anyOf' => [['$ref' => '#/components/schemas/Other'], ['type' => 'object', 'maxProperties' => 0], ['type' => 'null']]]],
     'a typed value list or null' => [['anyOf' => [['type' => 'string', 'enum' => ['a']], ['type' => 'null']]]],
     'an untyped value list or null' => [['anyOf' => [['enum' => ['a']], ['type' => 'null']]]],
     'one of two types or null' => [['oneOf' => [['type' => 'string'], ['type' => 'integer'], ['type' => 'null']]]],
-    'a tagged union or null' => [['anyOf' => [
-        ['oneOf' => [['$ref' => '#/components/schemas/Other']], 'discriminator' => ['propertyName' => 'a']],
-        ['type' => 'null'],
-    ]]],
     'a nested choice or null' => [['oneOf' => [['anyOf' => [['type' => 'string'], ['type' => 'integer']]], ['type' => 'null']]]],
     'a nullable property' => [['type' => 'object', 'properties' => ['a' => ['anyOf' => [['$ref' => '#/components/schemas/Other'], ['type' => 'null']]]]]],
     'a $ref, not nullable' => [['$ref' => '#/components/schemas/Other']],
+]);
+
+/*
+ * The two places the 3.0 document trades the strict reader for the code generator. A nullable lone `$ref`
+ * and a nullable lone discriminated union have no spelling that a strict 3.0.3 validator admits null by and
+ * a generator still reads as "nullable X": the null branch the rest of the emitter writes leaves a
+ * generator an anonymous `anyOf` wrapper, and a discriminator nested in it is not where generators look.
+ * Generators are what a 3.0 document is mostly exported for, so these keep `nullable: true` beside an
+ * `allOf` wrapper or the union itself — and the cost is pinned here rather than left to be rediscovered:
+ * a strict reader refuses null, and agrees with the source about every other value.
+ */
+it('spells a nullable reference and a nullable tagged union as 3.0 generators read them', function (array $schema, array $spelled): void {
+    $source = [
+        'openapi' => '3.2.0',
+        'info' => ['title' => 'API', 'version' => '1.0.0'],
+        'paths' => [],
+        'components' => ['schemas' => [
+            'S' => $schema,
+            'Other' => ['type' => 'object', 'properties' => ['a' => ['type' => 'string']], 'required' => ['a']],
+        ]],
+    ];
+    $emitted = (new OpenApi30DownlevelEmitter)->emit(UirDocument::fromArray($source));
+    $sourceJson = (string) json_encode($source, JSON_THROW_ON_ERROR);
+
+    expect(json_decode($emitted, true, flags: JSON_THROW_ON_ERROR)['components']['schemas']['S'])->toBe($spelled)
+        ->and(openApi30Admits($emitted, '/components/schemas/S', null))->toBeFalse();
+
+    foreach (['a', 1, ['a' => 'x'], ['b' => 1]] as $value) {
+        $asSource = (new Opis\JsonSchema\Validator)->validate(
+            json_decode((string) json_encode($value)),
+            json_decode((string) json_encode(['$ref' => '#/components/schemas/S', 'components' => json_decode($sourceJson)->components])),
+        )->isValid();
+
+        expect(openApi30Admits($emitted, '/components/schemas/S', $value))->toBe($asSource, json_encode($value).' in '.$emitted);
+    }
+})->with([
+    'a $ref or null' => [
+        ['anyOf' => [['$ref' => '#/components/schemas/Other'], ['type' => 'null']]],
+        ['allOf' => [['$ref' => '#/components/schemas/Other']], 'nullable' => true],
+    ],
+    'a tagged union or null' => [
+        ['anyOf' => [['oneOf' => [['$ref' => '#/components/schemas/Other']], 'discriminator' => ['propertyName' => 'a']], ['type' => 'null']]],
+        ['oneOf' => [['$ref' => '#/components/schemas/Other']], 'discriminator' => ['propertyName' => 'a'], 'nullable' => true],
+    ],
 ]);
 
 describe('the scan that guards the 3.0 emission', function (): void {
@@ -962,6 +1025,23 @@ describe('the scan that guards the 3.0 emission', function (): void {
         'a nullable with no type beside it' => [
             ['components' => ['schemas' => ['S' => ['properties' => ['a' => ['anyOf' => [['type' => 'string']], 'nullable' => true]]]]]],
             ['#/components/schemas/S/properties/a/nullable has no type'],
+        ],
+        'a nullable beside an allOf that wraps no reference' => [
+            ['components' => ['schemas' => ['S' => ['allOf' => [['type' => 'string']], 'nullable' => true]]]],
+            ['#/components/schemas/S/nullable has no type'],
+        ],
+        'a nullable beside an undiscriminated union' => [
+            ['components' => ['schemas' => ['S' => ['oneOf' => [['$ref' => '#/components/schemas/T']], 'nullable' => true]]]],
+            ['#/components/schemas/S/nullable has no type'],
+        ],
+        // The two spellings kept for generators are not refused.
+        'a nullable beside a wrapped reference' => [
+            ['components' => ['schemas' => ['S' => ['allOf' => [['$ref' => '#/components/schemas/T']], 'nullable' => true]]]],
+            [],
+        ],
+        'a nullable beside a discriminated union' => [
+            ['components' => ['schemas' => ['S' => ['oneOf' => [['$ref' => '#/components/schemas/T']], 'discriminator' => ['propertyName' => 'k'], 'nullable' => true]]]],
+            [],
         ],
         'the document members 3.0 lacks' => [
             ['jsonSchemaDialect' => 'https://json-schema.org/draft/2020-12/schema', 'webhooks' => []],

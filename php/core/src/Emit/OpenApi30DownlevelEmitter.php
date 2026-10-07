@@ -1016,9 +1016,11 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
 
     /**
      * A `{type: null}` branch is how 2020-12 spells nullable next to a `$ref` or a union. A lone
-     * surviving branch with a `type` of its own folds back in as `nullable: true` beside that type;
-     * anything else — a `$ref`, an untyped branch, a real choice — keeps its composition, with the
-     * null branch spelled {@see NULL_SCHEMA}.
+     * surviving branch with a `type` of its own folds back in as `nullable: true` beside that type. A
+     * lone `$ref` becomes `allOf: [{$ref}]` beside `nullable: true`, and a lone discriminated union
+     * merges in beside it: the idioms 3.0 code generators read as "nullable X", the union keeping its
+     * discriminator where they look for it. Anything else — an untyped branch, an undiscriminated
+     * composition, a real choice — keeps its composition, with the null branch spelled {@see NULL_SCHEMA}.
      *
      * @param  array<string, mixed>  $schema
      * @param  list<Diagnostic>  $diagnostics
@@ -1047,6 +1049,21 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
                 continue;
             }
 
+            // Generators over a strict 3.0.3 validator: the validator reads a `nullable` with no `type`
+            // beside it as nothing and refuses the null, and every generator reads it as "nullable X".
+            $idiom = $lone === null ? null : self::nullableIdiom($rest, $lone);
+            if ($idiom !== null) {
+                $schema = $idiom;
+
+                $diagnostics[] = new Diagnostic(
+                    severity: Severity::Info,
+                    code: 'downlevel.nullable-composition',
+                    message: sprintf('Moved the `{type: null}` branch at %s/%s onto the parent as `nullable: true`, the spelling OpenAPI 3.0 code generators read as nullable; a strict 3.0.3 validator, which honours `nullable` only beside a `type`, refuses null there.', $pointer, $keyword),
+                );
+
+                continue;
+            }
+
             $schema[$keyword] = array_map(static fn (mixed $b): mixed => $b === ['type' => 'null'] ? self::NULL_SCHEMA : $b, $branches);
 
             $diagnostics[] = new Diagnostic(
@@ -1071,6 +1088,33 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
         return is_string($branch['type'] ?? null)
             && ! array_key_exists('$ref', $branch)
             && array_intersect_key($parent, $branch) === [];
+    }
+
+    /**
+     * The parent with its one surviving branch carrying `nullable: true` the way 3.0 generators read it: a
+     * lone `$ref` wrapped in `allOf`, since 3.0 lets nothing stand beside a reference, and a discriminated
+     * union merged in, so its discriminator stays where they read polymorphism from. No `type` goes beside
+     * either: a reference may name any type, and `object` would refuse a referenced enum's strings. Null
+     * for any other branch, or one sharing a member with its parent.
+     *
+     * @param  array<string, mixed>  $parent
+     * @param  array<string, mixed>  $branch
+     * @return array<string, mixed>|null
+     */
+    private static function nullableIdiom(array $parent, array $branch): ?array
+    {
+        $ref = $branch['$ref'] ?? null;
+        if (is_string($ref) && count($branch) === 1) {
+            $existing = is_array($parent['allOf'] ?? null) ? array_values($parent['allOf']) : [];
+
+            return [...$parent, 'allOf' => [['$ref' => $ref], ...$existing], 'nullable' => true];
+        }
+
+        $discriminated = isset($branch['discriminator']) && (isset($branch['oneOf']) || isset($branch['anyOf']));
+
+        return $discriminated && array_intersect_key($parent, $branch) === []
+            ? [...$parent, ...$branch, 'nullable' => true]
+            : null;
     }
 
     /**
