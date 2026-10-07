@@ -58,6 +58,18 @@ it('surfaces exactly the expected API errors', function (string $method, array $
     // What a catch does next is its own throw point, read where it is written: a rethrow still leaves, and a
     // translation leaves as the class it translates to.
     'caught and rethrown' => ['caughtUndeclaredRethrown', ['OutOfStockException@500', 'RuntimeException@500']],
+    // A catch that rethrows its own variable takes nothing: the `throw $e` lets out whatever the try raised,
+    // which a catch wider than every class it names cannot spell — so the descended classes are what say it.
+    'caught wide and rethrown' => ['caughtWideRethrown', ['OutOfStockException@500', 'RuntimeException@500']],
+    'rolled back and rethrown' => ['caughtRolledBack', ['OutOfStockException@500', 'RuntimeException@500']],
+    // …and around a declaring call, the rethrow lets out what it declares and not what it hides.
+    'rolled back and rethrown, declared' => ['caughtRolledBackDeclared', ['OutOfStockException@500']],
+    'rolled back and rethrown, a throw in the try' => ['caughtRolledBackLiteral', ['OutOfStockException@500', 'RuntimeException@500']],
+    'rethrown on one path' => ['caughtSometimesRethrown', ['OutOfStockException@500', 'RuntimeException@500']],
+    // A class either side of the test cannot reflect is kept: a catch whose class no file declares takes
+    // nothing, and a thrown class no file declares cannot be shown to be an instance of the catch.
+    'a catch of an unknown class' => ['caughtUnknownClass', ['OutOfStockException@500', 'RuntimeException@500']],
+    'an unknown class thrown under a catch' => ['caughtUnknownThrown', ['NoSuchThrownException@500']],
     'caught and translated' => ['caughtUndeclaredTranslated', ['LogicException@500', 'RuntimeException@500']],
     'caught by nested tries, one each' => ['caughtUndeclaredNested', ['LogicException@500']],
     // The two shapes that take nothing: a `finally` alone, and a catch of a SUBCLASS of what is thrown — the
@@ -75,3 +87,21 @@ it('surfaces exactly the expected API errors', function (string $method, array $
     // ValidationException/422 is invented for it.
     "the app's own validate() keeps its own exception" => ['projectValidate', ['OutOfStockException@500']],
 ])->group('fixture');
+
+it('depends on the file of a class a catch took', function (string $method): void {
+    // Whether a catch takes a class is read off that class's ancestry, so its file decides what the route
+    // publishes even when the answer is to publish nothing: re-parenting the dropped exception lets it out,
+    // and a warm build keyed without the file would go on dropping what a cold one publishes.
+    expect(throwDependencyNames($method))->toContain('OutOfStockException.php');
+})->with([
+    'caught by its own class' => ['caughtUndeclared'],
+    'caught by a base class' => ['caughtUndeclaredByParent'],
+])->group('fixture');
+
+it('invalidates a cached fragment when a class a catch took is edited', function (): void {
+    /** @var list<string> $dependencies */
+    $dependencies = throwsAnalysis('caughtUndeclaredByParent')['dependencyFiles'];
+
+    expect(fragmentAcrossDependencyEdit($dependencies, 'app/Exceptions/OutOfStockException.php'))
+        ->toBe(['warm' => true, 'staleAfterEdit' => true]);
+})->group('fixture');

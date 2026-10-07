@@ -20,6 +20,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Spike C — exception-flow analysis targets.
@@ -317,6 +318,135 @@ class ThrowsController extends Controller
     }
 
     /**
+     * Case 8''d': the same rethrow from a catch wider than anything it names,
+     * so the `throw $e` says only `Exception` — what it lets out is whatever
+     * the try raised, both descended exceptions.
+     */
+    public function caughtWideRethrown(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\Exception $e) {
+            report($e);
+
+            throw $e;
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''d'': the transaction idiom — roll back whatever happened, then
+     * let it out unchanged.
+     */
+    public function caughtRolledBack(OrderService $orders): JsonResponse
+    {
+        DB::beginTransaction();
+
+        try {
+            $orders->place(1, 5);
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            throw $e;
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''d''b: the same idiom around a call that declares what it
+     * throws, which is what the rethrow lets out — and not what it hides.
+     */
+    public function caughtRolledBackDeclared(OrderService $orders): JsonResponse
+    {
+        DB::beginTransaction();
+
+        try {
+            $orders->placeDeclared(1, 5);
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            throw $e;
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''d''c: the same idiom around a `throw` written in the try.
+     */
+    public function caughtRolledBackLiteral(OrderService $orders, int $qty): JsonResponse
+    {
+        DB::beginTransaction();
+
+        try {
+            if ($qty > 10) {
+                throw new \App\Exceptions\OutOfStockException('too many');
+            }
+            $orders->reserve(1, $qty);
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            throw $e;
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''d''': a rethrow on one path only — what the catch keeps on the
+     * other does not change what can leave.
+     */
+    public function caughtSometimesRethrown(OrderService $orders, bool $strict): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\Exception $e) {
+            if ($strict) {
+                throw $e;
+            }
+
+            return response()->json(['caught' => $e->getMessage()]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''d'''': a catch naming a class that does not exist takes
+     * nothing, so both descended exceptions leave.
+     */
+    public function caughtUnknownClass(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\App\Exceptions\NoSuchException $e) {
+            return response()->json(['caught' => $e->getMessage()]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''d''''': a thrown class that does not exist is kept, even under
+     * a catch of everything an exception can be.
+     */
+    public function caughtUnknownThrown(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->placeUnknown();
+        } catch (\Exception $e) {
+            return response()->json(['caught' => $e->getMessage()]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
      * Case 8''e: a catch that translates what it caught into another
      * exception, which is what leaves.
      */
@@ -427,7 +557,7 @@ class ThrowsController extends Controller
     }
 
     /**
-     * Case 10:a domain exception that IS an HTTP status, pinned in its own
+     * Case 10: a domain exception that IS an HTTP status, pinned in its own
      * parent::__construct() through a private constructor's default — the
      * static-factory idiom, where the default is the only value any instance
      * can carry.

@@ -20,6 +20,7 @@ use PhpParser\Node;
 use PHPStan\Analyser\Scope;
 use PHPStan\Node\ClosureReturnStatementsNode;
 use PHPStan\Node\MethodReturnStatementsNode;
+use PHPStan\Reflection\ClassReflection;
 use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\Type\Constant\ConstantIntegerType;
 use PHPStan\Type\NeverType;
@@ -194,7 +195,7 @@ final class ThrowAnalyzer
         array $caught,
     ): array {
         $results = [];
-        /** @var array<string, true> $pointed calls with a throw point of their own, by start and end offset */
+        /** @var array<string, Type> $pointed what each node with a throw point of its own throws, by start and end offset */
         $pointed = [];
 
         foreach ($methodNode->getStatementResult()->getThrowPoints() as $throwPoint) {
@@ -208,75 +209,145 @@ final class ThrowAnalyzer
                 continue;
             }
 
-            $pointed[$node->getStartFilePos().':'.$node->getEndFilePos()] = true;
+            $pointed[self::key($node)] = $type;
 
             $scope = $this->fileAnalyzer->stableScope($throwPoint->getScope());
-            $explicit = $throwPoint->isExplicit();
-            $calleeName = $this->calleeResolver->name($node);
-            $callee = $this->calleeResolver->resolve($node, $scope);
             $frame = $this->frame($selfLabel, $scope, $node);
             $caughtHere = [...$caught, ...$this->catchesAround($methodNode, $node, $scope)];
 
-            // Layer 3': a closure handed to the callee. Ahead of the layers because they each `continue`,
-            // and because the callee's own answer says nothing about what the closure it runs throws.
+            // Layer 3': a closure handed to the callee. Ahead of the layers, because the callee's own
+            // answer says nothing about what the closure it runs throws.
             foreach ($this->applyClosures($node, $scope, $selfLabel, $depth, $visited, $priorChain, $frame, $caughtHere) as $result) {
                 $results[] = $result;
             }
 
-            // A call read off a `@method` tag naming a real method carries the magic method's throws, and
-            // PHP runs the real one ({@see CalleeResolver::shadowedMethod()}), so the point is re-read as
-            // what the analyser would have made of that method: its `@throws`, or an undeclared call.
-            $shadowed = $this->calleeResolver->shadowedMethod($node, $scope);
-            if ($shadowed !== null) {
-                $declared = $shadowed->getThrowType();
-                if ($declared !== null && $declared->isVoid()->yes()) {
-                    continue;
-                }
-                $explicit = $declared !== null;
-                $type = $declared ?? new ObjectType(Throwable::class);
-            }
-
-            // Layer 2: KnownThrowers registry, keyed on the callee name — for callees we cannot read.
-            $registryResults = $this->applyRegistry($calleeName, $callee, $node, $scope, $type, $explicit, $priorChain, $frame, $caughtHere);
-            if ($registryResults !== null) {
-                foreach ($registryResults as $result) {
-                    $results[] = $result;
-                }
-
-                continue;
-            }
-
-            // Layer 1: explicit concrete type (literal throw, @throws, stub).
-            if ($explicit && ! $this->isBareThrowable($type)) {
-                foreach ($this->applyExplicit($callee, $node, $scope, $type, $priorChain, $frame, $caughtHere) as $result) {
-                    $results[] = $result;
-                }
-
-                continue;
-            }
-
-            // Layer 3: implicit bare Throwable — descend, or drop it as noise.
-            if (! $explicit) {
-                foreach ($this->applyDescent($callee, $depth, $visited, $priorChain, $frame, $caughtHere) ?? [] as $result) {
-                    $results[] = $result;
-                }
-            }
-        }
-
-        // Layer 3' again, for a call inside a `try` that has no point of its own to carry it.
-        $scope = $this->fileAnalyzer->stableScope($methodNode->getStatementResult()->getScope());
-        foreach (EnclosingCatches::guardedCalls($methodNode) as $call) {
-            if (isset($pointed[$call->getStartFilePos().':'.$call->getEndFilePos()])) {
-                continue;
-            }
-
-            $caughtHere = [...$caught, ...$this->catchesAround($methodNode, $call, $scope)];
-            foreach ($this->applyClosures($call, $scope, $selfLabel, $depth, $visited, $priorChain, $this->frame($selfLabel, $scope, $call), $caughtHere) as $result) {
+            foreach ($this->applyLayers($node, $scope, $type, $throwPoint->isExplicit(), $depth, $visited, $priorChain, $frame, $caughtHere) as $result) {
                 $results[] = $result;
             }
         }
 
+        // Layer 3' again, for a call or `throw` inside a `try` that has no point of its own to carry it.
+        $scope = $this->fileAnalyzer->stableScope($methodNode->getStatementResult()->getScope());
+        foreach (EnclosingCatches::guarded($methodNode) as $site) {
+            if (isset($pointed[self::key($site)])) {
+                continue;
+            }
+
+            $frame = $this->frame($selfLabel, $scope, $site);
+            $caughtHere = [...$caught, ...$this->catchesAround($methodNode, $site, $scope)];
+            foreach ($this->applyClosures($site, $scope, $selfLabel, $depth, $visited, $priorChain, $frame, $caughtHere) as $result) {
+                $results[] = $result;
+            }
+
+            // A catch took every class the analyser could name here and then rethrows, so what was raised
+            // still leaves. Where the rethrow names a class the analyser narrowed its variable to, its own
+            // point says so; where it names none, the site is read as the point it makes outside the try.
+            $point = $this->owedToRethrow($methodNode, $site, $pointed) ? $this->pointOutsideTry($site, $scope) : null;
+            if ($point !== null) {
+                [$type, $explicit] = $point;
+                foreach ($this->applyLayers($site, $scope, $type, $explicit, $depth, $visited, $priorChain, $frame, $caughtHere) as $result) {
+                    $results[] = $result;
+                }
+            }
+        }
+
         return $results;
+    }
+
+    /**
+     * Whether a catch around the node rethrows by a `throw` that names no class of its own — no point, or a
+     * bare `Throwable` one.
+     *
+     * @param  array<string, Type>  $pointed
+     */
+    private function owedToRethrow(MethodReturnStatementsNode|ClosureReturnStatementsNode $body, Node $node, array $pointed): bool
+    {
+        foreach (EnclosingCatches::rethrowsAround($body, $node) as $rethrow) {
+            $type = $pointed[self::key($rethrow)] ?? null;
+            if ($type === null || $this->isBareThrowable($type)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Start and end offset: a chained call starts where the call it is chained on does. */
+    private static function key(Node $node): string
+    {
+        return $node->getStartFilePos().':'.$node->getEndFilePos();
+    }
+
+    /**
+     * The type and explicitness of the point a `throw` or a call makes where no catch is around it: what the
+     * thrown expression is, or what the reached callee declares — a bare `Throwable` where it declares
+     * nothing. Null for a call that does not resolve.
+     *
+     * @return array{Type, bool}|null
+     */
+    private function pointOutsideTry(Node\Expr\CallLike|Node\Expr\Throw_ $node, Scope $scope): ?array
+    {
+        if ($node instanceof Node\Expr\Throw_) {
+            return [$scope->getType($node->expr), true];
+        }
+
+        $reached = $this->calleeResolver->reached($node, $scope);
+        if ($reached === null) {
+            return null;
+        }
+        $declared = $reached->getThrowType();
+
+        return [$declared ?? new ObjectType(Throwable::class), $declared !== null];
+    }
+
+    /**
+     * Layers 2, 1 and 3, in that order, for one call or `throw`.
+     *
+     * @param  list<string>  $visited
+     * @param  list<Frame>  $priorChain
+     * @param  list<string>  $caught
+     * @return list<ThrownException>
+     */
+    private function applyLayers(
+        Node $node,
+        Scope $scope,
+        Type $type,
+        bool $explicit,
+        int $depth,
+        array $visited,
+        array $priorChain,
+        Frame $frame,
+        array $caught,
+    ): array {
+        $calleeName = $this->calleeResolver->name($node);
+        $callee = $this->calleeResolver->resolve($node, $scope);
+
+        // A call read off a `@method` tag naming a real method carries the magic method's throws, and
+        // PHP runs the real one ({@see CalleeResolver::shadowedMethod()}), so the point is re-read as
+        // what the analyser would have made of that method: its `@throws`, or an undeclared call.
+        $shadowed = $this->calleeResolver->shadowedMethod($node, $scope);
+        if ($shadowed !== null) {
+            $declared = $shadowed->getThrowType();
+            if ($declared !== null && $declared->isVoid()->yes()) {
+                return [];
+            }
+            $explicit = $declared !== null;
+            $type = $declared ?? new ObjectType(Throwable::class);
+        }
+
+        // Layer 2: KnownThrowers registry, keyed on the callee name — for callees we cannot read.
+        $registryResults = $this->applyRegistry($calleeName, $callee, $node, $scope, $type, $explicit, $priorChain, $frame, $caught);
+        if ($registryResults !== null) {
+            return $registryResults;
+        }
+
+        // Layer 1: explicit concrete type (literal throw, @throws, stub).
+        if ($explicit && ! $this->isBareThrowable($type)) {
+            return $this->applyExplicit($callee, $node, $scope, $type, $priorChain, $frame, $caught);
+        }
+
+        // Layer 3: implicit bare Throwable — descend, or drop it as noise.
+        return $explicit ? [] : ($this->applyDescent($callee, $depth, $visited, $priorChain, $frame, $caught) ?? []);
     }
 
     /**
@@ -593,6 +664,9 @@ final class ThrowAnalyzer
      * exception it cannot place is kept rather than dropped: a catch NARROWER than the thrown class takes
      * only some of its instances, and the rest still leave.
      *
+     * The answer is written in every class either side's ancestry is, kept or dropped alike, so those files
+     * join the dependency set: re-parenting the thrown class changes what the route publishes.
+     *
      * @param  list<string>  $caught
      */
     private function isCaught(string $fqcn, array $caught): bool
@@ -602,15 +676,39 @@ final class ThrowAnalyzer
         }
 
         $thrown = $this->reflectionProvider->getClass($fqcn);
+        $this->dependOn($this->ancestryFiles($thrown));
+
+        $taken = false;
         foreach ($caught as $class) {
-            if ($this->reflectionProvider->hasClass($class)
-                && $thrown->is($this->reflectionProvider->getClass($class)->getName())
-            ) {
-                return true;
+            if (! $this->reflectionProvider->hasClass($class)) {
+                continue;
+            }
+
+            $catch = $this->reflectionProvider->getClass($class);
+            $this->dependOn($this->ancestryFiles($catch));
+            $taken = $taken || $thrown->is($catch->getName());
+        }
+
+        return $taken;
+    }
+
+    /**
+     * The files a class, its parents and its interfaces are declared in — everything `is()` reads. A
+     * built-in class has no file of its own, only a stub the analyser may reach by more than one path.
+     *
+     * @return list<string>
+     */
+    private function ancestryFiles(ClassReflection $class): array
+    {
+        $files = [];
+        foreach ([$class, ...$class->getParents(), ...array_values($class->getInterfaces())] as $each) {
+            $file = $each->isBuiltin() ? null : $each->getFileName();
+            if ($file !== null) {
+                $files[] = $file;
             }
         }
 
-        return false;
+        return $files;
     }
 
     /**

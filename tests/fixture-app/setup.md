@@ -282,7 +282,8 @@ in the file being walked, and an array return is no type the trace follows:
   measures against, because `transaction()` is generic over its callback from Laravel 13 on and a closure
   that only throws makes everything after the call dead code.
 - `app/Services/OrderService.php` — `place()` / `placeDeclared()` / `reserve()`, the 2-level
-  throw chain descended by the exception-flow layer.
+  throw chain descended by the exception-flow layer; `placeLeniently()`, the same chain with its second
+  level caught inside the callee; and `placeUnknown()`, which throws a class no file declares.
 - `app/Services/ExportProbeQuery.php` — a collaborator an action receives by METHOD INJECTION, whose
   `throw` of an unreadable status sits a call away: what the notice about it names has to be this file
   and line, not the action line the route entered by.

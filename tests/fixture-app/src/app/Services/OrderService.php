@@ -17,7 +17,8 @@ use RuntimeException;
  *
  * Both call reserve() (a second level) which throws RuntimeException with no
  * @throws, so the deepest exception is only recoverable by descending 2 levels.
- * placeLeniently() is place() with that second level caught.
+ * placeLeniently() is place() with that second level caught, and
+ * placeUnknown() throws a class no file declares.
  */
 class OrderService
 {
@@ -75,5 +76,13 @@ class OrderService
         if ($qty > 100) {
             throw new RuntimeException('cannot reserve more than 100 units');
         }
+    }
+
+    /**
+     * No @throws, and the class it throws is declared nowhere.
+     */
+    public function placeUnknown(): void
+    {
+        throw new \App\Exceptions\NoSuchThrownException('unknown');
     }
 }

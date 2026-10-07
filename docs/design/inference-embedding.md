@@ -732,7 +732,13 @@ constructor whose helper the class being built overrides is not the body PHP run
    layer, registry and closure hop included. The analyser cannot decide it for an UNDECLARED call: 2.3
    types that point `Throwable~Caught` and 2.2 plain `Throwable`, so keying on the type would publish
    by PHPStan minor. A class either side cannot reflect is kept, and a catch narrower than the thrown
-   class takes nothing, since it may take only some instances.
+   class takes nothing, since it may take only some instances. A catch that can rethrow its own variable
+   (`catch (\Throwable $e) { DB::rollBack(); throw $e; }`) takes nothing either: the rethrow lets out
+   whatever the try raised, which its `$e` — typed as the catch for an undeclared call — cannot spell. Where
+   the analyser left such a call or `throw` no point, because the catch took all it could name, the point
+   it would have made outside the try is re-read (`ThrowAnalyzer::pointOutsideTry()`): the callee's
+   `@throws`, or a bare `Throwable` to descend into. Every class whose ancestry the test read — thrown and
+   caught — joins the dependency set, dropped or kept, since re-parenting either changes the answer.
 2. `KnownThrowers` registry (engine-owned and `@internal` — NOT a user surface; §7 is the
    sanctioned escape hatch), keyed on the callee NAME and gated on the
    RESOLVED callee — **dual role**: (a) *enrich* explicit stubbed points with a status
@@ -794,7 +800,7 @@ document CARRIES, and `project_paths` bounds that on purpose; the declaring-call
 the error the document already carries SAYS, so its gate is the application's own source — the same scope
 every other status read uses, for the priming reason below. That is what lets a modular guard state its
 status as plainly as one in `app/`. Measured over one build of the fixture's throw corpus when it held 57
-(it holds 73 actions on two controllers now, and every one added since depends only on files those already
+(it holds 80 actions on two controllers now, and every one added since depends only on files those already
 did), the analysed-file count is 163 with the read and 163 without, so no recorded walk is discarded; the cost is two
 extra live file walks (25 against 23), one per callee body whose `throw` states a status —
 `app/Services/ManifestDeclaredQuery.php` and `modules/Billing/LedgerReviewQuery.php` — and no measurable
@@ -852,7 +858,7 @@ is not surfaced at all (pinned as a fixture row rather than described).
 The call is not always there to carry the closure. Inside a `try` whose catch takes every class the callee
 declares, PHPStan 2.2 drops the call's point and 2.3 keeps it typed `never` — and the closure runs either
 way, its throws untouched by a catch aimed at the callee. So the closure hop also reads every call a `try`
-guards that has no point of its own (`EnclosingCatches::guardedCalls()`, off the body's statements), which
+guards that has no point of its own (`EnclosingCatches::guarded()`, off the body's statements), which
 answers alike on both — and, like every hop, carries the catches around the call into the closure's body.
 
 The callee's OWN signature decides what is left to read after it, and it is a function of the version the
@@ -871,7 +877,7 @@ list and the read declines anyway — measured against Symfony's own `ConflictHt
 `__construct` has zero statements — while asking for it primes that file, grows the analysed set and
 discards every walk the replay layer had recorded. That argument is about PRIMING, so it reaches vendor and
 stops there: a primed root is already in the analysed set, its bodies intact, and reading one grows nothing.
-Measured over one build of the fixture app's throw corpus when it held 58 (it holds 73 throw actions now,
+Measured over one build of the fixture app's throw corpus when it held 58 (it holds 80 throw actions now,
 and every one added since depends only on files those already did), the analysed-file count is the same whether the status reads are scoped to the
 application or to the descend paths — so nothing recorded is discarded — and the wider scope costs one extra live file walk, for an exception class nothing else opened. (The
 absolute counts this paragraph used to give were taken against a smaller corpus than the one above it, and
