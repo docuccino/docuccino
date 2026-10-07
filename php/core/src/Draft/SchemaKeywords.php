@@ -106,6 +106,11 @@ final class SchemaKeywords
         'discriminator',
     ];
 
+    /** The keywords whose value is one instance, and the ones whose value lists instances ({@see survivor()}). */
+    private const array VALUES = ['const', 'example', 'default'];
+
+    private const array VALUE_LISTS = ['enum', 'examples'];
+
     /**
      * The keywords that constrain values of a given instance type, mapped to the types they constrain
      * — a `minLength` speaks about strings and about nothing else. They survive a declaration that
@@ -115,11 +120,6 @@ final class SchemaKeywords
      *
      * @var array<string, list<string>>
      */
-    /** The keywords whose value is one instance, and the ones whose value lists instances ({@see survivor()}). */
-    private const array VALUES = ['const', 'example', 'default'];
-
-    private const array VALUE_LISTS = ['enum', 'examples'];
-
     private const array REFINEMENTS = [
         'format' => ['string', 'integer', 'number'],
         'enum' => [],
