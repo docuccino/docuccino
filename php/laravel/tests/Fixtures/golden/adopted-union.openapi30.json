@@ -264,18 +264,12 @@
         "type": "object",
         "properties": {
           "answer": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/Answer"
-              },
-              {
-                "type": "object",
-                "enum": [
-                  null
-                ],
-                "nullable": true
               }
-            ]
+            ],
+            "nullable": true
           }
         },
         "required": [

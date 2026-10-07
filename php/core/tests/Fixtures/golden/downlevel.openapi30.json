@@ -282,18 +282,12 @@
             ]
           },
           "status": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/Status"
-              },
-              {
-                "type": "object",
-                "enum": [
-                  null
-                ],
-                "nullable": true
               }
-            ]
+            ],
+            "nullable": true
           },
           "weight": {
             "anyOf": [
