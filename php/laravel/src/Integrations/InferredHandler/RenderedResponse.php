@@ -11,12 +11,11 @@ use Docuccino\Laravel\Support\FrameworkClasses;
 /**
  * The class of the response `respond()` is handed for one throw, where the build knows it — a `JsonResponse`,
  * exactly or at least: what a guard on that class is answered from ({@see RespondConditions}). Known in two
- * places only. Where the application
- * renders the exception, the inferred-handler tier's answer — read off a returned `JsonResponse`, of which a
- * subclass may still be sent. Where the framework does and the document says the error is sent as JSON, the
- * `JsonResponse` its JSON paths build exactly — every one but `HttpResponseException`, which hands back
- * whatever response it carries (and a `ValidationException` built with a response of its own, which the
- * document already describes as the framework's body).
+ * places only. Where the application renders the exception, the inferred-handler tier's answer — read off a
+ * returned `JsonResponse`, of which a subclass may still be sent. Where the framework does and the document
+ * says the error is sent as JSON, the `JsonResponse` its JSON paths build exactly — every one but
+ * `HttpResponseException`, which hands back whatever response it carries (and a `ValidationException` built
+ * with a response of its own, which the document already describes as the framework's body).
  */
 final readonly class RenderedResponse
 {
