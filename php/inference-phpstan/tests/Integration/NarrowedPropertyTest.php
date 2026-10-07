@@ -46,6 +46,10 @@ it('reads only the with() returns reachable for what $this->resource is', functi
     'a match arm on either abstract paginator answers a plain list with its default' => ['BulletinCollection', 'Illuminate\\Support\\Collection', [22], [['meta']]],
     // An arm's guard says when it may fire, not that it does, so the default after it is still read.
     'a match arm on either abstract paginator leaves a page itself and the default' => ['BulletinCollection', 'Illuminate\\Pagination\\CursorPaginator', [21, 22], [['paged'], ['meta']]],
+    // Assigned before a return, the property holds something else there: the return is open to whatever was
+    // wrapped, as one after a rebound parameter is, so a page keeps the meta the swap leads to.
+    'a page swapped for its items reaches every return after the swap' => ['RelayCollection', 'Illuminate\\Pagination\\LengthAwarePaginator', [26, 29], [['meta'], []]],
+    'a plain list is widened as well, since the swap may run before either return' => ['RelayCollection', 'Illuminate\\Support\\Collection', [26, 29], [['meta'], []]],
     'an unconditional with() is the same body whatever is wrapped' => ['ListedCollection', 'Illuminate\\Pagination\\LengthAwarePaginator', [18], [['meta', 'api_version']]],
 ])->group('fixture');
 

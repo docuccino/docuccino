@@ -623,12 +623,15 @@ final class PhpStanTypeEngine implements TypeEngine
     private function site(?Node\Expr $expr, Node $positioned, Scope $scope, ?Node\Expr $subject, ?array $guard, CallableBody $body, array $probes, bool $every, bool $typesParameter = true): array
     {
         $shape = $this->siteShape($expr, $scope);
-        // Only a parameter is rebound by a write: `$this->{property}` names no local that could be.
         $param = $subject instanceof Variable && is_string($subject->name) ? $subject->name : null;
         $held = $every || $param !== null
             ? ParameterUse::heldAt($positioned, array_values(array_unique([...$body->parameters, ...($param === null ? [] : [$param])])), $body->nodes)
             : [];
-        $rebound = $param !== null && ! in_array($param, $held, true);
+        // `$this->{property}` assigned before the site holds something else there, as a rebound parameter does.
+        $rebound = $param !== null
+            ? ! in_array($param, $held, true)
+            : $subject instanceof Node\Expr\PropertyFetch && $subject->name instanceof Node\Identifier
+                && ! ParameterUse::propertyHeldAt($positioned, $subject->name->toString(), $body->nodes);
 
         return [
             'pos' => SourceOrder::of($positioned),

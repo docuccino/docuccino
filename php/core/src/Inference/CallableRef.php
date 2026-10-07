@@ -49,7 +49,8 @@ final readonly class CallableRef
     /** A stable label for diagnostics, stub maps, and cache keys. */
     public function symbol(): string
     {
-        // A parameter's subject is left out of the key, which predates property narrowing.
+        // A narrowed parameter is the one the callable is handed its exception by, so the target already
+        // names it; a property is not fixed by the callable, so its name joins the key.
         $subject = $this->narrowProperty !== null ? $this->narrowedSubject().' ' : '';
         $symbol = $this->narrowType !== null ? $this->target().'#'.$subject.$this->narrowType : $this->target();
 

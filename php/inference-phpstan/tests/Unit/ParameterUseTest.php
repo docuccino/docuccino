@@ -323,3 +323,29 @@ it('holds a parameter as handed only where nothing that can run first could bind
     'written through a call' => ['$response->setStatusCode(500); return back();', true],
     'written through a property' => ['$response->headers = null; return back();', true],
 ]);
+
+it('holds a property of $this as handed only where nothing that can run first assigns it', function (string $code, bool $held): void {
+    $parsed = (new ParserFactory)->createForNewestSupportedVersion()->parse('<?php $f = function () {'.$code.'};') ?? [];
+    $closure = (new NodeFinder)->findFirstInstanceOf($parsed, Node\Expr\Closure::class);
+    assert($closure instanceof Node\Expr\Closure);
+    $returns = (new NodeFinder)->findInstanceOf($closure->stmts, Node\Stmt\Return_::class);
+
+    expect(ParameterUse::propertyHeldAt($returns[count($returns) - 1], 'resource', array_values($closure->stmts)))->toBe($held);
+})->with([
+    'never written' => ['if ($this->resource instanceof Paginator) { return []; } return [\'meta\' => 1];', true],
+    'assigned' => ['$this->resource = collect(); return [];', false],
+    'assigned in a branch first' => ['if ($x) { $this->resource = collect(); } return [];', false],
+    'assigned in a branch the return is not in' => ['if ($x) { $this->resource = collect(); return []; } else { return [1]; }', true],
+    'assigned after the return' => ['if ($x) { return [1]; } $this->resource = collect(); return [];', false],
+    'compounded' => ['$this->resource .= \'x\'; return [];', false],
+    'unset' => ['unset($this->resource); return [];', false],
+    'destructured into' => ['[$this->resource] = $pair; return [];', false],
+    'a reference taken to it' => ['$held = &$this->resource; return [];', false],
+    'a reference in an array' => ['$all = [&$this->resource]; return [];', false],
+    'a foreach binding' => ['foreach ($pages as $this->resource) {} return [];', false],
+    'bound by reference to another' => ['$this->resource = &$other; return [];', false],
+    'another property' => ['$this->other = collect(); return [];', true],
+    'the same name on another object' => ['$that->resource = collect(); return [];', true],
+    'written through it' => ['$this->resource->items = []; return [];', true],
+    'read' => ['$items = $this->resource->all(); return [];', true],
+]);
