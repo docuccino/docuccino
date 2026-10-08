@@ -32,6 +32,10 @@ it('surfaces exactly the expected API errors', function (string $method, array $
     '@throws trusted, deeper hidden' => ['deepDeclared', ['OutOfStockException@500']],
     'vendor any-throwable = no API error' => ['anyThrowableNoise', []],
     'caught subtracted, escaping surfaced' => ['tryCatch', ['RuntimeException@500']],
+    // The same catch around a call that DECLARES what it throws. The point that survives the catch names no
+    // class at all, and a declaring callee is not descended for what it might throw besides — doing so
+    // publishes the very exceptions the action turns into a 200.
+    'caught across a declaring call' => ['tryCatchDeclared', ['RuntimeException@500']],
     // The registry is keyed on a bare method name, so an app's own validate() is exactly where a guess
     // could overrule a truth: the callee is project code we read, so its own exception stands and no
     // ValidationException/422 is invented for it.

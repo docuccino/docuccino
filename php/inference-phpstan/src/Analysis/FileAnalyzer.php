@@ -32,6 +32,7 @@ use Throwable;
  *     arrays: array<string, array<string, Node\Expr\Array_>>,
  *     locals: array<string, array<string, array{Node\Expr, Scope}|null>>,
  *     calls: array<int, Scope>,
+ *     branches: array<string, array{Scope, Scope}>,
  * }
  *
  * @internal
@@ -194,6 +195,19 @@ final class FileAnalyzer
     }
 
     /**
+     * The scopes the walk evaluated a ternary's `if` and `else` branches in, or null where it did not reach
+     * both. The walk's own rather than the return's scope filtered afterwards: a narrowing applied once the
+     * walk is over has no analysis left to read the condition's type from, and from PHPStan 2.3 it drops the
+     * `$request->is('api/*')` a branch proves instead of answering it.
+     *
+     * @return array{Scope, Scope}|null
+     */
+    public function branchScopes(string $file, Node\Expr\Ternary $ternary): ?array
+    {
+        return $this->harvest($file)['branches'][self::spanKey($ternary)] ?? null;
+    }
+
+    /**
      * The file's `$var = [ ... ]` assignments by scope ({@see scopeKey()}) then variable name, first
      * assignment winning. Lets the refiner recover provenance for a body built up in a local
      * (`$body = [...]` then conditional `$body[...] = …`) rather than written inline. The appends are
@@ -271,8 +285,12 @@ final class FileAnalyzer
         $calls = [];
         /** @var array<string, true> $opaque scopes where a write named no single local */
         $opaque = [];
+        /** @var array<int, array{Node\Expr, Scope}> $evaluated every expression's scope, by object id, until the walk ends */
+        $evaluated = [];
+        /** @var list<Node\Expr\Ternary> $ternaries */
+        $ternaries = [];
 
-        $this->walks->walk($file, function (Node $node, Scope $scope) use (&$methods, &$closures, &$arrows, &$arrays, &$locals, &$calls, &$opaque): void {
+        $this->walks->walk($file, function (Node $node, Scope $scope) use (&$methods, &$closures, &$arrows, &$arrays, &$locals, &$calls, &$opaque, &$evaluated, &$ternaries): void {
             // Watching for these virtual nodes is the sanctioned way to pair returns with refined scope.
             // Collected first and outside the guard below, so that a reader wanting only a method body — the
             // throw analyzer, the tracer descending into a callee — never pays for the write half's failures.
@@ -302,6 +320,15 @@ final class FileAnalyzer
                 && $node->getStartFilePos() >= 0
             ) {
                 $calls[$node->getStartFilePos()] = $scope;
+            }
+
+            // A ternary's branches are paired with their scopes once the walk is done, since which of a node
+            // and its children the callback meets first is not something the walk promises.
+            if ($node instanceof Node\Expr) {
+                $evaluated[spl_object_id($node)] = [$node, $scope];
+                if ($node instanceof Node\Expr\Ternary && $node->if !== null) {
+                    $ternaries[] = $node;
+                }
             }
 
             $key = null;
@@ -351,6 +378,15 @@ final class FileAnalyzer
             $locals[$key] = array_map(static fn (): null => null, $locals[$key] ?? []);
         }
 
+        $branches = [];
+        foreach ($ternaries as $ternary) {
+            $if = $ternary->if === null ? null : ($evaluated[spl_object_id($ternary->if)] ?? null);
+            $else = $evaluated[spl_object_id($ternary->else)] ?? null;
+            if ($if !== null && $else !== null && $if[0] === $ternary->if && $else[0] === $ternary->else && $ternary->getStartFilePos() >= 0) {
+                $branches[self::spanKey($ternary)] = [$if[1], $else[1]];
+            }
+        }
+
         return $this->cache[$normalised] = [
             'methods' => $methods,
             'closures' => $closures,
@@ -358,7 +394,14 @@ final class FileAnalyzer
             'arrays' => $arrays,
             'locals' => $locals,
             'calls' => $calls,
+            'branches' => $branches,
         ];
+    }
+
+    /** Start and end offset: `($a ? $b : $c) ? $d : $e` nests two ternaries that start at one offset. */
+    private static function spanKey(Node $node): string
+    {
+        return $node->getStartFilePos().':'.$node->getEndFilePos();
     }
 
     /**

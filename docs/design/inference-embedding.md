@@ -489,8 +489,10 @@ whose scope leaves `$e` un-narrowed, so its arms are decomposed off the AST inst
 own `instanceof` conditions (walking `&&`/`||`, so a compound condition contributes every class named).
 Selection is source-order-first-match either way — the runtime semantics of both shapes. A returned
 ternary is the same conditional inline and expands the same way, one site per branch, each typed in the
-scope `filterByTruthyValue()`/`filterByFalseyValue()` leaves: collapsed, two responses are the supertype
-that says neither.
+scope the walk evaluated that branch in: collapsed, two responses are the supertype that says neither.
+The walk's branch scope, not the return's scope filtered afterwards — once the walk is over there is no
+analysis for a narrowing to read the condition's current type from, and PHPStan 2.3 drops a "falsey
+removed" narrowing of an untracked call (`$request->is('api/*')`) rather than apply it.
 
 A response POST-PROCESSOR (`$exceptions->respond()`) is read with `CallableRef::$narrowToEvery`, where
 nothing is chosen: every site the narrowed type reaches comes back, and PHPStan's own type for the
@@ -691,8 +693,11 @@ effort); the `$casts` property form is recovered today.
 ## 6. Exception flow (3 layers)
 
 1. PHPStan throw points (free). **Noise rule (corrected): drop `!isExplicit()` points**
-   (always bare `Throwable`) — `canContainAnyThrowable` is NOT a discriminator (nearly all
+   (bare `Throwable`) — `canContainAnyThrowable` is NOT a discriminator (nearly all
    points, including real signal, flag it). Dropped/demoted points are counted + verbose-logged.
+   From PHPStan 2.3 a call whose every DECLARED class a narrow catch took leaves an implicit point
+   typed `never`, for an enclosing `try`'s sake; it names nothing, and descending into its declaring
+   callee would publish the very throws the catch took, so it is skipped outright.
 2. `KnownThrowers` registry (engine-owned and `@internal` — NOT a user surface; §7 is the
    sanctioned escape hatch), keyed on the callee NAME and gated on the
    RESOLVED callee — **dual role**: (a) *enrich* explicit stubbed points with a status
@@ -824,7 +829,7 @@ list and the read declines anyway — measured against Symfony's own `ConflictHt
 `__construct` has zero statements — while asking for it primes that file, grows the analysed set and
 discards every walk the replay layer had recorded. That argument is about PRIMING, so it reaches vendor and
 stops there: a primed root is already in the analysed set, its bodies intact, and reading one grows nothing.
-Measured over one build of the fixture app's 57 throw actions, the analysed-file count is the same whether
+Measured over one build of the fixture app's 58 throw actions, the analysed-file count is the same whether
 the status reads are scoped to the application or to the descend paths — so nothing recorded is discarded —
 and the wider scope costs one extra live file walk, for an exception class nothing else opened. (The
 absolute counts this paragraph used to give were taken against a smaller corpus than the one above it, and

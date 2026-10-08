@@ -494,7 +494,7 @@ final class PhpStanTypeEngine implements TypeEngine
             }
 
             if ($expands && $expr instanceof Node\Expr\Ternary && $expr->if !== null) {
-                foreach ($this->branches($expr, $scope) as [$branch, $branchScope]) {
+                foreach ($this->branches($expr, $scope, $callable->file) as [$branch, $branchScope]) {
                     $sites[] = $this->site($branch, $branch, $branchScope, $this->paramGuard($param, $branchScope), $body, $probes, $every);
                 }
 
@@ -551,20 +551,25 @@ final class PhpStanTypeEngine implements TypeEngine
 
     /**
      * One returned expression as the branches it can take: a ternary's two, each in the scope its
-     * condition leaves and followed down through nested ternaries; anything else, itself. The short
-     * `?:` form is not expanded — its true branch is the condition, whose value this cannot type apart.
+     * condition leaves ({@see FileAnalyzer::branchScopes()}) and followed down through nested ternaries;
+     * anything else, itself. The short `?:` form is not expanded — its true branch is the condition, whose
+     * value this cannot type apart.
      *
      * @return list<array{Node\Expr, Scope}>
      */
-    private function branches(Node\Expr $expr, Scope $scope): array
+    private function branches(Node\Expr $expr, Scope $scope, string $file): array
     {
         if (! $expr instanceof Node\Expr\Ternary || $expr->if === null) {
             return [[$expr, $scope]];
         }
 
+        // A branch the walk never reached has no scope of its own, and filtering is the closest answer left.
+        [$truthy, $falsey] = $this->fileAnalyzer->branchScopes($file, $expr)
+            ?? [$scope->filterByTruthyValue($expr->cond), $scope->filterByFalseyValue($expr->cond)];
+
         return [
-            ...$this->branches($expr->if, $scope->filterByTruthyValue($expr->cond)),
-            ...$this->branches($expr->else, $scope->filterByFalseyValue($expr->cond)),
+            ...$this->branches($expr->if, $truthy, $file),
+            ...$this->branches($expr->else, $falsey, $file),
         ];
     }
 
