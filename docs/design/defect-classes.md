@@ -1495,3 +1495,34 @@ half against the vendored 3.0, 3.1 and 3.2 meta-schemas, with a floor on how man
 guard was run with `links` and the `responses` extensibility removed, and it failed on both. Each walk
 has rows for a name spelled like a keyword and for data in the same place. No scan refuses a new walk
 that skips by spelling. The skip-list tell is the review question.
+
+## A language rule read off the analyser's representation of it
+
+What PHP does is fixed; how PHPStan writes it down changes between minors. A reader that takes the
+analyser's representation as the rule publishes whatever the installed minor happens to say, so the same
+application gets a different document on 2.2 and 2.3.
+
+*Instances.* From 2.3 a call whose every declared class a catch takes leaves an implicit throw point
+typed `never`, where 2.2 left none; `ThrowAnalyzer` read every implicit point as a bare `Throwable` to
+descend into, and on 2.3 published the very exceptions the catch took. And catch subtraction itself for an
+UNDECLARED call: the analyser cannot subtract what it was never told the call throws, so descent's results
+went out past the catch on both minors — and the point's type, which 2.3 writes as `Throwable~Caught` and
+2.2 as plain `Throwable`, looked like the fix and would have published by minor. The source reader then
+repeated the mistake one level up: it counted every catch as taking what it names, and a catch that
+rethrows its own variable takes nothing — `catch (\Exception $e) { report($e); throw $e; }` around an
+undeclared call published nothing at all, because the rethrow's `$e` is typed as the catch. And the same
+again one call away: a catch that hands `$e` to a helper that rethrows it (`$this->fail($e)`) has no
+`throw` of its own to see, and was read as taking everything it names.
+
+*The tell.* A decision keyed on a point's or a type's exact shape where the fact behind it is written in
+the source — a `catch`, a `try`, a branch — in a form no minor can change.
+
+*The fix that worked.* Read the rule off the source in the language's own terms (`EnclosingCatches`:
+the classes every catch around a try's own statements names, an instance of one taken), and keep the
+analyser's representation for what only it knows. Where the representation must still be read, skip the
+shape one minor added so both publish what the older one did (the `never` point).
+
+*The tests that recognise it.* `ThrowSurfacingTest`'s catch rows, run against both minors on CI's fixture
+matrix (`pre-2210` and `newest`); `caughtDeclaredWithResidue` fails on 2.3 alone when the `never` skip is
+removed, the `caughtRolledBack*` rows fail when a rethrowing catch is read as taking anything, and the
+`caughtHandedTo*` / `caughtAndReported` rows when a hand-off is. `EnclosingCatchesTest` holds the reader to PHP's rule a row at a time.

@@ -722,9 +722,29 @@ constructor whose helper the class being built overrides is not the body PHP run
    (bare `Throwable`) — `canContainAnyThrowable` is NOT a discriminator (nearly all
    points, including real signal, flag it). Dropped/demoted points are counted + verbose-logged.
    From PHPStan 2.3 a call whose every DECLARED class a narrow catch took leaves an implicit point
-   typed `never`, for an enclosing `try`'s sake; it names nothing, and descending into its declaring
-   callee would publish the very throws the catch took, so it is skipped — its closure arguments are
-   read with the calls 2.2 leaves no point for at all (the closure hop, below).
+   typed `never`, for an enclosing `try`'s sake; it names nothing, and a declaring callee is not
+   descended — doing so would publish what its `@throws` hides on 2.3 and nothing on 2.2, which keeps
+   no point — so it is skipped; its closure arguments are read with the calls 2.2 leaves no point
+   for at all (the closure hop, below).
+   **What a catch takes is read off the source** (`EnclosingCatches`), never off a point's type: every
+   class the `catch`es around the point's own try statements name, plus those around each call and
+   closure the path descended through, and a result that is an instance of one is dropped — at every
+   layer, registry and closure hop included. The analyser cannot decide it for an UNDECLARED call: 2.3
+   types that point `Throwable~Caught` and 2.2 plain `Throwable`, so keying on the type would publish
+   by PHPStan minor. A class either side cannot reflect is kept, and a catch narrower than the thrown
+   class takes nothing, since it may take only some instances. A catch that can rethrow its own variable
+   (`catch (\Throwable $e) { DB::rollBack(); throw $e; }`) takes nothing either: the rethrow lets out
+   whatever the try raised, which its `$e` — typed as the catch for an undeclared call — cannot spell. A
+   catch that HANDS its variable on — to a call (`$this->fail($e)`, `report($e)`, `throw_if($x, $e)`) or
+   into an assignment — is read the same way, since a helper that rethrows is as common as a `throw $e`;
+   a `new` is not a hand-off (`throw new B(previous: $e)` lets out B). The one exception is a hand-off the
+   build can prove harmless: an application method whose body reads the parameter only through
+   `Throwable`'s final accessors (`getMessage()`, `getCode()`, …), by the same grammar
+   (`EnclosingCatches::readsWhole()`); anything it cannot read, vendor `report()` included, lets it out.
+   Where the analyser left such a call or `throw` no point, because the catch took all it could name, the point
+   it would have made outside the try is re-read (`ThrowAnalyzer::pointOutsideTry()`): the callee's
+   `@throws`, or a bare `Throwable` to descend into. Every class whose ancestry the test read — thrown and
+   caught — joins the dependency set, dropped or kept, since re-parenting either changes the answer.
 2. `KnownThrowers` registry (engine-owned and `@internal` — NOT a user surface; §7 is the
    sanctioned escape hatch), keyed on the callee NAME and gated on the
    RESOLVED callee — **dual role**: (a) *enrich* explicit stubbed points with a status
@@ -785,11 +805,12 @@ where the one above it could not:
 document CARRIES, and `project_paths` bounds that on purpose; the declaring-callee read changes only what
 the error the document already carries SAYS, so its gate is the application's own source — the same scope
 every other status read uses, for the priming reason below. That is what lets a modular guard state its
-status as plainly as one in `app/`. Measured over one build of the fixture's throw corpus (57 actions on
-two controllers), the analysed-file count is 163 with the read and 163 without, so no recorded walk is
-discarded; the cost is two extra live file walks (25 against 23), one per callee body whose `throw` states
-a status — `app/Services/ManifestDeclaredQuery.php` and `modules/Billing/LedgerReviewQuery.php` — and no
-measurable wall time (1.2s either way).
+status as plainly as one in `app/`. Measured over one build of the fixture's throw corpus when it held 57
+(it holds 85 actions on two controllers now, and every one added since depends only on files those already
+did), the analysed-file count is 163 with the read and 163 without, so no recorded walk is discarded; the cost is two
+extra live file walks (25 against 23), one per callee body whose `throw` states a status —
+`app/Services/ManifestDeclaredQuery.php` and `modules/Billing/LedgerReviewQuery.php` — and no measurable
+wall time (1.2s either way).
 
 **What counts as a construction the class makes of ITSELF** is one rule, and both readers of it obey it:
 a `new` written in the class's own declared code OR in a class it inherits from. `new static(…)` in a base
@@ -843,10 +864,8 @@ is not surfaced at all (pinned as a fixture row rather than described).
 The call is not always there to carry the closure. Inside a `try` whose catch takes every class the callee
 declares, PHPStan 2.2 drops the call's point and 2.3 keeps it typed `never` — and the closure runs either
 way, its throws untouched by a catch aimed at the callee. So the closure hop also reads every call a `try`
-guards that has no point of its own (`CatchSites`, off the body's statements), which answers alike on both.
-And because the closure's points belong to the closure's body, the catches around the CALL are not applied
-to them by PHPStan: the hop applies them itself, dropping a class a catch in force takes and keeping one it
-cannot place.
+guards that has no point of its own (`EnclosingCatches::guarded()`, off the body's statements), which
+answers alike on both — and, like every hop, carries the catches around the call into the closure's body.
 
 The callee's OWN signature decides what is left to read after it, and it is a function of the version the
 app resolved. `Connection::transaction()` returns `mixed` up to Laravel 12 and is generic over its callback
@@ -864,9 +883,9 @@ list and the read declines anyway — measured against Symfony's own `ConflictHt
 `__construct` has zero statements — while asking for it primes that file, grows the analysed set and
 discards every walk the replay layer had recorded. That argument is about PRIMING, so it reaches vendor and
 stops there: a primed root is already in the analysed set, its bodies intact, and reading one grows nothing.
-Measured over one build of the fixture app's 60 throw actions, the analysed-file count is the same whether
-the status reads are scoped to the application or to the descend paths — so nothing recorded is discarded —
-and the wider scope costs one extra live file walk, for an exception class nothing else opened. (The
+Measured over one build of the fixture app's throw corpus when it held 58 (it holds 85 throw actions now,
+and every one added since depends only on files those already did), the analysed-file count is the same whether the status reads are scoped to the
+application or to the descend paths — so nothing recorded is discarded — and the wider scope costs one extra live file walk, for an exception class nothing else opened. (The
 absolute counts this paragraph used to give were taken against a smaller corpus than the one above it, and
 two adjacent paragraphs disagreeing about one corpus is what stops a reader trusting either.) Scoping these reads to the descend paths instead published a placeholder 500 for a
 modular exception whose 409 was written in a file the build was already holding open, and recorded nothing

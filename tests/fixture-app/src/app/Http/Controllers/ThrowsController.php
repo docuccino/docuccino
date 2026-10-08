@@ -20,6 +20,8 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Spike C — exception-flow analysis targets.
@@ -168,7 +170,7 @@ class ThrowsController extends Controller
     }
 
     /**
-     * Case 8'': the same catch around a declaring call that runs a closure the
+     * Case 8'a: the same catch around a declaring call that runs a closure the
      * action hands it. The catch takes the guard's own exception and nothing
      * the closure throws, so the order service's two escape the action.
      */
@@ -186,7 +188,7 @@ class ThrowsController extends Controller
     }
 
     /**
-     * Case 8''': a catch that takes what the CLOSURE throws. The call keeps a
+     * Case 8'b: a catch that takes what the CLOSURE throws. The call keeps a
      * throw point of its own, and the exception the closure raises is still
      * one the action turns into a 200; only the literal RuntimeException
      * escapes.
@@ -204,6 +206,437 @@ class ThrowsController extends Controller
         }
 
         throw new \RuntimeException('escaping path');
+    }
+
+    /**
+     * Case 8'': the same catch around a call that declares NOTHING, so what
+     * it throws is found by descending into it — OutOfStockException one
+     * level down, RuntimeException two. The catch takes the first and the
+     * second escapes.
+     */
+    public function caughtUndeclared(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\App\Exceptions\OutOfStockException $e) {
+            return response()->json(['caught' => $e->getMessage()]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''': the catch takes everything placeDeclared() DECLARES, and
+     * reserve()'s RuntimeException two levels down is what it does not —
+     * hidden behind the docblock exactly as in case 6, so only the literal
+     * after the try surfaces.
+     */
+    public function caughtDeclaredWithResidue(OrderService $orders, bool $retry): JsonResponse
+    {
+        try {
+            $orders->placeDeclared(1, 5);
+        } catch (\App\Exceptions\OutOfStockException $e) {
+            Log::warning($e->getMessage());
+        }
+
+        if ($retry) {
+            throw new \LogicException('retry is not supported');
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''a: a catch of a base class both descended exceptions extend.
+     * The literal after the try is what survives.
+     */
+    public function caughtUndeclaredByParent(OrderService $orders, bool $retry): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\Exception $e) {
+            Log::warning($e->getMessage());
+        }
+
+        if ($retry) {
+            throw new \LogicException('retry is not supported');
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''b: a catch of the interface every exception implements.
+     */
+    public function caughtUndeclaredByInterface(OrderService $orders, bool $retry): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\Throwable $e) {
+            Log::warning($e->getMessage());
+        }
+
+        if ($retry) {
+            throw new \LogicException('retry is not supported');
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''c: one catch naming both descended classes.
+     */
+    public function caughtUndeclaredMulti(OrderService $orders, bool $retry): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\App\Exceptions\OutOfStockException|\RuntimeException $e) {
+            Log::warning($e->getMessage());
+        }
+
+        if ($retry) {
+            throw new \LogicException('retry is not supported');
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''d: a catch that rethrows what it caught — the exception still
+     * leaves the action, through the `throw $e`.
+     */
+    public function caughtUndeclaredRethrown(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\App\Exceptions\OutOfStockException $e) {
+            report($e);
+
+            throw $e;
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''d': the same rethrow from a catch wider than anything it names,
+     * so the `throw $e` says only `Exception` — what it lets out is whatever
+     * the try raised, both descended exceptions.
+     */
+    public function caughtWideRethrown(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\Exception $e) {
+            report($e);
+
+            throw $e;
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''d'': the transaction idiom — roll back whatever happened, then
+     * let it out unchanged.
+     */
+    public function caughtRolledBack(OrderService $orders): JsonResponse
+    {
+        DB::beginTransaction();
+
+        try {
+            $orders->place(1, 5);
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            throw $e;
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''d''b: the same idiom around a call that declares what it
+     * throws, which is what the rethrow lets out — and not what it hides.
+     */
+    public function caughtRolledBackDeclared(OrderService $orders): JsonResponse
+    {
+        DB::beginTransaction();
+
+        try {
+            $orders->placeDeclared(1, 5);
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            throw $e;
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''d''c: the same idiom around a `throw` written in the try.
+     */
+    public function caughtRolledBackLiteral(OrderService $orders, int $qty): JsonResponse
+    {
+        DB::beginTransaction();
+
+        try {
+            if ($qty > 10) {
+                throw new \App\Exceptions\OutOfStockException('too many');
+            }
+            $orders->reserve(1, $qty);
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            throw $e;
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''d''': a rethrow on one path only — what the catch keeps on the
+     * other does not change what can leave.
+     */
+    public function caughtSometimesRethrown(OrderService $orders, bool $strict): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\Exception $e) {
+            if ($strict) {
+                throw $e;
+            }
+
+            return response()->json(['caught' => $e->getMessage()]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''d'''': a catch naming a class that does not exist takes
+     * nothing, so both descended exceptions leave.
+     */
+    public function caughtUnknownClass(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\App\Exceptions\NoSuchException $e) {
+            return response()->json(['caught' => $e->getMessage()]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''d''''': a thrown class that does not exist is kept, even under
+     * a catch of everything an exception can be.
+     */
+    public function caughtUnknownThrown(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->placeUnknown();
+        } catch (\Exception $e) {
+            return response()->json(['caught' => $e->getMessage()]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''l: a catch that hands what it caught to the framework's
+     * report(), whose body passes it on to the exception handler — nothing
+     * this build can read shows it is not let out again, so both descended
+     * exceptions leave.
+     */
+    public function caughtAndReported(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\Exception $e) {
+            report($e);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''m: the report-then-rethrow helper — the catch says no
+     * `throw`, and the method it hands the exception to does.
+     */
+    public function caughtHandedToRethrower(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\Exception $e) {
+            $orders->failWith($e);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''n: the same helper around a call that DECLARES what it
+     * throws, so no point survives the catch and the hand-off is all that
+     * says the declared class leaves.
+     */
+    public function caughtDeclaredHandedToRethrower(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->placeDeclared(1, 5);
+        } catch (\App\Exceptions\OutOfStockException $e) {
+            $orders->failWith($e);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''o: a static helper that rethrows what it is handed.
+     */
+    public function caughtHandedToStaticRethrower(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\Exception $e) {
+            OrderService::escalate($e);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''p: a helper that only logs the message of what it is
+     * handed, which its body shows — so the catch still takes both, and the
+     * literal after the try is what survives.
+     */
+    public function caughtHandedToLogger(OrderService $orders, ProbeGuards $guards, bool $retry): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\Exception $e) {
+            $guards->note($e);
+        }
+
+        if ($retry) {
+            throw new \LogicException('retry is not supported');
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''e: a catch that translates what it caught into another
+     * exception, which is what leaves.
+     */
+    public function caughtUndeclaredTranslated(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\App\Exceptions\OutOfStockException $e) {
+            throw new \LogicException('cannot place the order', 0, $e);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''f: nested tries. The inner catch translates OutOfStockException
+     * to a LogicException; the outer one takes the RuntimeException from two
+     * levels down, and leaves the translation alone.
+     */
+    public function caughtUndeclaredNested(OrderService $orders): JsonResponse
+    {
+        try {
+            try {
+                $orders->place(1, 5);
+            } catch (\App\Exceptions\OutOfStockException $e) {
+                throw new \LogicException('cannot place the order', 0, $e);
+            }
+        } catch (\RuntimeException $e) {
+            return response()->json(['queued' => true]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''g: a `finally` with no catch takes nothing.
+     */
+    public function undeclaredInFinallyOnly(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } finally {
+            Cache::forget('placing');
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''h: a catch NARROWER than what is thrown. reserve() throws a
+     * plain RuntimeException, which no UnexpectedValueException catch takes,
+     * so both descended exceptions still leave.
+     */
+    public function caughtUndeclaredNarrower(OrderService $orders): JsonResponse
+    {
+        try {
+            $orders->place(1, 5);
+        } catch (\UnexpectedValueException $e) {
+            return response()->json(['caught' => $e->getMessage()]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''i: the catch written inside the callee, around a deeper
+     * undeclared call — the same subtraction one level down.
+     */
+    public function caughtInsideCallee(OrderService $orders): JsonResponse
+    {
+        $orders->placeLeniently(1, 5);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''j: a catch around a call that runs a closure, where the throw
+     * is written inside the closure. One of its two exceptions is taken.
+     */
+    public function caughtClosureThrow(ConnectionInterface $connection, bool $locked): void
+    {
+        try {
+            $connection->transaction(function () use ($locked): void {
+                if ($locked) {
+                    throw new \App\Exceptions\ExportLockedException(423, 'The export is locked.');
+                }
+
+                throw \App\Exceptions\ExportUnsupportedException::forFormat('tsv');
+            });
+        } catch (\App\Exceptions\ExportLockedException $e) {
+            Log::warning($e->getMessage());
+        }
+    }
+
+    /**
+     * Case 8''k: a catch around a call only the registry can read — the
+     * static findOrFail's 404 is taken and turned into a 410.
+     */
+    public function caughtFindOrFail(int $id): UserResource
+    {
+        try {
+            $user = User::findOrFail($id);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            abort(410, 'gone');
+        }
+
+        return new UserResource($user);
     }
 
     /**
