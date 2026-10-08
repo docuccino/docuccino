@@ -91,6 +91,22 @@ it('surfaces exactly the expected API errors', function (string $method, array $
     // a callee only the registry can read.
     'caught around a closure the callee runs' => ['caughtClosureThrow', ['ExportUnsupportedException@422']],
     'caught around a registry-read call' => ['caughtFindOrFail', ['HttpException@410']],
+    // A catch the CALLEE writes around its own call of the work it was handed takes what that work throws,
+    // as one around the call to the callee would: PHP hands it everything the try's statements raise.
+    'swallowed by rescue()' => ['rescuedClosure', ['LogicException@500']],
+    "swallowed by the app's own helper" => ['swallowedByHelper', ['LogicException@500']],
+    "swallowed by the app's own helper, on an instance" => ['swallowedByHelperOnInstance', ['LogicException@500']],
+    "swallowed by the app's own helper function" => ['swallowedByHelperFunction', ['LogicException@500']],
+    // …and only what it takes: a catch that rethrows takes nothing, a narrower one takes its class alone, and
+    // a run of the work from inside the catch is one no catch is around.
+    'reported and rethrown by a helper' => ['rethrownByHelper', ['OutOfStockException@500', 'RuntimeException@500']],
+    'narrowly swallowed by a helper' => ['narrowlySwallowedByHelper', ['RuntimeException@500']],
+    'retried by a helper from its catch' => ['retriedByHelper', ['OutOfStockException@500', 'RuntimeException@500']],
+    // A helper's catch is read by the same rule as the action's: one that hands what it caught to a method
+    // that rethrows it takes nothing. And a helper that hands the work on names no place it runs, so no catch
+    // of its own is weighed.
+    'handed by a helper to a method that rethrows' => ['failedByHelper', ['OutOfStockException@500', 'RuntimeException@500']],
+    'relayed by a helper to another' => ['relayedByHelperFunction', ['OutOfStockException@500', 'RuntimeException@500']],
     // The registry is keyed on a bare method name, so an app's own validate() is exactly where a guess
     // could overrule a truth: the callee is project code we read, so its own exception stands and no
     // ValidationException/422 is invented for it.

@@ -1590,3 +1590,26 @@ first place was put there on purpose — an overlay, a transformer, a hand-writt
 format and provenance level, to "what the emission publishes unreached, the source did not reach either",
 through a reachability walk of its own (`unreachableComponents()`); `AdoptedUnionGoldenTest` pins the enum
 to the documents whose trail still names it.
+
+## A path read from one end of a hop
+
+An exception's path from where it is raised to the response crosses every hop the analysis makes, and a
+catch anywhere on it takes what it names. A hop that carries only the catches of the side it started from
+publishes whatever the other side swallows.
+
+*Instances.* Descent into an undeclared callee ignored the caller's catch around the call (the analyser
+cannot subtract what it was never told the call throws). And the closure hop applied the caller's catches
+but never the callee's around the place it RUNS the closure: `rescue(function () { … })` and an
+application's own `try { $work(); } catch (\Exception $e) { report($e); }` helper both published every
+exception the work raised as an error response no request can receive.
+
+*The tell.* A hop whose arguments carry what is in force at its start, with nothing read at its far end.
+
+*The fix that worked.* Read the far end with the same grammar as the near one (`CalleeCatches` over
+`EnclosingCatches`), once per place the closure runs, so a class leaves if any one place lets it out; where
+the places cannot all be named, apply nothing more — vague but true.
+
+*The tests that recognise it.* `ThrowSurfacingTest`'s helper rows: a helper method, function and instance
+method, `rescue()`, a narrower catch, a rethrowing catch and a retry from inside the catch. Each of the
+first four fails with `CalleeCatches::around()` answering null, and the rethrow row fails with the rethrow
+rule taken out of `EnclosingCatches`.

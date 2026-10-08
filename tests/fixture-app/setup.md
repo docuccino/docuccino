@@ -46,10 +46,12 @@ cp -R tests/fixture-app/src/app/. tests/fixture-app/app/app/
 
 # 6. Overlay the tracked MODULAR sources (a `Modules\` PSR-4 root OUTSIDE app/, so the Query-Builder
 #    trace's follow-beyond hop into a Query class outside the descend scope is exercised) and register
-#    the PSR-4 root so PHPStan can reflect it, then refresh the autoloader.
+#    the PSR-4 root so PHPStan can reflect it, register the
+#    application's helper-function file (`app/Support/helpers.php`) as an autoloaded `files` entry, as an
+#    application does, then refresh the autoloader.
 mkdir -p tests/fixture-app/app/modules
 cp -R tests/fixture-app/src/modules/. tests/fixture-app/app/modules/
-php -r '$f="tests/fixture-app/app/composer.json";$j=json_decode(file_get_contents($f),true);$j["autoload"]["psr-4"]["Modules\\"]="modules/";file_put_contents($f,json_encode($j,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES)."\n");'
+php -r '$f="tests/fixture-app/app/composer.json";$j=json_decode(file_get_contents($f),true);$j["autoload"]["psr-4"]["Modules\\"]="modules/";$j["autoload"]["files"]=["app/Support/helpers.php"];file_put_contents($f,json_encode($j,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES)."\n");'
 composer dump-autoload --working-dir=tests/fixture-app/app
 ```
 
@@ -342,6 +344,10 @@ in the file being walked, and an array return is no type the trace follows:
   line: they are two bodies, and a reader keying closures by line answers the second for both. Also
   `note()`, which logs only the message of the exception a catch hands it — the hand-off a catch may still
   take through, and the one file that answer is written in.
+- `app/Support/Attempts.php` + `app/Support/helpers.php` — helpers that run the work an action hands them
+  under a catch of their own: swallowing it with its message logged, reporting and rethrowing it, handing
+  it to a method that rethrows, taking one class, retrying from the catch — and `relay()`, which hands the
+  work on to another helper, so its own body names no place the work runs.
 
 ### Data + Eloquent model reflection
 

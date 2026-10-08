@@ -769,7 +769,8 @@ constructor whose helper the class being built overrides is not the body PHP run
    for at all (the closure hop, below).
    **What a catch takes is read off the source** (`EnclosingCatches`), never off a point's type: every
    class the `catch`es around the point's own try statements name, plus those around each call and
-   closure the path descended through, and a result that is an instance of one is dropped — at every
+   closure the path descended through and around each place a callee runs a closure it was handed (a
+   catch that rethrows its own variable names nothing), and a result that is an instance of one is dropped — at every
    layer, registry and closure hop included. The analyser cannot decide it for an UNDECLARED call: 2.3
    types that point `Throwable~Caught` and 2.2 plain `Throwable`, so keying on the type would publish
    by PHPStan minor. A class either side cannot reflect is kept, and a catch narrower than the thrown
@@ -847,8 +848,9 @@ document CARRIES, and `project_paths` bounds that on purpose; the declaring-call
 the error the document already carries SAYS, so its gate is the application's own source — the same scope
 every other status read uses, for the priming reason below. That is what lets a modular guard state its
 status as plainly as one in `app/`. Measured over one build of the fixture's throw corpus when it held 57
-(it holds 85 actions on two controllers now, and every one added since depends only on files those already
-did), the analysed-file count is 163 with the read and 163 without, so no recorded walk is discarded; the cost is two
+(it holds 94 actions on two controllers now; every one added since depends only on files those already
+did, but for the nine whose closures a helper runs, which add `app/Support/Attempts.php` and the helper
+files and were not re-measured), the analysed-file count is 163 with the read and 163 without, so no recorded walk is discarded; the cost is two
 extra live file walks (25 against 23), one per callee body whose `throw` states a status —
 `app/Services/ManifestDeclaredQuery.php` and `modules/Billing/LedgerReviewQuery.php` — and no measurable
 wall time (1.2s either way).
@@ -908,6 +910,22 @@ way, its throws untouched by a catch aimed at the callee. So the closure hop als
 guards that has no point of its own (`EnclosingCatches::guarded()`, off the body's statements), which
 answers alike on both — and, like every hop, carries the catches around the call into the closure's body.
 
+The closure runs where the CALLEE calls it, so the catches around that place are on its path too — a helper
+that runs its work inside `try { $work(); } catch (\Exception $e) { report($e); }` hands its caller nothing
+the work throws, and the hop used to apply only the caller's catches. `CalleeCatches` reads the callee's
+declaration off the source with `EnclosingCatches`' grammar, finds every `$parameter(…)` the argument binds
+(by position or by name) and takes the catches around each; the closure is read once per place, so a class
+leaves if any one place lets it out — a retry from inside the catch, or a catch that rethrows its own
+variable, which takes nothing. Where the places cannot all be named — the parameter is passed on, stored,
+captured, reassigned, read by position or by `compact()`, or never called — only the caller's catches apply,
+which is vague but true. The callee file joins the dependency set, since editing that catch changes what
+the route publishes. Only the application's own callees are read, plus the framework functions whose
+contract is to catch (`CalleeCatches::CATCHES_BY_CONTRACT`, `rescue()` alone — a fixture guard re-derives the
+list from the installed framework's helper files): a package METHOD's catch may hand what it took to another
+method that rethrows it (`Connection::transaction()`'s `handleTransactionException()`), which no source read
+of the catch can see. The listed function's INSTALLED body is still what is read, so what its catch takes is
+the version the application resolved rather than a constant written here.
+
 The callee's OWN signature decides what is left to read after it, and it is a function of the version the
 app resolved. `Connection::transaction()` returns `mixed` up to Laravel 12 and is generic over its callback
 (`@param (\Closure(static): TReturn) $callback`, `@return TReturn`) from Laravel 13, so a closure that only
@@ -924,8 +942,9 @@ list and the read declines anyway — measured against Symfony's own `ConflictHt
 `__construct` has zero statements — while asking for it primes that file, grows the analysed set and
 discards every walk the replay layer had recorded. That argument is about PRIMING, so it reaches vendor and
 stops there: a primed root is already in the analysed set, its bodies intact, and reading one grows nothing.
-Measured over one build of the fixture app's throw corpus when it held 58 (it holds 85 throw actions now,
-and every one added since depends only on files those already did), the analysed-file count is the same whether the status reads are scoped to the
+Measured over one build of the fixture app's throw corpus when it held 58 (it holds 94 throw actions now,
+and every one added since depends only on files those already did, but for the nine helper rows, not
+re-measured), the analysed-file count is the same whether the status reads are scoped to the
 application or to the descend paths — so nothing recorded is discarded — and the wider scope costs one extra live file walk, for an exception class nothing else opened. (The
 absolute counts this paragraph used to give were taken against a smaller corpus than the one above it, and
 two adjacent paragraphs disagreeing about one corpus is what stops a reader trusting either.) Scoping these reads to the descend paths instead published a placeholder 500 for a

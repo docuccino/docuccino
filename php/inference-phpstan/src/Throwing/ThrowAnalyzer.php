@@ -75,6 +75,9 @@ final class ThrowAnalyzer
     /** Calls the descend scope kept this build out of, and the notices they publish. */
     private SkippedDescents $skippedDescents;
 
+    /** The catches a callee writes around where it runs a closure it was handed. */
+    private readonly CalleeCatches $calleeCatches;
+
     public function __construct(
         private readonly ReflectionProvider $reflectionProvider,
         // Descend scope: how far this build may WALK, which is what `project_paths` bounds.
@@ -101,6 +104,7 @@ final class ThrowAnalyzer
     ) {
         $this->unreadStatuses = new UnreadStatuses;
         $this->skippedDescents = new SkippedDescents($this->declaredFilter);
+        $this->calleeCatches = new CalleeCatches($this->reflectionProvider, $this->calleeResolver, $this->appFilter);
     }
 
     /**
@@ -648,7 +652,7 @@ final class ThrowAnalyzer
         }
 
         $results = [];
-        foreach ($node->getArgs() as $argument) {
+        foreach ($node->getArgs() as $position => $argument) {
             $closure = $this->closureArgument($argument->value, $scope);
             if ($closure === null) {
                 continue;
@@ -656,18 +660,28 @@ final class ThrowAnalyzer
 
             $this->dependOn([$scope->getFile()]);
 
+            // The closure runs where the callee calls it, so the catches around each of those places are on
+            // its path too; what escapes any one of them escapes. Where they cannot all be named, only the
+            // caller's catches apply.
+            $inCallee = $this->calleeCatches->around($node, $position, $scope);
+            if ($inCallee['file'] !== null) {
+                $this->dependOn([$inCallee['file']]);
+            }
+
             // `$visited` travels through untouched: a closure is not a callee anyone can cycle back into,
             // and the depth it spends is what bounds it. What it must not do is lose the callees the path
             // has already descended into, which is what that list is.
-            foreach ($this->analyzeMethod(
-                $closure,
-                $selfLabel.'::{closure}',
-                $depth + 1,
-                $visited,
-                [...$priorChain, $frame],
-                $caught,
-            ) as $result) {
-                $results[] = $result;
+            foreach ($inCallee['sites'] ?? [[]] as $site) {
+                foreach ($this->analyzeMethod(
+                    $closure,
+                    $selfLabel.'::{closure}',
+                    $depth + 1,
+                    $visited,
+                    [...$priorChain, $frame],
+                    [...$caught, ...$site],
+                ) as $result) {
+                    $results[] = $result;
+                }
             }
         }
 

@@ -12,6 +12,7 @@ use App\Services\ManifestRelayQuery;
 use App\Services\ManifestReviewQuery;
 use App\Services\OrderService;
 use App\Services\PayloadValidator;
+use App\Support\Attempts;
 use App\Support\Concerns\GuardsProbeState;
 use App\Support\ProbeGuards;
 use Illuminate\Auth\SessionGuard;
@@ -1098,5 +1099,140 @@ class ThrowsController extends Controller
     public function modularDeclaredStatus(\Modules\Billing\LedgerReviewQuery $query): void
     {
         $query->declaredResults(true);
+    }
+
+    /**
+     * Case 8''q: work handed to Laravel's rescue(), which catches every
+     * Throwable around the call it makes of it. Nothing the work throws can
+     * reach the response; only the action's own LogicException escapes.
+     */
+    public function rescuedClosure(OrderService $orders, bool $retry): JsonResponse
+    {
+        rescue(function () use ($orders): void {
+            $orders->place(1, 5);
+        }, report: false);
+
+        if ($retry) {
+            throw new \LogicException('retry is not supported');
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''r: work handed to the application's own helper, which swallows
+     * any Exception around its call of it.
+     */
+    public function swallowedByHelper(OrderService $orders, bool $retry): JsonResponse
+    {
+        Attempts::quietly(function () use ($orders): void {
+            $orders->place(1, 5);
+        });
+
+        if ($retry) {
+            throw new \LogicException('retry is not supported');
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''s: the same helper as an instance method.
+     */
+    public function swallowedByHelperOnInstance(OrderService $orders, Attempts $attempts, bool $retry): JsonResponse
+    {
+        $attempts->quietlyOn(function () use ($orders): void {
+            $orders->place(1, 5);
+        });
+
+        if ($retry) {
+            throw new \LogicException('retry is not supported');
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''t: the same helper as a function, autoloaded the way an
+     * application loads its helpers file.
+     */
+    public function swallowedByHelperFunction(OrderService $orders, bool $retry): JsonResponse
+    {
+        \App\Support\swallow(function () use ($orders): void {
+            $orders->place(1, 5);
+        });
+
+        if ($retry) {
+            throw new \LogicException('retry is not supported');
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''u: a helper whose catch reports and rethrows: everything the
+     * work throws still leaves.
+     */
+    public function rethrownByHelper(OrderService $orders): JsonResponse
+    {
+        Attempts::reporting(function () use ($orders): void {
+            $orders->place(1, 5);
+        });
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''v: a helper that takes only OutOfStockException; the
+     * RuntimeException the work raises two levels down still leaves.
+     */
+    public function narrowlySwallowedByHelper(OrderService $orders): JsonResponse
+    {
+        Attempts::unlessOutOfStock(function () use ($orders): void {
+            $orders->place(1, 5);
+        });
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''w: a helper that runs the work again from inside its catch,
+     * where nothing takes what the second run throws.
+     */
+    public function retriedByHelper(OrderService $orders): JsonResponse
+    {
+        Attempts::retryingOnce(function () use ($orders): void {
+            $orders->place(1, 5);
+        });
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''x: a helper whose catch hands what it caught to a method of
+     * its own that rethrows it — so the catch takes nothing, and everything
+     * the work throws still leaves.
+     */
+    public function failedByHelper(OrderService $orders, Attempts $attempts): JsonResponse
+    {
+        $attempts->guarded(function () use ($orders): void {
+            $orders->place(1, 5);
+        });
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Case 8''y: a helper that hands the work on to another helper, so its
+     * own body names no place the work runs and no catch of its own is
+     * weighed — everything the work throws is kept.
+     */
+    public function relayedByHelperFunction(OrderService $orders): JsonResponse
+    {
+        \App\Support\relay(function () use ($orders): void {
+            $orders->place(1, 5);
+        });
+
+        return response()->json(['ok' => true]);
     }
 }
