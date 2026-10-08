@@ -1537,3 +1537,31 @@ shape one minor added so both publish what the older one did (the `never` point)
 matrix (`pre-2210` and `newest`); `caughtDeclaredWithResidue` fails on 2.3 alone when the `never` skip is
 removed, the `caughtRolledBack*` rows fail when a rethrowing catch is read as taking anything, and the
 `caughtHandedTo*` / `caughtAndReported` rows when a hand-off is. `EnclosingCatchesTest` holds the reader to PHP's rule a row at a time.
+
+## An identity that names fewer facts than its body reads
+
+A component is deduped by its identity, so the identity has to carry every fact the body is a function
+of. When the body reads something the identity does not — which side of the wire is converting, which
+component a nested reference resolved to — two different bodies want one slot, the first registration
+wins, and which one is first is route order. The document is still deterministic; it is not local, and
+adding an unrelated route rewrites a request a generated client already compiled.
+
+*Instances.* The request facet (`Foo#request`) was decided by a class's OWN keys alone. A `@phpstan-sealed`
+union has no keys of its own, so it was hoisted under one identity on both sides while its members were
+not: a request named `AttachmentRequest`'s members until a response route sending the union was added,
+and then the response members, whose `required` the client cannot meet. The same held one level further
+for any plain class holding a class that differs (a note holding a link), for the member of a seal that
+holds the seal again, and for every adapter mapper (a Data class holding a plain DTO), none of which
+asked the question at all. Beside it, the fragment cache never keyed a sealed INTERFACE's file, because
+`DeclarationFiles::of()` answered nothing for an interface — so editing the seal served stale fragments.
+
+*The tell.* A component identity minted from the class name while the builder branches on something
+else (`describesRequest()`, a context flag) or recurses into components that do. Ask what the body
+REACHES, not only what it declares.
+
+*The fix that worked.* One reading, `RequestShape`: a class is its own request shape where a key is
+required on one side only or where anything it reaches is — walked over the type's serialised form, so
+no container can be missed, with a seen-set for the cycles seals make. `ComponentHoist` applies it for
+every mapper, so no mapper has to remember. The guard (`SealedUnionPerSideTest`) builds the request
+alone and with the response routes and asserts the request side's bytes do not move, in every route
+order, warm as cold.
