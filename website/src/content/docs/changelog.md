@@ -13,6 +13,37 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.21.0
+
+### Breaking changes
+
+- **inference-phpstan**: read a ternary's branches and a caught call's throw point the way PHPStan 2.3 hands them over ([#623](https://github.com/docuccino/docuccino/pull/623))
+  - phpstan declaration changed.
+
+### Features
+
+- **core**: a claim's description and an example's placeholders go where they are published ([#618](https://github.com/docuccino/docuccino/pull/618))
+- **core**: a shared response's use records a claim only where it did not land ([#617](https://github.com/docuccino/docuccino/pull/617))
+- **core**: publish a use's x-docuccino on its operation, not beside its $ref (UIR 2.1) ([#616](https://github.com/docuccino/docuccino/pull/616))
+
+### Bug fixes
+
+- bump devalue from 5.9.2 to 5.9.4 in /website ([#644](https://github.com/docuccino/docuccino/pull/644))
+- bump sharp from 0.35.4 to 0.35.5 in /website ([#645](https://github.com/docuccino/docuccino/pull/645))
+- bump smol-toml from 1.7.1 to 1.9.0 in /website ([#643](https://github.com/docuccino/docuccino/pull/643))
+- bump source-map-js from 1.2.1 to 1.2.2 in /website ([#642](https://github.com/docuccino/docuccino/pull/642))
+- **inference-phpstan**: apply the catch a callee writes around the closure it runs ([#640](https://github.com/docuccino/docuccino/pull/640))
+- **core**: spell null with a type in the OpenAPI 3.0 export, keeping the nullable $ref and union idioms generators read ([#639](https://github.com/docuccino/docuccino/pull/639))
+- **core**: drop a component only a dropped member referred to ([#638](https://github.com/docuccino/docuccino/pull/638))
+- **core**: publish a class reaching a request shape as its own request component ([#637](https://github.com/docuccino/docuccino/pull/637))
+- **core**: adopt a declared tagged union over the object the rules split, refined by the rules ([#630](https://github.com/docuccino/docuccino/pull/630))
+- **laravel**: read a collection's with() for the envelope it is sent in ([#629](https://github.com/docuccino/docuccino/pull/629))
+- **laravel**: illustrate a status-text member with the reason phrase its status is sent with ([#628](https://github.com/docuccino/docuccino/pull/628))
+- **laravel**: settle a respond() guard on the rendered response's class ([#626](https://github.com/docuccino/docuccino/pull/626))
+- **inference-phpstan**: drop what a catch takes from an undeclared call's descended throws ([#625](https://github.com/docuccino/docuccino/pull/625))
+- **inference-phpstan**: answer a parent-declared property through the parent::__construct() a constructor always runs ([#624](https://github.com/docuccino/docuccino/pull/624))
+- **core**: report every place a document fails its schema, not only the first ([#615](https://github.com/docuccino/docuccino/pull/615))
+
 ## v0.20.4
 
 ### Features
