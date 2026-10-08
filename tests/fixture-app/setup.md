@@ -136,6 +136,12 @@ them.
   two classes) reached through `::collection()` and
   `toResourceCollection()`, plus `@method` tags over real methods and over macros; and
   `app/Http/Requests/AccountRequest.php`, a FormRequest typing `user()` with a `@method` tag.
+  The same controller lists `GazetteResource`/`GazetteCollection`, `DigestResource`/`DigestCollection`
+  and `BriefResource`/`BriefCollection` — collections whose `with()` branches on the paginator
+  `$this->resource` may be (contracts joined by `||`, abstract classes negated, an inline ternary) — as
+  Eloquent collections, an array, a base collection, length-aware/simple/cursor pages and a page built by
+  hand; `BulletinCollection.php` spells the branch as a `match (true)`, and `RelayCollection.php` assigns
+  `$this->resource` before answering, so its returns say nothing about what was wrapped.
 - `app/Http/Controllers/KeyedCollectionController.php` — Eloquent collections returned bare and through
   `response()->json()`: as fetched, queried, plucked and mapped; filtered and sorted, with and without
   `values()`; handed in as a parameter; keyed by a string closure (`keyBy`, `mapWithKeys`); keyed or

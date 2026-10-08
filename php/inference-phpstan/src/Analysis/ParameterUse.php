@@ -194,6 +194,62 @@ final class ParameterUse
      */
     private static function untouched(Node $at, string $name, array $body, bool $rebindsOnly): bool
     {
+        return self::nonePrecedes($at, $body, static fn (array $parents, Node $root): array => self::touches($name, $body, $parents, $root, $rebindsOnly));
+    }
+
+    /**
+     * Whether `$this->{$property}` still holds what it held on entry where `$at` is reached: nothing that can
+     * run first assigns it, binds it in a `foreach`, takes a reference to it, or unsets it. A call writing it from elsewhere is past
+     * what a body read sees, as a callee writing back through a by-reference argument is for a parameter.
+     *
+     * @param  list<Node>  $body
+     */
+    public static function propertyHeldAt(Node $at, string $property, array $body): bool
+    {
+        return self::nonePrecedes($at, $body, static fn (): array => array_values((new NodeFinder)->find($body, static function (Node $node) use ($property): bool {
+            $written = match (true) {
+                $node instanceof Node\Expr\Assign, $node instanceof Node\Expr\AssignOp, $node instanceof Node\Expr\AssignRef => [$node->var],
+                $node instanceof Node\Stmt\Unset_ => $node->vars,
+                $node instanceof Node\Stmt\Foreach_ => array_filter([$node->keyVar, $node->valueVar]),
+                $node instanceof Node\ArrayItem && $node->byRef => [$node->value],
+                default => [],
+            };
+            if ($node instanceof Node\Expr\AssignRef) {
+                $written[] = $node->expr;
+            }
+
+            while ($written !== []) {
+                $target = array_shift($written);
+                if ($target instanceof Node\Expr\List_ || $target instanceof Node\Expr\Array_) {
+                    foreach ($target->items as $item) {
+                        if ($item !== null) {
+                            $written[] = $item->value;
+                        }
+                    }
+                } elseif (self::isOwnProperty($target, $property)) {
+                    return true;
+                }
+            }
+
+            return false;
+        })));
+    }
+
+    private static function isOwnProperty(Node $node, string $property): bool
+    {
+        return ($node instanceof Node\Expr\PropertyFetch || $node instanceof Node\Expr\NullsafePropertyFetch)
+            && $node->var instanceof Node\Expr\Variable && $node->var->name === 'this'
+            && $node->name instanceof Node\Identifier && $node->name->toString() === $property;
+    }
+
+    /**
+     * Whether no node the `$touches` callback names, over the body connected to one root, can run before `$at`.
+     *
+     * @param  list<Node>  $body
+     * @param  callable(array<int, array{Node, string}>, Node): list<Node>  $touches
+     */
+    private static function nonePrecedes(Node $at, array $body, callable $touches): bool
+    {
         // One root over the body's statements, so any two of its nodes have an ancestor in common.
         $root = new Node\Stmt\Block([]);
         $parents = [];
@@ -202,7 +258,7 @@ final class ParameterUse
             self::connect($node, $parents);
         }
 
-        foreach (self::touches($name, $body, $parents, $root, $rebindsOnly) as $touch) {
+        foreach ($touches($parents, $root) as $touch) {
             if (self::mayPrecede($touch, $at, $parents, $root, $body)) {
                 return false;
             }

@@ -527,6 +527,17 @@ callback's only return unreachable. A rebound parameter narrows nothing, so its 
 A write through the value is not a rebinding: PHPStan forgets a call's remembered answer once another call
 may have written to its receiver. A callee taking an argument by reference is not seen, as in `LocalWrites`.
 
+`CallableRef::$narrowProperty` narrows a property of `$this` in place of a parameter, through the same
+harvest: a ternary expands, a `match (true)` arm's `instanceof` conditions on `$this->{property}` form its
+guard, and PHPStan's type for the property fetch at each site decides reachability. The adapter reads a
+resource collection's `with()` this way, once per envelope — `$this->resource` is the paginator a page was
+built from or the base collection Laravel collected a list into — so a branch on the paginator folds the
+way a renderer's branch on the thrown exception does. As for an exception, the guard reads the narrowed
+class as EXACT (`NarrowingGuard::satisfiedBy()` is an `is_a` of that class): `Collection` satisfies no
+`instanceof Paginator`, although PHPStan's own `ObjectType` answers "maybe" for a non-final class against
+an interface. That is only sound because the host names the class the value really is — so a page built by a
+configured terminal, whose class is the application's, has its `with()` read whole.
+
 An exception MAPPER (`$exceptions->map()`) is read with `CallableRef::$returnsExceptions`: the sites are
 harvested exactly as for a post-processor, and each one that does not hand the parameter back is also read
 into `ActionAnalysis::$throws` as the throw of what it builds — `ThrowAnalyzer::returned()` wraps the

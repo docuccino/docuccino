@@ -175,6 +175,26 @@ An override with no return type, written the way Laravel writes its own, is docu
 body builds with `new`. If it builds different classes on different paths, it is documented as
 Laravel's own collection.
 
+A collection's `with()` often checks whether it holds a paginator, because Laravel merges it into a
+paginated list's own `meta`:
+
+```php
+public function with(Request $request): array
+{
+    if ($this->resource instanceof Paginator || $this->resource instanceof CursorPaginator) {
+        return parent::with($request);
+    }
+
+    return ['meta' => ['count' => $this->collection->count()]];
+}
+```
+
+Each list is documented with the branches it can take. A paginated list gets what the paginator branches
+return, and a list built from an array or an Eloquent collection gets the rest, so the `meta` above is
+required on `OrderResource::collection(Order::all())`. When Docuccino can't tell what a list was built
+from, such as a paginator built by hand, returned by a package, or built by a custom pagination method,
+every branch counts and a member that only some of them return is optional.
+
 ### Union return types
 
 An action whose return type has more than one arm documents as `anyOf`, one branch per arm — and each
