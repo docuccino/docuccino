@@ -1442,7 +1442,12 @@ interface ErrorResponseFinalizer {
 // CallableRef::$narrowToEvery: every reachable return, the parameter a return hands back unchanged, and
 // the literal-argument parameter calls PHPStan proves at each return (CallCondition), which the adapter
 // settles per route for `is()`, `routeIs()` (Support\RoutePredicates, shared with every other reader of
-// a route predicate) and the rendered `getStatusCode()` — a stand-in status is no reading of one.
+// a route predicate) and the rendered `getStatusCode()` — a stand-in status is no reading of one — and
+// the `instanceof` tests it proves (TypeCondition), settled against the class of the rendered response
+// where the build knows it (InferredHandler\RenderedResponse): exactly the JsonResponse Laravel's JSON
+// paths build, for an error the framework renders and the document publishes as application/json; at
+// least a JsonResponse, for one the inferred tier read the application's renderer for; unknown for an
+// HttpResponseException (it sends the response it carries) and everything else.
 // Each reachable return is one of three things. The rendered response handed back unchanged keeps what
 // the tiers before published. A JsonResponse is built exactly as a render callback's is, filed at the
 // status it states, else at the rendered one. Anything else is unread: beside a hand-back it leaves the

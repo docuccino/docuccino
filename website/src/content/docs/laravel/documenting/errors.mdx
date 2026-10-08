@@ -261,7 +261,11 @@ A response the callback builds without stating a status keeps the one it was han
 documented; one that first hands `$response` to a helper, which may rewrite it in place, is reported as
 unread rather than assumed unchanged. A branch on `$request->is(…)`, `$request->routeIs(…)` or `$response->getStatusCode()` is
 settled for each route wherever the route alone decides it, so the `api/*` routes above publish
-problem+json and every other route keeps the framework's body. A branch Docuccino cannot settle without a
+problem+json and every other route keeps the framework's body. A branch on the class of the response it
+is handed — `if (! $response instanceof JsonResponse) { return $response; }` — is settled the same way:
+Laravel renders every error it sends as JSON with a `JsonResponse`, so for those the pass-through is never
+taken. An `HttpResponseException` sends the response it carries, whatever its class, so both of its answers
+stand. A branch Docuccino cannot settle without a
 live request — `$request->expectsJson()`, or a path pattern that turns on a parameter's value or on
 whether an optional one was given — publishes both answers side by side, since the server really does send either
 one; where both answers use the same media type, that media type gets a schema that constrains nothing

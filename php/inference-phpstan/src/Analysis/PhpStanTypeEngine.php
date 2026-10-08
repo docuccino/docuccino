@@ -23,6 +23,7 @@ use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TraceReport;
 use Docuccino\Core\Inference\TraceVisitor;
+use Docuccino\Core\Inference\TypeCondition;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
@@ -57,7 +58,8 @@ use Throwable;
  * types, runs the 3-layer {@see ThrowAnalyzer}, and drives the interprocedural {@see Tracer}. Every
  * method is total — a failure becomes `UnknownT` plus a warning diagnostic, never an exception.
  *
- * @phpstan-type NarrowedSite array{pos: int, line: int, type: DType, component: ComponentDeclaration|null, guard: list<list<string>>, delegates: bool, echoes: string|null, conditions: list<CallCondition>, scope: Scope|null, expr: Node\Expr|null, foldScope: Scope}
+ * @phpstan-type Probes array{calls: list<Node\Expr\MethodCall>, tests: list<Node\Expr\Instanceof_>}
+ * @phpstan-type NarrowedSite array{pos: int, line: int, type: DType, component: ComponentDeclaration|null, guard: list<list<string>>, delegates: bool, echoes: string|null, conditions: list<CallCondition>, typeConditions: list<TypeCondition>, scope: Scope|null, expr: Node\Expr|null, foldScope: Scope}
  *
  * @internal
  */
@@ -462,7 +464,7 @@ final class PhpStanTypeEngine implements TypeEngine
      *
      * With {@see CallableRef::$narrowToEvery} nothing is chosen: every site the narrowed type can reach
      * comes back, in source order, each carrying the parameter it returns unchanged and the literal
-     * parameter calls its scope proves ({@see ParameterUse}).
+     * parameter calls and `instanceof` tests its scope proves ({@see ParameterUse}).
      *
      * `sites` are the harvested sites behind `returns`, for a reader that needs the expression itself.
      *
@@ -473,7 +475,9 @@ final class PhpStanTypeEngine implements TypeEngine
         $param = $callable->narrowParameter;
         $narrowTo = $callable->narrowType;
         $every = $callable->narrowToEvery || $callable->returnsExceptions;
-        $probes = $every ? ParameterUse::literalCalls($body->parameters, $body->nodes) : [];
+        $probes = $every
+            ? ['calls' => ParameterUse::literalCalls($body->parameters, $body->nodes), 'tests' => ParameterUse::typeTests($body->parameters, $body->nodes)]
+            : ['calls' => [], 'tests' => []];
 
         /** @var list<NarrowedSite> $sites */
         $sites = [];
@@ -495,13 +499,13 @@ final class PhpStanTypeEngine implements TypeEngine
 
             if ($expands && $expr instanceof Node\Expr\Ternary && $expr->if !== null) {
                 foreach ($this->branches($expr, $scope, $callable->file) as [$branch, $branchScope]) {
-                    $sites[] = $this->site($branch, $branch, $branchScope, $this->paramGuard($param, $branchScope), $body, $probes, $every);
+                    $sites[] = $this->site($branch, $branch, $branchScope, $param, null, $body, $probes, $every);
                 }
 
                 continue;
             }
 
-            $sites[] = $this->site($expr, $returnNode, $scope, $this->paramGuard($param, $scope), $body, $probes, $every);
+            $sites[] = $this->site($expr, $returnNode, $scope, $param, null, $body, $probes, $every);
         }
 
         if ($param === null || $narrowTo === null) {
@@ -544,7 +548,7 @@ final class PhpStanTypeEngine implements TypeEngine
     private function returnSites(array $sites, CallableRef $callable): array
     {
         return array_map(
-            static fn (array $s): ReturnSite => new ReturnSite($s['type'], new SourceLocation($callable->file, $s['line']), $s['component'], $s['echoes'], $s['conditions']),
+            static fn (array $s): ReturnSite => new ReturnSite($s['type'], new SourceLocation($callable->file, $s['line']), $s['component'], $s['echoes'], $s['conditions'], $s['typeConditions']),
             $sites,
         );
     }
@@ -585,24 +589,32 @@ final class PhpStanTypeEngine implements TypeEngine
     }
 
     /**
-     * @param  list<list<string>>  $guard
-     * @param  list<Node\Expr\MethodCall>  $probes
+     * A parameter bound to another value before `$positioned` is reached narrows nothing there: what the
+     * scope, or an arm's test of it, says is about the value bound since, so the site is open to every type.
+     *
+     * @param  list<list<string>>|null  $guard  null for the guard `$param`'s type in `$scope` states
+     * @param  Probes  $probes
      * @return NarrowedSite
      */
-    private function site(?Node\Expr $expr, Node $positioned, Scope $scope, array $guard, CallableBody $body, array $probes, bool $every, bool $typesParameter = true): array
+    private function site(?Node\Expr $expr, Node $positioned, Scope $scope, ?string $param, ?array $guard, CallableBody $body, array $probes, bool $every, bool $typesParameter = true): array
     {
         $shape = $this->siteShape($expr, $scope);
+        $held = $every || $param !== null
+            ? ParameterUse::heldAt($positioned, array_values(array_unique([...$body->parameters, ...($param === null ? [] : [$param])])), $body->nodes)
+            : [];
+        $rebound = $param !== null && ! in_array($param, $held, true);
 
         return [
             'pos' => SourceOrder::of($positioned),
             'line' => $positioned->getStartLine(),
             'type' => $shape['type'],
             'component' => $shape['component'],
-            'guard' => $guard,
+            'guard' => $rebound ? [] : ($guard ?? $this->paramGuard($param, $scope)),
             'delegates' => $this->isDelegation($shape['type']),
             'echoes' => $every ? ParameterUse::echoed($expr, $body->parameters, $body->nodes) : null,
-            'conditions' => $every ? ParameterUse::conditionsAt($scope, $probes) : [],
-            'scope' => $typesParameter ? $scope : null,
+            'conditions' => ParameterUse::conditionsAt($scope, $probes['calls'], $held),
+            'typeConditions' => ParameterUse::typeConditionsAt($scope, $probes['tests'], $held),
+            'scope' => $typesParameter && ! $rebound ? $scope : null,
             'expr' => $expr,
             'foldScope' => $scope,
         ];
@@ -631,7 +643,7 @@ final class PhpStanTypeEngine implements TypeEngine
      * `$param` against (a `default` arm, or a non-`instanceof` condition, is broad), type = the refined arm
      * body. Arm order is preserved via source position.
      *
-     * @param  list<Node\Expr\MethodCall>  $probes
+     * @param  Probes  $probes
      * @return list<NarrowedSite>
      */
     private function matchArmSites(Node\Expr\Match_ $match, ?string $param, Scope $scope, CallableBody $body, array $probes, bool $every): array
@@ -640,7 +652,7 @@ final class PhpStanTypeEngine implements TypeEngine
         foreach ($match->arms as $arm) {
             $guard = $arm->conds === null || $param === null ? [] : $this->armInstanceofGuards($arm->conds, $param, $scope);
             // The return's scope, not the arm's: it has not narrowed the parameter, so only the guard speaks.
-            $sites[] = $this->site($arm->body, $arm->body, $scope, $guard, $body, $probes, $every, typesParameter: false);
+            $sites[] = $this->site($arm->body, $arm->body, $scope, $param, $guard, $body, $probes, $every, typesParameter: false);
         }
 
         return $sites;

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Exceptions;
 
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
@@ -133,6 +134,60 @@ class RespondCallbacks
         return function (Response $response, Throwable $e): Response {
             if ($e instanceof ModelNotFoundException) {
                 return new JsonResponse(['type' => 'about:blank', 'title' => 'Not Found', 'status' => 404], 404, ['Content-Type' => ProblemEnvelope::CONTENT_TYPE]);
+            }
+
+            return $response;
+        };
+    }
+
+    /** Every JSON error reshaped, anything else — a view, a redirect, a download — passed through by its class. */
+    public function jsonGuarded(): callable
+    {
+        return function (Response $response, Throwable $e, Request $request): Response {
+            if (! $response instanceof JsonResponse) {
+                return $response;
+            }
+
+            return ProblemEnvelope::from($response, $e);
+        };
+    }
+
+    /** The same guard turned around: the rewrite inside it, the pass-through after. */
+    public function jsonGuardedReversed(): callable
+    {
+        return function (Response $response, Throwable $e): Response {
+            if ($response instanceof JsonResponse) {
+                return ProblemEnvelope::from($response, $e);
+            }
+
+            return $response;
+        };
+    }
+
+    /** The same guard as a one-line arrow function. */
+    public function jsonGuardedTernary(): callable
+    {
+        return fn (Response $response, Throwable $e): Response => $response instanceof JsonResponse ? ProblemEnvelope::from($response, $e) : $response;
+    }
+
+    /** A JSON error rebuilt as problem+json into the variable it arrived in, which is then handed back. */
+    public function jsonRebound(): callable
+    {
+        return function (Response $response): Response {
+            if ($response instanceof JsonResponse) {
+                $response = response($response->getContent(), $response->getStatusCode(), ['Content-Type' => ProblemEnvelope::CONTENT_TYPE]);
+            }
+
+            return $response;
+        };
+    }
+
+    /** A redirect passed through by its class, negated in parentheses; everything else reshaped. */
+    public function redirectGuarded(): callable
+    {
+        return function (Response $response, Throwable $e): Response {
+            if (! ($response instanceof RedirectResponse)) {
+                return ProblemEnvelope::from($response, $e);
             }
 
             return $response;

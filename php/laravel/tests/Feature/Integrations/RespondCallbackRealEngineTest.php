@@ -116,3 +116,35 @@ it('reads a branch on the exception against the class the handler hands the call
     'a branch on the class it is handed' => ['notFoundReshaped', ['application/problem+json']],
     'a branch on the class thrown, never taken' => ['modelNotFoundReshaped', ['application/json']],
 ])->group('fixture');
+
+it('reads a guard on the rendered response class against the response the framework renders for every error', function (string $method, string $path, string $verb, string $status, string $thrown): void {
+    app()->instance(TypeEngine::class, WorkbenchEngine::make(respondAnalyses([$thrown], $method)));
+
+    $document = generateDocument()->document->toArray();
+    $response = resolveResponse($document, $document['paths'][$path][$verb]['responses'][$status] ?? []);
+
+    // Laravel renders every one of these errors as a JsonResponse before the callback sees it, so the
+    // pass-through behind the guard is never taken: the one body sent is the rewrite.
+    expect(array_keys($response['content'] ?? []))->toBe(['application/problem+json']);
+})->with([
+    'a negated guard' => ['jsonGuarded'],
+    'the guard turned around' => ['jsonGuardedReversed'],
+    'the guard as a ternary' => ['jsonGuardedTernary'],
+    'a parenthesised negation of a class it is not' => ['redirectGuarded'],
+])->with([
+    'a binding the route cannot resolve' => ['/api/forms/{form}', 'get', '404', ModelNotFoundException::class],
+    'a request that fails validation' => ['/api/tickets', 'post', '422', ValidationException::class],
+])->group('fixture');
+
+it('does not settle a guard on a response the callback rebinds before it returns', function (): void {
+    app()->instance(TypeEngine::class, WorkbenchEngine::make(respondAnalyses([ModelNotFoundException::class], 'jsonRebound')));
+
+    $document = generateDocument()->document->toArray();
+    $response = resolveResponse($document, $document['paths']['/api/forms/{form}']['get']['responses']['404'] ?? []);
+
+    // The guard reads the rebuilt response, not the one handed in, so it settles nothing: the one return is
+    // reachable, sends a body nothing read, and the 404 stands with its body unsaid — never the framework's
+    // JSON, which the callback replaces for every error it is handed as JSON.
+    expect($response)->toHaveKey('description')
+        ->and($response['content'] ?? [])->toBe([]);
+})->group('fixture');
