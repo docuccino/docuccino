@@ -19,7 +19,7 @@
     "@fontsource-variable/instrument-sans": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "astro": "^7.3.2",
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "starlight-llms-txt": "^0.11.0",
     "starlight-md-txt": "^0.1.0"
   }
