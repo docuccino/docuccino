@@ -313,11 +313,30 @@ final class ProblemDetails
 
 A path that throws doesn't count, because it builds no object, and `readonly` properties work the same
 way. A `$this->method()` the constructor calls counts as part of it, when the class (or one of its traits)
-declares that method. Where the constructor can't answer, a non-nullable property is required and a
-nullable one is optional. That happens when there's no constructor, when the property belongs to a parent
-class and a subclass's own constructor runs, and when something else may assign the property: the parent
-constructor, a method that assigns `$this->{$name}` or passes `$this` on, or the named constructor of a
-class whose constructor is private. A class that implements `JsonSerializable` decides its own keys, so its nullable properties
+declares that method and the class being documented doesn't override it. A subclass whose constructor
+calls `parent::__construct()` as a plain statement — not inside an `if`, and with no `return` before it —
+gets the parent's answer for the parent's properties, through every level of the hierarchy, and a
+property it assigns itself after that call is required:
+
+```php
+final class ApiProblem extends ProblemDetails
+{
+    public string $instance; // required
+
+    public function __construct(string $title, ?string $detail, string $instance)
+    {
+        parent::__construct($title, $detail); // `detail` stays optional
+
+        $this->instance = $instance;
+    }
+}
+```
+
+Where the constructor can't answer, a non-nullable property is required and a nullable one is optional.
+That happens when there's no constructor, when a subclass's constructor may skip `parent::__construct()`,
+and when something else may assign the property: a parent constructor assigning the subclass's own
+properties, a method that assigns `$this->{$name}`, passes `$this` on or is overridden, or the named
+constructor of a class whose constructor is private. A class that implements `JsonSerializable` decides its own keys, so its nullable properties
 stay optional too.
 
 Named as a request body type — `#[BodyParameter(type: InvoiceLine::class)]` — the same class is published
@@ -478,9 +497,10 @@ public function show(Attachment $attachment): ImageAttachment|LinkAttachment
 
 Each class publishes its tag as the one value it can hold — `"kind": { "type": "string", "const":
 "image" }`, and required — which is what makes the members mutually exclusive. A property counts as
-fixed when it is `readonly`, the class is `final`, and the class's own constructor assigns it once, as
-a plain statement, from a string or integer literal, a backed enum case, or a class constant holding
-one. Anything looser — a value passed in, chosen by an `if`, or on a class a subclass could construct
+fixed when it is `readonly`, the class is `final`, and the constructor it runs assigns it once, as a
+plain statement, from a string or integer literal, a backed enum case, or a class constant holding one.
+That constructor may be inherited, or reach the assignment through a `parent::__construct()` it calls
+as a plain statement too. Anything looser — a value passed in, chosen by an `if`, or on a class a subclass could construct
 differently — could hold another member's value, so the union stays an `anyOf` with the property typed
 as declared. So does a class that can re-tag a copy of itself — a `clone($this, ['kind' => …])` in its
 own body, a parent class, or a trait either uses, or a `public(set)` property anyone may re-initialise

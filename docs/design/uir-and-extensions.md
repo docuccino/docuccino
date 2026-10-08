@@ -251,8 +251,10 @@ see [Morph type columns](#morph-type-columns).
 
 The value a member pins comes from the engine (`Metadata\FixedPropertyValues`), which types a property
 as the literal every instance holds only where PHP guarantees it: a `readonly`, non-promoted property
-of a `final` class, assigned by the class's own constructor as a top-level statement (nothing that could
-`return` or `goto` before it), from a string or int literal, a backed enum case, or a class constant
+of a `final` class, assigned by the constructor it runs as a top-level statement (nothing that could
+`return` or `goto` before it) — or by a parent constructor that one reaches the same way through
+`parent::__construct()`, recursively, with `self::` read in the class the line sits in and `static::` in
+the final class — from a string or int literal, a backed enum case, or a class constant
 holding one, whose declared type holds it without coercion. Readonly makes that one assignment the
 answer — any other write throws — except where PHP re-initialises a readonly property on a copy: a
 `__clone` (its own or inherited), a `clone($object, [...])` with properties (8.5) anywhere with set

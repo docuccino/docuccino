@@ -250,6 +250,9 @@ jobs:
           # at actions/cache before a test runs, which reads as a broken branch rather than a
           # bad key. The constraint stays in `phpstan`, where it belongs.
           - { laravel: '^12.0', phpstan: '>=2.2.2,<2.2.10', slug: 'pre-2210' }
+          # The newest 2.2 beside the newest of all: from 2.3 a call whose declared throws a catch
+          # took leaves a `never` point where 2.2 leaves none, and the two must publish alike.
+          - { laravel: '^13.0', phpstan: '~2.2.10', slug: 'latest-22' }
           - { laravel: '^12.0', phpstan: '*', slug: 'newest' }
           - { laravel: '^13.0', phpstan: '*', slug: 'newest' }
     steps:

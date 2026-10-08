@@ -153,8 +153,16 @@ them.
   constructors that hand the work on: `HydratedProblem` (a private helper and a `CarriesTrace` trait helper,
   each assigning one member in a branch), `FilledProblem` (a `FillsAttributes` trait writing
   `$this->{$key}`), `PaymentProblem` (a `DataObject` parent constructor doing the same), and
-  `RateLimitProblem` (a private constructor behind a named one). What the engine reads off each constructor
-  is what decides which keys a response always carries.
+  `RateLimitProblem` (a private constructor behind a named one). A hierarchy reached through
+  `parent::__construct()`: `RenderedProblem` (an open base reading a rendered response, with `detail` only
+  in a branch), its final `InstanceProblem`, the open `ApiProblem` and its final `TracedProblem` (three
+  levels), `ExplainedProblem` (assigning `detail` after the call), `DeferredProblem` (the call inside an
+  `if`), `EarlyReturnProblem` (a `return` ahead of the call), `RefilledProblem` (filling by name after
+  the call), and `FlatProblem`, the same members and constructor written into one class as the control.
+  Beside them `LockedProblem` under an `AttributedProblem` that fills by name, `SilentNotice` overriding
+  the helper its inherited `NoticeProblem` constructor calls, and two unsets the analyser does not track:
+  `UntitledNotice` after its parent constructor, `RetractedNotice` after its own assignment. What the engine reads off each
+  constructor is what decides which keys a response always carries.
 
 ### Closures located by line
 

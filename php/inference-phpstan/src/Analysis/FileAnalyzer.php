@@ -197,8 +197,8 @@ final class FileAnalyzer
     /**
      * The scopes the walk evaluated a ternary's `if` and `else` branches in, or null where it did not reach
      * both. The walk's own rather than the return's scope filtered afterwards: a narrowing applied once the
-     * walk is over has no analysis left to read the condition's type from, and from PHPStan 2.3 it drops the
-     * `$request->is('api/*')` a branch proves instead of answering it.
+     * walk is over has no analysis left to read the condition's type from, and may drop what a branch
+     * proves about an untracked call (`$request->is('api/*')`) rather than answer it.
      *
      * @return array{Scope, Scope}|null
      */

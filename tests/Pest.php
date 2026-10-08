@@ -124,6 +124,7 @@ use Opis\JsonSchema\Uri;
 use Opis\JsonSchema\ValidationResult;
 use Opis\JsonSchema\Validator;
 use PhpParser\Node;
+use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\FindingVisitor;
 use PhpParser\NodeVisitor\NameResolver;
@@ -2500,23 +2501,32 @@ function ensureFixtureAvailable(bool $available): void
  * registered here (its Laravel and this process's clash), and nothing else about the change classes
  * needs it: their attribute arguments are literal constants, and a `::class` naming an analysis-only
  * class is a string rather than a load.
- *
- * Registered once per process and idempotent, because a Pest worker runs many tests.
  */
 function loadFixtureAppVersionChanges(): void
 {
-    static $registered = false;
+    loadFixtureAppClasses('Versioning');
+}
 
-    if ($registered) {
+/**
+ * Makes the fixture app's classes under `App\<directory>\` loadable in THIS process, for a test that
+ * reflects the very class the real engine analysed rather than a twin of it. Only for classes whose
+ * dependencies this process also has, for the reason {@see loadFixtureAppVersionChanges()} gives.
+ *
+ * Registered once per directory per process and idempotent, because a Pest worker runs many tests.
+ */
+function loadFixtureAppClasses(string $directory): void
+{
+    static $registered = [];
+
+    if (isset($registered[$directory])) {
         return;
     }
 
-    $registered = true;
-    $root = FixtureRunner::appRoot().'/app/Versioning/';
+    $registered[$directory] = true;
+    $prefix = 'App\\'.$directory.'\\';
+    $root = FixtureRunner::appRoot().'/app/'.$directory.'/';
 
-    spl_autoload_register(static function (string $class) use ($root): void {
-        $prefix = 'App\\Versioning\\';
-
+    spl_autoload_register(static function (string $class) use ($prefix, $root): void {
         if (! str_starts_with($class, $prefix)) {
             return;
         }
@@ -5275,4 +5285,19 @@ function timacdonaldSendsResourceObjects(): bool
 {
     return version_compare(Application::VERSION, '12.45.0', '<')
         || InstalledVersions::satisfies(new VersionParser, 'timacdonald/json-api', '>=1.0.0-beta.10');
+}
+
+/**
+ * A constructor body for `EscapeProbe` and its siblings, parsed with names resolved in their namespace, as
+ * the statements the constructor readers take.
+ *
+ * @return array<Node>
+ */
+function escapeProbeBody(string $body): array
+{
+    $parsed = (new ParserFactory)->createForHostVersion()->parse('<?php namespace Docuccino\\Inference\\PhpStan\\Tests\\Support\\Fixtures\\Initialisation; '.$body);
+    $resolved = (new NodeTraverser(new NameResolver))->traverse($parsed ?? []);
+    $namespace = $resolved[0] ?? null;
+
+    return $namespace instanceof Namespace_ ? $namespace->stmts : [];
 }

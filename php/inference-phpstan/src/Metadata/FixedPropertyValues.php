@@ -25,9 +25,9 @@ use Throwable;
 
 /**
  * The value a property holds on every instance of its class, where PHP guarantees the class fixes it: a
- * readonly property a final class's own constructor assigns once, from a literal, and that nothing its
- * hierarchy declares can re-initialise on a copy. Rule, and what a source read cannot see, in full:
- * `docs/design/uir-and-extensions.md` §Discriminated unions.
+ * readonly property a final class's constructor assigns once, from a literal — itself or through the
+ * `parent::__construct()` it always runs — and that nothing its hierarchy declares can re-initialise on a
+ * copy. Rule, and what a source read cannot see, in full: `docs/design/uir-and-extensions.md` §Discriminated unions.
  *
  * @internal
  */
@@ -50,18 +50,10 @@ final class FixedPropertyValues
         if (! $class->isFinal()
             || ! $property->isReadOnly()
             || $property->isPromoted()
-            || $property->getDeclaringClass()->getName() !== $class->getName()
             || $constructor === null
-            || $constructor->getDeclaringClass()->getName() !== $class->getName()
             || $class->hasMethod('__clone')
             || self::publicSet($property)
         ) {
-            return null;
-        }
-
-        $file = $constructor->getFileName();
-        $method = $file === false ? null : MethodDeclaration::in($this->statements($file), $constructor);
-        if ($method === null) {
             return null;
         }
 
@@ -69,8 +61,8 @@ final class FixedPropertyValues
             return null;
         }
 
-        $expr = self::assignedAtTop($method->stmts ?? [], $property->getName());
-        $folded = $expr === null ? null : self::fold($expr, $class);
+        $assigned = $this->assignedBy($constructor->getDeclaringClass(), $property);
+        $folded = $assigned === null ? null : self::fold($assigned['expr'], $assigned['scope'], $class);
         if ($folded === null || ! self::satisfies($declared, $folded['value'], $folded['enum'])) {
             return null;
         }
@@ -79,28 +71,34 @@ final class FixedPropertyValues
     }
 
     /**
-     * What a top-level `$this->name = …;` assigns, when no statement before it could leave the
-     * constructor first.
+     * What the constructor `$declaring` writes assigns the property on every path that completes it: a
+     * top-level `$this->name = …;` it reaches ({@see ReachedStatements}), or else what the parent constructor
+     * it reaches first assigns. Readonly makes whichever runs first the value, since any later write throws.
+     * With the class the line sits in, which `self::` binds to.
      *
-     * @param  array<Node\Stmt>  $statements
+     * @param  ReflectionClass<object>  $declaring
+     * @return array{expr: Node\Expr, scope: ReflectionClass<object>}|null
      */
-    private static function assignedAtTop(array $statements, string $name): ?Node\Expr
+    private function assignedBy(ReflectionClass $declaring, ReflectionProperty $property): ?array
     {
-        $finder = new NodeFinder;
-        foreach ($statements as $statement) {
-            if ($statement instanceof Node\Stmt\Expression
-                && $statement->expr instanceof Node\Expr\Assign
-                && $statement->expr->var instanceof Node\Expr\PropertyFetch
-                && $statement->expr->var->var instanceof Node\Expr\Variable
-                && $statement->expr->var->var->name === 'this'
-                && $statement->expr->var->name instanceof Node\Identifier
-                && $statement->expr->var->name->toString() === $name
-            ) {
-                return $statement->expr->expr;
+        $owner = $property->getDeclaringClass()->getName();
+        $constructor = $declaring->getConstructor();
+        $file = $constructor?->getFileName();
+        if (($owner !== $declaring->getName() && ! $declaring->isSubclassOf($owner)) || $constructor === null || $file === null || $file === false) {
+            return null;
+        }
+
+        $method = MethodDeclaration::in($this->statements($file), $constructor);
+        foreach (ReachedStatements::of($method->stmts ?? []) as $statement) {
+            $expr = ReachedStatements::assignment($statement, $property->getName());
+            if ($expr !== null) {
+                return ['expr' => $expr, 'scope' => $declaring];
             }
 
-            if ($finder->findFirst($statement, static fn (Node $node): bool => $node instanceof Node\Stmt\Return_ || $node instanceof Node\Stmt\Goto_) !== null) {
-                return null;
+            if (ReachedStatements::parentConstruct($statement) !== null) {
+                $parent = ReachedStatements::parentConstructorClass($declaring);
+
+                return $parent === null ? null : $this->assignedBy($parent, $property);
             }
         }
 
@@ -108,10 +106,11 @@ final class FixedPropertyValues
     }
 
     /**
-     * @param  ReflectionClass<object>  $class
+     * @param  ReflectionClass<object>  $scope  the class whose constructor the expression is written in
+     * @param  ReflectionClass<object>  $class  the class being described
      * @return array{value: string|int, enum: ?string, files: list<string>}|null
      */
-    private static function fold(Node\Expr $expr, ReflectionClass $class): ?array
+    private static function fold(Node\Expr $expr, ReflectionClass $scope, ReflectionClass $class): ?array
     {
         if ($expr instanceof Node\Scalar\String_) {
             return ['value' => $expr->value, 'enum' => null, 'files' => []];
@@ -125,8 +124,12 @@ final class FixedPropertyValues
             return null;
         }
 
-        // `static` is `self` here: the class is final.
-        $owner = in_array($expr->class->toLowerString(), ['self', 'static'], true) ? $class->getName() : $expr->class->toString();
+        // `self` binds to the class the line is written in, `static` to the class being built.
+        $owner = match ($expr->class->toLowerString()) {
+            'self' => $scope->getName(),
+            'static' => $class->getName(),
+            default => $expr->class->toString(),
+        };
         if (! class_exists($owner) && ! interface_exists($owner)) {
             return null;
         }
