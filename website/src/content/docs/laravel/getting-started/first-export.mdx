@@ -306,8 +306,10 @@ as its own losses. The first group below is what 3.1 already gives up; the rest 
 | In 3.1 / 3.2 | In the 3.0 export |
 | --- | --- |
 | `type: [string, null]` | `type: string` with `nullable: true` |
-| `anyOf: [{$ref}, {type: null}]` | `allOf: [{$ref}]` with `nullable: true` |
-| `anyOf: [{enum: [a, b]}, {type: null}]` | `enum: [a, b, null]` with `nullable: true` — 3.0's `nullable` widens only the type, so the enum lists null itself |
+| `anyOf: [{type: string, enum: [a, b]}, {type: null}]` | `type: string`, `enum: [a, b, null]` with `nullable: true` — 3.0's `nullable` widens only the type, so the enum lists null itself |
+| `anyOf: [{$ref}, {type: null}]` | `allOf: [{$ref}]` with `nullable: true` — what 3.0 code generators read as a nullable reference; a strict 3.0.3 validator refuses null there, as `nullable` takes effect only beside a `type` |
+| `anyOf: [{oneOf, discriminator}, {type: null}]` | the tagged `oneOf` and its `discriminator` with `nullable: true`, for the same reason and at the same cost |
+| `{type: null}`, and a null branch beside an untyped branch or more than one branch | `{type: object, nullable: true, enum: [null]}` — 3.0's `nullable` does nothing without a `type` beside it, so null gets a type of its own that the enum narrows to null alone |
 | `type: [string, integer]` | An `anyOf` of single-type branches, each carrying the keywords about its own type — `items` and `minItems` go to the array branch, `additionalProperties` and `required` to the object one |
 | `const: "draft"` | `enum: ["draft"]` |
 | A subschema of `true` or `false` | `{}` or `{"not": {}}` — the same constraint, in the only spelling 3.0 has for it |

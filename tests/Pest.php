@@ -5367,3 +5367,61 @@ function escapeProbeBody(string $body): array
 
     return $namespace instanceof Namespace_ ? $namespace->stmts : [];
 }
+
+/**
+ * Whether the schema at `$pointer` in an emitted OpenAPI 3.0 document admits `$value`, read the way 3.0.4
+ * reads it rather than as JSON Schema: `nullable: true` adds null to a `type` in the same object and has
+ * no effect anywhere else, and an exclusive bound is a boolean qualifying `minimum`/`maximum`. A `$ref`
+ * resolves inside the document, as it does for a 3.0 reader.
+ */
+function openApi30Admits(string $emitted, string $pointer, mixed $value): bool
+{
+    $document = openApi30AsJsonSchema(json_decode($emitted, flags: JSON_THROW_ON_ERROR));
+    if (! $document instanceof stdClass) {
+        throw new LogicException('An OpenAPI document is an object.');
+    }
+    $document->{'$ref'} = '#'.$pointer;
+
+    return (new Validator)->validate(json_decode((string) json_encode($value)), $document)->isValid();
+}
+
+/**
+ * One OpenAPI 3.0 node with its 3.0-only keywords restated as JSON Schema 2020-12 ({@see openApi30Admits()}).
+ * Data members — a value list, an example, a default, an extension — are carried as written.
+ */
+function openApi30AsJsonSchema(mixed $node): mixed
+{
+    if (is_array($node)) {
+        return array_map(openApi30AsJsonSchema(...), $node);
+    }
+    if (! $node instanceof stdClass) {
+        return $node;
+    }
+
+    $schema = new stdClass;
+    foreach (get_object_vars($node) as $key => $member) {
+        $data = in_array($key, ['enum', 'example', 'default', 'discriminator'], true) || str_starts_with((string) $key, 'x-');
+        $schema->{$key} = $data ? $member : openApi30AsJsonSchema($member);
+    }
+
+    if (is_bool($schema->nullable ?? null)) {
+        if ($schema->nullable && is_string($schema->type ?? null)) {
+            $schema->type = [$schema->type, 'null'];
+        }
+        unset($schema->nullable);
+    }
+
+    foreach (['exclusiveMinimum' => 'minimum', 'exclusiveMaximum' => 'maximum'] as $exclusive => $bound) {
+        if (! is_bool($schema->{$exclusive} ?? null)) {
+            continue;
+        }
+        if ($schema->{$exclusive} && isset($schema->{$bound})) {
+            $schema->{$exclusive} = $schema->{$bound};
+            unset($schema->{$bound});
+        } else {
+            unset($schema->{$exclusive});
+        }
+    }
+
+    return $schema;
+}
