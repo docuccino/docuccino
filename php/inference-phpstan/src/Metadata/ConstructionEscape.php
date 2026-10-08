@@ -4,17 +4,13 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Metadata;
 
-use Docuccino\Core\Inference\MethodDeclaration;
+use Docuccino\Inference\PhpStan\Support\ParsedFiles;
 use PhpParser\Node;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\NodeFinder;
-use PhpParser\NodeTraverser;
-use PhpParser\NodeVisitor\NameResolver;
-use PhpParser\ParserFactory;
 use ReflectionClass;
-use Throwable;
 
 /**
  * Whether anything the analyser does not follow may assign a property before a caller holds the object —
@@ -25,8 +21,7 @@ use Throwable;
  */
 final class ConstructionEscape
 {
-    /** @var array<string, list<Node>> file → its name-resolved statements */
-    private array $files = [];
+    public function __construct(private readonly ParsedFiles $files = new ParsedFiles) {}
 
     /**
      * Whether one may, given the statements of the constructor `$declaring` writes, run to build a `$class`.
@@ -50,7 +45,7 @@ final class ConstructionEscape
         }
 
         foreach ($followed as $method) {
-            $body = $this->methodBody($declaring, $method);
+            $body = $this->files->body($declaring->getMethod($method));
             $nested = [];
             // The analyser follows no call made from inside a followed method.
             if ($body === null || $this->escapes($class, $declaring, $property, $body, $nested, $inherited) || $nested !== []) {
@@ -94,7 +89,7 @@ final class ConstructionEscape
             if (self::isThis($call->var) && $call->name instanceof Identifier
                 && self::declares($declaring, $call->name->toString()) && self::runs($class, $declaring, $call->name->toString())
             ) {
-                $bodies[] = $this->methodBody($declaring, $call->name->toString()) ?? [];
+                $bodies[] = $this->files->body($declaring->getMethod($call->name->toString())) ?? [];
             }
         }
 
@@ -248,40 +243,5 @@ final class ConstructionEscape
         }
 
         return false;
-    }
-
-    /**
-     * The statements of a method the class declares, read from the file that writes it (a trait's, for a
-     * trait's method), or null where they cannot be found.
-     *
-     * @param  ReflectionClass<object>  $class
-     * @return array<Node>|null
-     */
-    private function methodBody(ReflectionClass $class, string $method): ?array
-    {
-        $reflected = $class->getMethod($method);
-        $file = $reflected->getFileName();
-        if ($file === false) {
-            return null;
-        }
-
-        return MethodDeclaration::in($this->statements($file), $reflected)?->stmts;
-    }
-
-    /** @return list<Node> */
-    private function statements(string $file): array
-    {
-        if (isset($this->files[$file])) {
-            return $this->files[$file];
-        }
-
-        try {
-            $code = is_file($file) ? file_get_contents($file) : false;
-            $statements = $code === false ? null : (new ParserFactory)->createForHostVersion()->parse($code);
-        } catch (Throwable) {
-            $statements = null;
-        }
-
-        return $this->files[$file] = $statements === null ? [] : array_values((new NodeTraverser(new NameResolver))->traverse($statements));
     }
 }

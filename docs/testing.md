@@ -308,11 +308,11 @@ would sit too close to the figure for an ordinary change to survive it (see `lar
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **97.76%** | 97    | fully in-process-measurable; 0.76pp above it, ~122 statements |
+| `core`              | **97.80%** | 97    | fully in-process-measurable; 0.80pp above it, ~128 statements |
 | `laravel`           | **97.22%** | 97    | ratcheted 95 → 96 → 97, the last once the figure cleared 97.20%, see below; 0.22pp above it, ~37 statements |
-| `inference-phpstan` | **55.15%** | 54    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51 → 53 → 54; 1.15pp, ~43 statements |
+| `inference-phpstan` | **55.74%** | 55    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51 → 53 → 54 → 55; 0.74pp, ~29 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 93.11%     | —     | informational only; no longer a gate (statement sum of the rows above) |
+| Overall             | 93.00%     | —     | informational only; no longer a gate (statement sum of the rows above) |
 
 Every figure here is one `composer test:coverage` run of the whole set — CI's coverage job on PHP 8.4,
 which is what the record describes — so the three read off the same clover report and the floors file
@@ -363,8 +363,9 @@ the floor in silence. What answers that is the record check above, which fires a
 longer the only thing watching the number, which is what makes keeping its margin affordable. Ratchet to
 97 when the figure clears **97.20%**, about 28 statements, the order of margin the other two floors carry.
 Re-recorded at 97.18% (15,100/15,538) it had not: a floor of 97 would have carried 28.14 statements.
-Re-recorded at 97.22% (15,850/16,303) it has, so the floor ratcheted 96 → 97 with 36.09 statements of
-margin (0.22pp); it now takes deleting about 1,200 fully covered statements to cross it with no lost proof.
+It cleared it at 97.22% (15,850/16,303), when the floor ratcheted 96 → 97 with 36.09 statements of margin
+(0.22pp); the figure since is the table's. It takes deleting about 1,200 fully covered statements to cross
+the floor with no lost proof.
 
 **A floor drop is only ever a documented denominator change**, and there have been two.
 
@@ -460,7 +461,7 @@ for its pure/parent-process classes, never more subprocess fixture tests.
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **97**, `laravel` **97**, `inference-phpstan` **54**.
+  an aspiration. Current floors: `core` **97**, `laravel` **97**, `inference-phpstan` **55**.
 - The same run **checks the record**: each entry carries the `measured` figure its floor was set from,
   and a run more than ten statements away from it reports `STALE` and fails, naming the three places to
   re-record. Honest floors are only honest against a measurement somebody took recently, and until this

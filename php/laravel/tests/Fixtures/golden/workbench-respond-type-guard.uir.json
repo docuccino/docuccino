@@ -145,14 +145,7 @@
                     "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
                   }
                 }
-              ],
-              "facts": {
-                "examplePlaceholders": {
-                  "application/problem+json": [
-                    "title"
-                  ]
-                }
-              }
+              ]
             },
             "description": "Not Found",
             "content": {
@@ -183,7 +176,8 @@
                       "items": {}
                     },
                     "status": {
-                      "type": "integer"
+                      "type": "integer",
+                      "const": 404
                     },
                     "title": {
                       "type": "string"
@@ -201,7 +195,7 @@
                 },
                 "example": {
                   "type": "about:blank",
-                  "title": "string",
+                  "title": "Not Found",
                   "status": 404
                 }
               }
@@ -308,12 +302,7 @@
                 }
               ],
               "facts": {
-                "component": "Conflict",
-                "examplePlaceholders": {
-                  "application/problem+json": [
-                    "title"
-                  ]
-                }
+                "component": "Conflict"
               }
             },
             "description": "Conflict",
@@ -376,7 +365,8 @@
                       "items": {}
                     },
                     "status": {
-                      "type": "integer"
+                      "type": "integer",
+                      "const": 409
                     },
                     "title": {
                       "type": "string"
@@ -394,7 +384,7 @@
                 },
                 "example": {
                   "type": "about:blank",
-                  "title": "string",
+                  "title": "Conflict",
                   "status": 409
                 }
               }
@@ -522,14 +512,7 @@
                     "symbol": "implicit:validated-request"
                   }
                 }
-              ],
-              "facts": {
-                "examplePlaceholders": {
-                  "application/problem+json": [
-                    "title"
-                  ]
-                }
-              }
+              ]
             },
             "description": "Unprocessable Entity",
             "content": {
@@ -560,7 +543,8 @@
                       "items": {}
                     },
                     "status": {
-                      "type": "integer"
+                      "type": "integer",
+                      "const": 422
                     },
                     "title": {
                       "type": "string"
@@ -578,7 +562,7 @@
                 },
                 "example": {
                   "type": "about:blank",
-                  "title": "string",
+                  "title": "Unprocessable Content",
                   "status": 422
                 }
               }
@@ -724,7 +708,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "adc735dccc66852d0028f4e898a9c4485b8e8451d25a0ebdf3840f4543e0049c"
+      "contentHash": "4ca93981af029ae745e3d1ffef972f75043703e2826399e4b2cb5a0cb7331c7c"
     },
     "generator": {
       "name": "docuccino/laravel",

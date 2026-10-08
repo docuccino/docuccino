@@ -38,16 +38,16 @@ const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
     // phpdoc type grammar, the contract checker. The floor sits at the measured integer and 98 is out of
     // reach:
-    // Measured 97.76% (15613/15970): 97% of it is 15490.90 statements, 122.10 of margin (0.76pp).
+    // Measured 97.80% (15636/15988): 97% of it is 15508.36 statements, 127.64 of margin (0.80pp).
     // It was ratcheted 96 → 97 back when
     // the figure was 97.51% over a denominator 1189 statements smaller, dipped to 97.39% as core absorbed
     // work at slightly under its own average, and has come back up without the floor needing to move
     // either time — the ordinary shape for a package this size, and why 97 is where it stays.
-    'core' => ['floor' => 97, 'measured' => 97.76],
+    'core' => ['floor' => 97, 'measured' => 97.80],
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/, the
     // contract-testing assertions. The floor sat at 96 while 97 would have been a hair-trigger, and was to
     // ratchet once the figure cleared 97.20% — about 28 statements. It has:
-    // Measured 97.22% (15864/16317): 97% of it is 15827.49 statements, 36.51 of margin (0.22pp).
+    // Measured 97.22% (15871/16324): 97% of it is 15834.28 statements, 36.72 of margin (0.22pp).
     // The margin is thinner than `core`'s, and the risk it carries is a denominator change rather than a
     // lost proof — deleting about 1,200 fully covered adapter statements would drop the ratio under 97 with
     // no change in test quality. The record check further down fires at ten statements either way, so the
@@ -91,12 +91,14 @@ const FLOORS = [
     // over the constructor (`FixedPropertyValues`), unit-tested over real probes, at 53.55% (1576/2943).
     // It RATCHETED 53 → 54 when reading whether a constructor path that skips a property proves anything
     // landed in the measurable half too — php-parser over the constructor and the one level of helpers the
-    // analyser follows (`ConstructionEscape`), unit-tested over real probes:
-    // Measured 55.15% (2057/3730): 54% of it is 2014.20 statements, 42.80 of margin; 55 would need 2051.50.
+    // analyser follows (`ConstructionEscape`), unit-tested over real probes. It RATCHETED 54 → 55 when
+    // reading which body members echo the status and its reason phrase landed there as well — php-parser
+    // over a constructor and a status-text read (`ConstructorEchoes`, `StatusTextRead`), unit-tested:
+    // Measured 55.74% (2181/3913): 55% of it is 2152.15 statements, 28.85 of margin; 56 would need 2191.28.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads a few statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 54, 'measured' => 55.15],
+    'inference-phpstan' => ['floor' => 55, 'measured' => 55.74],
 ];
 
 /*

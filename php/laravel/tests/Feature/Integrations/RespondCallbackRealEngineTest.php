@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 use Docuccino\Laravel\Integrations\InferredHandler\ReceivedException;
@@ -148,3 +149,26 @@ it('does not settle a guard on a response the callback rebinds before it returns
     expect($response)->toHaveKey('description')
         ->and($response['content'] ?? [])->toBe([]);
 })->group('fixture');
+
+it('illustrates the title of every error with the reason phrase its status is sent with', function (string $method, string $path, string $verb, string $status, string $thrown): void {
+    $problem = 'App\\Problems\\HttpProblem';
+    app()->instance(TypeEngine::class, WorkbenchEngine::make(
+        respondAnalyses([$thrown], $method),
+        [$problem => ClassMetadata::fromArray(FixtureRunner::classMetadata($problem))],
+    ));
+
+    $document = generateDocument()->document->toArray();
+    $content = resolveResponse($document, $document['paths'][$path][$verb]['responses'][$status] ?? [])['content']['application/problem+json'] ?? [];
+
+    // What the server sends is Symfony's own table at that status, read here from Symfony itself; the
+    // schema beside it is shared across statuses and names no phrase.
+    expect($content['example']['title'] ?? null)->toBe(Response::$statusTexts[(int) $status])
+        ->and($content['example']['status'] ?? null)->toBe((int) $status)
+        ->and(resolveSchema($document, $content['schema'] ?? [])['properties']['title'] ?? null)->toBe(['type' => 'string']);
+})->with([
+    'an array body built by a helper' => ['pathGated'],
+    'an object body built in place' => ['problemObject'],
+])->with([
+    'a binding the route cannot resolve' => ['/api/forms/{form}', 'get', '404', ModelNotFoundException::class],
+    'a request that fails validation' => ['/api/tickets', 'post', '422', ValidationException::class],
+])->group('fixture');

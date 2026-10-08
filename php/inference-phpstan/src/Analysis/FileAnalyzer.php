@@ -33,6 +33,9 @@ use Throwable;
  *     locals: array<string, array<string, array{Node\Expr, Scope}|null>>,
  *     calls: array<int, Scope>,
  *     branches: array<string, array{Scope, Scope}>,
+ *     mentions: array<string, array<string, list<int>>>,
+ *     members: array<int, true>,
+ *     written: array<int, true>,
  * }
  *
  * @internal
@@ -239,6 +242,26 @@ final class FileAnalyzer
     }
 
     /**
+     * Whether a read of `$variable` — a member of it, or the variable itself where `$member` is false —
+     * ending at offset `$after` still gives the same value anywhere later in the scope's body ({@see scopeKey()}):
+     * nothing after it writes the variable, and, for a member, nothing names the variable except to read a
+     * property of it or call one of its methods with no arguments. A call with arguments (`->setStatusCode(503)`)
+     * or the object handed on may have changed what the member gives, so a value named before one is not
+     * what the read gives at the return.
+     */
+    public function readHolds(string $file, string $key, int $after, string $variable, bool $member): bool
+    {
+        $harvest = $this->harvest($file);
+        foreach ($harvest['mentions'][$key][$variable] ?? [] as $at) {
+            if ($at > $after && (isset($harvest['written'][$at]) || ($member && ! isset($harvest['members'][$at])))) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Which body a harvested node belongs to: `Class::method`, or a bare function name outside a class.
      * The class half is what keeps two same-named methods in one file — a `render()` per renderer — from
      * sharing one variable's assignment, which would publish one class's response body for the other's
@@ -289,8 +312,14 @@ final class FileAnalyzer
         $evaluated = [];
         /** @var list<Node\Expr\Ternary> $ternaries */
         $ternaries = [];
+        /** @var array<string, array<string, list<int>>> $mentions each variable's offsets, by scope, {@see readHolds()} */
+        $mentions = [];
+        /** @var array<int, true> $members offsets of a variable a member is read off, with no arguments */
+        $members = [];
+        /** @var array<int, true> $written offsets of a variable written, itself or through what it holds */
+        $written = [];
 
-        $this->walks->walk($file, function (Node $node, Scope $scope) use (&$methods, &$closures, &$arrows, &$arrays, &$locals, &$calls, &$opaque, &$evaluated, &$ternaries): void {
+        $this->walks->walk($file, function (Node $node, Scope $scope) use (&$methods, &$closures, &$arrows, &$arrays, &$locals, &$calls, &$opaque, &$evaluated, &$ternaries, &$mentions, &$members, &$written): void {
             // Watching for these virtual nodes is the sanctioned way to pair returns with refined scope.
             // Collected first and outside the guard below, so that a reader wanting only a method body — the
             // throw analyzer, the tracer descending into a callee — never pays for the write half's failures.
@@ -337,6 +366,17 @@ final class FileAnalyzer
                 $key = self::scopeKey($scope);
                 if ($key === null) {
                     return; // outside any function, where there are no locals to harvest
+                }
+
+                if ($node instanceof Node\Expr\Variable && is_string($node->name) && $node->getStartFilePos() >= 0) {
+                    $mentions[$key][$node->name][] = $node->getStartFilePos();
+                }
+                $member = self::memberRead($node);
+                if ($member !== null) {
+                    $members[$member] = true;
+                }
+                foreach (self::writtenVariables($node) as $at) {
+                    $written[$at] = true;
                 }
 
                 $assignment = LocalWrites::assignment($node);
@@ -395,7 +435,55 @@ final class FileAnalyzer
             'locals' => $locals,
             'calls' => $calls,
             'branches' => $branches,
+            'mentions' => $mentions,
+            'members' => $members,
+            'written' => $written,
         ];
+    }
+
+    /**
+     * The variable's offset, where the node reads a member straight off a variable: a property, or a method
+     * called with no arguments.
+     */
+    private static function memberRead(Node $node): ?int
+    {
+        $called = $node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\NullsafeMethodCall;
+        if (! $called && ! $node instanceof Node\Expr\PropertyFetch && ! $node instanceof Node\Expr\NullsafePropertyFetch) {
+            return null;
+        }
+
+        return $node->var instanceof Node\Expr\Variable && (! $called || (! $node->isFirstClassCallable() && $node->getArgs() === []))
+            ? $node->var->getStartFilePos()
+            : null;
+    }
+
+    /**
+     * The offset of each variable the node writes, itself or through a property or offset of what it holds
+     * (`$response->headers = …`, `$body['status']++`, `unset($response->content)`).
+     *
+     * @return list<int>
+     */
+    private static function writtenVariables(Node $node): array
+    {
+        $targets = match (true) {
+            $node instanceof Node\Expr\Assign, $node instanceof Node\Expr\AssignOp, $node instanceof Node\Expr\AssignRef,
+            $node instanceof Node\Expr\PreInc, $node instanceof Node\Expr\PostInc,
+            $node instanceof Node\Expr\PreDec, $node instanceof Node\Expr\PostDec => [$node->var],
+            $node instanceof Node\Stmt\Unset_ => $node->vars,
+            default => [],
+        };
+
+        $offsets = [];
+        foreach ($targets as $target) {
+            while ($target instanceof Node\Expr\PropertyFetch || $target instanceof Node\Expr\NullsafePropertyFetch || $target instanceof Node\Expr\ArrayDimFetch) {
+                $target = $target->var;
+            }
+            if ($target instanceof Node\Expr\Variable) {
+                $offsets[] = $target->getStartFilePos();
+            }
+        }
+
+        return $offsets;
     }
 
     /** Start and end offset: `($a ? $b : $c) ? $d : $e` nests two ternaries that start at one offset. */

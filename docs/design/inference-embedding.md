@@ -420,7 +420,19 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    call site then binds them: a constant-foldable argument pins the member to a literal (a per-arm
    `type` URI becomes a `const`), a caller parameter RE-HOMES the accessor one hop out, and anything
    else drops the provenance and leaves the member widened. A member reading the SAME accessor that
-   drives the HTTP status becomes a `StatusMarkerT` (§5) for the response seam to fill.
+   drives the HTTP status becomes a `StatusMarkerT` (§5) for the response seam to fill, and one reading
+   Symfony's status-text table AT that accessor (`Response::$statusTexts[$status] ?? 'Error'`, through
+   any class inheriting the table) a `StatusTextMarkerT` carrying the `??` literal. A local assigned
+   exactly once reads through to what it was assigned (`$status = $response->getStatusCode()`), one hop,
+   and the analysed function's OWN parameters count too: nothing binds them, but two reads of one are
+   still the same value. A value named before it is sent — that local, a body array or object built in one
+   — counts only while nothing after it names the variable read except to read a member of it, a property
+   or a method called with no arguments (`FileAnalyzer::readHolds()`): a `$response->setStatusCode(503)` in
+   between, or the response handed anywhere, and it is the old status. An object body built in place (`new JsonResponse(new Problem($response), …)`)
+   carries the same two markers in its member map, keyed by property, for each public readonly property
+   its constructor's reached top-level statements write from such a read, or promotes from one
+   (`ConstructorEchoes`). A chain's `->setStatusCode()` replaces the status the body echoed, so it widens
+   every marker back to what the member was read as.
 3. **Enum-case accessor folding** (the final hop). When the call site binds a concrete enum case,
    `EnumAccessorFolder` resolves the accessors the callee applied to it: `->value`/`->name` from the
    case by reflection — VENDOR-SAFE, no body analysed; a no-arg `->method()` only for a PROJECT enum, by
@@ -576,14 +588,19 @@ takes a live `processFile`. The decision is owned by `PhpStanTypeEngine::traceCl
 
 Closed set: `ScalarT, LiteralT, ArrayShapeT(fields, isList), ListT/MapT, UnionT,
 IntersectionT, ClassT(fqcn, typeArgs), EnumT(fqcn, cases), CallableT, NullT/VoidT/NeverT,
-StatusMarkerT, UnknownT(reason — always carries why)`. Nullability = `UnionT[..., NullT]`.
+StatusMarkerT, StatusTextMarkerT(type, fallback), UnknownT(reason — always carries why)`. Nullability =
+`UnionT[..., NullT]`.
 
-`StatusMarkerT` is the sole non-language member: a resolution SIGNAL ("this body member echoes the
-response's own HTTP status") synthesised by the response refinement (§4a) and resolved to a `LiteralT`
-by the adapter's response builder. The translator NEVER produces it — PHPStan has no such type. It is a
-DType rather than a transient side-channel because it must survive SERIALIZATION: it rides inside the
-`ArrayShapeT` payload of a `JsonResponse<…>` `ClassT` in an `ActionAnalysis`, while resolution happens
-later, in the adapter. Same rationale as `uir-and-extensions.md` §8.
+`StatusMarkerT` and `StatusTextMarkerT` are the non-language members: resolution SIGNALS ("this body
+member echoes the response's own HTTP status", "… its reason phrase") synthesised by the response
+refinement (§4a) and resolved by the adapter's response builder against the status the response is
+documented under. The translator NEVER produces them — PHPStan has no such type. They are DTypes rather
+than a transient side-channel because they must survive SERIALIZATION: they ride inside the payload (or
+the member map) of a `JsonResponse<…>` `ClassT` in an `ActionAnalysis`, while resolution happens later, in
+the adapter. Same rationale as `uir-and-extensions.md` §8. The status resolves before schema conversion
+(a `const`); the phrase resolves for the EXAMPLE only, from the installed framework's own table — the one
+the response is sent with — since a body shared across statuses has no one phrase, and its schema stays
+the type the member was read as.
 
 Translator (`TypeTranslator::translate(PHPStan\Type\Type, TranslationBudget): DType`):
 ConstantArrayType → ArrayShapeT (optional keys honored, isList from the accessory OR derived from a
