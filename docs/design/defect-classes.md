@@ -1565,3 +1565,28 @@ no container can be missed, with a seen-set for the cycles seals make. `Componen
 every mapper, so no mapper has to remember. The guard (`SealedUnionPerSideTest`) builds the request
 alone and with the response routes and asserts the request side's bytes do not move, in every route
 order, warm as cold.
+
+## A component kept alive by a member the emission drops
+
+The build publishes a component once anything in the UIR refers to it, and the UIR refers to more than
+an OpenAPI document carries: the provenance a winner keeps of the value it overrode names that value's
+components. Every emission that drops a member — the OAS emitters strip `x-docuccino`, `winners` and
+`none` level the trail, 3.0 drops `webhooks` — can leave a component nothing in the result refers to: a
+dead type in every client generated from it, present or absent by which layer won.
+
+*Instances.* A declared `#[BodyParameter]` adopting the object the rules split by a tag: the rules'
+shape referred to the tag's enum component, the declaration names it by const, and the enum survived in
+every OpenAPI artifact on the trail's say-so alone. And a schema only a webhook carries, published by the
+3.0 artifact that dropped the webhook.
+
+*The tell.* A component in an emitted document with no `$ref` to it, where the full UIR has one inside
+`x-docuccino` or a member that format cannot hold.
+
+*The fix that worked.* One rule at the emission, not one per producer (`Emit\StrandedComponents`): a
+component the source reached and the emitted document no longer reaches goes. One nothing reached in the
+first place was put there on purpose — an overlay, a transformer, a hand-written document — and stays.
+
+*The tests that recognise it.* `StrandedComponentsTest` holds every UIR document in the tree, in every
+format and provenance level, to "what the emission publishes unreached, the source did not reach either",
+through a reachability walk of its own (`unreachableComponents()`); `AdoptedUnionGoldenTest` pins the enum
+to the documents whose trail still names it.

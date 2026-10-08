@@ -1032,6 +1032,72 @@ function componentRefsIn(mixed $node, string $bucket): array
 }
 
 /**
+ * The components a document publishes that nothing in it reaches, as `section/name`: the roots are every
+ * `$ref` and `discriminator.mapping` value outside `components`, closed over the components they name. A
+ * pointer INTO a component reaches the component. Security schemes are named by `security`, never by a
+ * `$ref`, so they are not read. Every member is read wherever it sits, so a pointer an example states
+ * reaches too — the error this can make is calling an orphan reached, never the reverse.
+ *
+ * @param  array<array-key, mixed>  $document
+ * @return list<string>
+ */
+function unreachableComponents(array $document): array
+{
+    $components = is_array($document['components'] ?? null) ? $document['components'] : [];
+    unset($document['components']);
+
+    $pointers = static function (mixed $node) use (&$pointers): array {
+        if (! is_array($node)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($node as $key => $value) {
+            if ($key === '$ref' && is_string($value)) {
+                $out[] = $value;
+            } elseif ($key === 'mapping' && is_array($value)) {
+                $out = [...$out, ...array_values(array_filter($value, is_string(...)))];
+            }
+            $out = [...$out, ...$pointers($value)];
+        }
+
+        return $out;
+    };
+
+    $reached = [];
+    $pending = $pointers($document);
+    while ($pending !== []) {
+        $segments = explode('/', (string) array_pop($pending));
+        if (count($segments) < 4 || $segments[0] !== '#' || $segments[1] !== 'components') {
+            continue;
+        }
+
+        $name = str_replace(['~1', '~0'], ['/', '~'], $segments[3]);
+        if (isset($reached[$segments[2]][$name])) {
+            continue;
+        }
+
+        $reached[$segments[2]][$name] = true;
+        $pending = [...$pending, ...$pointers($components[$segments[2]][$name] ?? null)];
+    }
+
+    $unreached = [];
+    foreach ($components as $section => $bucket) {
+        if ($section === 'securitySchemes' || ! is_array($bucket)) {
+            continue;
+        }
+
+        foreach (array_keys($bucket) as $name) {
+            if (! isset($reached[$section][$name])) {
+                $unreached[] = $section.'/'.$name;
+            }
+        }
+    }
+
+    return $unreached;
+}
+
+/**
  * A committed fixture document, read the way the product reads one.
  *
  * Through {@see JsonValue}, never `json_decode(…, true)`: the harness is a READER of documents, so an

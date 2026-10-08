@@ -224,7 +224,8 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
         unset($array['jsonSchemaDialect']);
 
         $array = $this->downlevelInfo($array, $diagnostics);
-        $array = $this->dropWebhooks($array, $diagnostics);
+        // A component only the webhooks referred to goes with them.
+        $array = StrandedComponents::drop($array, $this->dropWebhooks($array, $diagnostics));
         [$array, $removed] = $this->downlevelComponents($array, $diagnostics);
 
         /** @var array<string, mixed> $walked */
