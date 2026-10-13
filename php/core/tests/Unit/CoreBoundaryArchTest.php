@@ -13,6 +13,8 @@ declare(strict_types=1);
  * the build.
  */
 use Docuccino\Core\Contract\ContractIndex;
+use Docuccino\Core\Document\UirDocument;
+use Docuccino\Core\Document\UseSites;
 use Docuccino\Core\Draft\DeprecationNote;
 use Docuccino\Core\Draft\DescriptionAppender;
 use Docuccino\Core\Draft\OperationDraft;
@@ -92,6 +94,16 @@ function coreDocBlockTypes(?string $docComment, ?string $file): array
 }
 
 /**
+ * Whether a docblock carries the `@internal` TAG. A docblock may say the word in prose — `UirDocument`'s
+ * explains that what it is made of is internal while it is not — and reading that as the tag takes a
+ * public class off the surface and calls every method returning it a leak.
+ */
+function coreMarkedInternal(string|false $docComment): bool
+{
+    return $docComment !== false && preg_match('/^\s*(?:\/\*\*|\*)\s*@internal\b/m', $docComment) === 1;
+}
+
+/**
  * Every public promise the given classes make in an `@internal` type, as a readable sentence each.
  *
  * A function rather than an inline loop so the state it must REFUSE can be run through it: a guard that
@@ -107,7 +119,7 @@ function coreInternalLeaks(array $classes): array
             return false;
         }
 
-        return str_contains((string) (new ReflectionClass($name))->getDocComment(), '@internal');
+        return coreMarkedInternal((new ReflectionClass($name))->getDocComment());
     };
 
     $native = static function (?ReflectionType $type, ReflectionClass $owner) use ($internal): array {
@@ -150,7 +162,7 @@ function coreInternalLeaks(array $classes): array
 
         foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
             // A method that says it's internal is honest about it; the rule is about the silent ones.
-            if ($method->getDeclaringClass()->getName() !== $class || str_contains((string) $method->getDocComment(), '@internal')) {
+            if ($method->getDeclaringClass()->getName() !== $class || coreMarkedInternal($method->getDocComment())) {
                 continue;
             }
 
@@ -221,7 +233,7 @@ function corePublicSurface(): array
                 .($directory === $root ? '' : $directory.'\\')
                 .basename((string) $file, '.php');
 
-            if (! str_contains((string) (new ReflectionClass($class))->getDocComment(), '@internal')) {
+            if (! coreMarkedInternal((new ReflectionClass($class))->getDocComment())) {
                 $surface[] = $class;
             }
         }
@@ -264,6 +276,17 @@ it('never hands a public API consumer a type marked @internal', function (): voi
     }
 
     expect(coreInternalLeaks($surface))->toBe([]);
+});
+
+it('reads @internal as a tag, never as a word in prose', function (): void {
+    expect(coreMarkedInternal("/**\n * A value.\n *\n * @internal\n */"))->toBeTrue()
+        ->and(coreMarkedInternal('/** @internal */'))->toBeTrue()
+        ->and(coreMarkedInternal("/**\n * What it is made of is `@internal`, and it is not.\n */"))->toBeFalse()
+        ->and(coreMarkedInternal("/**\n * @internalish\n */"))->toBeFalse()
+        ->and(coreMarkedInternal(false))->toBeFalse()
+        // The class whose prose mentions the tag, and one that carries it.
+        ->and(coreMarkedInternal((new ReflectionClass(UirDocument::class))->getDocComment()))->toBeFalse()
+        ->and(coreMarkedInternal((new ReflectionClass(UseSites::class))->getDocComment()))->toBeTrue();
 });
 
 it('reads the type a member DOCUMENTS as well as the one it declares', function (): void {
@@ -349,7 +372,7 @@ it('names no class for a docblock that promises none', function (): void {
 it('freezes the contract index at the methods outside core actually call', function (): void {
     $public = [];
     foreach ((new ReflectionClass(ContractIndex::class))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
-        if (! str_contains((string) $method->getDocComment(), '@internal')) {
+        if (! coreMarkedInternal($method->getDocComment())) {
             $public[] = $method->getName();
         }
     }
@@ -384,7 +407,7 @@ it('freezes the contract index at the methods outside core actually call', funct
 it('freezes the rule-transformer field façade at the methods it means to promise', function (): void {
     $public = [];
     foreach ((new ReflectionClass(ValidationField::class))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
-        if ($method->getName() !== '__construct' && ! str_contains((string) $method->getDocComment(), '@internal')) {
+        if ($method->getName() !== '__construct' && ! coreMarkedInternal($method->getDocComment())) {
             $public[] = $method->getName();
         }
     }
@@ -519,7 +542,7 @@ it('freezes the drafts an extension writes through at the methods they mean to p
     foreach ($promised as $class => $methods) {
         $public = [];
         foreach ((new ReflectionClass($class))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
-            if ($method->getName() !== '__construct' && ! str_contains((string) $method->getDocComment(), '@internal')) {
+            if ($method->getName() !== '__construct' && ! coreMarkedInternal($method->getDocComment())) {
                 $public[] = $method->getName();
             }
         }
@@ -537,7 +560,7 @@ it('freezes the drafts an extension writes through at the methods they mean to p
     foreach ((array) glob(__DIR__.'/../../src/Draft/*.php') as $file) {
         $class = 'Docuccino\\Core\\Draft\\'.basename((string) $file, '.php');
 
-        if (! str_contains((string) (new ReflectionClass($class))->getDocComment(), '@internal')) {
+        if (! coreMarkedInternal((new ReflectionClass($class))->getDocComment())) {
             $classes[] = $class;
         }
     }
@@ -564,7 +587,7 @@ it('keeps the configuration reader off the frozen public surface', function (): 
     foreach ($files as $file) {
         $class = 'Docuccino\Core\Config\\'.basename((string) $file, '.php');
 
-        expect((new ReflectionClass($class))->getDocComment())->toContain('@internal');
+        expect(coreMarkedInternal((new ReflectionClass($class))->getDocComment()))->toBeTrue();
     }
 });
 
