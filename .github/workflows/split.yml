@@ -76,7 +76,7 @@ concurrency:
 jobs:
   split:
     name: ${{ matrix.package }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     # Forks have no SPLIT_TOKEN and must never attempt to push to the org.
     if: github.repository == 'docuccino/docuccino'
     strategy:

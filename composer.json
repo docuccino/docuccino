@@ -98,8 +98,8 @@
         ],
         "test:types": "@php -d grpc.enable_fork_support=1 vendor/bin/pest --type-coverage --exclude-group=fixture --min=100 --memory-limit=2G",
         "analyse": "phpstan analyse --no-progress --memory-limit=2G",
-        "lint": "pint --test",
-        "fix": "pint",
+        "lint": "pint --test --parallel",
+        "fix": "pint --parallel",
         "sync-schema": "@php tools/sync-schema.php",
         "sync-schema:check": "@php tools/sync-schema.php --check"
     }

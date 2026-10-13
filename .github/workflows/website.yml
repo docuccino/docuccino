@@ -23,7 +23,7 @@ permissions:
 jobs:
   build:
     name: Build docs site (Astro + Starlight)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     defaults:
       run:
         working-directory: website
