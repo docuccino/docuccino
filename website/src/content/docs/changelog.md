@@ -13,6 +13,12 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.21.2
+
+### Features
+
+- **core**: write a read document back as JSON, exactly as it was written ([#660](https://github.com/docuccino/docuccino/pull/660))
+
 ## v0.21.1
 
 ### Features
