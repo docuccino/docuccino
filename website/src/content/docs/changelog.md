@@ -13,6 +13,18 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.21.1
+
+### Features
+
+- **core**: read an uploaded OpenAPI document through a public DocumentReader ([#654](https://github.com/docuccino/docuccino/pull/654))
+
+### Bug fixes
+
+- **core**: diff a 3.0 document against a 3.1 or 3.2 one in the dialect they share ([#656](https://github.com/docuccino/docuccino/pull/656))
+- **core**: keep an empty security requirement read back from JSON ([#653](https://github.com/docuccino/docuccino/pull/653))
+- **laravel**: fold Laravel's new exclude, excludeWith and excludeWithout rules ([#657](https://github.com/docuccino/docuccino/pull/657))
+
 ## v0.21.0
 
 ### Breaking changes
