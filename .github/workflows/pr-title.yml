@@ -31,7 +31,7 @@ concurrency:
 jobs:
   lint:
     name: Conventional PR title
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     # The standing release pull request is opened by release-pr.yml as `Release vX.Y.Z`, which is
     # deliberately not a conventional subject: it lands nothing user-facing and the generator skips
     # it. Exempt exactly that branch of THIS repository — a fork branch of the same name is still

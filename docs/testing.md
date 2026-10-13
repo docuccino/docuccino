@@ -172,6 +172,11 @@ Line coverage needs a coverage driver. The project uses **pcov** (fast, statemen
 ```bash
 # One-time: install pcov (macOS/Homebrew PHP needs the pcre2 headers on the include path)
 CPPFLAGS="-I$(brew --prefix pcre2)/include" pecl install pcov
+# …and point it at the packages, as CI does. Unset, it falls back to the whole checkout (this root
+# has no src/, lib/ or app/ for it to guess), vendor/ included, and the run is far slower for it.
+# In php.ini, not `-d`: the parallel workers are separate processes.
+#   pcov.directory=php
+#   pcov.exclude="~/tests/~"
 
 # The ENFORCED gate: clover report + the per-package floors (this is what CI runs)
 composer test:coverage
