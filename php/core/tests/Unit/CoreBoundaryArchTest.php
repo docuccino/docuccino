@@ -22,6 +22,8 @@ use Docuccino\Core\Draft\ParameterDraft;
 use Docuccino\Core\Draft\ResponseDraft;
 use Docuccino\Core\Draft\SchemaDraft;
 use Docuccino\Core\Extensions\Validation\ValidationField;
+use Docuccino\Core\Reader\DocumentReader;
+use Docuccino\Core\Reader\ReadDocument;
 use Docuccino\Core\Tests\Fixtures\Boundary\DocblockLeakProbe;
 use Docuccino\Core\TypeGrammar\ImportContext;
 use Docuccino\Core\TypeGrammar\PhpDocParserStack;
@@ -226,7 +228,9 @@ function corePublicSurface(): array
     // objects an extension spends its whole life in, and a member of one handing back an internal type
     // is a dependency an import scan cannot see. Their `@internal` members — the ones that freeze a node
     // or move it about — are skipped by the sweep below, exactly as a marked member anywhere else is.
-    foreach (['Contract', 'Inference', 'Draft'] as $root) {
+    // Reader/ is the way a service outside the build reads a document someone uploaded, so what it hands
+    // back is public on the same terms.
+    foreach (['Contract', 'Inference', 'Draft', 'Reader'] as $root) {
         foreach ((array) glob(__DIR__.'/../../src/'.$root.'/{,*/}*.php', GLOB_BRACE) as $file) {
             $directory = basename(dirname((string) $file));
             $class = 'Docuccino\Core\\'.$root.'\\'
@@ -253,9 +257,10 @@ it('never hands a public API consumer a type marked @internal', function (): voi
         'Docuccino\Core\Contract\Coverage\CoverageReport',
         'Docuccino\Core\Inference\ArgumentSlots',
         'Docuccino\Core\Inference\DType\DType',
-        // One per root, so a glob that stopped matching one of the three is a failure rather than a
-        // surface that quietly shrank to the other two.
+        // One per root, so a glob that stopped matching one of them is a failure rather than a surface
+        // that quietly shrank to the others.
         'Docuccino\Core\Draft\SchemaDraft',
+        'Docuccino\Core\Reader\ReadDocument',
     );
 
     // One expectation per name, because `not->toContain(a, b)` passes the moment ONE of them is
@@ -271,6 +276,10 @@ it('never hands a public API consumer a type marked @internal', function (): voi
         'Docuccino\Core\Inference\LocalWrites',
         // The keyword model the drafts reason WITH rather than hand out.
         'Docuccino\Core\Draft\SchemaKeywords',
+        // What the reader composes; a caller reads its answers, never these.
+        'Docuccino\Core\Reader\DocumentDecoder',
+        'Docuccino\Core\Reader\Inspector',
+        'Docuccino\Core\Reader\NodeManifest',
     ] as $marked) {
         expect($surface)->not->toContain($marked);
     }
@@ -284,7 +293,7 @@ it('reads @internal as a tag, never as a word in prose', function (): void {
         ->and(coreMarkedInternal("/**\n * What it is made of is `@internal`, and it is not.\n */"))->toBeFalse()
         ->and(coreMarkedInternal("/**\n * @internalish\n */"))->toBeFalse()
         ->and(coreMarkedInternal(false))->toBeFalse()
-        // The class whose prose mentions the tag, and one that carries it.
+        // The class whose prose mentions the tag is on the surface a reader hands back.
         ->and(coreMarkedInternal((new ReflectionClass(UirDocument::class))->getDocComment()))->toBeFalse()
         ->and(coreMarkedInternal((new ReflectionClass(UseSites::class))->getDocComment()))->toBeTrue();
 });
@@ -392,6 +401,34 @@ it('freezes the contract index at the methods outside core actually call', funct
         'supportsWebhooks',
         'webhooksNamed',
     ]);
+});
+
+/**
+ * The same freeze over the document reader: the one way a service outside the build — a hosted product
+ * reading what a customer uploaded — reads a document, so every method here is a semver promise to a
+ * caller who cannot see this repository.
+ */
+it('freezes the document reader at the methods it means to promise', function (): void {
+    $promised = [
+        DocumentReader::class => ['read'],
+        ReadDocument::class => ['contentHash', 'inspect', 'nodes', 'uir', 'validate'],
+    ];
+
+    foreach ($promised as $class => $methods) {
+        $public = [];
+        foreach ((new ReflectionClass($class))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+            if ($method->getName() !== '__construct' && ! coreMarkedInternal($method->getDocComment())) {
+                $public[] = $method->getName();
+            }
+        }
+
+        sort($public);
+
+        expect($public)->toBe($methods);
+    }
+
+    // Constructing a read document is the reader's job, and says so.
+    expect(coreMarkedInternal((new ReflectionMethod(ReadDocument::class, '__construct'))->getDocComment()))->toBeTrue();
 });
 
 /**
