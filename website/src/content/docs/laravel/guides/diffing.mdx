@@ -446,6 +446,22 @@ identical. Check that the artifact belongs to this document, re-export it if it 
 how ids are minted, and read the changeset again. The warning is advisory: `--enforce` never reads
 it.
 
+## Across OpenAPI versions
+
+OpenAPI 3.0 spells several things differently from 3.1 and 3.2. A nullable field is `nullable: true`
+rather than a `null` in its type, a pinned value is a one-member `enum` rather than `const`, and a
+`$ref` with a description beside it becomes an `allOf`. Compared keyword by keyword, the 3.0 and 3.1
+exports of one unchanged API would read as hundreds of breaking changes.
+
+So when one side is 3.0 and the other is 3.1 or 3.2, the newer side is first rewritten the way the
+[3.0 export](/laravel/getting-started/first-export/) writes it, and the two compare as 3.0. Switching
+your committed artifact from `openapi-3.0` to `openapi-3.1` reports nothing, and a field you removed
+in the same commit is still reported.
+
+The price is what 3.0 cannot say. Webhooks, guide pages and the schema keywords the 3.0 export drops
+aren't on the 3.0 side, so a diff across versions doesn't compare them. Two documents of the same
+version compare in full.
+
 ## What it does not compare
 
 The diff reads two documents and nothing else, which bounds it usefully.
