@@ -153,7 +153,7 @@ final readonly class ReadDocument
         }
 
         $declared = Inspector::specVersion($this->graph);
-        $version = $declared !== null && preg_match('/^(\d+\.\d+)(?:\.|$)/', $declared, $match) === 1 ? $match[1] : null;
+        $version = $this->inspection->uirVersion;
         $schema = $version === null ? null : Validator::documentSchemaPathFor($version);
 
         if ($schema === null) {

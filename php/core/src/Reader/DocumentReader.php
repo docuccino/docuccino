@@ -15,6 +15,9 @@ use Docuccino\Core\Support\JsonValue;
  * past its own size once walked — YAML aliases, or nodes listed far more often than they are written —
  * so every answer a read document gives costs in proportion to its bytes.
  *
+ * Every enum it hands back is backed by a string a caller may store, and those strings change only as a
+ * breaking change.
+ *
  * ```php
  * $document = (new DocumentReader)->read($bytes, 'application/yaml');
  *
