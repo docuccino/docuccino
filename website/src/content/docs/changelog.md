@@ -13,6 +13,13 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.22.0
+
+### Breaking changes
+
+- **core**: refuse a document whose node index or diff would expand far past its own size ([#663](https://github.com/docuccino/docuccino/pull/663))
+  - `DocumentReader::read()` refuses a document whose node index would outgrow its bytes, with the new `ReadFailure::NodeExpansion`, so an exhaustive `match` over `ReadFailure` needs that case. `IncomparableDocumentsException` now carries a `DiffFailure` as `$failure` and is also thrown when a diff would read shared nodes past its budget; constructing one with `new` takes the failure first. `ReadDocument::validate()` no longer appends a "more than N findings" line: show your own when `isTruncated()` is true. UPGRADING.md has the details under v0.22.0.
+
 ## v0.21.2
 
 ### Features
