@@ -4,6 +4,28 @@ One section per release that asks something of you, newest first. A release not 
 nothing but the version bump — the [changelog](https://docs.docuccino.app/changelog/) carries the
 full record either way.
 
+## v0.21.3
+
+Only if you read uploaded documents through `Docuccino\Core\Reader` or call the differ yourself.
+Nothing about a generated document changes.
+
+- **A validation's findings are only findings.** `ReadDocument::validate($max)` no longer ends a list
+  it cut with a line saying "more than N findings". The list holds at most `$max` places the
+  document fails, and `isTruncated()` says whether there were more — now also when the meta-schema
+  check cut its own list, which used to come back as a finding with `isTruncated()` false. If you
+  showed that line, show your own when `isTruncated()` is true.
+- **`read()` refuses one more kind of document.** A document whose node index would hold more nodes
+  than it has bytes — paths sharing one path item that lists its parameters for every operation — is
+  refused with `ReadFailure::NodeExpansion`. A `match` over `ReadFailure` needs the case.
+- **`IncomparableDocumentsException` says why.** Its `$failure` is a `DiffFailure`:
+  `AlgorithmMismatch` for the refusal it always made, and `ReferenceExpansion` when comparing the
+  two documents would read their shared nodes far more often than any document needs. Every place
+  that catches it already handles both. Constructing one with `new` now takes the failure first.
+
+What you can stop writing by hand: `DocumentNode::toArray()`, `DocumentGenerator::toArray()`,
+`Syntax::mediaType()`, and `DocumentInspection::$uirVersion` — the major.minor UIR version
+`validate()` picks the extension's schema by.
+
 ## v0.21.0
 
 The full artifact (`--format=full`) is now valid OpenAPI everywhere it shares a component. When an

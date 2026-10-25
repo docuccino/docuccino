@@ -1613,3 +1613,38 @@ the places cannot all be named, apply nothing more — vague but true.
 method, `rescue()`, a narrower catch, a rethrowing catch and a retry from inside the catch. Each of the
 first four fails with `CalleeCatches::around()` answering null, and the rethrow row fails with the rethrow
 rule taken out of `EnclosingCatches`.
+
+## A walk that reads a shared node once per use
+
+OpenAPI shares by reference, and a reader that follows a reference reads the node it lands on again at
+every use. That is usually the point — a path's operations are the ones its path item states, and an
+edit to a shared response changes every operation that uses it — but it makes the walk's cost a
+function of how often a document uses what it shares, which nothing about the document's size bounds.
+The YAML alias bomb is the same shape one layer down, and the decoder already refused it.
+
+*Instances.* The node index listed a path item's operations once per path referencing it, and a path
+item's parameters once per operation, so 200 paths sharing one item with 200 parameters and eight
+operations — 21 KB — listed 323,200 nodes; 3.2's `additionalOperations` did the same inside one item.
+The differ read a shared path item per path, a shared response, parameter or request body per
+operation, and a schema per position pointing differently on the two sides: 1,000 operations sharing a
+200-property response compared it 1,000 times, and schemas each pointing at the next twice, renamed on
+one side, doubled the walk per level — 2.3 KB of documents reported 262,179 changes.
+
+*The tell.* A resolver called inside a loop over uses, with nothing measuring what it hands back. The
+sharper one is a cost proportional to a product — paths × parameters, uses × size, a branching factor
+to the depth — where the document's size is proportional to the sum.
+
+*The fix that worked.* Bound the walk by the document that drives it, in the alias budget's terms: no
+more than the bytes could spell written out, or a floor for a small document, counted BEFORE the work
+it guards. The index counts its nodes without listing them and refuses past one per byte
+(`NodeManifest::admit()`, `ReadFailure::NodeExpansion`); the differ charges every resolution the size
+of what it lands on and refuses past 32 times the document's size (`ReferenceBudget`,
+`DiffFailure::ReferenceExpansion`). Each bound was sized against real documents first, and the margin
+stated: the index's against 0.006 nodes per byte at most, the differ's against Stripe's description
+renamed throughout, which reads 13 times its size. Within the bound, read a shared node once and list
+it as many times as it is used.
+
+*The tests that recognise it.* `NodeExpansionTest` and `DiffReferenceBudgetTest`: each shape refused
+under a time and a memory bound, both sides of each limit to the node and the byte, and a document
+sharing nodes the way real ones do read as before. A path referencing a path item lists exactly what
+the item written in its place lists, so the sharing inside the bound cannot change an answer.
