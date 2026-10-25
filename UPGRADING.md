@@ -4,7 +4,7 @@ One section per release that asks something of you, newest first. A release not 
 nothing but the version bump — the [changelog](https://docs.docuccino.app/changelog/) carries the
 full record either way.
 
-## v0.21.3
+## v0.22.0
 
 Only if you read uploaded documents through `Docuccino\Core\Reader` or call the differ yourself.
 Nothing about a generated document changes.
