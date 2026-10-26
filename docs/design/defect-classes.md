@@ -1633,12 +1633,17 @@ own alias budget counted values, where one long string named again and again is 
 of YAML naming a 100 KB string 1,000 times read in 6 ms, and `json()` then wrote 100 MB of it at a
 288 MB peak; 1.07 MB exhausted any memory limit. The same copy spelt a pointer for every value, each
 repeating every member name above it, so with no alias at all an 800 KB name over 80,000 values took
-2.7 s to decode.
+2.7 s to decode. The index spelt one for every node it counted, and every node's key repeats the path's
+name too, so one path with a 400 KB name over 20,000 parameters — 1 MB of JSON, nothing shared — exhausted
+4 GB inside `read()`; counting also spelt a shared parameter's `in:name` at every use. And a node many
+paths share spells its label and id again at each, which costs the index nothing and the caller writing
+it everything: a 1.3 MB document read in 54 ms and wrote an 8 GB manifest.
 
 *The tell.* A resolver called inside a loop over uses, with nothing measuring what it hands back. The
 sharper one is a cost proportional to a product — paths × parameters, uses × size, a branching factor
 to the depth — where the document's size is proportional to the sum. A budget is the same tell one step
-removed when it counts one unit and the cost is made of another: values, when a value can be a megabyte.
+removed when it counts one unit and the cost is made of another: values, when a value can be a megabyte,
+and nodes, when a node's pointer can.
 
 *The fix that worked.* Bound the walk by the document that drives it, in the alias budget's terms: no
 more than the document could spell written out, or a floor for a small document, counted BEFORE the
@@ -1660,12 +1665,21 @@ Count every unit the cost is made of. The decoder refuses past one value per byt
 eight bytes of strings and member names per byte (1 MiB for a small document), each counted as it is
 copied (`DocumentDecoder`, `ReadFailure::AliasExpansion`); the most any of 45 real descriptions that
 alias spells is 1.9, a split of Glean's API. And spell nothing per value that repeats what is above it:
-the decoder keeps where it is as segments, and writes a pointer only for a refusal.
+the decoder keeps where it is as segments, and writes a pointer only for a refusal. The index counts
+the text its nodes spell — every listing's pointer, key, label and id — without spelling any of it: a
+path item's plan holds what each node adds below the item, and each path adds its own key and the item's
+pointer once per node. Past 16 bytes a byte of compact JSON (4 MiB for a small document) it refuses with
+`ReadFailure::NodeExpansion`; the most any of 263 real descriptions spells is 1.4, and 2.0 counted
+against its paths alone. A parameter is matched by `in` then `name`, never the two spelt together, so
+counting copies no shared name.
 
-*The tests that recognise it.* `NodeExpansionTest`, `DiffReferenceBudgetTest` and `AliasExpansionTest`:
+*The tests that recognise it.* `NodeExpansionTest`, `IndexTextTest`, `DiffReferenceBudgetTest` and
+`AliasExpansionTest`:
 each shape refused under a time and a memory bound, both sides of each limit to the node and the byte,
 and a document sharing nodes the way real ones do read as before. A path referencing a path item lists
 exactly what the item written in its place lists, so the sharing inside the bound cannot change an
 answer. Every spelling of one document — compact, indented, YAML, terse YAML, padded — gets the answer
 the JSON it is written back as gets, and `DocumentReaderTest` reads that JSON back as the same document
-for every fixture, and reads a long name over many values inside a time bound.
+for every fixture, and reads a long name over many values inside a time bound. `IndexTextTest` counts
+exactly the text the index then lists, for every fixture and for each part of a node that spells it, so
+the arithmetic cannot drift from what `nodes()` writes.
