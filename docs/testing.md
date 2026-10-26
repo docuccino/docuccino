@@ -305,7 +305,7 @@ the same worker files. No id and no count changes, so every report reads what it
 Raising the limit would have bought time, not room: the payload is tests × lines each test executes,
 and more processes only spread the same total over more files.
 
-## Measured coverage (2026-10-07)
+## Measured coverage (2026-10-26)
 
 Line coverage (statements) over the suite excluding the `fixture` group. These are the numbers the
 floors are set from — measure, then set the floor to the measured integer, unless the measured integer
@@ -313,11 +313,11 @@ would sit too close to the figure for an ordinary change to survive it (see `lar
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **97.82%** | 97    | fully in-process-measurable; 0.82pp above it, ~135 statements |
+| `core`              | **97.88%** | 97    | fully in-process-measurable; 0.88pp above it, ~150 statements |
 | `laravel`           | **97.24%** | 97    | ratcheted 95 → 96 → 97, the last once the figure cleared 97.20%, see below; 0.24pp above it, ~39 statements |
 | `inference-phpstan` | **55.70%** | 55    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51 → 53 → 54 → 55; 0.70pp, ~28 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 92.96%     | —     | informational only; no longer a gate (statement sum of the rows above) |
+| Overall             | 93.07%     | —     | informational only; no longer a gate (statement sum of the rows above) |
 
 Every figure here is one `composer test:coverage` run of the whole set — CI's coverage job on PHP 8.4,
 which is what the record describes — so the three read off the same clover report and the floors file
