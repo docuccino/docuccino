@@ -129,6 +129,8 @@ use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\FindingVisitor;
 use PhpParser\NodeVisitor\NameResolver;
 use PhpParser\ParserFactory;
+use Symfony\Component\Yaml\Exception\ParseException;
+use Symfony\Component\Yaml\Yaml;
 use Workbench\App\Http\Requests\SearchFormsRequest;
 use Workbench\App\Http\Requests\StoreVersionedFormRequest;
 
@@ -1155,6 +1157,53 @@ function uirDocuments(): array
             $decoded = json_decode((string) file_get_contents($entry->getPathname()), true);
 
             if (is_array($decoded) && isset($decoded['openapi'], $decoded['info'], $decoded['x-docuccino'])) {
+                $found[] = $entry->getPathname();
+            }
+        }
+    }
+
+    sort($found);
+
+    return $found;
+}
+
+/**
+ * Every OpenAPI document in the packages' fixture trees — UIR artifacts, exports and plain descriptions,
+ * JSON and YAML — as absolute paths, sorted. Picked by an `openapi` member at the root, decoded without
+ * the reader under test, so a reader that stopped reading one fails on it rather than shrinking the set.
+ *
+ * @return list<string>
+ */
+function openApiDocuments(): array
+{
+    $found = [];
+
+    foreach (['core', 'laravel', 'inference-phpstan'] as $package) {
+        $directory = dirname(__DIR__).'/php/'.$package.'/tests/Fixtures';
+
+        if (! is_dir($directory)) {
+            continue;
+        }
+
+        $entries = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(
+            $directory,
+            FilesystemIterator::SKIP_DOTS,
+        ));
+
+        foreach ($entries as $entry) {
+            if (! $entry instanceof SplFileInfo || ! $entry->isFile() || ! in_array($entry->getExtension(), ['json', 'yaml', 'yml'], true)) {
+                continue;
+            }
+
+            $text = (string) file_get_contents($entry->getPathname());
+
+            try {
+                $decoded = $entry->getExtension() === 'json' ? json_decode($text, true) : Yaml::parse($text);
+            } catch (ParseException) {
+                continue;
+            }
+
+            if (is_array($decoded) && isset($decoded['openapi'])) {
                 $found[] = $entry->getPathname();
             }
         }
