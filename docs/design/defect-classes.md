@@ -1642,13 +1642,16 @@ chain was read afresh at every use, each hop's pointer split and walked again, s
 reference is 400 KB long, used by 20,000 operations — 3 MB of JSON — took 6.6 s to read and as long again
 to list, and putting each use's id back beside its `$ref` paid it once more, in `read()` and in `uir()`.
 A path item at the end of such a chain was followed, and its pointer spelt, again for every path: 12.7 s
-before the index refused it.
+before the index refused it. One layer further down, symfony/yaml's cap on aliases to a map or a list
+bounded how many merges a document makes and not what each copies: a merge key copies the whole map it
+names into the one being read, while the parser reads, so 128 merges of a 100,000-member map — 1.2 MB —
+cost 941 ms and 711 MB, and 128 of `[,,,,]`, a list merged as a map at a position a byte, 9 GB at 1 MB.
 
 *The tell.* A resolver called inside a loop over uses, with nothing measuring what it hands back. The
 sharper one is a cost proportional to a product — paths × parameters, uses × size, a branching factor
 to the depth — where the document's size is proportional to the sum. A budget is the same tell one step
 removed when it counts one unit and the cost is made of another: values, when a value can be a megabyte,
-and nodes, when a node's pointer can.
+and nodes, when a node's pointer can, and merges, when a merge can copy a map as large as the document.
 
 *The fix that worked.* Bound the walk by the document that drives it, in the alias budget's terms: no
 more than the document could spell written out, or a floor for a small document, counted BEFORE the
@@ -1677,6 +1680,16 @@ pointer once per node. Past 16 bytes a byte of compact JSON (4 MiB for a small d
 `ReadFailure::NodeExpansion`; the most any of 263 real descriptions spells is 1.4, and 2.0 counted
 against its paths alone. A parameter is matched by `in` then `name`, never the two spelt together, so
 counting copies no shared name.
+
+Where the parser does the copying, bound what it is allowed to start. The decoder keeps symfony's cap
+wherever the text could spell a merge key and shrinks it with the separators the text spells — a comma, a
+bracket, a brace or a line break, one of which stands between any two members of a map or a list — so the
+merges times the most members each could copy stay within 2^19 (`DocumentDecoder::aliasCap()`, refused as
+`ReadFailure::AliasExpansion`). Separators rather than bytes, because the dearest spelling is a separator
+a member and real descriptions spell one every 14 to 49 bytes: a document of up to 4,095 keeps the
+parser's 128, which is 57 to 200 KB of real YAML, and the dearest bomb measured costs 56 MB under it. The
+scan reads where a key can end as well as the two characters, so a PDF's `<</Type` in an example costs a
+description nothing.
 
 Where the repetition is pure, remember the answer rather than bound it. Following a reference reads the
 same document and lands in the same place at every use, so `RefHops` follows each distinct reference once

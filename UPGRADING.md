@@ -4,6 +4,18 @@ One section per release that asks something of you, newest first. A release not 
 nothing but the version bump — the [changelog](https://docs.docuccino.app/changelog/) carries the
 full record either way.
 
+## v0.23.0
+
+Only if you read uploaded documents through `Docuccino\Core\Reader`. Nothing about a generated document
+changes.
+
+- **`read()` refuses YAML whose merge keys could cost more than its size allows.** Where the text could
+  spell a merge key (`<<`), a document may name at most 524,288 ÷ (its separators + 1) aliases to a map
+  or a list, and never more than 128, a separator being a comma, a bracket, a brace or a line break. Up
+  to 4,095 separators that is the 128 it always was. Past it the document is refused with
+  `ReadFailure::AliasExpansion`, and so is one past 128, which was `ReadFailure::Syntax`. Its remedy, if
+  you word your own: remove the merge keys, or upload the document as JSON.
+
 ## v0.22.0
 
 Only if you read uploaded documents through `Docuccino\Core\Reader` or call the differ yourself.
