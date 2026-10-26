@@ -1735,3 +1735,46 @@ operation by where it is written rather than by the request line, which a `GET` 
 with the fixed `get`. The guard is two readers agreeing: every fixture, emptied of its paths and webhooks,
 reports one removal per operation the node index lists (`AdditionalOperationsDiffTest`), so a walk that
 misses a member makes the two counts part.
+
+## A value the parser built, read as the one the document wrote
+
+A parser hands back values, not text, and some of those values it constructed: a date PHP's calendar
+normalised, a number cast from whatever a tag was on, a map assembled by a merge. Nothing in the value
+says it was built rather than written, so a reader that takes it as the document stores something the
+author never wrote, and every check downstream agrees with it, because they all read the same value.
+
+*Instances.* symfony/yaml, in one sweep. `2024-02-30` became the date 1 March, `2024-01-01T24:00:00Z` the
+next day and a leap second the next minute, all from PHP's calendar; a timestamp written as a mapping key
+became a count of seconds, since keys are read with no flags, so `2024-01-01:` published `"1704067200"`.
+`!!float abc` was cast to 0, and so were `!!float "1.5"`, `.inf` and `0x1A`. A merge of an alias naming a
+list became a map keyed `0`, `1`; a merged map whose first key is `0` was read as a list of maps; and
+`<<: &m {a: 1}` became a key named `<<` holding null. `tRUE` and `nULL` became `true` and `null`, which no
+YAML version reads them as, and `! 12`, a string under YAML's non-specific tag, became 12. A key written
+twice after a merge kept the second silently, as did one whose first value was null, on 7.4.
+
+*The tell.* A value type the source format has no literal for, or a normalising constructor between the
+text and the value: `new DateTimeImmutable($text)`, `(float) $text`, `$data += $refValue`. Ask what the
+parser does with text that is NOT a valid instance of the type it is building, and whether anything after
+it can tell.
+
+*The fix that worked.* Two, by what the reader holds. Where the answer is the text itself, keep the parser
+from building anything: put a character the text cannot spell before each misread plain scalar, so the
+parser reads a string, and take it back out of every string and name (`PlainScalars`). Where the reader
+needs the parser's answer and the text both, read a second text in which the parser cannot misread —
+every merge key a member of its own name, every `!!float` a `!!str` — and hold the first reading to it
+(`YamlTwin`): a merge must produce exactly the members YAML's merge gives, and a float tag must be on a
+number. Refuse what is plainly not what it claims, saying what to write instead; and where the parser
+itself says, listen — 7.4 reports a duplicate key only as a deprecation, which is caught and refused as
+8.1 refuses it. Each row of the tests also asserts its premise against the bare parser, so a release that
+stops misreading shows up as a row to delete rather than a guard quietly testing nothing.
+
+*What it cannot see.* The parser gives no sign of a flow mapping's key written twice whose first value is
+null, and a quoted `<<` spelt with an escape still merges on releases before 7.4.21 and 8.1.9. The
+readings where YAML 1.1 and 1.2 disagree — `1_000`, `0777`, a signed octal — are versions rather than
+misreadings, and stay as symfony reads them.
+
+*The tests that recognise it.* `YamlReadingsTest`: every impossible timestamp in block, flow, alias,
+comment-ended and CRLF positions read as its JSON twin, every possible one read exactly as before, the
+mark kept out of quotes, block scalars, anchors, refusals and a document already holding the mark's
+character, each float-tag spelling, each merge YAML and the parser agree on read as its twin, and each
+they do not refused with its line.

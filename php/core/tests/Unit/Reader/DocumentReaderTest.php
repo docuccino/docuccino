@@ -119,21 +119,6 @@ it('refuses a mapping key starting with a NUL byte, in every style, as text it c
     'in text that looked like JSON' => ['{"openapi":"3.1.0","\u0000a":1}'],
 ]);
 
-it('refuses a date the YAML parser matched and could not construct', function (string $yaml): void {
-    // Every symfony/yaml release core admits refuses it in these words.
-    try {
-        (new DocumentReader)->read($yaml);
-        $this->fail('An impossible date was read.');
-    } catch (UnreadableDocumentException $exception) {
-        expect($exception->failure)->toBe(ReadFailure::Syntax)
-            ->and($exception->reason)->toStartWith('The document is not valid YAML: ')
-            ->and($exception->reason)->toEndWith('could not be parsed as it is an invalid date.');
-    }
-})->with([
-    'a month past twelve' => ["openapi: 3.1.0\nx-released: 2024-13-45\n"],
-    'an hour past twenty-four' => ["openapi: 3.1.0\nx-released: 2024-01-01 25:61:61\n"],
-]);
-
 it('refuses a YAML alias bomb cheaply rather than expanding it', function (): void {
     $yaml = "a: &a [x, x, x, x, x, x, x, x, x, x]\n";
     $previous = 'a';
