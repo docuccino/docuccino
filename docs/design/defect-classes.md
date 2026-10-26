@@ -1724,7 +1724,11 @@ silence, which reads as "nothing here".
 no change. Then it walked the fixed methods and not `additionalOperations`: a custom operation's response
 going from 200 to 201, its summary, its removal, every edit to one reported nothing, while the node index
 listed it. The two readers beneath the walk had the same gap: `SchemaDirection` kept a body only a custom
-operation sends on the response side, and `IdentityOverlap` counted none of its ids.
+operation sends on the response side, and `IdentityOverlap` counted none of its ids. The node index read
+the open map and is the second tell below: it keyed what it found by the method uppercased, and gathered
+the fixed and the custom operations into one map by member name. So a custom `get`, a custom `Get` and the
+fixed `get` all keyed `GET /path`, and the custom `get` took the fixed one's place: `/paths/…/get` was not
+listed at all, and a caller storing keys lost it from its catalogue.
 
 *The tell.* `foreach (PathItem::METHODS …)` or `$item->operations` with no `additionalOperations` beside
 it. A custom method is case-sensitive and sent as written, so the second tell is a reader that keys one by
@@ -1732,9 +1736,16 @@ its method uppercased: a custom `get` is another method than the fixed `get`, an
 
 *The fix that worked.* One enumeration for every walk of a reader (`Diff\PathOperations`), keying each
 operation by where it is written rather than by the request line, which a `GET` key OpenAPI forbids shares
-with the fixed `get`. The guard is two readers agreeing: every fixture, emptied of its paths and webhooks,
-reports one removal per operation the node index lists (`AdditionalOperationsDiffTest`), so a walk that
-misses a member makes the two counts part.
+with the fixed `get`. The index reads it too, as a LIST, so no member can stand in for another, and keys a
+custom operation `additionalOperations/get /path` by the one spelling the differ keys a change by. A key
+spells its path after a space, so a space in a method, which only an invalid document can hold, is
+escaped as `~2`, as a pointer escapes a `/` as `~1`. The guard is two readers agreeing: every fixture,
+emptied of its paths and webhooks, reports one removal per operation the node index lists, sent by the
+method the index points at and keyed as the index keys it (`AdditionalOperationsDiffTest`), so a walk that
+misses a member makes the two counts part and a reader spelling its own key makes the two keys part. Beside
+it, a fixed `get` with a custom `get`, `Get` and `COPY` is listed as four operations with their parameters
+and responses, and every other node is listed byte for byte as it is without the custom ones
+(`DocumentNodesTest`).
 
 ## A value the parser built, read as the one the document wrote
 

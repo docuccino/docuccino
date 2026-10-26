@@ -11,12 +11,15 @@ use Docuccino\Core\Support\Arr;
 
 /**
  * Every operation a path item states — its fixed methods, then OpenAPI 3.2's `additionalOperations` — read
- * here by every walk the differ makes over operations, so none of them sees fewer than the comparison does.
+ * here by every walk the differ makes over operations and by the node index, so none of them sees fewer than
+ * the comparison does, and the differ's keys and the index's spell an operation alike.
  *
  * A custom method is sent as its key is written, case and all: a custom `get` is another method than the
  * fixed `get` (`GET`), and a `GET` key, which OpenAPI forbids, sends the fixed one's request line from
  * somewhere else. So each is told apart by where it is WRITTEN — the fixed method's name uppercased, or
- * `additionalOperations/` and the key escaped as the node index's pointer escapes it — which no two share.
+ * `additionalOperations/` and the key escaped as a pointer escapes it — which no two share. A key spells
+ * that before a space and the path after it, so a space in a custom method, which only a document OpenAPI
+ * calls invalid can hold, is escaped as `~2`: kept, it could spell the start of another operation's path.
  *
  * @internal
  */
@@ -36,7 +39,30 @@ final class PathOperations
         }
 
         foreach (self::customIn($item->rest) as [$method, $operation]) {
-            $out[] = [$method, self::CUSTOM.'/'.Pointer::escape($method), Operation::fromArray(Arr::stringKeyed($operation))];
+            $out[] = [$method, self::custom($method), Operation::fromArray(Arr::stringKeyed($operation))];
+        }
+
+        return $out;
+    }
+
+    /**
+     * The same operations, read off $item as written.
+     *
+     * @param  array<array-key, mixed>  $item
+     * @return list<array{0: string, 1: string, 2: array<array-key, mixed>}> where the operation is written, the pointer to it below the item, and the operation
+     */
+    public static function written(array $item): array
+    {
+        $out = [];
+
+        foreach (PathItem::METHODS as $method) {
+            if (is_array($item[$method] ?? null)) {
+                $out[] = [strtoupper($method), '/'.$method, $item[$method]];
+            }
+        }
+
+        foreach (self::customIn($item) as [$method, $operation]) {
+            $out[] = [self::custom($method), '/'.self::CUSTOM.'/'.Pointer::escape($method), $operation];
         }
 
         return $out;
@@ -68,6 +94,12 @@ final class PathOperations
         }
 
         return $item;
+    }
+
+    /** Where the custom operation $method is written, as a key spells it. */
+    private static function custom(string $method): string
+    {
+        return self::CUSTOM.'/'.str_replace(' ', '~2', Pointer::escape($method));
     }
 
     /**
