@@ -15,6 +15,16 @@ changes.
   to 4,095 separators that is the 128 it always was. Past it the document is refused with
   `ReadFailure::AliasExpansion`, and so is one past 128, which was `ReadFailure::Syntax`. Its remedy, if
   you word your own: remove the merge keys, or upload the document as JSON.
+- **`read()` refuses YAML whose tags or merge keys say what they cannot.** A `!!float` on what is not a
+  number, a merge key naming anything but a map or a list of maps, a merge symfony/yaml reads otherwise
+  than YAML does (a list named by an alias, a map with a `0` key, an anchored map on the merge key's own
+  line), and a key written twice after a merge, or over a null on symfony/yaml 7.4, are refused with
+  `ReadFailure::Syntax`. Each was read as something the document did not say: `!!float abc` as 0, a merged
+  list as a map of its positions.
+- **And reads some YAML as it was written.** An impossible timestamp (`2024-02-30`) is that string, where
+  it was moved into the next month or refused; a timestamp written as a key is its text, where it was a
+  count of seconds; `true`, `false`, `null`, `.inf` and `.nan` in a case YAML does not spell them (`tRUE`),
+  and whatever YAML's non-specific tag `!` is on, are strings; and `!!float "1.5"` is 1.5, where it was 0.
 
 ## v0.22.0
 

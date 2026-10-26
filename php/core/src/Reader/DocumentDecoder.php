@@ -12,6 +12,7 @@ use JsonException;
 use stdClass;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Parser;
+use Symfony\Component\Yaml\Tag\TaggedValue;
 use Symfony\Component\Yaml\Yaml;
 use Throwable;
 use TypeError;
@@ -19,7 +20,9 @@ use TypeError;
 /**
  * Bytes to an object graph — every map a {@see stdClass}, every sequence a list — so `{}` and `[]` stay
  * two values. JSON is read by `json_decode`; YAML by symfony/yaml with no PHP objects, constants or
- * custom tags, so YAML is held to the values JSON can spell.
+ * custom tags, so YAML is held to the values JSON can spell, and to what was written: what the parser
+ * would misread is marked out of the text first ({@see PlainScalars}) or held to a second reading
+ * ({@see YamlTwin}).
  *
  * Every value is copied into a fresh graph on the way out, under three bounds. One is depth, at the
  * canonical writer's own limit, so a document that reads is one that can be written back. The other two
@@ -83,6 +86,12 @@ final class DocumentDecoder
 
     private int $length = 0;
 
+    /** What {@see PlainScalars} marked the text with, taken back out of every string and name the copy makes. */
+    private ?string $mark = null;
+
+    /** The second reading the copy holds the first to, where the text could spell a merge key or a float tag. */
+    private ?YamlTwin $twin = null;
+
     /**
      * Where the copy is, as segments, spelt as a pointer only when a refusal names it: a pointer for every
      * value repeats each name above it, so one long name over many values would cost their product.
@@ -98,6 +107,9 @@ final class DocumentDecoder
      */
     public function decode(string $bytes, ?string $mediaType): array
     {
+        $this->mark = null;
+        $this->twin = null;
+
         if (str_starts_with($bytes, self::BOM)) {
             $bytes = substr($bytes, strlen(self::BOM));
         }
@@ -121,7 +133,7 @@ final class DocumentDecoder
                 // that said JSON is taken at its word.
                 if ($declared === null) {
                     try {
-                        return [$this->admitted(self::yaml($bytes, self::aliasCap($bytes)), strlen($bytes)), Syntax::Yaml];
+                        return [$this->yaml($bytes), Syntax::Yaml];
                     } catch (ParseException) {
                         // Report it as the JSON it looked like.
                     }
@@ -141,12 +153,11 @@ final class DocumentDecoder
             return [$this->admitted($parsed, strlen($bytes)), Syntax::Json];
         }
 
-        $aliases = self::aliasCap($bytes);
-
         try {
-            $parsed = self::yaml($bytes, $aliases);
+            return [$this->yaml($bytes), Syntax::Yaml];
         } catch (ParseException $exception) {
             $line = $exception->getParsedLine();
+            $aliases = self::aliasCap($bytes);
 
             // symfony's own words for its cap ask the reader to raise it, which only the parser's caller can do.
             if ($aliases !== PHP_INT_MAX && str_starts_with($exception->getMessage(), 'Maximum number of collection aliases')) {
@@ -163,30 +174,76 @@ final class DocumentDecoder
                 $exception,
             );
         }
-
-        return [$this->admitted($parsed, strlen($bytes)), Syntax::Yaml];
     }
 
     /**
-     * symfony/yaml's reading of $bytes, resolving at most $aliases aliases to a map or a list
+     * $bytes read as YAML and copied: symfony/yaml's reading of the text with what it would misread marked
+     * out ({@see PlainScalars}), held to a second reading where it could misread a merge key or a float tag
+     * ({@see YamlTwin}).
+     *
+     * @throws ParseException where symfony/yaml cannot read the text
+     * @throws UnreadableDocumentException where what it reads cannot be the document
+     */
+    private function yaml(string $bytes): stdClass
+    {
+        [$text, $this->mark] = PlainScalars::marked($bytes);
+        $aliases = self::aliasCap($bytes);
+
+        try {
+            $parsed = self::parse($text, $aliases);
+            $this->twin = YamlTwin::of($text);
+            $twin = $this->twin === null ? null : self::parse($this->twin->text, $aliases);
+        } catch (ParseException $exception) {
+            // Neither the marks nor the twin's names are anything the document wrote, so none of them may reach
+            // what is said about it.
+            $problem = PlainScalars::unmarked(self::yamlProblem($exception), $this->mark);
+
+            throw new ParseException($this->twin === null ? $problem : $this->twin->unmarked($problem), $exception->getParsedLine(), previous: $exception);
+        }
+
+        return $this->admitted($parsed, strlen($bytes), $twin);
+    }
+
+    /**
+     * symfony/yaml's reading of $text, resolving at most $aliases aliases to a map or a list
      * ({@see aliasCap()}). Releases before 7.4.21 and 8.1.9 throw something other than a
      * {@see ParseException} for two kinds of text, and each is thrown here as one, so it is refused like any
      * other text the parser cannot read: a TypeError for a merge key inside a flow mapping (`{<<: *base}`),
-     * and an Error for a mapping key starting with a NUL byte. Anything else goes on as it was thrown.
+     * and an Error for a mapping key starting with a NUL byte. Anything else goes on as it was thrown. 7.4
+     * also reads past a key written twice whose first value is null, saying so only in a deprecation, where
+     * 8.1 refuses it: it is refused here as 8.1 refuses it.
      *
      * @throws ParseException
      */
-    private static function yaml(string $bytes, int $aliases): mixed
+    private static function parse(string $text, int $aliases): mixed
     {
+        // The only deprecation symfony/yaml raises while it parses is this one, so none is lost by keeping it.
+        $duplicate = null;
+        set_error_handler(static function (int $level, string $message) use (&$duplicate): bool {
+            if (preg_match('/Duplicate key "(.*)" detected on line (\d+) whilst parsing YAML/s', $message, $match) === 1) {
+                $duplicate ??= [$match[1], (int) $match[2]];
+            }
+
+            return true;
+        }, E_USER_DEPRECATED);
+
         try {
-            return Yaml::parse($bytes, self::YAML_FLAGS, maxAliasesForCollections: $aliases);
+            $parsed = Yaml::parse($text, self::YAML_FLAGS, maxAliasesForCollections: $aliases);
         } catch (Throwable $exception) {
             throw match (true) {
                 $exception instanceof TypeError && str_starts_with($exception->getMessage(), 'Unsupported operand types: array + ') => new ParseException('A merge key (<<) inside a flow mapping is not supported; write that mapping in block style.', previous: $exception),
                 $exception instanceof Error && str_starts_with($exception->getMessage(), 'Cannot access property starting with "\0"') => new ParseException(self::NUL_KEY, previous: $exception),
                 default => $exception,
             };
+        } finally {
+            restore_error_handler();
         }
+
+        if ($duplicate !== null) {
+            throw new ParseException(sprintf('Duplicate key "%s" detected.', $duplicate[0]), $duplicate[1]);
+        }
+
+        return $parsed;
     }
 
     /**
@@ -248,7 +305,7 @@ final class DocumentDecoder
     /**
      * @throws UnreadableDocumentException
      */
-    private function admitted(mixed $parsed, int $length): stdClass
+    private function admitted(mixed $parsed, int $length, mixed $twin = null): stdClass
     {
         $this->values = 0;
         $this->text = 0;
@@ -257,7 +314,7 @@ final class DocumentDecoder
         $this->textBudget = max(self::MIN_TEXT, self::TEXT_PER_BYTE * $length);
         $this->path = [];
 
-        $graph = $this->copy($parsed);
+        $graph = $this->copy($parsed, $twin);
 
         if (! $graph instanceof stdClass) {
             throw new UnreadableDocumentException(ReadFailure::NotAnObject, sprintf(
@@ -275,9 +332,11 @@ final class DocumentDecoder
     }
 
     /**
+     * @param  mixed  $twin  the twin's reading of the same place ({@see YamlTwin}), or null where there is none
+     *
      * @throws UnreadableDocumentException
      */
-    private function copy(mixed $value): mixed
+    private function copy(mixed $value, mixed $twin = null): mixed
     {
         if (++$this->values > $this->valueBudget) {
             throw new UnreadableDocumentException(ReadFailure::AliasExpansion, sprintf(
@@ -298,28 +357,46 @@ final class DocumentDecoder
                 $list = [];
                 foreach ($value as $index => $member) {
                     $this->path[] = $index;
-                    $list[] = $this->copy($member);
+                    $list[] = $this->copy($member, is_array($twin) ? ($twin[$index] ?? null) : null);
                     array_pop($this->path);
                 }
 
                 return $list;
             }
 
+            $members = is_array($value) ? $value : get_object_vars($value);
+            $view = $this->twin !== null && $twin instanceof stdClass ? $this->merged($this->twin, $members, $twin) : [];
+
             $object = new stdClass;
-            foreach (is_array($value) ? $value : get_object_vars($value) as $name => $member) {
+            foreach ($members as $name => $member) {
                 // A name no object can hold. Only YAML hands one over, and only from a flow mapping: from a
-                // block one, the releases that do not refuse it fail while parsing ({@see yaml()}).
+                // block one, the releases that do not refuse it fail while parsing ({@see parse()}).
                 if (str_starts_with((string) $name, "\0")) {
                     throw new UnreadableDocumentException(ReadFailure::Syntax, 'The document is not valid YAML: '.self::NUL_KEY);
                 }
 
-                $this->spell((string) $name);
-                $this->path[] = $name;
-                $object->{$name} = $this->copy($member);
+                // Two names the parser told apart only by a mark are one name written twice.
+                $key = PlainScalars::unmarked((string) $name, $this->mark);
+                if ($this->mark !== null && property_exists($object, $key)) {
+                    throw new UnreadableDocumentException(ReadFailure::Syntax, sprintf('The document is not valid YAML: Duplicate key "%s" detected.', $key));
+                }
+
+                $this->spell($key);
+                $this->path[] = $key;
+                $object->{$key} = $this->copy($member, $view[(string) $name] ?? null);
                 array_pop($this->path);
             }
 
             return $object;
+        }
+
+        if ($value instanceof TaggedValue && in_array($value->getTag(), ['!str', '!float'], true) && is_string($value->getValue())) {
+            // Releases before 7.4.21 and 8.1.9 hand a block scalar back still tagged, where later ones read it.
+            $value = $value->getTag() === '!str' ? $value->getValue() : YamlTwin::float(PlainScalars::unmarked($value->getValue(), $this->mark), $this->path);
+        } elseif (is_float($value) && is_string($twin)) {
+            // Only a float tag reads as a float in one reading and a string in the other, and symfony/yaml casts
+            // what it tags (`abc` to 0, `.inf` to 0) where YAML reads it.
+            $value = YamlTwin::float(PlainScalars::unmarked($twin, $this->mark), $this->path);
         }
 
         if ($value instanceof DateTimeInterface) {
@@ -332,7 +409,7 @@ final class DocumentDecoder
 
         if (is_string($value)) {
             // Counted before it is read, so an alias naming it again and again is read no further than allowed.
-            $this->spell($value);
+            $value = $this->spell(PlainScalars::unmarked($value, $this->mark));
 
             if (preg_match('//u', $value) !== 1) {
                 throw self::unrepresentable($this->pointer(), 'a string that is not UTF-8 text');
@@ -344,6 +421,27 @@ final class DocumentDecoder
         }
 
         return $value;
+    }
+
+    /**
+     * What YAML merges into the map $twins read as $twin ({@see YamlTwin::view()}), where the parser read it
+     * with $members: refused where the two part.
+     *
+     * @param  array<int|string, mixed>  $members
+     * @return array<string, mixed>
+     *
+     * @throws UnreadableDocumentException
+     */
+    private function merged(YamlTwin $twins, array $members, stdClass $twin): array
+    {
+        $view = $twins->view($twin, $this->path);
+
+        $misread = $twins->misread(array_map('strval', array_keys($members)), $view, $twin, $this->path);
+        if ($misread !== null) {
+            throw $misread;
+        }
+
+        return $view;
     }
 
     /**
