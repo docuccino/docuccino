@@ -1637,7 +1637,12 @@ repeating every member name above it, so with no alias at all an 800 KB name ove
 name too, so one path with a 400 KB name over 20,000 parameters — 1 MB of JSON, nothing shared — exhausted
 4 GB inside `read()`; counting also spelt a shared parameter's `in:name` at every use. And a node many
 paths share spells its label and id again at each, which costs the index nothing and the caller writing
-it everything: a 1.3 MB document read in 54 ms and wrote an 8 GB manifest.
+it everything: a 1.3 MB document read in 54 ms and wrote an 8 GB manifest. Under all of them, a `$ref`
+chain was read afresh at every use, each hop's pointer split and walked again, so a parameter whose own
+reference is 400 KB long, used by 20,000 operations — 3 MB of JSON — took 6.6 s to read and as long again
+to list, and putting each use's id back beside its `$ref` paid it once more, in `read()` and in `uir()`.
+A path item at the end of such a chain was followed, and its pointer spelt, again for every path: 12.7 s
+before the index refused it.
 
 *The tell.* A resolver called inside a loop over uses, with nothing measuring what it hands back. The
 sharper one is a cost proportional to a product — paths × parameters, uses × size, a branching factor
@@ -1673,8 +1678,17 @@ pointer once per node. Past 16 bytes a byte of compact JSON (4 MiB for a small d
 against its paths alone. A parameter is matched by `in` then `name`, never the two spelt together, so
 counting copies no shared name.
 
-*The tests that recognise it.* `NodeExpansionTest`, `IndexTextTest`, `DiffReferenceBudgetTest` and
-`AliasExpansionTest`:
+Where the repetition is pure, remember the answer rather than bound it. Following a reference reads the
+same document and lands in the same place at every use, so `RefHops` follows each distinct reference once
+per document and remembers where it lands, and the pointer to it: the reader's walks hold one (the index
+and `UseSites`), and `Refs::follow()` is the same loop over a memo of its own. What it remembers is keyed by
+the reference's text, so it grows with the references a document writes and never with their uses, and it
+lives as long as the walk holding it. Depth is still counted from where each chain starts. The differ
+needs none of it: it resolves one hop at a time by component name and charges each the size of what it
+lands on, the next hop's pointer included, so a long hop is paid for in its budget at every use.
+
+*The tests that recognise it.* `NodeExpansionTest`, `IndexTextTest`, `DiffReferenceBudgetTest`,
+`AliasExpansionTest` and `ReferenceChainTest`:
 each shape refused under a time and a memory bound, both sides of each limit to the node and the byte,
 and a document sharing nodes the way real ones do read as before. A path referencing a path item lists
 exactly what the item written in its place lists, so the sharing inside the bound cannot change an
@@ -1682,4 +1696,6 @@ answer. Every spelling of one document — compact, indented, YAML, terse YAML, 
 the JSON it is written back as gets, and `DocumentReaderTest` reads that JSON back as the same document
 for every fixture, and reads a long name over many values inside a time bound. `IndexTextTest` counts
 exactly the text the index then lists, for every fixture and for each part of a node that spells it, so
-the arithmetic cannot drift from what `nodes()` writes.
+the arithmetic cannot drift from what `nodes()` writes. `RefHopsTest` holds the memo to a chain read
+afresh, stated in the test, for every reference in the fixtures in both orders and for each refusal — a
+cycle, a missing target, a ninth hop counted from where its chain starts — and to belonging to one document.

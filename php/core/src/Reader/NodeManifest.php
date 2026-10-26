@@ -7,7 +7,7 @@ namespace Docuccino\Core\Reader;
 use Docuccino\Core\Canonical\Canonicalizer;
 use Docuccino\Core\Canonical\CanonicalJsonSerializer;
 use Docuccino\Core\Contract\Pointer;
-use Docuccino\Core\Contract\Refs;
+use Docuccino\Core\Contract\RefHops;
 use Docuccino\Core\Document\NodeIdentity;
 use Docuccino\Core\Document\PathItem;
 use Docuccino\Core\Document\UseSites;
@@ -34,7 +34,8 @@ use Docuccino\Core\Support\CompactJson;
  * Both of those list one written node many times over, and every node's pointer and key spell again
  * the names written above it, so the index can outgrow the document by any factor, in nodes or in the
  * text they spell: {@see admit()} is the bound, counted before anything is spelt or digested. Within
- * it, a path item is read and a node digested once, however often either is listed.
+ * it, a path item is read, a node digested and a reference followed ({@see RefHops}) once, however often
+ * each is listed.
  *
  * @internal
  *
@@ -80,6 +81,9 @@ final class NodeManifest
     /** @var array<string, mixed> */
     private array $document = [];
 
+    /** The document's references, each followed once. */
+    private RefHops $refs;
+
     /** @var list<DocumentNode> */
     private array $nodes = [];
 
@@ -103,6 +107,7 @@ final class NodeManifest
         $this->serializer = new CanonicalJsonSerializer;
         $this->emitter = new UirEmitter($this->canonicalizer, $this->serializer);
         $this->identities = new IdentityGenerator;
+        $this->refs = new RefHops([]);
     }
 
     /**
@@ -185,9 +190,8 @@ final class NodeManifest
     {
         $this->start($document);
 
-        foreach ($this->pathItems() as [$member, $name, $item, $segments]) {
+        foreach ($this->pathItems() as [$member, $name, $item, $at]) {
             $path = $this->path($member, $name);
-            $at = Pointer::of($segments);
 
             $plan = $this->plan($item, $at);
             foreach ($plan['operations'] as $planned) {
@@ -219,8 +223,7 @@ final class NodeManifest
 
         $count = 0;
         $spelled = 0;
-        foreach ($this->pathItems() as [$member, $name, $item, $segments]) {
-            $at = Pointer::of($segments);
+        foreach ($this->pathItems() as [$member, $name, $item, $at]) {
             $plan = $this->plan($item, $at);
 
             $count += $plan['listed'];
@@ -243,17 +246,18 @@ final class NodeManifest
     private function start(array $document): void
     {
         $this->document = UseSites::lower($document);
+        $this->refs = new RefHops($this->document);
         $this->nodes = [];
         $this->plans = [];
         $this->digests = [];
     }
 
     /**
-     * Every path and webhook, with the path item it lists operations from and where that item is written
-     * — which, for a path written as a `$ref`, is where the reference lands. One landing nowhere lists
-     * nothing.
+     * Every path and webhook, with the path item it lists operations from and the pointer to where that
+     * item is written — which, for a path written as a `$ref`, is where the reference lands, spelt once
+     * however many paths reference it. One landing nowhere lists nothing.
      *
-     * @return iterable<array{string, string, array<string, mixed>, list<string>}>
+     * @return iterable<array{string, string, array<string, mixed>, string}>
      */
     private function pathItems(): iterable
     {
@@ -264,16 +268,16 @@ final class NodeManifest
                 }
 
                 /** @var array<string, mixed> $item */
-                $segments = [$member, (string) $name];
+                $at = Pointer::of([$member, (string) $name]);
 
                 if (is_string($item['$ref'] ?? null)) {
-                    [$item, $segments, $dangling] = Refs::follow($this->document, $item, $segments);
+                    [$item, $at, $dangling] = $this->refs->followTo($item, $at);
                     if ($dangling !== null) {
                         continue;
                     }
                 }
 
-                yield [$member, (string) $name, $item, $segments];
+                yield [$member, (string) $name, $item, $at];
             }
         }
     }
@@ -613,7 +617,7 @@ final class NodeManifest
         }
 
         /** @var array<string, mixed> $node */
-        [$resolved, , $dangling] = Refs::follow($this->document, $node, []);
+        [$resolved, , $dangling] = $this->refs->follow($node, []);
 
         return $dangling === null ? $resolved : null;
     }
