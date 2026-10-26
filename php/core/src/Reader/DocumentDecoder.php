@@ -45,6 +45,14 @@ final class DocumentDecoder
     private int $length = 0;
 
     /**
+     * Where the copy is, as segments, spelt as a pointer only when a refusal names it: a pointer for every
+     * value repeats each name above it, so one long name over many values would cost their product.
+     *
+     * @var list<string|int>
+     */
+    private array $path = [];
+
+    /**
      * @return array{stdClass, Syntax}
      *
      * @throws UnreadableDocumentException
@@ -146,8 +154,9 @@ final class DocumentDecoder
         $this->values = 0;
         $this->length = $length;
         $this->budget = max(self::MIN_VALUES, $length);
+        $this->path = [];
 
-        $graph = $this->copy($parsed, 0, '');
+        $graph = $this->copy($parsed);
 
         if (! $graph instanceof stdClass) {
             throw new UnreadableDocumentException(ReadFailure::NotAnObject, sprintf(
@@ -167,7 +176,7 @@ final class DocumentDecoder
     /**
      * @throws UnreadableDocumentException
      */
-    private function copy(mixed $value, int $depth, string $pointer): mixed
+    private function copy(mixed $value): mixed
     {
         if (++$this->values > $this->budget) {
             throw new UnreadableDocumentException(ReadFailure::AliasExpansion, sprintf(
@@ -178,8 +187,8 @@ final class DocumentDecoder
         }
 
         if ($value instanceof stdClass || is_array($value)) {
-            if ($depth >= self::MAX_DEPTH) {
-                throw self::tooDeep($pointer === '' ? '/' : $pointer);
+            if (count($this->path) >= self::MAX_DEPTH) {
+                throw self::tooDeep($this->pointer());
             }
 
             // A YAML sequence is a list. Anything else symfony hands back as an array is a map it built
@@ -187,7 +196,9 @@ final class DocumentDecoder
             if (is_array($value) && array_is_list($value)) {
                 $list = [];
                 foreach ($value as $index => $member) {
-                    $list[] = $this->copy($member, $depth + 1, $pointer.'/'.$index);
+                    $this->path[] = $index;
+                    $list[] = $this->copy($member);
+                    array_pop($this->path);
                 }
 
                 return $list;
@@ -195,7 +206,9 @@ final class DocumentDecoder
 
             $object = new stdClass;
             foreach (is_array($value) ? $value : get_object_vars($value) as $name => $member) {
-                $object->{$name} = $this->copy($member, $depth + 1, Pointer::append($pointer, $name));
+                $this->path[] = $name;
+                $object->{$name} = $this->copy($member);
+                array_pop($this->path);
             }
 
             return $object;
@@ -206,18 +219,24 @@ final class DocumentDecoder
         }
 
         if (is_float($value) && ! is_finite($value)) {
-            throw self::unrepresentable($pointer, 'an infinite or NaN number');
+            throw self::unrepresentable($this->pointer(), 'an infinite or NaN number');
         }
 
         if (is_string($value) && preg_match('//u', $value) !== 1) {
-            throw self::unrepresentable($pointer, 'a string that is not UTF-8 text');
+            throw self::unrepresentable($this->pointer(), 'a string that is not UTF-8 text');
         }
 
         if (is_object($value)) {
-            throw self::unrepresentable($pointer, 'a '.get_debug_type($value));
+            throw self::unrepresentable($this->pointer(), 'a '.get_debug_type($value));
         }
 
         return $value;
+    }
+
+    /** Where the copy is, as a pointer: `/` for the root. */
+    private function pointer(): string
+    {
+        return $this->path === [] ? '/' : Pointer::of($this->path);
     }
 
     /**
@@ -271,7 +290,7 @@ final class DocumentDecoder
         return new UnreadableDocumentException(ReadFailure::Unrepresentable, sprintf(
             'The document holds %s at %s, which JSON cannot represent.',
             $what,
-            $pointer === '' ? '/' : $pointer,
+            $pointer,
         ));
     }
 }
