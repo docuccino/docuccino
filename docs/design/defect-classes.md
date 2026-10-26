@@ -1620,7 +1620,7 @@ OpenAPI shares by reference, and a reader that follows a reference reads the nod
 every use. That is usually the point — a path's operations are the ones its path item states, and an
 edit to a shared response changes every operation that uses it — but it makes the walk's cost a
 function of how often a document uses what it shares, which nothing about the document's size bounds.
-The YAML alias bomb is the same shape one layer down, and the decoder already refused it.
+The YAML alias bomb is the same shape one layer down.
 
 *Instances.* The node index listed a path item's operations once per path referencing it, and a path
 item's parameters once per operation, so 200 paths sharing one item with 200 parameters and eight
@@ -1628,11 +1628,17 @@ operations — 21 KB — listed 323,200 nodes; 3.2's `additionalOperations` did 
 The differ read a shared path item per path, a shared response, parameter or request body per
 operation, and a schema per position pointing differently on the two sides: 1,000 operations sharing a
 200-property response compared it 1,000 times, and schemas each pointing at the next twice, renamed on
-one side, doubled the walk per level — 2.3 KB of documents reported 262,179 changes.
+one side, doubled the walk per level — 2.3 KB of documents reported 262,179 changes. And the decoder's
+own alias budget counted values, where one long string named again and again is one value a use: 107 KB
+of YAML naming a 100 KB string 1,000 times read in 6 ms, and `json()` then wrote 100 MB of it at a
+288 MB peak; 1.07 MB exhausted any memory limit. The same copy spelt a pointer for every value, each
+repeating every member name above it, so with no alias at all an 800 KB name over 80,000 values took
+2.7 s to decode.
 
 *The tell.* A resolver called inside a loop over uses, with nothing measuring what it hands back. The
 sharper one is a cost proportional to a product — paths × parameters, uses × size, a branching factor
-to the depth — where the document's size is proportional to the sum.
+to the depth — where the document's size is proportional to the sum. A budget is the same tell one step
+removed when it counts one unit and the cost is made of another: values, when a value can be a megabyte.
 
 *The fix that worked.* Bound the walk by the document that drives it, in the alias budget's terms: no
 more than the document could spell written out, or a floor for a small document, counted BEFORE the
@@ -1650,10 +1656,16 @@ wrote back for it — fewer bytes of the same document — was refused when read
 function of the document alone, so every spelling gets one answer; it is measured only as far as the
 count needs, and capped at four times the text, which only YAML aliases naming a long string outgrow.
 
-*The tests that recognise it.* `NodeExpansionTest` and `DiffReferenceBudgetTest`: each shape refused
-under a time and a memory bound, both sides of each limit to the node and the byte, and a document
-sharing nodes the way real ones do read as before. A path referencing a path item lists exactly what
-the item written in its place lists, so the sharing inside the bound cannot change an answer. Every
-spelling of one document — compact, indented, YAML, terse YAML, padded — gets the answer the JSON it
-is written back as gets, and `DocumentReaderTest` reads that JSON back as the same document for every
-fixture.
+Count every unit the cost is made of. The decoder refuses past one value per byte and, separately, past
+eight bytes of strings and member names per byte (1 MiB for a small document), each counted as it is
+copied (`DocumentDecoder`, `ReadFailure::AliasExpansion`); the most any of 45 real descriptions that
+alias spells is 1.9, a split of Glean's API. And spell nothing per value that repeats what is above it:
+the decoder keeps where it is as segments, and writes a pointer only for a refusal.
+
+*The tests that recognise it.* `NodeExpansionTest`, `DiffReferenceBudgetTest` and `AliasExpansionTest`:
+each shape refused under a time and a memory bound, both sides of each limit to the node and the byte,
+and a document sharing nodes the way real ones do read as before. A path referencing a path item lists
+exactly what the item written in its place lists, so the sharing inside the bound cannot change an
+answer. Every spelling of one document — compact, indented, YAML, terse YAML, padded — gets the answer
+the JSON it is written back as gets, and `DocumentReaderTest` reads that JSON back as the same document
+for every fixture, and reads a long name over many values inside a time bound.
