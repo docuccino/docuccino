@@ -11,6 +11,7 @@ use Error;
 use JsonException;
 use stdClass;
 use Symfony\Component\Yaml\Exception\ParseException;
+use Symfony\Component\Yaml\Parser;
 use Symfony\Component\Yaml\Yaml;
 use Throwable;
 use TypeError;
@@ -55,6 +56,13 @@ final class DocumentDecoder
     private const string NUL_KEY = 'Mapping keys starting with a NUL byte are not supported.';
 
     private const int YAML_FLAGS = Yaml::PARSE_OBJECT_FOR_MAP | Yaml::PARSE_EXCEPTION_ON_INVALID_TYPE | Yaml::PARSE_DATETIME;
+
+    /**
+     * Text that could spell a YAML merge key: `<<`, a `<` written as an escape, or a `<` before a backslash,
+     * which can escape the line break between it and the next one. Releases before 7.4.21 and 8.1.9 read a
+     * quoted key as a merge too, so every way of writing the two characters counts.
+     */
+    private const string MERGE_KEY = '/<<|<\\\\|\\\\(?:x3c|u003c|u0000003c)/i';
 
     private int $values = 0;
 
@@ -151,7 +159,7 @@ final class DocumentDecoder
     private static function yaml(string $bytes): mixed
     {
         try {
-            return Yaml::parse($bytes, self::YAML_FLAGS);
+            return Yaml::parse($bytes, self::YAML_FLAGS, maxAliasesForCollections: self::aliasCap($bytes));
         } catch (Throwable $exception) {
             throw match (true) {
                 $exception instanceof TypeError && str_starts_with($exception->getMessage(), 'Unsupported operand types: array + ') => new ParseException('A merge key (<<) inside a flow mapping is not supported; write that mapping in block style.', previous: $exception),
@@ -159,6 +167,22 @@ final class DocumentDecoder
                 default => $exception,
             };
         }
+    }
+
+    /**
+     * How many aliases to a map or a list symfony/yaml may resolve in $bytes: all of them, unless the text
+     * could spell a merge key ({@see MERGE_KEY}), where it keeps its own 128.
+     *
+     * An alias costs the parser what any scalar of its length does, however large the value it names, because
+     * it hands back the value already built; the copy is what expands it, under budgets of its own. A merge is
+     * the exception. `<<: *base` copies every member of the map it names into the one being read, while the
+     * parser reads, so N merges of an N-member map cost it N²: 175 KB took 2.5 s and 2.5 GB, 357 KB 15 s and
+     * 10 GB. The cap is what bounds that, so it stays wherever a merge could be; anywhere else it only refused
+     * real descriptions, which alias a shared response at every operation that returns it.
+     */
+    private static function aliasCap(string $bytes): int
+    {
+        return preg_match(self::MERGE_KEY, $bytes) === 0 ? PHP_INT_MAX : Parser::DEFAULT_MAX_ALIASES_FOR_COLLECTIONS;
     }
 
     /**
