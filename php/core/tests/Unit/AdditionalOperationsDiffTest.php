@@ -379,13 +379,146 @@ it('keys a custom operation it cannot pair by identity where the index points', 
         ->and($pointers)->toHaveCount(3);
 });
 
+it('points every change to an operation whose method spells a fixed one at the node the index lists for it', function (Closure $edit, int $expected, string $at) use ($diff): void {
+    // The fixed `get` and a custom `get`, `Get` and `GET` beside it: four operations, which the index has to
+    // list as four, or a change to the one it dropped names a node it does not list.
+    $id = static fn (string $id): array => ['x-docuccino' => ['id' => $id]];
+    $operation = static fn (string $n): array => [
+        ...$id("op:v1:{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}"),
+        'summary' => 'Read',
+        'parameters' => [[...$id("par:v1:{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}a"), 'name' => 'into', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string']]],
+        'responses' => ['200' => [...$id("res:v1:{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}{$n}b"), 'description' => 'Read']],
+    ];
+    $old = [
+        'openapi' => '3.2.0',
+        'info' => ['title' => 'Forms', 'version' => '1'],
+        'paths' => ['/forms' => ['get' => $operation('1'), 'additionalOperations' => ['get' => $operation('2'), 'Get' => $operation('3'), 'GET' => $operation('4')]]],
+    ];
+    $new = $edit($old);
+
+    $changes = $diff($old, $new)->changes;
+
+    $nodes = [
+        ...(new DocumentReader)->read((string) json_encode($old))->nodes(),
+        ...(new DocumentReader)->read((string) json_encode($new))->nodes(),
+    ];
+    $listed = static fn (string $identity): array => array_values(array_unique(array_map(
+        static fn (DocumentNode $node): string => $node->kind->value.' '.$node->pointer,
+        array_filter($nodes, static fn (DocumentNode $node): bool => $node->identity === $identity),
+    )));
+
+    expect($changes)->toHaveCount($expected);
+
+    foreach ($changes as $change) {
+        $node = $listed($change->id);
+
+        expect($node)->toHaveCount(1)
+            ->and($node[0])->toMatch('#^'.preg_quote($change->target->value.' /paths/~1forms'.$at, '#').'(/|$)#');
+    }
+})->with([
+    'the fixed get\'s summary rewritten' => [static function (array $doc): array {
+        $doc['paths']['/forms']['get']['summary'] = 'Show';
+
+        return $doc;
+    }, 1, '/get'],
+    'a parameter of the fixed get becoming required' => [static function (array $doc): array {
+        $doc['paths']['/forms']['get']['parameters'][0]['required'] = true;
+
+        return $doc;
+    }, 1, '/get'],
+    'a custom get\'s response re-coded' => [static function (array $doc): array {
+        $doc['paths']['/forms']['additionalOperations']['get']['responses'] = ['204' => ['x-docuccino' => ['id' => 'res:v1:222222222222222c'], 'description' => 'Read']];
+
+        return $doc;
+    }, 2, '/additionalOperations/get'],
+    'a custom Get removed' => [static function (array $doc): array {
+        unset($doc['paths']['/forms']['additionalOperations']['Get']);
+
+        return $doc;
+    }, 1, '/additionalOperations/Get'],
+    'a custom GET, which OpenAPI forbids, rewritten' => [static function (array $doc): array {
+        $doc['paths']['/forms']['additionalOperations']['GET']['summary'] = 'Show';
+
+        return $doc;
+    }, 1, '/additionalOperations/GET'],
+]);
+
+it('keys an operation it cannot pair by identity as the index keys it, whatever its method spells', function () use ($diff): void {
+    // Two readers, one spelling of where an operation is written: the index keys a node by it and the differ
+    // keys a change by it, so the change names the node — for the fixed `get`, for every custom method spelt
+    // like it, and for one holding a character either the pointer or the key has to escape.
+    $operation = ['responses' => ['204' => ['description' => 'Done']]];
+    $old = [
+        'openapi' => '3.2.0',
+        'info' => ['title' => 'Forms', 'version' => '1'],
+        'paths' => ['/forms' => [
+            'get' => $operation,
+            'additionalOperations' => ['get' => $operation, 'Get' => $operation, 'GET' => $operation, 'COPY' => $operation, 'C~P' => $operation, 'C/P' => $operation, 'C P' => $operation],
+        ]],
+    ];
+
+    $removed = $diff($old, ['openapi' => '3.2.0', 'info' => ['title' => 'Forms', 'version' => '1'], 'paths' => (object) []])->changes;
+    $keys = array_map(
+        static fn (DocumentNode $node): string => $node->key,
+        array_filter((new DocumentReader)->read((string) json_encode($old))->nodes(), static fn (DocumentNode $node): bool => $node->kind === NodeKind::Operation),
+    );
+
+    expect(array_map(static fn (Change $change): string => $change->id, $removed))
+        ->toEqualCanonicalizing(array_map(static fn (string $key): string => '_'.$key, $keys))
+        ->and(array_unique($keys))->toHaveCount(8);
+});
+
+it('keeps a custom method holding a space from spelling another operation\'s key', function () use ($diff): void {
+    // A key spells where an operation is written, a space, and its path, and a path can hold a space, so a
+    // method holding one — which only a document OpenAPI calls invalid can write — could spell the start of
+    // another operation's path: `COPY webhook:x` under `/b` and `COPY` under the webhook `x /b`, in the
+    // index's spelling of a webhook, and `COPY webhooks.x` in the differ's. So a space in a method is escaped
+    // as `~2`, as a `/` in one is escaped as `~1`.
+    $operation = ['responses' => ['204' => ['description' => 'Done']]];
+    $old = [
+        'openapi' => '3.2.0',
+        'info' => ['title' => 'Forms', 'version' => '1'],
+        'paths' => [
+            '/b' => ['additionalOperations' => ['COPY webhook:x' => $operation, 'COPY webhooks.x' => $operation, 'COPY /a' => $operation]],
+            '/a /b' => ['additionalOperations' => ['COPY' => $operation]],
+        ],
+        'webhooks' => ['x /b' => ['additionalOperations' => ['COPY' => $operation]]],
+    ];
+
+    $keys = array_map(
+        static fn (DocumentNode $node): string => $node->key,
+        array_values(array_filter((new DocumentReader)->read((string) json_encode($old))->nodes(), static fn (DocumentNode $node): bool => $node->kind === NodeKind::Operation)),
+    );
+    $removed = $diff($old, ['openapi' => '3.2.0', 'info' => ['title' => 'Forms', 'version' => '1'], 'paths' => (object) [], 'webhooks' => (object) []])->changes;
+
+    expect($keys)->toBe([
+        'additionalOperations/COPY /a /b',
+        'additionalOperations/COPY webhook:x /b',
+        'additionalOperations/COPY~2webhook:x /b',
+        'additionalOperations/COPY~2webhooks.x /b',
+        'additionalOperations/COPY~2~1a /b',
+    ])->and(array_map(static fn (Change $change): string => $change->id, $removed))->toEqualCanonicalizing([
+        '_additionalOperations/COPY /a /b',
+        '_additionalOperations/COPY webhooks.x /b',
+        '_additionalOperations/COPY~2webhook:x /b',
+        '_additionalOperations/COPY~2webhooks.x /b',
+        '_additionalOperations/COPY~2~1a /b',
+    ]);
+});
+
 it('removes, operation for operation, what the index lists for every fixture', function () use ($diff): void {
     // The differ and the node index are two readers of which operations a document states, and every
     // fixture is held to their agreeing: emptied of its paths and webhooks, a document reports one removal
-    // per operation the index lists, of the method the index names and with the identity it lists. A walk
-    // that misses a member holding operations — `webhooks` once, `additionalOperations` until now — makes
-    // the counts part.
-    $method = static fn (string $spelt): string => explode(' ', $spelt, 2)[0];
+    // per operation the index lists, of the method a client sends to the node the index points at and with
+    // the identity it lists — and, where nothing pairs it by identity, keyed by where it is written as the
+    // index keys it. A walk that misses a member holding operations — `webhooks` once, `additionalOperations`
+    // after it — makes the counts part, and a key the two readers spell apart makes the second pair part.
+    $first = static fn (string $spelt): string => explode(' ', $spelt, 2)[0];
+    // Stated from the Path Item Object rather than read off either reader: a fixed member is sent as its name
+    // uppercased, and a custom one as its key is written.
+    $sent = static fn (DocumentNode $node): string => preg_match('#/additionalOperations/([^/]*)$#', $node->pointer, $match) === 1
+        ? str_replace(['~1', '~0'], ['/', '~'], $match[1])
+        : strtoupper((string) preg_replace('#^.*/#', '', $node->pointer));
     $compared = 0;
     $custom = 0;
 
@@ -401,10 +534,14 @@ it('removes, operation for operation, what the index lists for every fixture', f
         $removed = array_values(array_filter($changeset->changes, static fn (Change $change): bool => $change->code === 'operation.removed'));
 
         $byIdentity = $changeset->pairing === Pairing::Identity;
+        $structural = static fn (Change $change): bool => str_starts_with($change->id, '_');
+        $unidentified = static fn (DocumentNode $node): bool => ! $byIdentity || $node->identity === null;
 
         // By identity, an operation carrying one is keyed by it, and one carrying none by where it is written.
-        expect(array_map(static fn (Change $change): string => $method($change->path).($byIdentity && ! str_starts_with($change->id, '_') ? ' '.$change->id : ''), $removed))
-            ->toEqualCanonicalizing(array_map(static fn (DocumentNode $node): string => $method($node->key).($byIdentity && $node->identity !== null ? ' '.$node->identity : ''), $operations), basename($path));
+        expect(array_map(static fn (Change $change): string => $first($change->path).($structural($change) ? '' : ' '.$change->id), $removed))
+            ->toEqualCanonicalizing(array_map(static fn (DocumentNode $node): string => $sent($node).($unidentified($node) ? '' : ' '.$node->identity), $operations), basename($path))
+            ->and(array_map(static fn (Change $change): string => $first($change->id), array_values(array_filter($removed, $structural))))
+            ->toEqualCanonicalizing(array_map(static fn (DocumentNode $node): string => '_'.$first($node->key), array_values(array_filter($operations, $unidentified))), basename($path));
 
         $compared++;
         $custom += count(array_filter($operations, static fn (DocumentNode $node): bool => str_contains($node->pointer, '/additionalOperations/')));

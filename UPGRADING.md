@@ -25,6 +25,16 @@ changes.
   it was moved into the next month or refused; a timestamp written as a key is its text, where it was a
   count of seconds; `true`, `false`, `null`, `.inf` and `.nan` in a case YAML does not spell them (`tRUE`),
   and whatever YAML's non-specific tag `!` is on, are strings; and `!!float "1.5"` is 1.5, where it was 0.
+- **`nodes()` keys a custom operation by where it is written.** An operation under OpenAPI 3.2's
+  `additionalOperations` is keyed `additionalOperations/COPY /forms/{p0}`, where it was `COPY /forms/{p0}`,
+  and the keys of its parameters and responses open the same way. Its method keeps its case, so a custom
+  `get` or `Get` is no longer keyed `GET /forms/{p0}` beside the fixed `get`, and a custom `get` no longer
+  takes the fixed `get`'s place: that operation and its nodes are listed again. A `~` or `/` in the method
+  is escaped as its pointer escapes it, and a space, which only a document OpenAPI calls invalid can hold,
+  as `~2`. A fixed method's nodes, and every node of a document without `additionalOperations`, keep their
+  keys, and a custom operation's nodes keep their pointers, ids, labels and digests. If you store keys, a
+  custom operation's stored ones match nothing now: match each to its new key by its pointer, or it reads
+  as one node removed and another added.
 
 ## v0.22.0
 
