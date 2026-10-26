@@ -1699,3 +1699,26 @@ exactly the text the index then lists, for every fixture and for each part of a 
 the arithmetic cannot drift from what `nodes()` writes. `RefHopsTest` holds the memo to a chain read
 afresh, stated in the test, for every reference in the fixtures in both orders and for each refusal — a
 cycle, a missing target, a ninth hop counted from where its chain starts — and to belonging to one document.
+
+## A walk over the fixed methods, blind to the open map
+
+A Path Item states its operations two ways: nine fixed members, `get` to `query`, and from OpenAPI 3.2
+`additionalOperations`, a map from any other method to an operation. `PathItem::METHODS` names the first,
+so a loop over it reads as a loop over every operation, and what it misses gets no vaguer answer, only
+silence, which reads as "nothing here".
+
+*Instances.* The differ walked `paths` and not `webhooks`, so a webhook the provider stopped calling was
+no change. Then it walked the fixed methods and not `additionalOperations`: a custom operation's response
+going from 200 to 201, its summary, its removal, every edit to one reported nothing, while the node index
+listed it. The two readers beneath the walk had the same gap: `SchemaDirection` kept a body only a custom
+operation sends on the response side, and `IdentityOverlap` counted none of its ids.
+
+*The tell.* `foreach (PathItem::METHODS …)` or `$item->operations` with no `additionalOperations` beside
+it. A custom method is case-sensitive and sent as written, so the second tell is a reader that keys one by
+its method uppercased: a custom `get` is another method than the fixed `get`, and both uppercase to `GET`.
+
+*The fix that worked.* One enumeration for every walk of a reader (`Diff\PathOperations`), keying each
+operation by where it is written rather than by the request line, which a `GET` key OpenAPI forbids shares
+with the fixed `get`. The guard is two readers agreeing: every fixture, emptied of its paths and webhooks,
+reports one removal per operation the node index lists (`AdditionalOperationsDiffTest`), so a walk that
+misses a member makes the two counts part.
