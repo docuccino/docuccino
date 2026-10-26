@@ -15,8 +15,10 @@ Nothing about a generated document changes.
   check cut its own list, which used to come back as a finding with `isTruncated()` false. If you
   showed that line, show your own when `isTruncated()` is true.
 - **`read()` refuses one more kind of document.** A document whose node index would hold more nodes
-  than it has bytes — paths sharing one path item that lists its parameters for every operation — is
-  refused with `ReadFailure::NodeExpansion`. A `match` over `ReadFailure` needs the case.
+  than the document takes bytes as compact JSON — paths sharing one path item that lists its
+  parameters for every operation — is refused with `ReadFailure::NodeExpansion`. Whitespace, comments
+  and YAML layout are no part of that size, so the JSON `json()` writes reads back under the limit
+  the document was read under. A `match` over `ReadFailure` needs the case.
 - **`IncomparableDocumentsException` says why.** Its `$failure` is a `DiffFailure`:
   `AlgorithmMismatch` for the refusal it always made, and `ReferenceExpansion` when comparing the
   two documents would read their shared nodes far more often than any document needs. Every place

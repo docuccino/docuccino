@@ -1635,16 +1635,25 @@ sharper one is a cost proportional to a product — paths × parameters, uses ×
 to the depth — where the document's size is proportional to the sum.
 
 *The fix that worked.* Bound the walk by the document that drives it, in the alias budget's terms: no
-more than the bytes could spell written out, or a floor for a small document, counted BEFORE the work
-it guards. The index counts its nodes without listing them and refuses past one per byte
-(`NodeManifest::admit()`, `ReadFailure::NodeExpansion`); the differ charges every resolution the size
-of what it lands on and refuses past 32 times the document's size (`ReferenceBudget`,
-`DiffFailure::ReferenceExpansion`). Each bound was sized against real documents first, and the margin
-stated: the index's against 0.006 nodes per byte at most, the differ's against Stripe's description
-renamed throughout, which reads 13 times its size. Within the bound, read a shared node once and list
-it as many times as it is used.
+more than the document could spell written out, or a floor for a small document, counted BEFORE the
+work it guards. The index counts its nodes without listing them and refuses past one per byte the
+document takes as compact JSON (`NodeManifest::admit()`, `ReadFailure::NodeExpansion`); the differ
+charges every resolution the size of what it lands on and refuses past 32 times the document's size,
+in the same measure (`ReferenceBudget`, `DiffFailure::ReferenceExpansion`, `CompactJson`). Each bound
+was sized against real documents first, and the margin stated: the index's against 0.0073 nodes per
+byte at most, the differ's against Stripe's description renamed throughout, which reads 13 times its
+size. Within the bound, read a shared node once and list it as many times as it is used.
+
+Measure the DOCUMENT, not the text it arrived as. The index's bound was first one node per byte of the
+upload, so whitespace bought index, and a pretty-printed upload was admitted while the JSON `json()`
+wrote back for it — fewer bytes of the same document — was refused when read again. Compact JSON is a
+function of the document alone, so every spelling gets one answer; it is measured only as far as the
+count needs, and capped at four times the text, which only YAML aliases naming a long string outgrow.
 
 *The tests that recognise it.* `NodeExpansionTest` and `DiffReferenceBudgetTest`: each shape refused
 under a time and a memory bound, both sides of each limit to the node and the byte, and a document
 sharing nodes the way real ones do read as before. A path referencing a path item lists exactly what
-the item written in its place lists, so the sharing inside the bound cannot change an answer.
+the item written in its place lists, so the sharing inside the bound cannot change an answer. Every
+spelling of one document — compact, indented, YAML, terse YAML, padded — gets the answer the JSON it
+is written back as gets, and `DocumentReaderTest` reads that JSON back as the same document for every
+fixture.
