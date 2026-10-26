@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Reader;
 
-use DateMalformedStringException;
 use DateTimeInterface;
 use Docuccino\Core\Canonical\CanonicalJsonSerializer;
 use Docuccino\Core\Contract\Pointer;
@@ -142,11 +141,10 @@ final class DocumentDecoder
     }
 
     /**
-     * symfony/yaml's reading of $bytes. Releases before 7.4.21, and 8.0, throw something other than a
-     * {@see ParseException} for three kinds of text, and each is thrown here as one, so it is refused like
-     * any other text the parser cannot read: a TypeError for a merge key inside a flow mapping
-     * (`{<<: *base}`), an Error for a mapping key starting with a NUL byte, and, in 7.0 alone, the date's
-     * own exception for one it matched and could not construct. Anything else goes on as it was thrown.
+     * symfony/yaml's reading of $bytes. Releases before 7.4.21 and 8.1.9 throw something other than a
+     * {@see ParseException} for two kinds of text, and each is thrown here as one, so it is refused like any
+     * other text the parser cannot read: a TypeError for a merge key inside a flow mapping (`{<<: *base}`),
+     * and an Error for a mapping key starting with a NUL byte. Anything else goes on as it was thrown.
      *
      * @throws ParseException
      */
@@ -157,7 +155,6 @@ final class DocumentDecoder
         } catch (Throwable $exception) {
             throw match (true) {
                 $exception instanceof TypeError && str_starts_with($exception->getMessage(), 'Unsupported operand types: array + ') => new ParseException('A merge key (<<) inside a flow mapping is not supported; write that mapping in block style.', previous: $exception),
-                $exception instanceof DateMalformedStringException => new ParseException('A date could not be parsed as it is an invalid date.', previous: $exception),
                 $exception instanceof Error && str_starts_with($exception->getMessage(), 'Cannot access property starting with "\0"') => new ParseException(self::NUL_KEY, previous: $exception),
                 default => $exception,
             };
