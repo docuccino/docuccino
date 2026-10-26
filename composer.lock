@@ -383,7 +383,7 @@
             "dist": {
                 "type": "path",
                 "url": "php/attributes",
-                "reference": "cdf9ba75875d3c2c976e95d5eec5a2cd6bb242ba"
+                "reference": "97707da087ca264d9e054b20cc426c38a1f3dd73"
             },
             "require": {
                 "php": "^8.3"
@@ -402,15 +402,17 @@
                     "name": "Tom Martin"
                 }
             ],
-            "description": "Dependency-free PHP attribute classes for Docuccino.",
+            "description": "Dependency-free PHP attributes for the OpenAPI details Docuccino cannot infer: summaries, parameters, responses and security.",
             "homepage": "https://docuccino.app",
             "keywords": [
+                "annotations",
                 "api-documentation",
                 "attributes",
                 "openapi",
+                "openapi-attributes",
                 "php-attributes",
                 "scramble-alternative",
-                "uir"
+                "swagger"
             ],
             "support": {
                 "issues": "https://github.com/docuccino/docuccino/issues",
@@ -427,7 +429,7 @@
             "dist": {
                 "type": "path",
                 "url": "php/core",
-                "reference": "19d5e79c1c7f8de1fae29410bca96a0333fc643a"
+                "reference": "fafc796a34730fa80592f108a7fa9cf7c2146c95"
             },
             "require": {
                 "composer-runtime-api": "^2",
@@ -437,7 +439,7 @@
                 "php": "^8.3",
                 "phpstan/phpdoc-parser": "^2",
                 "psr/container": "^1.1 || ^2.0",
-                "symfony/yaml": "^7.0 || ^8.0"
+                "symfony/yaml": "^7.4.18 || ^8.1.6"
             },
             "type": "library",
             "autoload": {
@@ -458,15 +460,18 @@
                     "name": "Tom Martin"
                 }
             ],
-            "description": "Framework-agnostic UIR model, canonicalizer, identity, validator and emitters.",
+            "description": "OpenAPI 3.2, 3.1 and 3.0 emitters, semantic API diffing and breaking-change detection: the framework-agnostic engine behind Docuccino.",
             "homepage": "https://docuccino.app",
             "keywords": [
                 "api-documentation",
+                "breaking-changes",
                 "json-schema",
                 "openapi",
+                "openapi-3.2",
+                "openapi-diff",
+                "openapi-generator",
                 "scramble-alternative",
-                "swagger",
-                "uir"
+                "swagger"
             ],
             "support": {
                 "issues": "https://github.com/docuccino/docuccino/issues",
@@ -483,7 +488,7 @@
             "dist": {
                 "type": "path",
                 "url": "php/inference-phpstan",
-                "reference": "426edce0d620dcccddc99f9f169a67a14ff34015"
+                "reference": "b5dc879456a7ff22bb12bd481b87bb0ba224a0bc"
             },
             "require": {
                 "docuccino/attributes": "self.version",
@@ -515,16 +520,17 @@
                     "name": "Tom Martin"
                 }
             ],
-            "description": "PHPStan/Larastan type inference engine for Docuccino, behind the core TypeEngine contract.",
+            "description": "PHPStan and Larastan type inference for Docuccino: recovers OpenAPI response and error schemas from the real types in your code.",
             "homepage": "https://docuccino.app",
             "keywords": [
                 "api-documentation",
                 "larastan",
+                "laravel",
                 "openapi",
                 "phpstan",
                 "scramble-alternative",
-                "type-inference",
-                "uir"
+                "static-analysis",
+                "type-inference"
             ],
             "support": {
                 "issues": "https://github.com/docuccino/docuccino/issues",
@@ -541,7 +547,7 @@
             "dist": {
                 "type": "path",
                 "url": "php/laravel",
-                "reference": "f4c0e8dbcd4e85905f4acb5b5edc05bc84928853"
+                "reference": "6d23fb67f4f7febe6d5d3120e530958aa9fdbbe2"
             },
             "require": {
                 "docuccino/attributes": "self.version",
@@ -558,15 +564,27 @@
             },
             "require-dev": {
                 "docuccino/inference-phpstan": "self.version",
+                "illuminate/testing": "^12.0 || ^13.0",
                 "lorisleiva/laravel-actions": "^2.0",
                 "orchestra/testbench": "^10.0 || ^11.0",
                 "pestphp/pest": "^4.0",
+                "phpunit/phpunit": "^11.5 || ^12.0",
                 "spatie/laravel-data": "^4.0",
                 "spatie/laravel-json-api-paginate": "^2.0",
                 "timacdonald/json-api": "^1.0@beta"
             },
             "suggest": {
-                "docuccino/inference-phpstan": "Required for static type inference — install as a dev dependency: composer require --dev docuccino/inference-phpstan. Without it documentation comes from docblocks and attributes only."
+                "docuccino/inference-phpstan": "Required for static type inference — install as a dev dependency: composer require --dev docuccino/inference-phpstan. Without it documentation comes from docblocks and attributes only.",
+                "illuminate/testing": "Required by the contract-testing helpers (Docuccino\\Laravel\\Testing) — every Laravel application already has it through laravel/framework.",
+                "laravel/passport": "^12.0 || ^13.0 — documents the OAuth2 security scheme and the scopes each route's middleware requires.",
+                "laravel/sanctum": "^4.0 — documents the bearer-token security scheme and the abilities each route's middleware requires.",
+                "lorisleiva/laravel-actions": "^2.0 — reads action classes used as controllers: the dispatched method's signature, a body from rules(), a 403 from authorize().",
+                "phpunit/phpunit": "Required by the contract-testing helpers (Docuccino\\Laravel\\Testing), which are only ever loaded from a test suite.",
+                "spatie/laravel-data": "^4.0 — documents Data classes as component schemas and request bodies, including name mapping, wrapping and rules() overrides.",
+                "spatie/laravel-json-api-paginate": "^2.0 — documents the page[number] / page[size] / page[cursor] parameters and the paginator envelope from jsonPaginate().",
+                "spatie/laravel-permission": "^6.0 — publishes the roles and permissions a route's middleware requires (opt-in per document).",
+                "spatie/laravel-query-builder": "^7.0 — documents the filter[…], sort, include and fields[…] parameters from the query's allow-lists.",
+                "timacdonald/json-api": "^1.0@beta — documents JSON:API resources as JSON:API documents, plus their include and fields parameters."
             },
             "type": "library",
             "extra": {
@@ -598,15 +616,20 @@
                     "name": "Tom Martin"
                 }
             ],
-            "description": "Laravel adapter for Docuccino: route discovery, extension registry, pipeline and artisan export.",
+            "description": "Generate OpenAPI 3.2 and 3.1 documentation for a Laravel API automatically, from the real types in your code.",
             "homepage": "https://docuccino.app",
             "keywords": [
+                "api-docs",
                 "api-documentation",
+                "documentation-generator",
                 "laravel",
+                "laravel-openapi",
                 "openapi",
+                "openapi-3.2",
+                "openapi-generator",
+                "rest-api",
                 "scramble-alternative",
-                "swagger",
-                "uir"
+                "swagger"
             ],
             "support": {
                 "issues": "https://github.com/docuccino/docuccino/issues",
@@ -6398,16 +6421,16 @@
         },
         {
             "name": "symfony/yaml",
-            "version": "v7.4.15",
+            "version": "v7.4.21",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/yaml.git",
-                "reference": "e101850ded5d2c0d44bf32abb8996404afec2dec"
+                "reference": "044907929c7999814378be22da34722c7a86bad4"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/yaml/zipball/e101850ded5d2c0d44bf32abb8996404afec2dec",
-                "reference": "e101850ded5d2c0d44bf32abb8996404afec2dec",
+                "url": "https://api.github.com/repos/symfony/yaml/zipball/044907929c7999814378be22da34722c7a86bad4",
+                "reference": "044907929c7999814378be22da34722c7a86bad4",
                 "shasum": ""
             },
             "require": {
@@ -6450,7 +6473,7 @@
             "description": "Loads and dumps YAML files",
             "homepage": "https://symfony.com",
             "support": {
-                "source": "https://github.com/symfony/yaml/tree/v7.4.15"
+                "source": "https://github.com/symfony/yaml/tree/v7.4.21"
             },
             "funding": [
                 {
@@ -6470,7 +6493,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-07-21T15:13:06+00:00"
+            "time": "2026-10-12T12:34:30+00:00"
         },
         {
             "name": "tijsverkoyen/css-to-inline-styles",
