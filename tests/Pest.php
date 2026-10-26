@@ -64,6 +64,8 @@ use Docuccino\Core\Pipeline\Assembler;
 use Docuccino\Core\Pipeline\FragmentCache;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Pipeline\OperationFragment;
+use Docuccino\Core\Reader\DocumentReader;
+use Docuccino\Core\Reader\SourcePosition;
 use Docuccino\Core\Support\ConfiguredFlag;
 use Docuccino\Core\Support\Fqcn;
 use Docuccino\Core\Support\Hydrate;
@@ -1752,6 +1754,52 @@ function loadGolden(string $name): string
     }
 
     return $contents;
+}
+
+/**
+ * Expects each pointer of the document read from $text placed at its [line, column], or nowhere.
+ *
+ * @param  array<string, ?array{int, int}>  $expected
+ */
+function expectPositions(string $text, ?string $mediaType, array $expected): void
+{
+    $document = (new DocumentReader)->read($text, $mediaType);
+
+    $actual = [];
+    foreach (array_keys($expected) as $pointer) {
+        $position = $document->position($pointer);
+        $actual[$pointer] = $position === null ? null : [$position->line, $position->column];
+    }
+
+    expect($actual)->toBe($expected);
+}
+
+/**
+ * Every pointer a decoded document holds: the root as `/`, and each node before what it holds, which is the
+ * order its text writes them in.
+ *
+ * @return list<string>
+ */
+function everyPointerIn(mixed $node, string $pointer = ''): array
+{
+    $pointers = [$pointer === '' ? '/' : $pointer];
+    $members = $node instanceof stdClass ? get_object_vars($node) : (is_array($node) ? $node : []);
+    foreach ($members as $name => $member) {
+        array_push($pointers, ...everyPointerIn($member, $pointer.'/'.str_replace(['~', '/'], ['~0', '~1'], (string) $name)));
+    }
+
+    return $pointers;
+}
+
+/**
+ * What $text holds from $position to the end of its line, counted as a {@see SourcePosition} counts: lines
+ * broken at LF, CR or CRLF, columns in characters, no byte order mark.
+ */
+function textAt(string $text, SourcePosition $position): string
+{
+    $lines = (array) preg_split('/\r\n|\r|\n/', str_starts_with($text, "\u{FEFF}") ? substr($text, 3) : $text);
+
+    return mb_substr((string) ($lines[$position->line - 1] ?? ''), $position->column - 1);
 }
 
 /**
