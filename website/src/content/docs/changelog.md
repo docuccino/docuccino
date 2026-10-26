@@ -13,6 +13,14 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.22.1
+
+### Bug fixes
+
+- **core**: bound what the node index spells and how often a $ref is followed, and refuse YAML the parser throws on ([#668](https://github.com/docuccino/docuccino/pull/668))
+- **core**: refuse YAML whose aliases repeat text far past its own size ([#667](https://github.com/docuccino/docuccino/pull/667))
+- **core**: measure the node budget against the document's compact JSON, not its whitespace ([#665](https://github.com/docuccino/docuccino/pull/665))
+
 ## v0.22.0
 
 ### Breaking changes
