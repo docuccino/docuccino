@@ -58,11 +58,20 @@ final class DocumentDecoder
     private const int YAML_FLAGS = Yaml::PARSE_OBJECT_FOR_MAP | Yaml::PARSE_EXCEPTION_ON_INVALID_TYPE | Yaml::PARSE_DATETIME;
 
     /**
-     * Text that could spell a YAML merge key: `<<`, a `<` written as an escape, or a `<` before a backslash,
-     * which can escape the line break between it and the next one. Releases before 7.4.21 and 8.1.9 read a
-     * quoted key as a merge too, so every way of writing the two characters counts.
+     * Text that could spell a YAML merge key: a `<<` a key could end at, a `<` written as an escape, or a `<`
+     * before an escaped line break, which joins it to the next one. Releases before 7.4.21 and 8.1.9 read a
+     * quoted key as a merge too, so every way of writing the two characters counts. A key ends at a colon, at
+     * what ends a flow scalar, at a closing quote, or at white space or a NUL, which the parser trims from a
+     * key; a `<<` before anything else is part of a longer scalar, as in a PDF's `<</Type` or `<<\r\n`, or a
+     * shell's `<<EOF`.
      */
-    private const string MERGE_KEY = '/<<|<\\\\|\\\\(?:x3c|u003c|u0000003c)/i';
+    private const string MERGE_KEY = '/<<(?=[\s\x00\'":,\]}]|$)|<\\\\[\r\n]|\\\\(?:x3c|u003c|u0000003c)/i';
+
+    /** The members symfony/yaml may copy for one document's merge keys ({@see aliasCap()}): 56 MB at the dearest spelling measured. */
+    private const int MERGE_COPIES = 524_288;
+
+    /** What stands between two members of one map or list: a comma or a bracket in flow style, a line break in block style. */
+    private const string SEPARATORS = ",[]{}\n\r";
 
     private int $values = 0;
 
@@ -112,7 +121,7 @@ final class DocumentDecoder
                 // that said JSON is taken at its word.
                 if ($declared === null) {
                     try {
-                        return [$this->admitted(self::yaml($bytes), strlen($bytes)), Syntax::Yaml];
+                        return [$this->admitted(self::yaml($bytes, self::aliasCap($bytes)), strlen($bytes)), Syntax::Yaml];
                     } catch (ParseException) {
                         // Report it as the JSON it looked like.
                     }
@@ -132,10 +141,20 @@ final class DocumentDecoder
             return [$this->admitted($parsed, strlen($bytes)), Syntax::Json];
         }
 
+        $aliases = self::aliasCap($bytes);
+
         try {
-            $parsed = self::yaml($bytes);
+            $parsed = self::yaml($bytes, $aliases);
         } catch (ParseException $exception) {
             $line = $exception->getParsedLine();
+
+            // symfony's own words for its cap ask the reader to raise it, which only the parser's caller can do.
+            if ($aliases !== PHP_INT_MAX && str_starts_with($exception->getMessage(), 'Maximum number of collection aliases')) {
+                throw new UnreadableDocumentException(ReadFailure::AliasExpansion, sprintf(
+                    'The document names more than %d YAML aliases to a map or a list, the most a document of its size may name where its text could spell a merge key (<<): each merge copies the whole map it names while the document is parsed. Remove its merge keys, or upload it as JSON.',
+                    $aliases,
+                ), $line > 0 ? $line : null, $exception);
+            }
 
             throw new UnreadableDocumentException(
                 ReadFailure::Syntax,
@@ -149,17 +168,18 @@ final class DocumentDecoder
     }
 
     /**
-     * symfony/yaml's reading of $bytes. Releases before 7.4.21 and 8.1.9 throw something other than a
+     * symfony/yaml's reading of $bytes, resolving at most $aliases aliases to a map or a list
+     * ({@see aliasCap()}). Releases before 7.4.21 and 8.1.9 throw something other than a
      * {@see ParseException} for two kinds of text, and each is thrown here as one, so it is refused like any
      * other text the parser cannot read: a TypeError for a merge key inside a flow mapping (`{<<: *base}`),
      * and an Error for a mapping key starting with a NUL byte. Anything else goes on as it was thrown.
      *
      * @throws ParseException
      */
-    private static function yaml(string $bytes): mixed
+    private static function yaml(string $bytes, int $aliases): mixed
     {
         try {
-            return Yaml::parse($bytes, self::YAML_FLAGS, maxAliasesForCollections: self::aliasCap($bytes));
+            return Yaml::parse($bytes, self::YAML_FLAGS, maxAliasesForCollections: $aliases);
         } catch (Throwable $exception) {
             throw match (true) {
                 $exception instanceof TypeError && str_starts_with($exception->getMessage(), 'Unsupported operand types: array + ') => new ParseException('A merge key (<<) inside a flow mapping is not supported; write that mapping in block style.', previous: $exception),
@@ -171,18 +191,30 @@ final class DocumentDecoder
 
     /**
      * How many aliases to a map or a list symfony/yaml may resolve in $bytes: all of them, unless the text
-     * could spell a merge key ({@see MERGE_KEY}), where it keeps its own 128.
+     * could spell a merge key ({@see MERGE_KEY}), and there as many as keep what merges copy within
+     * {@see MERGE_COPIES}, up to the parser's own 128.
      *
-     * An alias costs the parser what any scalar of its length does, however large the value it names, because
-     * it hands back the value already built; the copy is what expands it, under budgets of its own. A merge is
-     * the exception. `<<: *base` copies every member of the map it names into the one being read, while the
-     * parser reads, so N merges of an N-member map cost it N²: 175 KB took 2.5 s and 2.5 GB, 357 KB 15 s and
-     * 10 GB. The cap is what bounds that, so it stays wherever a merge could be; anywhere else it only refused
-     * real descriptions, which alias a shared response at every operation that returns it.
+     * An alias costs the parser no more than its spelling: it hands back the value already built, and the copy
+     * expands it under budgets of its own. A merge copies every member of the map it names while the parser
+     * reads, before any budget sees it, so merges cost their number times their members. The cap bounds the
+     * first and the separators the second, since no map or list holds more members than its text spells
+     * separators: `[,,,,]`, merged as a map of its positions, is the dearest spelling, and 128 merges of it
+     * cost 9 GB at 1 MB. Where no merge could be spelt, a cap only refuses real descriptions, which alias a
+     * shared response at every operation that returns it.
      */
     private static function aliasCap(string $bytes): int
     {
-        return preg_match(self::MERGE_KEY, $bytes) === 0 ? PHP_INT_MAX : Parser::DEFAULT_MAX_ALIASES_FOR_COLLECTIONS;
+        if (preg_match(self::MERGE_KEY, $bytes) === 0) {
+            return PHP_INT_MAX;
+        }
+
+        $counts = count_chars($bytes, 1);
+        $separators = 0;
+        foreach (str_split(self::SEPARATORS) as $separator) {
+            $separators += $counts[ord($separator)] ?? 0;
+        }
+
+        return min(Parser::DEFAULT_MAX_ALIASES_FOR_COLLECTIONS, intdiv(self::MERGE_COPIES, $separators + 1));
     }
 
     /**
