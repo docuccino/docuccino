@@ -38,16 +38,16 @@ const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
     // phpdoc type grammar, the contract checker. The floor sits at the measured integer and 98 is out of
     // reach:
-    // Measured 97.82% (16065/16423): 97% of it is 15930.31 statements, 134.69 of margin (0.82pp).
+    // Measured 97.88% (16665/17026): 97% of it is 16515.22 statements, 149.78 of margin (0.88pp).
     // It was ratcheted 96 → 97 back when
     // the figure was 97.51% over a denominator 1189 statements smaller, dipped to 97.39% as core absorbed
     // work at slightly under its own average, and has come back up without the floor needing to move
     // either time — the ordinary shape for a package this size, and why 97 is where it stays.
-    'core' => ['floor' => 97, 'measured' => 97.82],
+    'core' => ['floor' => 97, 'measured' => 97.88],
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/, the
     // contract-testing assertions. The floor sat at 96 while 97 would have been a hair-trigger, and was to
     // ratchet once the figure cleared 97.20% — about 28 statements. It has:
-    // Measured 97.24% (15945/16398): 97% of it is 15906.06 statements, 38.94 of margin (0.24pp).
+    // Measured 97.24% (15957/16410): 97% of it is 15917.70 statements, 39.30 of margin (0.24pp).
     // The margin is thinner than `core`'s, and the risk it carries is a denominator change rather than a
     // lost proof — deleting about 1,200 fully covered adapter statements would drop the ratio under 97 with
     // no change in test quality. The record check further down fires at ten statements either way, so the
