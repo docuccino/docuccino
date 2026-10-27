@@ -563,6 +563,7 @@ changed. No color, no timestamps — safe to paste into a PR comment.
       "target": "parameter",
       "id": "par:v1:k4v2mzq7tn3xrs6b",
       "path": "GET /api/invoices parameters query:status",
+      "subject": { "kind": "operation", "method": "GET", "path": "/api/invoices" },
       "breaking": true,
       "code": "parameter.removed"
     }
@@ -582,6 +583,21 @@ changed. No color, no timestamps — safe to paste into a PR comment.
 `parameter.became-required`, `response.content-removed`, `schema.type-narrowed` or
 `securityScheme.changed`. A change carrying field-level detail adds a `fields` array. The `policy`
 member appears only with `--enforce`, and `requiredVersion` only on a violation.
+
+`subject` says what the change is about, member by member, so you can group changes without taking
+`path` apart — a path template, a webhook name and a component name can all hold a dot or a space, so
+`components.schemas.Pet.enum` could be the enum of `Pet` or the schema `Pet.enum`. Its `kind` decides
+the rest:
+
+| `kind` | Members | About |
+| --- | --- | --- |
+| `operation` | `method`, and `path` or `webhook` | an operation, or anything on one: a parameter, a response, a request or response schema |
+| `pathItem` | `path` or `webhook` | a path item whose `$ref` resolved to nothing, so nothing under it could be compared |
+| `schema` | `name` | a schema under `components.schemas` |
+| `securityScheme` | `name` | a scheme under `components.securitySchemes` |
+| `page` | `slug` | a content page |
+
+`method` is the method a client sends, as `path` prints it.
 
 ### `--enforce` and versioning policies
 
