@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\SpecValidation\ArazzoMetaSchema;
 use Docuccino\Core\SpecValidation\OpenApiMetaSchema;
 use Docuccino\Core\Tests\Support\ArazzoSchema;
 use Docuccino\Core\Tests\Support\PostmanSchema;
@@ -13,7 +14,8 @@ use Docuccino\Core\Tests\Support\PostmanSchema;
  *
  * Four guards pin schemas here. `OpenApiMetaSchemaTest` pins the three OpenAPI meta-schemas by
  * identity and by content; `PostmanSchemaPinTest` pins the Postman collection schema the same way;
- * `ArazzoSchemaPinTest` pins the Arazzo workflow schema; `SchemaShippingTest` and
+ * `ArazzoSchemaPinTest` pins the Arazzo workflow schema the emitter is checked against, and
+ * `ArazzoMetaSchemaTest` every Arazzo schema the reader ships; `SchemaShippingTest` and
  * `website/scripts/sync-schema.mjs --check` hold every copy of our OWN UIR schema byte-identical to the
  * canonical one, for every version published. Each proves its own members and is silent outside
  * them — and side by side they left one member unpinned for as long as it has existed. The Postman
@@ -41,7 +43,8 @@ function schemaPinOwed(string $declaredId): string
     return match (true) {
         str_starts_with($declaredId, 'https://spec.openapis.org/oas/') => 'openapi',
         $declaredId === PostmanSchema::PUBLISHED => 'postman',
-        $declaredId === ArazzoSchema::PUBLISHED => 'arazzo',
+        $declaredId === ArazzoSchema::PUBLISHED,
+        in_array($declaredId, array_column(ArazzoMetaSchema::SCHEMAS, 'published'), true) => 'arazzo',
         // By PREFIX, because every version of our own schema owes the same pin and that pin already
         // covers them all: `SchemaShippingTest` walks the authoring directory rather than a list, so a
         // version added tomorrow is drift-guarded the day it lands. An exact id here would have been
@@ -78,7 +81,7 @@ it('leaves no schema in the tree outside a pin', function (): void {
         // each in spec/, php/core/resources/ and website/public/, and 2.0 is two files).
         ->and(count($buckets['openapi']))->toBeGreaterThanOrEqual(3)
         ->and(count($buckets['postman']))->toBeGreaterThanOrEqual(1)
-        ->and(count($buckets['arazzo']))->toBeGreaterThanOrEqual(1)
+        ->and(count($buckets['arazzo']))->toBeGreaterThanOrEqual(2)
         ->and(count($buckets['uir']))->toBeGreaterThanOrEqual(12)
         ->and(count($documents))->toBe(array_sum(array_map(count(...), $buckets)));
 });
@@ -95,6 +98,7 @@ it('calls a schema that owes a pin and has none unpinned', function (): void {
     expect(schemaPinOwed('https://spec.openapis.org/oas/3.2/schema/2025-09-17'))->toBe('openapi')
         ->and(schemaPinOwed(PostmanSchema::PUBLISHED))->toBe('postman')
         ->and(schemaPinOwed(ArazzoSchema::PUBLISHED))->toBe('arazzo')
+        ->and(schemaPinOwed(ArazzoMetaSchema::publishedId('1.0')))->toBe('arazzo')
         // A different REVISION of the same Arazzo minor is a different file and owes its own decision,
         // because the OAI dates each one and the digest pins exactly the dated bytes.
         ->and(schemaPinOwed('https://spec.openapis.org/arazzo/1.1/schema/2099-01-01'))->toBe('unpinned')
@@ -128,8 +132,11 @@ it('pins nothing that is not in the tree', function (): void {
     foreach (array_keys(OpenApiMetaSchema::SCHEMAS) as $format) {
         $pinned[] = OpenApiMetaSchema::path($format);
     }
+    foreach (array_keys(ArazzoMetaSchema::SCHEMAS) as $version) {
+        $pinned[] = ArazzoMetaSchema::path($version);
+    }
 
-    expect($pinned)->toHaveCount(4);
+    expect($pinned)->toHaveCount(6);
 
     foreach ($pinned as $path) {
         expect($documents)->toContain($path);
