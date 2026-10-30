@@ -13,6 +13,17 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.23.2
+
+### Features
+
+- **core**: inspecting a document reads the title and version its info states ([#679](https://github.com/docuccino/docuccino/pull/679))
+- **core**: name what every diff change is about, so changes group without taking their path apart ([#678](https://github.com/docuccino/docuccino/pull/678))
+
+### Bug fixes
+
+- bump vite from 8.2.1 to 8.3.5 in /website ([#662](https://github.com/docuccino/docuccino/pull/662))
+
 ## v0.23.1
 
 ### Features
