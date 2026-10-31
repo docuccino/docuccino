@@ -347,3 +347,20 @@ describe('every position a 3.0 document holds a schema or a reference at', funct
             ->and(array_map(static fn (Diagnostic $d): string => $d->code, $result->report->diagnostics))->each->toBe('upgrade.ref-siblings');
     })->with(['openapi-3.1', 'openapi-3.2']);
 });
+
+/*
+ * A hand-written 3.0 document in the shapes 3.0 authors write — nullable fields, a nullable reference and
+ * tagged union, boolean bounds, a described `$ref` — pinned at every OpenAPI export. The generator's own
+ * corpus is 3.2 throughout, so without this nothing byte-locked stands in the population a 3.0 reading
+ * acts on. The 3.0 golden is the source as 3.0 spells it, bar the two `$ref` siblings 3.0 itself ignores
+ * and an `exclusiveMaximum: false` that says nothing.
+ */
+it('emits a 3.0 document byte-identical to the committed golden at every OpenAPI version', function (string $format, string $golden): void {
+    $result = Formats::emit($format, UirDocument::fromArray(loadFixture('openapi30-source.json')), new EmitOptions);
+
+    assertGoldenAt(dirname(__DIR__).'/Fixtures/golden/'.$golden, $result->output);
+})->with([
+    ['openapi-3.2', 'openapi30-source.openapi32.json'],
+    ['openapi-3.1', 'openapi30-source.openapi31.json'],
+    ['openapi-3.0', 'openapi30-source.openapi30.json'],
+]);
