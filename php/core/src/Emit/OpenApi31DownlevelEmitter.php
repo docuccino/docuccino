@@ -284,7 +284,7 @@ final readonly class OpenApi31DownlevelEmitter implements ReportingEmitter
         // The 3.2 emitter's own array is pre-`ServerVariables` — the Postman emitter reads it too, and a
         // collection answers a defaultless variable its own way — so the OpenAPI answer is applied here,
         // where 3.0 inherits it by chaining off this method.
-        $oas32 = ServerVariables::complete($this->oas32->toOpenApiArray($document, $options), $diagnostics);
+        $oas32 = ServerVariables::complete($this->oas32->toOpenApiArray($document, $diagnostics, $options), $diagnostics);
 
         return $this->downlevel($oas32, $diagnostics);
     }

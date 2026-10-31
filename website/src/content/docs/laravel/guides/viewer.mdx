@@ -123,6 +123,9 @@ property of the formats, not of your list, so reordering the config cannot chang
 served. YAML targets are skipped (the endpoint serves `application/json`), and if a document writes
 nothing servable the viewer generates instead and logs why.
 
+A 3.0 file is served at the version the driver reads, with its schemas restated in that version's terms
+on the way out — see [Reading an OpenAPI 3.0 document](/laravel/reference/diagnostics/#reading-an-openapi-30-document).
+
 A full document works as an `artifact` source too: it's re-emitted through the OpenAPI emitter on the
 way out, so provenance and internal identities never reach the browser.
 

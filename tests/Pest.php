@@ -5469,7 +5469,7 @@ function escapeProbeBody(string $body): array
  * Whether the schema at `$pointer` in an emitted OpenAPI 3.0 document admits `$value`, read the way 3.0.4
  * reads it rather than as JSON Schema: `nullable: true` adds null to a `type` in the same object and has
  * no effect anywhere else, and an exclusive bound is a boolean qualifying `minimum`/`maximum`. A `$ref`
- * resolves inside the document, as it does for a 3.0 reader.
+ * resolves inside the document, as it does for a 3.0 reader, and anything beside it is ignored.
  */
 function openApi30Admits(string $emitted, string $pointer, mixed $value): bool
 {
@@ -5493,6 +5493,11 @@ function openApi30AsJsonSchema(mixed $node): mixed
     }
     if (! $node instanceof stdClass) {
         return $node;
+    }
+
+    // A `$ref` is a Reference Object in 3.0, whose siblings "SHALL be ignored".
+    if (is_string($node->{'$ref'} ?? null)) {
+        return (object) ['$ref' => $node->{'$ref'}];
     }
 
     $schema = new stdClass;
