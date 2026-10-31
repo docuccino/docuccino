@@ -27,6 +27,8 @@ use Docuccino\Core\SpecValidation\EmittedSpecCheck;
  */
 final readonly class OpenApi32Emitter implements ReportingEmitter
 {
+    private const string VERSION = '3.2.0';
+
     /**
      * The members outside a schema that hold one: a parameter's, a header's and a media type's `schema`,
      * and 3.2's `itemSchema`. `components.schemas` is the name map that holds them.
@@ -88,6 +90,9 @@ final readonly class OpenApi32Emitter implements ReportingEmitter
         // them. The viewer is the whole of that reach, which is what this comment used to overstate:
         // the diff commands hydrate a committed artifact too, and never emit one.
         unset($array['$schema'], $array['uir']);
+
+        // A document read at 3.0 or 3.1 is published as 3.2, so it says so.
+        $array['openapi'] = self::VERSION;
 
         /** @var array<string, mixed> $stripped */
         $stripped = $this->strip($array, $options);
