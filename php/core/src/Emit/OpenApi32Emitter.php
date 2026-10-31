@@ -82,11 +82,12 @@ final readonly class OpenApi32Emitter implements ReportingEmitter
      * off this one reads the same thing.
      *
      * @param  list<Diagnostic>  $diagnostics
+     * @param  bool  $for30  whether the array is headed for a 3.0 artifact ({@see OpenApi30Upgrade::upgrade()})
      * @return array<string, mixed>
      */
-    public function toOpenApiArray(UirDocument $document, array &$diagnostics, EmitOptions $options = new EmitOptions): array
+    public function toOpenApiArray(UirDocument $document, array &$diagnostics, EmitOptions $options = new EmitOptions, bool $for30 = false): array
     {
-        $array = OpenApi30Upgrade::upgrade($document->toArray(), $diagnostics);
+        $array = OpenApi30Upgrade::upgrade($document->toArray(), $diagnostics, $for30);
 
         // A compatibility strip, not dead code: UIR 2.0 writes neither member, but the adapter's
         // VIEWER hydrates a committed artifact and re-emits it, and one written before 2.0 carries

@@ -228,7 +228,7 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
      */
     public function toOpenApiArray(UirDocument $document, array &$diagnostics, EmitOptions $options = new EmitOptions): array
     {
-        return $this->downlevel($this->oas31->toOpenApiArray($document, $diagnostics, $options), $diagnostics);
+        return $this->downlevel($this->oas31->toOpenApiArray($document, $diagnostics, $options, for30: true), $diagnostics);
     }
 
     /**

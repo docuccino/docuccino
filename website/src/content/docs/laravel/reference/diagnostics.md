@@ -501,14 +501,15 @@ than carried across under the newer label:
 The first two are exact, so they raise nothing. A schema's `example` and a `format` of `binary` or
 `byte` are carried as written: both are still valid at 3.1 and 3.2, and both are what Docuccino writes
 itself. Exporting the document at 3.0 reads the restatement back, so `nullable` and the boolean bounds
-come out as the 3.0 source spelled them.
+come out as the 3.0 source spelled them and raise nothing; only a dropped `$ref` sibling is reported
+there, because it is the one thing that changes.
 
 Like the `downlevel.*` codes, these are raised once per emitted format.
 
 | Code | Severity | What it means | What to do |
 |---|---|---|---|
 | `upgrade.ref-siblings` | info | Members beside a `$ref` were dropped — a schema's siblings, or a reference's own `summary` or `description`. OpenAPI 3.0 ignores them, while 3.1 and 3.2 apply them, so carrying them across would publish a constraint or wording the 3.0 document never stated | Nothing, if the 3.0 document says what you meant. If the siblings were meant to apply, put the `$ref` in an `allOf` beside them in the source, which every version reads alike |
-| `upgrade.nullable-without-type` | info | A `nullable: true` with no `type` beside it was published as admitting null, through an `anyOf` with a `{type: "null"}` branch. OpenAPI 3.0's text gives such a `nullable` no effect, while 3.0 code generators read it as nullable — it is how 3.0 spells a nullable `$ref`, wrapped in an `allOf` — so the wider reading is the one that stays true for both | Nothing, if the value can be null. If it can't, take `nullable` out of the source |
+| `upgrade.nullable-without-type` | info | A `nullable: true` with no `type` beside it was published at 3.1 or 3.2 as admitting null, through an `anyOf` with a `{type: "null"}` branch. OpenAPI 3.0's text gives such a `nullable` no effect, while 3.0 code generators read it as nullable — it is how 3.0 spells a nullable `$ref`, wrapped in an `allOf` — so the wider reading is the one that stays true for both. A 3.0 export keeps the source's spelling, which says both, and raises nothing | Nothing, if the value can be null. If it can't, take `nullable` out of the source |
 
 ## Servers
 

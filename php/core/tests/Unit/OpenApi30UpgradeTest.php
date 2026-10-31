@@ -175,6 +175,51 @@ it('round-trips a 3.0 schema through every newer export and back', function (arr
 ]);
 
 /*
+ * A diagnostic earns its place where the artifact differs from what the source said. Exported at 3.0, a
+ * 3.0 construct the restatement brings back as written changed nothing a reader can see, so neither the
+ * restatement nor the downlevel reading it back reports anything — including the no-type `nullable`,
+ * whose 3.0 spelling already says both of the readings a newer version has to choose between.
+ */
+it('raises nothing exporting a 3.0 construct at 3.0 that comes back as written', function (array $schema): void {
+    $result = Formats::emit('openapi-3.0', UirDocument::fromArray(upgradeSource($schema)), new EmitOptions);
+
+    expect(json_decode($result->output, true, flags: JSON_THROW_ON_ERROR)['components']['schemas']['S'])->toEqual($schema)
+        ->and(array_map(static fn (Diagnostic $d): string => $d->code.': '.$d->message, $result->report->diagnostics))->toBe([]);
+})->with([
+    'a nullable type' => [['type' => 'string', 'nullable' => true]],
+    'a nullable type beside a value list without null' => [['type' => 'string', 'nullable' => true, 'enum' => ['a']]],
+    'an exclusive minimum' => [['type' => 'integer', 'minimum' => 0, 'exclusiveMinimum' => true]],
+    'a nullable reference' => [['allOf' => [['$ref' => '#/components/schemas/Other']], 'nullable' => true, 'description' => 'The other one.']],
+    'a nullable tagged union' => [['oneOf' => [['$ref' => '#/components/schemas/Other']], 'discriminator' => ['propertyName' => 'a'], 'nullable' => true]],
+    'a nullable value list with no type' => [['enum' => ['a', 'z'], 'nullable' => true]],
+    'a nullable composition with no type' => [['allOf' => [['$ref' => '#/components/schemas/Other'], ['required' => ['b']]], 'nullable' => true]],
+    'a nullable with nothing beside it' => [['nullable' => true, 'description' => 'Anything.']],
+    'nested' => [['type' => 'object', 'properties' => ['n' => ['type' => 'array', 'items' => ['allOf' => [['$ref' => '#/components/schemas/Other']], 'nullable' => true]]]]],
+]);
+
+it('still reports a $ref sibling it drops from a 3.0 export, since that one changes', function (): void {
+    $result = Formats::emit('openapi-3.0', UirDocument::fromArray(upgradeSource(['$ref' => '#/components/schemas/Other', 'description' => 'Ignored.'])), new EmitOptions);
+
+    expect(json_decode($result->output, true, flags: JSON_THROW_ON_ERROR)['components']['schemas']['S'])->toBe(['$ref' => '#/components/schemas/Other'])
+        ->and(array_map(static fn (Diagnostic $d): string => $d->code, $result->report->diagnostics))->toBe(['upgrade.ref-siblings']);
+});
+
+/*
+ * A collection is built from the 3.2 array, so what it reports about reading a 3.0 document is exactly
+ * what the 3.2 export reports: nothing more, and nothing less.
+ */
+it('reports from a Postman collection what the 3.2 export it is built from reports, and no more', function (): void {
+    $document = UirDocument::fromArray(loadFixture('openapi30-source.json'));
+    $reading = static fn (string $format): array => array_values(array_map(
+        static fn (Diagnostic $d): string => $d->code.': '.$d->message,
+        array_filter(Formats::emit($format, $document, new EmitOptions)->report->diagnostics, static fn (Diagnostic $d): bool => str_starts_with($d->code, 'upgrade.')),
+    ));
+
+    expect($reading('postman'))->toBe($reading('openapi-3.2'))
+        ->and($reading('openapi-3.2'))->toHaveCount(4);
+});
+
+/*
  * A document stating 3.1 or 3.2 is already in the meaning it is exported in. `nullable` there is an
  * unknown keyword, which is the author's to have written and no one's to reinterpret.
  */

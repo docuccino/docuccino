@@ -15,15 +15,15 @@ use Docuccino\Core\Support\JsonPointer;
  * A document read at OpenAPI 3.0, restated in the meaning 3.1 and 3.2 give their own spellings, so an
  * export labelled with a newer version says what the 3.0 source said. Every emitter chains off the 3.2
  * one, which runs this first, so the 3.0 downlevel reads the same restatement back and lands where the
- * source started.
+ * source started — silently, since a construct that comes back as written changed nothing a reader sees.
  *
  * The 3.0.4 text is the reading: 3.0.x are editorial revisions of one spec. Where its reading and the
  * one 3.0 code generators act on disagree — a `nullable` with no `type` beside it — the wider of the two
- * is published, and said.
+ * is published, and said; a 3.0 artifact keeps the source's own spelling, which carries both.
  *
  * @internal
  */
-final class OpenApi30Upgrade
+final readonly class OpenApi30Upgrade
 {
     private const string DOCUMENT = 'document';
 
@@ -132,6 +132,9 @@ final class OpenApi30Upgrade
     /** What 3.1 lets a Reference Object say beside its `$ref`, overriding the component's own wording. */
     private const array REFERENCE_PROSE = ['summary', 'description'];
 
+    /** @param  bool  $for30  whether the restatement is headed for a 3.0 artifact, which spells a no-type `nullable` itself */
+    private function __construct(private bool $for30) {}
+
     /** Whether a document stating this `openapi` version is read as 3.0. */
     public static function reads30(string $openapi): bool
     {
@@ -139,13 +142,15 @@ final class OpenApi30Upgrade
     }
 
     /**
-     * $document restated in 3.1's meaning where it states a 3.0 version, and as it is otherwise.
+     * $document restated in 3.1's meaning where it states a 3.0 version, and as it is otherwise. `$for30`
+     * says the restatement will be read back into a 3.0 artifact, where a no-type `nullable` keeps its own
+     * spelling: the 3.0 document says exactly what the source did, so there is no reading to choose.
      *
      * @param  array<string, mixed>  $document
      * @param  list<Diagnostic>  $diagnostics
      * @return array<string, mixed>
      */
-    public static function upgrade(array $document, array &$diagnostics): array
+    public static function upgrade(array $document, array &$diagnostics, bool $for30 = false): array
     {
         $openapi = $document['openapi'] ?? null;
 
@@ -153,7 +158,7 @@ final class OpenApi30Upgrade
             return $document;
         }
 
-        return self::walkObject(self::DOCUMENT, $document, '#', $diagnostics);
+        return (new self($for30))->walkObject(self::DOCUMENT, $document, '#', $diagnostics);
     }
 
     /**
@@ -161,18 +166,18 @@ final class OpenApi30Upgrade
      * @param  list<Diagnostic>  $diagnostics
      * @return array<string, mixed>
      */
-    private static function walkObject(string $kind, array $node, string $pointer, array &$diagnostics): array
+    private function walkObject(string $kind, array $node, string $pointer, array &$diagnostics): array
     {
         if ($kind === self::SCHEMA) {
-            return self::schema($node, $pointer, $diagnostics);
+            return $this->schema($node, $pointer, $diagnostics);
         }
 
         if (in_array($kind, self::REFERABLE, true) && is_string($node['$ref'] ?? null)) {
-            return self::reference($node, $pointer, $diagnostics);
+            return $this->reference($node, $pointer, $diagnostics);
         }
 
         if ($kind === self::CALLBACK) {
-            return self::walkMap(self::PATH_ITEM, $node, $pointer, $diagnostics, extensible: true);
+            return $this->walkMap(self::PATH_ITEM, $node, $pointer, $diagnostics, extensible: true);
         }
 
         $children = self::CHILDREN[$kind] ?? [];
@@ -191,10 +196,10 @@ final class OpenApi30Upgrade
             $child = JsonPointer::child($pointer, $member);
 
             $node[$member] = match ($shape) {
-                self::ONE => self::walkObject($childKind, Arr::stringKeyed($value), $child, $diagnostics),
-                self::LIST => self::walkList($childKind, $value, $child, $diagnostics),
-                self::EXTENSIBLE_MAP => self::walkMap($childKind, $value, $child, $diagnostics, extensible: true),
-                default => self::walkMap($childKind, $value, $child, $diagnostics),
+                self::ONE => $this->walkObject($childKind, Arr::stringKeyed($value), $child, $diagnostics),
+                self::LIST => $this->walkList($childKind, $value, $child, $diagnostics),
+                self::EXTENSIBLE_MAP => $this->walkMap($childKind, $value, $child, $diagnostics, extensible: true),
+                default => $this->walkMap($childKind, $value, $child, $diagnostics),
             };
         }
 
@@ -206,13 +211,13 @@ final class OpenApi30Upgrade
      * @param  list<Diagnostic>  $diagnostics
      * @return list<mixed>
      */
-    private static function walkList(string $kind, array $list, string $pointer, array &$diagnostics): array
+    private function walkList(string $kind, array $list, string $pointer, array &$diagnostics): array
     {
         $out = [];
 
         foreach (array_values($list) as $index => $item) {
             $out[] = is_array($item)
-                ? self::walkObject($kind, Arr::stringKeyed($item), JsonPointer::child($pointer, (string) $index), $diagnostics)
+                ? $this->walkObject($kind, Arr::stringKeyed($item), JsonPointer::child($pointer, (string) $index), $diagnostics)
                 : $item;
         }
 
@@ -227,7 +232,7 @@ final class OpenApi30Upgrade
      * @param  list<Diagnostic>  $diagnostics
      * @return array<string, mixed>
      */
-    private static function walkMap(string $kind, array $map, string $pointer, array &$diagnostics, bool $extensible = false): array
+    private function walkMap(string $kind, array $map, string $pointer, array &$diagnostics, bool $extensible = false): array
     {
         $out = [];
 
@@ -236,7 +241,7 @@ final class OpenApi30Upgrade
 
             $out[$name] = ($extensible && str_starts_with($name, 'x-')) || ! is_array($member)
                 ? $member
-                : self::walkObject($kind, Arr::stringKeyed($member), JsonPointer::child($pointer, $name), $diagnostics);
+                : $this->walkObject($kind, Arr::stringKeyed($member), JsonPointer::child($pointer, $name), $diagnostics);
         }
 
         return $out;
@@ -251,7 +256,7 @@ final class OpenApi30Upgrade
      * @param  list<Diagnostic>  $diagnostics
      * @return array<string, mixed>
      */
-    private static function reference(array $node, string $pointer, array &$diagnostics): array
+    private function reference(array $node, string $pointer, array &$diagnostics): array
     {
         $dropped = array_values(array_intersect(array_keys($node), self::REFERENCE_PROSE));
 
@@ -279,10 +284,10 @@ final class OpenApi30Upgrade
      * @param  list<Diagnostic>  $diagnostics
      * @return array<string, mixed>
      */
-    private static function schema(array $schema, string $pointer, array &$diagnostics): array
+    private function schema(array $schema, string $pointer, array &$diagnostics): array
     {
         if (is_string($schema['$ref'] ?? null)) {
-            return self::schemaReference($schema, $pointer, $diagnostics);
+            return $this->schemaReference($schema, $pointer, $diagnostics);
         }
 
         foreach ($schema as $keyword => $value) {
@@ -295,14 +300,14 @@ final class OpenApi30Upgrade
             $child = JsonPointer::child($pointer, $keyword);
 
             $schema[$keyword] = match (SchemaKeywords::positionOf($keyword)) {
-                SchemaKeywords::POSITION_SCHEMA => self::schema(Arr::stringKeyed($value), $child, $diagnostics),
-                SchemaKeywords::POSITION_SCHEMA_MAP => self::walkMap(self::SCHEMA, $value, $child, $diagnostics),
-                SchemaKeywords::POSITION_SCHEMA_LIST => self::walkList(self::SCHEMA, $value, $child, $diagnostics),
+                SchemaKeywords::POSITION_SCHEMA => $this->schema(Arr::stringKeyed($value), $child, $diagnostics),
+                SchemaKeywords::POSITION_SCHEMA_MAP => $this->walkMap(self::SCHEMA, $value, $child, $diagnostics),
+                SchemaKeywords::POSITION_SCHEMA_LIST => $this->walkList(self::SCHEMA, $value, $child, $diagnostics),
                 default => $value,
             };
         }
 
-        return self::nullable(self::exclusiveBounds($schema), $pointer, $diagnostics);
+        return $this->nullable($this->exclusiveBounds($schema), $pointer, $diagnostics);
     }
 
     /**
@@ -315,7 +320,7 @@ final class OpenApi30Upgrade
      * @param  list<Diagnostic>  $diagnostics
      * @return array<string, mixed>
      */
-    private static function schemaReference(array $schema, string $pointer, array &$diagnostics): array
+    private function schemaReference(array $schema, string $pointer, array &$diagnostics): array
     {
         $dropped = array_values(array_filter(
             array_keys($schema),
@@ -346,7 +351,7 @@ final class OpenApi30Upgrade
      * @param  array<string, mixed>  $schema
      * @return array<string, mixed>
      */
-    private static function exclusiveBounds(array $schema): array
+    private function exclusiveBounds(array $schema): array
     {
         foreach (['exclusiveMinimum' => 'minimum', 'exclusiveMaximum' => 'maximum'] as $exclusive => $bound) {
             $qualifies = $schema[$exclusive] ?? null;
@@ -377,7 +382,7 @@ final class OpenApi30Upgrade
      * @param  list<Diagnostic>  $diagnostics
      * @return array<string, mixed>
      */
-    private static function nullable(array $schema, string $pointer, array &$diagnostics): array
+    private function nullable(array $schema, string $pointer, array &$diagnostics): array
     {
         $nullable = $schema['nullable'] ?? null;
 
@@ -392,7 +397,7 @@ final class OpenApi30Upgrade
         }
 
         if (! array_key_exists('type', $schema)) {
-            return self::untypedNullable($schema, $pointer, $diagnostics);
+            return $this->for30 ? [...$schema, 'nullable' => true] : $this->untypedNullable($schema, $pointer, $diagnostics);
         }
 
         $type = $schema['type'];
@@ -417,7 +422,7 @@ final class OpenApi30Upgrade
      * @param  list<Diagnostic>  $diagnostics
      * @return array<string, mixed>
      */
-    private static function untypedNullable(array $schema, string $pointer, array &$diagnostics): array
+    private function untypedNullable(array $schema, string $pointer, array &$diagnostics): array
     {
         $whole = [];
         $branch = [];
