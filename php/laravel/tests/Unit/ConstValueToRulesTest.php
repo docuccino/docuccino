@@ -10,6 +10,7 @@ use Docuccino\Laravel\Tests\Fixtures\Rules\LegacyStringRule;
 use Docuccino\Laravel\Tests\Fixtures\Rules\OpaqueCheck;
 use Docuccino\Laravel\Tests\Fixtures\Rules\TenantMember;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationRuleParser;
 use Workbench\App\Enums\WidgetStatus;
 
 /**
@@ -266,10 +267,10 @@ it('leaves out a rule it cannot read that can only refuse values, keeps the rest
     'a closure' => [ConstValue::instance('Closure', []), 'a closure'],
     'Password::min()' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\Password::min', [ConstValue::scalar(8)]), 'Password::min(…)'],
     'File::types()' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\File::types', [ConstValue::scalar('pdf')]), 'File::types(…)'],
-    'Rule::notIn()' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::notIn', [ConstValue::scalar('root')]), 'Rule::notIn(…)'],
+    'Rule::contains()' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::contains', [ConstValue::scalar('root')]), 'Rule::contains(…)'],
     'Rule::requiredIf()' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::requiredIf', [ConstValue::unknown('closure')]), 'Rule::requiredIf(…)'],
     'new Password()' => [ConstValue::instance('Illuminate\\Validation\\Rules\\Password', [ConstValue::scalar(8)]), 'new Illuminate\\Validation\\Rules\\Password'],
-    'new NotIn()' => [ConstValue::instance('Illuminate\\Validation\\Rules\\NotIn', [ConstValue::array([ConstValue::scalar('root')])]), 'new Illuminate\\Validation\\Rules\\NotIn'],
+    'new Contains()' => [ConstValue::instance('Illuminate\\Validation\\Rules\\Contains', [ConstValue::array([ConstValue::scalar('root')])]), 'new Illuminate\\Validation\\Rules\\Contains'],
 ]);
 
 it('gives up a field one of whose rules has content it cannot read, and names that rule', function (ConstValue $opaque, string $named): void {
@@ -450,9 +451,11 @@ it('folds a framework rule object written with new as the Rule factory that buil
     // own answer, by calling it.
     // A static that returns a rule string builds no object, and reads as its string (below).
     $samples = [
+        'array' => [[['a', 'b']], [ConstValue::array([ConstValue::scalar('a'), ConstValue::scalar('b')])]],
         'enum' => [[WidgetStatus::class], [ConstValue::scalar(WidgetStatus::class)]],
         'exists' => [['users'], [ConstValue::scalar('users')]],
         'in' => [[['a', 'b']], [ConstValue::array([ConstValue::scalar('a'), ConstValue::scalar('b')])]],
+        'notIn' => [[['a', 'b']], [ConstValue::array([ConstValue::scalar('a'), ConstValue::scalar('b')])]],
         'unique' => [['users'], [ConstValue::scalar('users')]],
     ];
 
@@ -525,3 +528,56 @@ it('gives up a field using a Rule static the installed Laravel does not declare'
         ->and(RuleFactories::ruleString('Illuminate\\Validation\\Rule::optionalSlug', []))->toBeNull()
         ->and(RuleFactories::builtClass('optionalSlug'))->toBeNull();
 });
+
+it('reads Rule::notIn and new NotIn as the not_in rule Laravel casts them to', function (array $args, array $values): void {
+    // Laravel validates a NotIn object as the `not_in:` string it casts to, so each spelling excludes the
+    // values Laravel's own parser reads off that string.
+    $real = array_map(static fn (ConstValue $arg): mixed => $arg->isArray() ? array_map(static fn (ConstValue $item): mixed => $item->scalar, $arg->items) : $arg->scalar, $args);
+    [$name, $excluded] = ValidationRuleParser::parse((string) Rule::notIn(...$real));
+
+    foreach ([ConstValue::descriptor('Illuminate\\Validation\\Rule::notIn', $args), ConstValue::instance('Illuminate\\Validation\\Rules\\NotIn', $args)] as $written) {
+        $folder = new ConstValueToRules;
+        $rules = $folder->fold(ConstValue::array([ConstValue::scalar('string'), $written]));
+
+        expect(array_map(static fn ($r): array => [$r->name, $r->parameters], $rules))->toBe([['string', []], ['not_in', $values]])
+            ->and([$name, $rules[1]->parameters])->toBe(['NotIn', $excluded])
+            ->and($folder->unread())->toBe([])
+            ->and($folder->widened())->toBeFalse();
+    }
+})->with([
+    'one array' => [[ConstValue::array([ConstValue::scalar('admin'), ConstValue::scalar('root')])], ['admin', 'root']],
+    'separate arguments' => [[ConstValue::scalar('admin'), ConstValue::scalar('root')], ['admin', 'root']],
+    'numbers and a bool' => [[ConstValue::array([ConstValue::scalar(0), ConstValue::scalar(true)])], ['0', '1']],
+]);
+
+it('publishes no exclusion where a value of Rule::notIn comes from a call, and says it widened', function (): void {
+    // `Rule::notIn(Status::cases())`: the values are only known at runtime. Leaving the exclusion off is
+    // wider than the endpoint and true, and the field is named for it.
+    $folder = new ConstValueToRules;
+    $rules = $folder->fold(ConstValue::array([
+        ConstValue::scalar('string'),
+        ConstValue::descriptor('Illuminate\\Validation\\Rule::notIn', [ConstValue::descriptor('App\\Enums\\Status::cases', [])]),
+    ]));
+
+    expect(array_map(static fn ($r): string => $r->name, $rules))->toBe(['string'])
+        ->and($folder->widened())->toBeTrue()
+        ->and($folder->unread())->toBe([]);
+});
+
+it('reads Rule::array and new ArrayRule as the array rule, keys or not', function (array $args, array $keys): void {
+    // `Rule::array(['a'])` is `array:a`: the value is an array, with no keys but those. A key nothing here
+    // can read only refuses keys, so the field is still an array and nothing is lost but that refusal.
+    foreach ([ConstValue::descriptor('Illuminate\\Validation\\Rule::array', $args), ConstValue::instance('Illuminate\\Validation\\Rules\\ArrayRule', $args)] as $written) {
+        $folder = new ConstValueToRules;
+        $rules = $folder->fold(ConstValue::array([ConstValue::scalar('required'), $written]));
+
+        expect(array_map(static fn ($r): array => [$r->name, $r->parameters], $rules))->toBe([['required', []], ['array', $keys]])
+            ->and($folder->unread())->toBe([])
+            ->and($folder->widened())->toBeFalse();
+    }
+})->with([
+    'no keys' => [[], []],
+    'keys in one array' => [[ConstValue::array([ConstValue::scalar('name'), ConstValue::scalar('email')])], ['name', 'email']],
+    'keys as separate arguments' => [[ConstValue::scalar('name'), ConstValue::scalar('email')], ['name', 'email']],
+    'keys from a call' => [[ConstValue::descriptor('App\\Support\\Keys::all', [])], []],
+]);

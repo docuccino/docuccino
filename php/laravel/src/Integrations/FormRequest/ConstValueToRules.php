@@ -51,12 +51,14 @@ final class ConstValueToRules
     private const FACTORY_OBJECTS = [
         'Illuminate\\Validation\\Rules\\Enum' => 'enum',
         'Illuminate\\Validation\\Rules\\In' => 'in',
+        'Illuminate\\Validation\\Rules\\NotIn' => 'notIn',
+        'Illuminate\\Validation\\Rules\\ArrayRule' => 'array',
         'Illuminate\\Validation\\Rules\\Exists' => 'exists',
         'Illuminate\\Validation\\Rules\\Unique' => 'unique',
     ];
 
     /** The `Rule::` factories {@see descriptor()} reads. */
-    private const READ_FACTORIES = ['enum', 'in', 'exists', 'unique', 'excludeif', 'excludeunless', 'exclude', 'excludewith', 'excludewithout'];
+    private const READ_FACTORIES = ['enum', 'in', 'notin', 'array', 'exists', 'unique', 'excludeif', 'excludeunless', 'exclude', 'excludewith', 'excludewithout'];
 
     private readonly DependencyFileSet $dependencyFiles;
 
@@ -266,11 +268,14 @@ final class ConstValueToRules
         // A choice descriptor whose values didn't fold is worth LESS than nothing: it would win the merge
         // and then contribute no keyword, so it stays unrecovered for the caller to diagnose.
         // `exists`/`unique` legitimately carry no values.
-        $choices = $method === 'in' ? $this->scalarValues($descriptor->args) : [];
+        $choices = $method === 'in' || $method === 'notin' ? $this->scalarValues($descriptor->args) : [];
 
         return match (true) {
             $method === 'enum' => $this->enum($descriptor),
             $method === 'in' => $choices === null || $choices === [] ? null : ValidationRule::of('in', $choices),
+            $method === 'notin' => $choices === null || $choices === [] ? null : ValidationRule::of('not_in', $choices),
+            // The keys `array:a,b` names only refuse other keys, so an unread one leaves plain `array`.
+            $method === 'array' => ValidationRule::of('array', self::values($descriptor->args) ?? []),
             $method === 'exists' => ValidationRule::of('exists'),
             $method === 'unique' => ValidationRule::of('unique'),
             $method === 'excludeif' => self::exclude('exclude_if', $descriptor->args[0] ?? null),
@@ -402,14 +407,28 @@ final class ConstValueToRules
      */
     private function scalarValues(array $args): ?array
     {
+        $values = self::values($args);
+        if ($values === null) {
+            $this->widened = true;
+        }
+
+        return $values;
+    }
+
+    /**
+     * The values an argument list states, or null unless every entry named one ({@see scalarValues()}).
+     *
+     * @param  list<ConstValue>  $args
+     * @return list<string>|null
+     */
+    private static function values(array $args): ?array
+    {
         // `Rule::in(['a', 'b'])` folds arg 0 to an array; `Rule::in('a', 'b')` to a list of args.
         $source = count($args) === 1 && $args[0]->isArray() ? $args[0]->items : $args;
 
         $out = [];
         foreach ($source as $arg) {
             if (! $arg->isScalar() || $arg->scalar === null) {
-                $this->widened = true;
-
                 return null;
             }
 

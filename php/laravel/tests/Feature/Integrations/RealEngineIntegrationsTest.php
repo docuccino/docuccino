@@ -868,6 +868,35 @@ it('widens a rule whose values come from a call, in the shape an app reaches for
         ->and($trace['unrecoverable'])->toBe([]);
 })->group('fixture');
 
+it('reads every spelling of an excluded value set as the not_in rule Laravel validates', function (): void {
+    // `Rule::notIn(...)` builds a NotIn, which Laravel validates as the `not_in:` string it casts to, so all
+    // four spellings exclude the same values. Values known only at runtime leave the exclusion off, which is
+    // wider than the endpoint and true, and say so. `Rule::array([...])` is `array:...` the same way.
+    $trace = FixtureRunner::traceRules(
+        'app/Http/Requests/ExcludedValuesRequest.php',
+        'App\\Http\\Requests\\ExcludedValuesRequest',
+        'rules',
+    );
+
+    $rules = static fn (string $field): array => array_map(
+        static fn (array $rule): array => [$rule['name'], $rule['parameters']],
+        $trace['fields'][$field],
+    );
+
+    foreach (['handle', 'username', 'alias', 'nickname'] as $field) {
+        expect($rules($field))->toBe([['required', []], ['string', []], ['not_in', ['admin', 'root']]], $field);
+    }
+
+    expect($rules('status'))->toBe([['required', []], ['string', []]])
+        ->and($rules('team'))->toBe([['required', []], ['string', []]])
+        ->and($rules('settings'))->toBe([['required', []], ['array', ['theme']]])
+        ->and($rules('limits'))->toBe([['required', []], ['array', ['daily']]])
+        ->and($trace['widened'])->toBe(['status', 'team'])
+        ->and($trace['unread'])->toBe([])
+        ->and($trace['opaque'])->toBe([])
+        ->and($trace['unrecoverable'])->toBe([]);
+})->group('fixture');
+
 it('leaves out a rule it cannot read that only refuses values, and gives up a field whose rule could loosen the rest', function (): void {
     // A custom rule object and a closure are run as checks, so without them `title` and `slug` are wider
     // than the endpoint and still true. `Rule::when(…, ['nullable'])` and a rule chosen by a ternary can be
