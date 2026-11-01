@@ -214,7 +214,7 @@
                 "type": "null"
               }
             ],
-            "example": "null"
+            "example": null
           },
           "replies": {
             "description": "How many replies the customer has sent, where they have.",
@@ -337,7 +337,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "4aa66b29cfca08aafeac0e8e8058333a216b5685892a32d7db508bb034efffea"
+      "contentHash": "7a8d5ed0814048e2fb5e251079e6846ffaadfc79112eb41e453e6a87037e0eab"
     },
     "generator": {
       "name": "docuccino/laravel",

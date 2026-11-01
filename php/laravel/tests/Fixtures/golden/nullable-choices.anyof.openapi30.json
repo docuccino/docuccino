@@ -102,13 +102,13 @@
                 "$ref": "#/components/schemas/TicketQueue"
               }
             ],
-            "example": "null",
+            "example": null,
             "nullable": true
           },
           "replies": {
             "description": "How many replies the customer has sent, where they have.",
             "type": "integer",
-            "example": "3",
+            "example": 3,
             "nullable": true
           },
           "state": {

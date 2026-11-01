@@ -102,7 +102,7 @@
                 "$ref": "#/components/schemas/TicketQueue"
               }
             ],
-            "example": "null",
+            "example": null,
             "nullable": true
           },
           "replies": {
