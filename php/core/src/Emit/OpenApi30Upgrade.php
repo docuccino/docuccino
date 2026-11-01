@@ -138,8 +138,11 @@ final class OpenApi30Upgrade
     /** @var array<string, bool> each schema {@see untypedNullable()} wrapped, by pointer: true where its branch is a lone `allOf` member */
     private array $wrapped = [];
 
-    /** @param  bool  $for30  whether the restatement is headed for a 3.0 artifact, which spells a no-type `nullable` itself */
-    private function __construct(private readonly bool $for30) {}
+    /**
+     * @param  bool  $for30  whether the restatement is headed for a 3.0 artifact, which spells a no-type `nullable` itself
+     * @param  bool  $respell  whether what 3.0 says is spelled as 3.1 does, or only what 3.0 ignores dropped
+     */
+    private function __construct(private readonly bool $for30, private readonly bool $respell = true) {}
 
     /** Whether a document stating this `openapi` version is read as 3.0. */
     public static function reads30(string $openapi): bool
@@ -165,6 +168,27 @@ final class OpenApi30Upgrade
         }
 
         return (new self($for30))->walkObject(self::DOCUMENT, $document, '#', $diagnostics);
+    }
+
+    /**
+     * $document with what 3.0 ignores dropped where it is read as 3.0 — a `$ref`'s siblings, a Reference
+     * Object's prose, and an exclusive bound or a `nullable` saying nothing — and every other member as
+     * written: what its 3.0 export says, without the round trip through 3.1 that spells it.
+     *
+     * @param  array<string, mixed>  $document
+     * @return array<string, mixed>
+     */
+    public static function stripped(array $document): array
+    {
+        $openapi = $document['openapi'] ?? null;
+
+        if (! is_string($openapi) || ! self::reads30($openapi)) {
+            return $document;
+        }
+
+        $diagnostics = [];
+
+        return (new self(true, respell: false))->walkObject(self::DOCUMENT, $document, '#', $diagnostics);
     }
 
     /**
@@ -442,8 +466,12 @@ final class OpenApi30Upgrade
             $value = $schema[$bound] ?? null;
 
             if ($qualifies && (is_int($value) || is_float($value))) {
-                $schema[$exclusive] = $value;
-                unset($schema[$bound]);
+                if ($this->respell) {
+                    $schema[$exclusive] = $value;
+                    unset($schema[$bound]);
+                } else {
+                    $schema[$exclusive] = true;
+                }
             }
         }
 
@@ -469,10 +497,12 @@ final class OpenApi30Upgrade
             unset($schema['nullable']);
         }
 
+        if ($nullable === true && (! $this->respell || ($this->for30 && ! array_key_exists('type', $schema)))) {
+            return self::measured([...$schema, 'nullable' => true], $heights, $height);
+        }
+
         if ($nullable === true && ! array_key_exists('type', $schema)) {
-            return $this->for30
-                ? self::measured([...$schema, 'nullable' => true], $heights, $height)
-                : $this->untypedNullable($schema, $heights, $pointer, $diagnostics, $height);
+            return $this->untypedNullable($schema, $heights, $pointer, $diagnostics, $height);
         }
 
         $type = $schema['type'] ?? null;
