@@ -204,10 +204,7 @@ final class PhpStanTypeEngine implements TypeEngine
         $returns = $this->harvestReturns($body, $action->file);
 
         $throwAnalyzer = $this->makeThrowAnalyzer();
-        $declaration = $body->declaration;
-        $throws = $declaration instanceof Node\Expr\ArrowFunction
-            ? $throwAnalyzer->analyzeArrow($declaration, $body->returns[0]['scope'], $this->selfLabel($action))
-            : $throwAnalyzer->analyze($declaration, $this->selfLabel($action));
+        $throws = $throwAnalyzer->analyze($body, $this->selfLabel($action));
 
         $truncation = $this->refinerTruncation($this->label($action));
         $diagnostics = $throwAnalyzer->diagnostics();
