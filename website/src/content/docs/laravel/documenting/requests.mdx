@@ -560,7 +560,11 @@ Within a rules array, Docuccino reads pipe strings (`'required|integer'`), array
 (`new Enum(Currency::class)`, `new In([...])`, `new NotIn([...])`, chained calls included), the `Rule::`
 methods that return a rule string, such as `Rule::nullable()` and `Rule::sometimes()`, which document
 exactly as `'nullable'` and `'sometimes'` do, and your own rule objects — `new SortCode` documents from
-the rule class's [`#[RuleSchema]`](#documenting-a-custom-rule). A field whose rules are a closure, a rule object with no
+the rule class's [`#[RuleSchema]`](#documenting-a-custom-rule). An enum case in a value list documents
+the value Laravel compares it as: `Rule::in([Status::Draft])` accepts `draft`, the backing value, and a
+pure enum's case is its name. A list of one enum's cases is documented as a choice from that enum.
+
+A field whose rules are a closure, a rule object with no
 `#[RuleSchema]`, or a values-at-runtime factory like `Rule::in(MediaCollections::names())` can't be read
 statically. It raises a `validation.rule-unrecoverable` info diagnostic naming the field, so nothing
 disappears silently: the field is omitted from the schema, or — when something else documents it, such
@@ -1174,7 +1178,7 @@ a `format` claim about it would be a guess.
 | Rule | Documented as |
 | --- | --- |
 | `in:draft,sent,paid` / `Rule::in(...)` / `Rule::enum(InvoiceStatus::class)` / `new Enum(InvoiceStatus::class)` | An `enum` of the allowed values — `integer`-typed when every value is a whole number, else `string`. `Rule::enum()` reads the enum's real cases and names the class in the description; a `->only([...])` / `->except([...])` chain narrows the documented values to match. |
-| `not_in:a,b` / `Rule::notIn(...)` / `new NotIn([...])` | `not: { enum: ["a", "b"] }` |
+| `not_in:a,b` / `Rule::notIn(...)` / `new NotIn([...])` | `not: { enum: ["a", "b"] }`. An enum case in the list excludes its backing value. |
 | `regex:/^INV-\d+$/` | `pattern`, with the PHP delimiters stripped so it's a bare ECMA-262 regex, read the way [route constraints](#route-constraints) are: under `/u`, `\d` and `\w` match every script, so they are published as the ASCII class or any non-ASCII character. PHP's `$` also matches before a final newline unless the regex carries `D`, so `/^INV-\d+$/` is published as `^INV-\d+\n?$` and `/^INV-\d+$/D` as `^INV-\d+$`. `\s` and a Unicode property such as `\pL` under `/u` are widened the same way, so `/^[\pL\s\-]+$/u` is published as `^(?:[A-Za-z\t-\r \-]\|[^\x00-\x7F])+\n?$`. Under `/i` every letter is spelled in both cases — `/^[a-z]+$/iD` is published as `^[a-zA-Z]+$` — and under `/iu` with the two non-ASCII characters PHP folds onto one, the Kelvin sign (U+212A) and the long s (U+017F). A modifier that changes what matches in a way no `pattern` spells — `m`, `s`, `x` — publishes no pattern, and a `validation.regex-modifier` notice says so. So does a body no pattern states truly — `.`, a lone `\s` or a count over a negated class, a Unicode-wide escape or a property, a widened escape or property beside a second unbounded quantifier or inside a repeated group, such as `\pL+\s*\pL*` or `(?:\pL+-?)*`, whose widened atoms would overlap on every non-ASCII character and send a validator backtracking far longer than PHP, inline flags, lookarounds, `\B` without `/u`, anything after a `$` that could take that final newline — with a `validation.regex-unportable` notice. |
 | `alpha:ascii`, `alpha_num:ascii`, `alpha_dash:ascii` | The ASCII class as an anchored `pattern` — `^[a-zA-Z0-9_-]+$` for `alpha_dash:ascii`. |
 | `alpha`, `alpha_num`, `alpha_dash` | Laravel accepts letters, marks and numbers from any script here, so the `pattern` is the ASCII class plus any non-ASCII character — `^(?:[a-zA-Z0-9_-]\|[^\x00-\x7F])+$`. That's exact for ASCII and wider beyond it, because the exact `\p{L}` form reads differently in validators that compile without the `u` flag. |

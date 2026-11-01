@@ -36,6 +36,21 @@ final class EnumReflection
     }
 
     /**
+     * The value {@see values()} lists for the one case named `$case`, or null where the enum has no such
+     * case or is not reflectable.
+     */
+    public static function valueOf(string $fqcn, string $case): string|int|null
+    {
+        foreach (self::cases($fqcn) as $reflected) {
+            if ($reflected->getName() === $case) {
+                return self::caseValue($reflected);
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * The case names, in declaration order — the {@see EnumT} `cases` contract, distinct from the
      * backing {@see values()}.
      *

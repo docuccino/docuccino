@@ -687,7 +687,8 @@ and stays ahead of both.)
 Chained modifiers are recovered too:
 
 - `->default('sent')` sets the parameter's `schema.default`. The value must be a constant — a computed
-  default can't be read statically, and the rest of the entry is still documented without it. A
+  default can't be read statically, and the rest of the entry is still documented without it. An enum
+  case is the value the query binds it as, so `->default(Status::Sent)` documents `sent`. A
   `default` on the [filter class](#custom-filter-classes) covers every other call site, and a chained
   one here wins for this entry, exactly as a comment does over the class's `description`.
 - `->nullable()` appends *"Accepts `null` to filter for absent values."* to the description. It does

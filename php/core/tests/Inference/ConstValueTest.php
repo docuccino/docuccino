@@ -135,3 +135,18 @@ it('renders and round-trips a spread sitting in a descriptor argument list', fun
     expect($value->render())->toBe("Rule::in('any', ...<unplaceable factory arg>)")
         ->and(ConstValue::fromArray($value->toArray())->toArray())->toBe($value->toArray());
 });
+
+it('keeps an enum case whole, with its enum, rather than as its name or its value', function (): void {
+    // Which value a case stands for is the reader's framework's to say, so the fold keeps both halves.
+    $value = ConstValue::enumCase('App\\Enums\\Status', 'Draft');
+
+    expect($value->isCase())->toBeTrue()
+        ->and($value->isScalar())->toBeFalse()
+        ->and($value->class)->toBe('App\\Enums\\Status')
+        ->and($value->caseName())->toBe('Draft')
+        ->and($value->render())->toBe('Status::Draft')
+        ->and($value->toArray())->toBe(['kind' => 'case', 'class' => 'App\\Enums\\Status', 'case' => 'Draft'])
+        ->and(ConstValue::fromArray($value->toArray())->toArray())->toBe($value->toArray())
+        ->and(ConstValue::scalar('Draft')->caseName())->toBeNull()
+        ->and($value->withChainedCall('only', [])->toArray())->toBe($value->toArray());
+});

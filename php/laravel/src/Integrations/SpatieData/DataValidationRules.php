@@ -405,6 +405,7 @@ final class DataValidationRules
             }
 
             $tokens = $this->reflector->validationTokens($fqcn, $property->name);
+            $this->dependencyFiles->add(...$this->reflector->validationEnumFiles($fqcn, $property->name));
             [$objectRules, $opaque] = $this->ruleObjectRules($fqcn, $property->name, $key);
             $stated = $opaque ? [] : [
                 ...array_map(RuleParsing::token(...), $tokens),

@@ -10,6 +10,7 @@ use Docuccino\Core\Inference\ArgumentSlots;
 use Docuccino\Core\Inference\ConstValue;
 use Docuccino\Core\Support\Fqcn;
 use Docuccino\Laravel\Integrations\Support\DependencyFileSet;
+use Docuccino\Laravel\Integrations\Support\EnumCaseValue;
 use Docuccino\Laravel\Integrations\Support\RuleParsing;
 use Docuccino\Laravel\Integrations\Validation\CustomRuleReader;
 use Docuccino\Laravel\Integrations\Validation\RuleFactories;
@@ -272,10 +273,10 @@ final class ConstValueToRules
 
         return match (true) {
             $method === 'enum' => $this->enum($descriptor),
-            $method === 'in' => $choices === null || $choices === [] ? null : ValidationRule::of('in', $choices),
+            $method === 'in' => $choices === null || $choices === [] ? null : ValidationRule::of('in', $choices, self::caseEnum($descriptor->args)),
             $method === 'notin' => $choices === null || $choices === [] ? null : ValidationRule::of('not_in', $choices),
             // The keys `array:a,b` names only refuse other keys, so an unread one leaves plain `array`.
-            $method === 'array' => ValidationRule::of('array', self::values($descriptor->args) ?? []),
+            $method === 'array' => ValidationRule::of('array', $this->values($descriptor->args) ?? []),
             $method === 'exists' => ValidationRule::of('exists'),
             $method === 'unique' => ValidationRule::of('unique'),
             $method === 'excludeif' => self::exclude('exclude_if', $descriptor->args[0] ?? null),
@@ -350,11 +351,11 @@ final class ConstValueToRules
     }
 
     /**
-     * Applies a `Rule::enum(…)->only([…])/->except([…])` chain to the recovered backing values. The chained
-     * args fold to case *names* (that's what the engine folds an enum-case constant to), so pair each name
-     * with its backing value — {@see EnumReflection::names()} runs parallel to
-     * {@see EnumReflection::values()} — and keep/drop by name, preserving order. An unknown chain method is
-     * ignored and the full case list stands.
+     * Applies a `Rule::enum(…)->only([…])/->except([…])` chain to the recovered backing values. Laravel
+     * keeps or drops a case by comparing it strictly with the cases listed, so a selector selects only a
+     * case of this enum, matched by name — {@see EnumReflection::names()} runs parallel to
+     * {@see EnumReflection::values()} — and order is preserved. An unknown chain method is ignored and the
+     * full case list stands.
      *
      * @param  list<string>  $values
      * @param  list<array{method: string, args: list<ConstValue>}>  $chain
@@ -371,8 +372,9 @@ final class ConstValueToRules
         foreach ($chain as $call) {
             // Selectors that would not read are the one place narrowing must NOT happen: a half-read
             // `only([...])` would drop cases the endpoint accepts. The full list stands instead.
-            $selected = $this->scalarValues($call['args']);
-            if ($selected === null || $selected === []) {
+            // An empty list narrows nothing in Laravel either.
+            $selected = self::entries($call['args']) === [] ? null : $this->selection($call['args'], $fqcn);
+            if ($selected === null) {
                 continue;
             }
 
@@ -407,7 +409,7 @@ final class ConstValueToRules
      */
     private function scalarValues(array $args): ?array
     {
-        $values = self::values($args);
+        $values = $this->values($args);
         if ($values === null) {
             $this->widened = true;
         }
@@ -416,25 +418,85 @@ final class ConstValueToRules
     }
 
     /**
-     * The values an argument list states, or null unless every entry named one ({@see scalarValues()}).
+     * The values an argument list states, or null unless every entry named one ({@see scalarValues()}). An
+     * enum case is the value Laravel casts it to ({@see EnumCaseValue}), so `Rule::in([Status::Draft])`
+     * states `draft` and never `Draft`.
      *
      * @param  list<ConstValue>  $args
      * @return list<string>|null
      */
-    private static function values(array $args): ?array
+    private function values(array $args): ?array
     {
-        // `Rule::in(['a', 'b'])` folds arg 0 to an array; `Rule::in('a', 'b')` to a list of args.
-        $source = count($args) === 1 && $args[0]->isArray() ? $args[0]->items : $args;
-
         $out = [];
-        foreach ($source as $arg) {
-            if (! $arg->isScalar() || $arg->scalar === null) {
+        foreach (self::entries($args) as $arg) {
+            $value = $arg->isCase() ? EnumCaseValue::of($arg) : ($arg->isScalar() ? $arg->scalar : null);
+            if ($value === null) {
                 return null;
             }
 
-            $out[] = is_bool($arg->scalar) ? ($arg->scalar ? '1' : '0') : (string) $arg->scalar;
+            $this->dependencyFiles->add(EnumCaseValue::file($arg));
+            $out[] = is_bool($value) ? ($value ? '1' : '0') : (string) $value;
         }
 
         return $out;
+    }
+
+    /**
+     * The case names of `$fqcn` an `->only()`/`->except()` argument list selects, or null when an entry
+     * would not read. A value that is not a case of this enum — a string, another enum's case — is never
+     * strictly equal to one, so it selects nothing.
+     *
+     * @param  list<ConstValue>  $args
+     * @return list<string>|null
+     */
+    private function selection(array $args, string $fqcn): ?array
+    {
+        $names = [];
+        foreach (self::entries($args) as $arg) {
+            $name = $arg->caseName();
+            if ($name === null && (! $arg->isScalar() || $arg->scalar === null)) {
+                $this->widened = true;
+
+                return null;
+            }
+
+            if ($name !== null && ltrim((string) $arg->class, '\\') === $fqcn) {
+                $names[] = $name;
+            }
+        }
+
+        return $names;
+    }
+
+    /**
+     * The enum every entry of a choice list is a case of, or null where any entry is something else. A rule
+     * listing one enum's cases is a choice from that enum, so it is named, described and referenced as one.
+     *
+     * @param  list<ConstValue>  $args
+     */
+    private static function caseEnum(array $args): ?string
+    {
+        $classes = [];
+        foreach (self::entries($args) as $arg) {
+            if (! $arg->isCase()) {
+                return null;
+            }
+
+            $classes[ltrim((string) $arg->class, '\\')] = true;
+        }
+
+        return count($classes) === 1 ? (string) array_key_first($classes) : null;
+    }
+
+    /**
+     * An argument list's entries: `Rule::in(['a', 'b'])` folds arg 0 to an array, `Rule::in('a', 'b')` to a
+     * list of args.
+     *
+     * @param  list<ConstValue>  $args
+     * @return list<ConstValue>
+     */
+    private static function entries(array $args): array
+    {
+        return count($args) === 1 && $args[0]->isArray() ? $args[0]->items : $args;
     }
 }

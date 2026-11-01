@@ -9,9 +9,13 @@ use Docuccino\Inference\PhpStan\Translation\TypeTranslator;
 use PhpParser\Node;
 use PhpParser\ParserFactory;
 use PHPStan\Analyser\Scope;
+use PHPStan\Type\Constant\ConstantIntegerType;
 use PHPStan\Type\Constant\ConstantStringType;
+use PHPStan\Type\Enum\EnumCaseObjectType;
 use PHPStan\Type\MixedType;
+use PHPStan\Type\NullType;
 use PHPStan\Type\Type;
+use PHPStan\Type\UnionType;
 use PHPUnit\Framework\MockObject\Stub;
 
 /**
@@ -202,3 +206,27 @@ it('leaves a spread array item standing as one item, so the written items still 
 
     expect($value?->render())->toBe("['open', ...<spread array item>, 'closed']");
 });
+
+it('folds an enum case to the case and its enum, read off the type rather than the name written', function (): void {
+    // A case stands for a value only once a framework casts it, so the fold keeps it whole. Reading the type
+    // means an enum constant aliasing a case (`const DEFAULT = self::Normal`) is that case.
+    $scope = $this->createStub(Scope::class);
+    $scope->method('getType')->willReturn(new EnumCaseObjectType('App\\Enums\\Priority', 'Normal'));
+
+    $value = ConstantFolder::fold(foldableExpr('Priority::DEFAULT'), $scope);
+
+    expect($value?->toArray())->toBe(['kind' => 'case', 'class' => 'App\\Enums\\Priority', 'case' => 'Normal']);
+});
+
+it('folds a type to the one value it pins, and to nothing where it could be more than one', function (Type $type, ?string $rendered): void {
+    expect(ConstantFolder::ofType($type)?->render())->toBe($rendered);
+})->with([
+    'one case' => [new EnumCaseObjectType('App\\Enums\\Status', 'Draft'), 'Status::Draft'],
+    'a case or null' => [new UnionType([new EnumCaseObjectType('App\\Enums\\Status', 'Draft'), new NullType]), null],
+    'two cases' => [new UnionType([new EnumCaseObjectType('App\\Enums\\Status', 'Draft'), new EnumCaseObjectType('App\\Enums\\Status', 'Published')]), null],
+    // A plain constant on an enum is its value, not its name.
+    'a constant string' => [new ConstantStringType('priority'), "'priority'"],
+    'a constant int' => [new ConstantIntegerType(3), '3'],
+    'null' => [new NullType, 'null'],
+    'anything' => [new MixedType, null],
+]);

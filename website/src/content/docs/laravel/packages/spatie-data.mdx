@@ -176,7 +176,8 @@ class CreateInvoiceData extends Data
 
 `#[Required]` marks the property required, `#[Max]` / `#[Min]` become length or range keywords (by the
 property's type), `#[Email]` a `format: email`, and `#[In]` / `#[Enum]` an `enum` — `#[Enum(Currency::class)]`
-expands to the enum's backing values, never the class name. Presence, type, size, format, and pattern
+expands to the enum's backing values, never the class name, and an enum case in `#[In]` or `#[NotIn]` is
+its backing value. Presence, type, size, format, and pattern
 attributes are all covered, and a property's own type contributes the base type where no attribute
 states one.
 
