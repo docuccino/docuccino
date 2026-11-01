@@ -221,7 +221,13 @@
           "handles": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "not": {
+                "enum": [
+                  "root",
+                  "admin"
+                ]
+              }
             }
           },
           "labels": {
@@ -246,7 +252,13 @@
           "nicknames": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "not": {
+                "enum": [
+                  "root",
+                  "admin"
+                ]
+              }
             }
           },
           "roles": {
@@ -274,6 +286,12 @@
                 "Email"
               ]
             }
+          },
+          "settings": {
+            "type": [
+              "array",
+              "object"
+            ]
           },
           "tags": {
             "type": "array",
@@ -313,7 +331,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "b374dea3e7241d281cc56ece17b8a22bf29999d8cf21793f77b3cd5a9b6dad67"
+      "contentHash": "10b710234858e1069611bad0b4682f6ba0844eeb5851e59ff5d39d74a71e27be"
     },
     "generator": {
       "name": "docuccino/laravel",

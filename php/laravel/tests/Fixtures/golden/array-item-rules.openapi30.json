@@ -123,7 +123,13 @@
           "handles": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "not": {
+                "enum": [
+                  "root",
+                  "admin"
+                ]
+              }
             }
           },
           "labels": {
@@ -148,7 +154,13 @@
           "nicknames": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "not": {
+                "enum": [
+                  "root",
+                  "admin"
+                ]
+              }
             }
           },
           "roles": {
@@ -176,6 +188,16 @@
                 "Email"
               ]
             }
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "type": "array"
+              },
+              {
+                "type": "object"
+              }
+            ]
           },
           "tags": {
             "type": "array",
