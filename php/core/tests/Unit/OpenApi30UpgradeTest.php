@@ -3,10 +3,13 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diff\DocumentDiffer;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\EmitOptions;
 use Docuccino\Core\Emit\Formats;
 use Docuccino\Core\Emit\OpenApi30Upgrade;
+use Docuccino\Core\Reader\DocumentReader;
+use Docuccino\Core\Reader\UnreadableDocumentException;
 use Opis\JsonSchema\Validator;
 
 /**
@@ -142,6 +145,46 @@ it('leaves a nullable that asserts nothing beside it as nothing, since null alre
     expect(json_decode($result->output, true, flags: JSON_THROW_ON_ERROR)['components']['schemas']['S'])->toBe(['description' => 'Anything.'])
         ->and(array_map(static fn (Diagnostic $d): string => $d->code, $result->report->diagnostics))->not->toContain('upgrade.nullable-without-type');
 });
+
+/*
+ * Admitting null beside what a schema asserts nests it two levels deeper, and a 3.0 document the reader
+ * takes can nest enough of those to pass the bound every writer has. Past it, the export and every diff
+ * against the document threw. The deepest ones are read as admitting any value instead, which is wider
+ * than either reading of the source and so still true, and said.
+ */
+it('never restates a 3.0 document deeper than it can be written out', function (string $keyword, int $levels): void {
+    $schema = ['type' => 'string'];
+    $value = 'x';
+
+    for ($level = 0; $level < $levels; $level++) {
+        $schema = ['nullable' => true, 'description' => 'Level '.$level, $keyword => $keyword === 'items' ? $schema : ['a' => $schema]];
+        $value = $keyword === 'items' ? [$value] : ['a' => $value];
+    }
+
+    // As deep as the reader takes: one level more is refused.
+    $document = (new DocumentReader)->read((string) json_encode(upgradeSource($schema)))->uir();
+
+    foreach (Formats::ids() as $format) {
+        expect(static fn () => Formats::emit($format, $document, new EmitOptions))->not->toThrow(Throwable::class);
+    }
+
+    $result = Formats::emit('openapi-3.1', $document, new EmitOptions);
+    $own = (new DocumentReader)->read($result->output)->uir();
+    $newer = UirDocument::fromArray(['openapi' => '3.1.0'] + upgradeSource(['type' => 'object']));
+
+    expect(array_map(static fn (Diagnostic $d): string => $d->code, $result->report->diagnostics))->toContain('upgrade.nullable-too-deep')
+        ->and(upgradeAdmits($result->output, null))->toBeTrue()
+        ->and(upgradeAdmits($result->output, $value))->toBeTrue()
+        ->and((new DocumentDiffer)->diff($document, $own)->changes)->toBe([])
+        ->and((new DocumentDiffer)->diff($document, $newer)->changes)->not->toBe([])
+        ->and((new DocumentDiffer)->diff($newer, $document)->changes)->not->toBe([]);
+
+    expect(static fn () => (new DocumentReader)->read((string) json_encode(upgradeSource([$keyword => $keyword === 'items' ? $schema : ['a' => $schema]]))))
+        ->toThrow(UnreadableDocumentException::class);
+})->with([
+    'properties' => ['properties', 62],
+    'items' => ['items', 124],
+]);
 
 /*
  * The 3.0 export of a 3.0 document reads the restatement back, so it lands where the source started —

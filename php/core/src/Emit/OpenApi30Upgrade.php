@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Emit;
 
+use Docuccino\Core\Canonical\CanonicalJsonSerializer;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Document\PathItem;
 use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Support\Arr;
 use Docuccino\Core\Support\JsonPointer;
+use stdClass;
 
 /**
  * A document read at OpenAPI 3.0, restated in the meaning 3.1 and 3.2 give their own spellings, so an
@@ -305,35 +307,85 @@ final class OpenApi30Upgrade
 
     /**
      * One Schema Object, its subschemas first so a rewrite here composes branches that are already read.
+     * `$height` is how many levels the restated schema nests, as {@see CanonicalJsonSerializer} counts them.
      *
      * @param  array<string, mixed>  $schema
      * @param  list<Diagnostic>  $diagnostics
      * @return array<string, mixed>
      */
-    private function schema(array $schema, string $pointer, array &$diagnostics): array
+    private function schema(array $schema, string $pointer, array &$diagnostics, int &$height = 0): array
     {
         if (is_string($schema['$ref'] ?? null)) {
-            return $this->schemaReference($schema, $pointer, $diagnostics);
+            $schema = $this->schemaReference($schema, $pointer, $diagnostics);
+            $height = self::height($schema);
+
+            return $schema;
         }
+
+        $heights = [];
 
         foreach ($schema as $keyword => $value) {
             $keyword = (string) $keyword;
+            $position = is_array($value) ? SchemaKeywords::positionOf($keyword) : null;
+            $below = 0;
 
-            if (! is_array($value)) {
-                continue;
+            if (is_array($value) && $position === SchemaKeywords::POSITION_SCHEMA) {
+                $schema[$keyword] = $this->schema(Arr::stringKeyed($value), JsonPointer::child($pointer, $keyword), $diagnostics, $below);
+            } elseif (is_array($value) && ($position === SchemaKeywords::POSITION_SCHEMA_MAP || $position === SchemaKeywords::POSITION_SCHEMA_LIST)) {
+                $schema[$keyword] = $this->subschemas($value, $position === SchemaKeywords::POSITION_SCHEMA_LIST, JsonPointer::child($pointer, $keyword), $diagnostics, $below);
+            } else {
+                $below = self::height($value);
             }
 
-            $child = JsonPointer::child($pointer, $keyword);
-
-            $schema[$keyword] = match (SchemaKeywords::positionOf($keyword)) {
-                SchemaKeywords::POSITION_SCHEMA => $this->schema(Arr::stringKeyed($value), $child, $diagnostics),
-                SchemaKeywords::POSITION_SCHEMA_MAP => $this->walkMap(self::SCHEMA, $value, $child, $diagnostics),
-                SchemaKeywords::POSITION_SCHEMA_LIST => $this->walkList(self::SCHEMA, $value, $child, $diagnostics),
-                default => $value,
-            };
+            $heights[$keyword] = $below;
         }
 
-        return $this->nullable($this->exclusiveBounds($schema), $pointer, $diagnostics);
+        return $this->nullable($this->exclusiveBounds($schema), $heights, $pointer, $diagnostics, $height);
+    }
+
+    /**
+     * A map or list of subschemas, and through `$height` how many levels it nests.
+     *
+     * @param  array<mixed, mixed>  $members
+     * @param  list<Diagnostic>  $diagnostics
+     * @return array<mixed, mixed>
+     */
+    private function subschemas(array $members, bool $list, string $pointer, array &$diagnostics, int &$height): array
+    {
+        $out = [];
+        $deepest = 0;
+
+        foreach ($list ? array_values($members) : $members as $name => $member) {
+            $below = 0;
+            $out[$list ? $name : (string) $name] = is_array($member)
+                ? $this->schema(Arr::stringKeyed($member), JsonPointer::child($pointer, (string) $name), $diagnostics, $below)
+                : $member;
+            $deepest = max($deepest, $below);
+        }
+
+        $height = $deepest + 1;
+
+        return $out;
+    }
+
+    /** How many levels `$value` nests: none for a scalar, and one more than its deepest member for a container. */
+    private static function height(mixed $value): int
+    {
+        if ($value instanceof stdClass) {
+            $value = get_object_vars($value);
+        }
+
+        if (! is_array($value)) {
+            return 0;
+        }
+
+        $deepest = 0;
+
+        foreach ($value as $member) {
+            $deepest = max($deepest, self::height($member));
+        }
+
+        return $deepest + 1;
     }
 
     /**
@@ -405,36 +457,34 @@ final class OpenApi30Upgrade
      * Schema Object constraints retain their defined behavior".
      *
      * @param  array<string, mixed>  $schema
+     * @param  array<string, int>  $heights  how many levels each member nests
      * @param  list<Diagnostic>  $diagnostics
      * @return array<string, mixed>
      */
-    private function nullable(array $schema, string $pointer, array &$diagnostics): array
+    private function nullable(array $schema, array $heights, string $pointer, array &$diagnostics, int &$height): array
     {
         $nullable = $schema['nullable'] ?? null;
 
-        if (! is_bool($nullable)) {
-            return $schema;
+        if (is_bool($nullable)) {
+            unset($schema['nullable']);
         }
 
-        unset($schema['nullable']);
-
-        if (! $nullable) {
-            return $schema;
+        if ($nullable === true && ! array_key_exists('type', $schema)) {
+            return $this->for30
+                ? self::measured([...$schema, 'nullable' => true], $heights, $height)
+                : $this->untypedNullable($schema, $heights, $pointer, $diagnostics, $height);
         }
 
-        if (! array_key_exists('type', $schema)) {
-            return $this->for30 ? [...$schema, 'nullable' => true] : $this->untypedNullable($schema, $pointer, $diagnostics);
-        }
+        $type = $schema['type'] ?? null;
 
-        $type = $schema['type'];
-
-        if (is_string($type) && $type !== 'null') {
+        if ($nullable === true && is_string($type) && $type !== 'null') {
             $schema['type'] = [$type, 'null'];
-        } elseif (is_array($type) && ! in_array('null', $type, true)) {
+            $heights['type'] = 1;
+        } elseif ($nullable === true && is_array($type) && ! in_array('null', $type, true)) {
             $schema['type'] = [...array_values($type), 'null'];
         }
 
-        return $schema;
+        return self::measured($schema, $heights, $height);
     }
 
     /**
@@ -444,11 +494,16 @@ final class OpenApi30Upgrade
      * schema asserts, its annotations staying where they describe the whole. A lone `allOf` member is that
      * branch alone, which is the spelling the 3.0 downlevel reads back as this same idiom.
      *
+     * The branch sits two levels deeper than the schema did. Where that would nest the document past what
+     * can be written out, the schema is read as admitting any value instead, which is wider still and so
+     * still true, and said.
+     *
      * @param  array<string, mixed>  $schema
+     * @param  array<string, int>  $heights
      * @param  list<Diagnostic>  $diagnostics
      * @return array<string, mixed>
      */
-    private function untypedNullable(array $schema, string $pointer, array &$diagnostics): array
+    private function untypedNullable(array $schema, array $heights, string $pointer, array &$diagnostics, int &$height): array
     {
         $whole = [];
         $branch = [];
@@ -465,13 +520,32 @@ final class OpenApi30Upgrade
 
         // Nothing asserted, so null already passes: there is no narrower reading to widen from.
         if ($branch === []) {
-            return $whole;
+            return self::measured($whole, $heights, $height);
         }
 
         $allOf = $branch['allOf'] ?? null;
 
         $only = count($branch) === 1 && is_array($allOf) && count($allOf) === 1 ? array_values($allOf)[0] : null;
         $hoisted = is_array($only);
+
+        // The `anyOf` list and the branch in it, over the deepest member the branch holds, or the hoisted
+        // `allOf` list's own levels.
+        $wrapper = $hoisted ? ($heights['allOf'] ?? 0) : 2 + max([0, ...array_values(array_intersect_key($heights, $branch))]);
+        $depth = substr_count($pointer, '/');
+
+        if ($depth + 1 + max($wrapper, 2) > CanonicalJsonSerializer::MAX_DEPTH) {
+            $diagnostics[] = new Diagnostic(
+                severity: Severity::Warning,
+                code: 'upgrade.nullable-too-deep',
+                message: sprintf(
+                    'Read the schema at %s, which has `nullable: true` and no `type`, as admitting any value: admitting null beside what it asserts would nest the document more than %d levels deep, past what can be written out.',
+                    $pointer,
+                    CanonicalJsonSerializer::MAX_DEPTH,
+                ),
+            );
+
+            return self::measured($whole, $heights, $height);
+        }
 
         if (is_array($only)) {
             $branch = $only;
@@ -488,6 +562,22 @@ final class OpenApi30Upgrade
             ),
         );
 
+        $height = 1 + max([0, ...array_values(array_intersect_key($heights, $whole)), max($wrapper, 2)]);
+
         return [...$whole, 'anyOf' => [$branch, ['type' => 'null']]];
+    }
+
+    /**
+     * `$schema`, with `$height` set to how many levels it nests from what its members do.
+     *
+     * @param  array<string, mixed>  $schema
+     * @param  array<string, int>  $heights
+     * @return array<string, mixed>
+     */
+    private static function measured(array $schema, array $heights, int &$height): array
+    {
+        $height = 1 + max([0, ...array_values(array_intersect_key($heights, $schema))]);
+
+        return $schema;
     }
 }
