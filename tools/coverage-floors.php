@@ -93,12 +93,17 @@ const FLOORS = [
     // landed in the measurable half too — php-parser over the constructor and the one level of helpers the
     // analyser follows (`ConstructionEscape`), unit-tested over real probes. It RATCHETED 54 → 55 when
     // reading which body members echo the status and its reason phrase landed there as well — php-parser
-    // over a constructor and a status-text read (`ConstructorEchoes`, `StatusTextRead`), unit-tested:
-    // Measured 55.70% (2239/4020): 55% of it is 2211.00 statements, 28.00 of margin; 56 would need 2251.20.
+    // over a constructor and a status-text read (`ConstructorEchoes`, `StatusTextRead`), unit-tested. It
+    // RATCHETED 55 → 56 when the engine learned to analyse a closure route's action. Which body an action
+    // names, and the warning when there is none, depend on the source alone, so the real engine is driven
+    // in process through its factory's adapter seam over a pass that harvests nothing (`PhpStanEngineFactory`
+    // 26/26). What a found arrow function's body returns and throws stays the fixture group's (33 statements).
+    // 57 was declined at 0.22 statements of margin, the hair-trigger the policy names:
+    // Measured 57.01% (2311/4054): 56% of it is 2270.24 statements, 40.76 of margin; 57 would leave 0.22.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads a few statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 55, 'measured' => 55.70],
+    'inference-phpstan' => ['floor' => 56, 'measured' => 57.01],
 ];
 
 /*

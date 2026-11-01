@@ -315,9 +315,9 @@ would sit too close to the figure for an ordinary change to survive it (see `lar
 |---------------------|------------|-------|--------------------------------------------------|
 | `core`              | **97.88%** | 97    | fully in-process-measurable; 0.88pp above it, ~150 statements |
 | `laravel`           | **97.24%** | 97    | ratcheted 95 → 96 → 97, the last once the figure cleared 97.20%, see below; 0.24pp above it, ~39 statements |
-| `inference-phpstan` | **55.70%** | 55    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51 → 53 → 54 → 55; 0.70pp, ~28 statements |
+| `inference-phpstan` | **57.01%** | 56    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51 → 53 → 54 → 55 → 56; 1.01pp, ~40 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 93.07%     | —     | informational only; no longer a gate (statement sum of the rows above) |
+| Overall             | 93.18%     | —     | informational only; no longer a gate (statement sum of the rows above) |
 
 Every figure here is one `composer test:coverage` run of the whole set — CI's coverage job on PHP 8.4,
 which is what the record describes — so the three read off the same clover report and the floors file
@@ -466,7 +466,7 @@ for its pure/parent-process classes, never more subprocess fixture tests.
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **97**, `laravel` **97**, `inference-phpstan` **55**.
+  an aspiration. Current floors: `core` **97**, `laravel` **97**, `inference-phpstan` **56**.
 - The same run **checks the record**: each entry carries the `measured` figure its floor was set from,
   and a run more than ten statements away from it reports `STALE` and fails, naming the three places to
   re-record. Honest floors are only honest against a measurement somebody took recently, and until this

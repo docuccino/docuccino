@@ -35,6 +35,7 @@ declare(strict_types=1);
  *   php engine-runner.php data-response-status      <dataFile>       <class[,class…]> <ignored>
  *   php engine-runner.php trace-file-responses      <controllerFile> <class> <method>
  *   php engine-runner.php trace-closure             <file> <ignored> <ignored> <line>
+ *   php engine-runner.php analyze-closures          <file> <ignored> <line[,line…]>
  *   php engine-runner.php request-headers           <controllerFile> <class> <method> <formRequest>
  *
  * Dispatch stays a `match ($mode)` rather than a mode => factory table — each arm is a thin
@@ -575,6 +576,15 @@ $result = match ($mode) {
             'pageSizeKey' => $visitor->pageSize()?->key,
             'pageSizeDefault' => $visitor->pageSize()?->default,
         ];
+    })(),
+    // One engine, a closure route's action at each line — how a routes file of them is analysed in a build.
+    'analyze-closures' => (static function () use ($engine, $file, $method): array {
+        $analyses = [];
+        foreach (explode(',', $method) as $at) {
+            $analyses[$at] = $engine->analyzeAction(new ActionRef($file, null, '{closure}', (int) $at))->toArray();
+        }
+
+        return $analyses;
     })(),
     'trace-closure' => (static function () use ($engine, $file, $line): array {
         // The closure-by-line trace — how a closure route's action is walked — hands each return

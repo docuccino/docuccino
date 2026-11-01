@@ -900,9 +900,13 @@ it, against descent's own depth budget and cycle guard. The one caller with no o
 handler tier, which locates a render callback from `ReflectionFunction`'s file+line
 (`FileAnalyzer::callableAtLine()`, closures and arrow functions alike — an arrow function's one return is
 its body expression in the scope `InArrowFunctionNode` is walked with); a line carrying two callbacks is
-one reflection cannot tell apart, so it answers neither. For THROWS an arrow function is the boundary —
-`InArrowFunctionNode` carries no statement result, so there are no throw points to read and the exception
-is not surfaced at all (pinned as a fixture row rather than described).
+one reflection cannot tell apart, so it answers neither. A closure ROUTE's action is located the same way —
+it arrives as `{closure}` with no class and the line reflection gives — and analysed like a method: its
+returns, and its throws. For throws an arrow function needs one step more, since `InArrowFunctionNode`
+carries no statement result and so no throw points: its body is one expression that can hold no `try`, so
+each call and `throw` in it is read as the point it makes where no catch is around it
+(`ThrowAnalyzer::pointOutsideTry()`, the grammar a guarded call is already read with) and sent through the
+same layers. That holds for an arrow function handed to a callee as for one that is a route's action.
 
 The call is not always there to carry the closure. Inside a `try` whose catch takes every class the callee
 declares, PHPStan 2.2 drops the call's point and 2.3 keeps it typed `never` — and the closure runs either

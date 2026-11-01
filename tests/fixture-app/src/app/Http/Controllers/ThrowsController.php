@@ -837,9 +837,9 @@ class ThrowsController extends Controller
 
     /**
      * Case 10n: the same throw in an ARROW function, which PHPStan models with no
-     * statement result — so there are no throw points to read and the exception
-     * is not surfaced at all. The boundary of the hop above, pinned rather than
-     * described.
+     * statement result — so there are no throw points to hand over, and the hop
+     * reads its one expression instead. The same closure as above, spelled with
+     * `fn`.
      */
     public function arrowThrownStatus(ConnectionInterface $connection): void
     {
