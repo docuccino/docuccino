@@ -4424,6 +4424,39 @@ function checkFormContract(Exchange $exchange, ?callable $mutate = null): CheckR
 }
 
 /**
+ * A document stating `$openapi` whose `GET /a` responds with `$schema`, beside `$components`.
+ *
+ * @param  array<string, mixed>  $schema
+ * @param  array<string, mixed>  $components
+ * @return array<string, mixed>
+ */
+function versionedContract(string $openapi, array $schema, array $components = []): array
+{
+    return [
+        'openapi' => $openapi,
+        'info' => ['title' => 'API', 'version' => '1.0.0'],
+        'paths' => ['/a' => ['get' => ['responses' => ['200' => [
+            'description' => 'OK',
+            'content' => ['application/json' => ['schema' => $schema]],
+        ]]]]],
+        'components' => ['schemas' => $components === [] ? new stdClass : $components],
+    ];
+}
+
+/**
+ * `$body` as the response to `GET /a` in `$document`, read from its JSON text as an artifact is.
+ *
+ * @param  array<string, mixed>  $document
+ */
+function checkVersionedResponse(array $document, string $body): Outcome
+{
+    $index = ContractIndex::fromJson((string) json_encode($document));
+
+    return (new ContractChecker($index))->check(contractExchange('GET', '/a', responseBody: $body))->response
+        ?? throw new RuntimeException('GET /a matched no operation.');
+}
+
+/**
  * Check one dispatched payload against the fixture's webhook of that name — its first documented
  * method, which is the only one for every name but `invoice.voided`.
  *

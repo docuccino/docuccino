@@ -57,6 +57,11 @@ function allowedAssociativeJsonDecodes(): array
         // and is never re-emitted or compared.
         'php/core/src/Contract/ContractIndex.php::fromJson' => 'contract lookup index; validation reads graph()',
 
+        // The same associative copy for a 3.0 contract, decoded from the text of its restatement
+        // (`OpenApi30Upgrade::restate()`), which `graph()` decodes again as objects. Located in, never
+        // re-emitted or compared.
+        'php/core/src/Contract/ContractIndex.php::fromArray' => 'restated 3.0 contract lookup index; validation reads graph()',
+
         // The decoded value lands on `additionalProperties` — a SCHEMA, and every position inside a
         // schema that a PHP array cannot spell is one canonicalisation restores from the keyword's own
         // contract. Measured against the recorded goldens: 41 such schemas, none carrying an `example`,
