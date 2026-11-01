@@ -13,6 +13,12 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.23.4
+
+### Bug fixes
+
+- **core**: an Arazzo description fails on the rules its schema can't state ([#705](https://github.com/docuccino/docuccino/pull/705))
+
 ## v0.23.3
 
 ### Features
