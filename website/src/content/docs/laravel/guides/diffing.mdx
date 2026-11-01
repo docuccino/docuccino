@@ -190,6 +190,14 @@ so those *are* read through, and override the component's. Docuccino writes a ho
 pointer alone, so this comes up only against a hand-written or third-party artifact.
 </Aside>
 
+**A one-branch composition is the schema inside it.** An `allOf`, `anyOf` or `oneOf` holding a single
+schema, with nothing beside it but a `title`, a `description` or an example, accepts exactly what that
+schema accepts. It is how OpenAPI 3.0 has to write a described reference, so wrapping `Customer` in
+`allOf: [{$ref: Customer}]` to give it a `description` reports the `description` and nothing else, and a
+union branch wrapped that way still pairs with `Customer` on the other side. Put a constraint beside the
+wrapper, such as a `maxProperties`, and it is an intersection again, compared as written.
+
+
 ## Breaking depends on which way the data flows
 
 A schema serves one side of the wire or the other, and the same edit is not worth the same thing on

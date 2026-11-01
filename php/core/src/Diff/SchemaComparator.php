@@ -173,6 +173,13 @@ final class SchemaComparator
      */
     private function compareSubschema(mixed $old, mixed $new, string $path, string $id, bool $request): array
     {
+        $oldBranch = self::loneBranch($old, $new);
+        $newBranch = self::loneBranch($new, $old);
+
+        if ($oldBranch !== null || $newBranch !== null) {
+            return $this->compareSubschema($oldBranch ?? $old, $newBranch ?? $new, $path, $id, $request);
+        }
+
         $resolved = $this->resolvePointers($old, $new, $path, $id);
 
         if ($resolved !== null) {
@@ -249,6 +256,58 @@ final class SchemaComparator
             : [];
 
         return [$oldBody ?? $old, $newBody ?? $new, $pair, $moved];
+    }
+
+    /**
+     * The schema a one-branch composition IS, or null where `$schema` is not one or `$other` spells the
+     * same keyword. `allOf`, `anyOf` and `oneOf` of one schema each validate exactly what that schema
+     * does, so with nothing beside the keyword but annotations and the identity — the siblings a bare
+     * pointer may carry ({@see ComponentRefs::resolveSchema()}) — the wrapper is its branch, the
+     * wrapper's annotations written over the branch's. An asserting sibling makes it an intersection, and
+     * it compares as written. Where both sides spell the keyword, their branches pair as written.
+     *
+     * Changes found under an unwrapped branch are reported at the position, as a resolved pointer's are.
+     *
+     * @return array<string, mixed>|false|null
+     */
+    private static function loneBranch(mixed $schema, mixed $other): array|false|null
+    {
+        $map = Hydrate::mapOrNull($schema);
+
+        if ($map === null) {
+            return null;
+        }
+
+        $keyword = null;
+
+        foreach (array_keys($map) as $member) {
+            if ($member === 'x-docuccino' || SchemaKeywords::isAnnotationOnly($member)) {
+                continue;
+            }
+
+            // A list whose members are not tuple slots applies each one to the instance itself.
+            if ($keyword !== null
+                || SchemaKeywords::positionOf($member) !== SchemaKeywords::POSITION_SCHEMA_LIST
+                || SchemaPolarity::rule($member)['pairsByIndex']) {
+                return null;
+            }
+
+            $keyword = $member;
+        }
+
+        $branches = $keyword === null ? [] : self::branches($map[$keyword]);
+
+        if ($keyword === null || count($branches) !== 1 || array_key_exists($keyword, Hydrate::mapOrNull($other) ?? [])) {
+            return null;
+        }
+
+        if ($branches[0] === false) {
+            return false;
+        }
+
+        unset($map[$keyword]);
+
+        return $map + self::asSchema($branches[0]);
     }
 
     /**
@@ -1170,9 +1229,13 @@ final class SchemaComparator
         return $meta === null ? null : Hydrate::stringOrNull($meta['id'] ?? null);
     }
 
-    /** The component a branch names, which is what the branch IS. */
+    /** The component a branch names, which is what the branch IS — wrapped in a one-branch composition or not. */
     private static function refKey(mixed $member): ?string
     {
+        while (($branch = self::loneBranch($member, null)) !== null) {
+            $member = $branch;
+        }
+
         $map = Hydrate::mapOrNull($member);
 
         return $map === null ? null : Hydrate::stringOrNull($map['$ref'] ?? null);
