@@ -151,6 +151,18 @@ final class OpenApi30Upgrade
     }
 
     /**
+     * Whether a document's own `openapi` member is read as 3.0.
+     *
+     * @param  array<string, mixed>  $document
+     */
+    public static function states30(array $document): bool
+    {
+        $openapi = $document['openapi'] ?? null;
+
+        return is_string($openapi) && self::reads30($openapi);
+    }
+
+    /**
      * $document restated in 3.1's meaning where it states a 3.0 version, and as it is otherwise. `$for30`
      * says the restatement will be read back into a 3.0 artifact, where a no-type `nullable` keeps its own
      * spelling: the 3.0 document says exactly what the source did, so there is no reading to choose.
@@ -161,9 +173,7 @@ final class OpenApi30Upgrade
      */
     public static function upgrade(array $document, array &$diagnostics, bool $for30 = false): array
     {
-        $openapi = $document['openapi'] ?? null;
-
-        if (! is_string($openapi) || ! self::reads30($openapi)) {
+        if (! self::states30($document)) {
             return $document;
         }
 
@@ -180,9 +190,7 @@ final class OpenApi30Upgrade
      */
     public static function stripped(array $document): array
     {
-        $openapi = $document['openapi'] ?? null;
-
-        if (! is_string($openapi) || ! self::reads30($openapi)) {
+        if (! self::states30($document)) {
             return $document;
         }
 
@@ -201,9 +209,7 @@ final class OpenApi30Upgrade
      */
     public static function restate(array $document): ?array
     {
-        $openapi = $document['openapi'] ?? null;
-
-        if (! is_string($openapi) || ! self::reads30($openapi)) {
+        if (! self::states30($document)) {
             return null;
         }
 

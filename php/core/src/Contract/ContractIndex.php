@@ -102,9 +102,7 @@ final class ContractIndex
      */
     private static function restated(array $document, string $json): ?array
     {
-        $openapi = $document['openapi'] ?? null;
-
-        if (! is_string($openapi) || ! OpenApi30Upgrade::reads30($openapi)) {
+        if (! OpenApi30Upgrade::states30($document)) {
             return null;
         }
 
@@ -153,15 +151,23 @@ final class ContractIndex
     }
 
     /**
-     * Pointer segments into {@see document()}, as the segments naming that place in the document as
+     * Pointer segments into {@see document()}, as the pointer naming that place in the document as
      * written — which every pointer a reader is shown must be.
      *
      * @param  list<string>  $segments
-     * @return list<string>
      *
      * @internal
      */
-    public function written(array $segments): array
+    public function writtenPointer(array $segments): string
+    {
+        return Pointer::of($this->written($segments));
+    }
+
+    /**
+     * @param  list<string>  $segments
+     * @return list<string>
+     */
+    private function written(array $segments): array
     {
         return $this->restatement?->written($segments) ?? $segments;
     }
