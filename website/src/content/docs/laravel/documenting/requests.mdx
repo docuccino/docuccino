@@ -556,13 +556,25 @@ The rules array is recovered without ever being executed, from any of these:
 
 Within a rules array, Docuccino reads pipe strings (`'required|integer'`), arrays of rules
 (`['required', 'integer']`), the `Rule::` factories `Rule::enum()`, `Rule::in()`, `Rule::exists()` and
-`Rule::unique()` or the objects they build (`new Enum(Currency::class)`, `new In([...])`), and your own
-rule objects — `new SortCode` documents from the rule class's
+`Rule::unique()` or the objects they build (`new Enum(Currency::class)`, `new In([...])`, chained calls
+included), and your own rule objects — `new SortCode` documents from the rule class's
 [`#[RuleSchema]`](#documenting-a-custom-rule). A field whose rules are a closure, a rule object with no
 `#[RuleSchema]`, or a values-at-runtime factory like `Rule::in(MediaCollections::names())` can't be read
 statically. It raises a `validation.rule-unrecoverable` info diagnostic naming the field, so nothing
 disappears silently: the field is omitted from the schema, or — when something else documents it, such
 as a Data property's own type — kept without the constraints those rules stated.
+
+When only one of a field's rules can't be read, what happens depends on what that rule could do:
+
+- **A check on the value** — a rule object with no `#[RuleSchema]`, a closure, or one of Laravel's own
+  rules Docuccino doesn't read, such as `Password::min(8)` — can only refuse values. The field keeps the
+  rules that were read, so it's documented a little wider than your endpoint, which is still true.
+- **A rule whose content isn't known until runtime** — `Rule::when()`, `Rule::forEach()`, a spread, or a
+  rule chosen by a call or a ternary — could turn out to be `nullable`, `sometimes` or `exclude`. Then none
+  of the rules beside it hold on their own, so the field is left out rather than published as stricter
+  than your endpoint.
+
+Either way the same `validation.rule-unrecoverable` diagnostic names the field and the rule.
 
 A rule that writes some of its values and gets the rest from somewhere else — `Rule::in('any',
 $this->fallback())`, `Rule::in('any', ...$this->statuses())`, or an `->only([Draft, $this->extra()])`
@@ -727,6 +739,10 @@ are ignored, and the class needn't implement any interface — so a rule from a 
 moment its author adds the attribute. Nothing is instantiated and `validate()` never runs. A rule class
 with no `#[RuleSchema]` keeps the `validation.rule-unrecoverable` diagnostic; closures stay opaque.
 </Aside>
+
+A rule with nothing a schema can say, like one that checks a value against your database, takes an empty
+`#[RuleSchema]`. That tells Docuccino there's nothing to document, so the field stays as its other rules
+describe it and the diagnostic goes quiet.
 
 ### Examples come with the rules
 

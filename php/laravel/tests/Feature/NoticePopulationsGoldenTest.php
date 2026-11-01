@@ -244,8 +244,15 @@ it('emits the validation notice population and its document byte-identically', f
             'validation.container-undecided',
             'validation.container-undecided',
             'validation.rule-unrecoverable',
+            // A rule left out beside rules that read: on the body, the query and an inline validate().
+            'validation.rule-unrecoverable',
+            'validation.rule-unrecoverable',
+            'validation.rule-unrecoverable',
+            'validation.rule-unrecoverable',
+            // A conditional rule, which gives up its field.
+            'validation.rule-unrecoverable',
         ],
-        ['"secret"', '"visibility"', '"window"', '"meta"', 'omitted from the query parameters', 'omitted from the request schema'],
-        ['"attachment"', '"status"', '"tags"', '"marker"', '"scope"', '"payload"', '"title"', '"channel"', '"author"', '"reference"', '"body"', '"audience"', '"term"', '"summary"'],
+        ['"secret"', '"visibility"', '"window"', '"meta"', 'omitted from the query parameters', 'omitted from the request schema', '"reference"', '"body"', '"audience"', '"term"', '"summary"', 'left off the query parameters'],
+        ['"attachment"', '"status"', '"tags"', '"marker"', '"scope"', '"payload"', '"title"', '"channel"', '"author"'],
     );
 });

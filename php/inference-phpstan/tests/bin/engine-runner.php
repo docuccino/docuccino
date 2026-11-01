@@ -502,7 +502,8 @@ $result = match ($mode) {
     'trace-rules' => (static function () use ($engine, $ref): array {
         // RulesMethodVisitor recovers a rules() method's returned array with AST-level constant folding
         // so Rule::enum(...) descriptors survive. Returns each field's rule names + params, the fields
-        // that are present but unrecoverable, and the ones that recovered minus a constraint they widened.
+        // that are present but unrecoverable, the ones that recovered minus a constraint they widened or
+        // a rule they could not read, and the ones given up for a rule whose content is unknown.
         $visitor = new RulesMethodVisitor;
         $engine->trace($ref, $visitor);
 
@@ -519,6 +520,8 @@ $result = match ($mode) {
             'fields' => $fields,
             'unrecoverable' => $visitor->unrecoverableFields(),
             'widened' => $visitor->widenedFields(),
+            'unread' => $visitor->unreadRules(),
+            'opaque' => $visitor->opaqueFields(),
         ];
     })(),
     'trace-inline-rules' => (static function () use ($engine, $ref): array {

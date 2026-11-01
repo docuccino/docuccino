@@ -447,7 +447,8 @@ Documents what a custom validation rule accepts, once, on the rule class — so 
 it is documented, wherever the rule object appears. Each field maps onto the rule vocabulary (`type` → a
 type rule, `enum` → `in:…`, `min`/`max` → the size rules), so the result is identical to writing those
 rules by hand. The attribute is the contract: the class needn't implement any interface, and the
-constructor arguments at the call site are ignored.
+constructor arguments at the call site are ignored. An empty `#[RuleSchema]` says the rule has nothing a
+schema can state.
 
 ```php
 #[RuleSchema(type: 'string', pattern: '[0-9]{2}-[0-9]{2}-[0-9]{2}', description: 'A UK sort code.')]

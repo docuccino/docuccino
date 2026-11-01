@@ -868,6 +868,51 @@ it('widens a rule whose values come from a call, in the shape an app reaches for
         ->and($trace['unrecoverable'])->toBe([]);
 })->group('fixture');
 
+it('leaves out a rule it cannot read that only refuses values, and gives up a field whose rule could loosen the rest', function (): void {
+    // A custom rule object and a closure are run as checks, so without them `title` and `slug` are wider
+    // than the endpoint and still true. `Rule::when(…, ['nullable'])` and a rule chosen by a ternary can be
+    // `nullable` or `sometimes`, so the `string` beside them is not true on its own. `status` is
+    // `(new Enum(…))->only([…])`, which reads as the factory chain that builds it.
+    $trace = FixtureRunner::traceRules(
+        'app/Http/Requests/UnreadRulesRequest.php',
+        'App\\Http\\Requests\\UnreadRulesRequest',
+        'rules',
+    );
+
+    $names = static fn (string $field): array => array_map(
+        static fn (array $rule): string => $rule['name'],
+        $trace['fields'][$field],
+    );
+
+    expect(array_keys($trace['fields']))->toBe(['title', 'slug', 'status'])
+        ->and($names('title'))->toBe(['required', 'string', 'max'])
+        ->and($names('slug'))->toBe(['required', 'string'])
+        ->and($names('status'))->toBe(['required', 'enum'])
+        ->and($trace['fields']['status'][1]['parameters'])->toBe(['open', 'closed'])
+        ->and($trace['unread'])->toBe(['title' => ['new App\\Rules\\NoProfanity'], 'slug' => ['a closure']])
+        ->and($trace['opaque'])->toBe(['summary' => 'Rule::when(…)', 'tier' => 'a value this build cannot read'])
+        ->and($trace['unrecoverable'])->toBe([])
+        ->and($trace['widened'])->toBe([]);
+})->group('fixture');
+
+it('reads rules assembled in a variable with the same grammar, from the constant shape alone', function (): void {
+    // The trace sees no returned array here, so the literal reading answers alone: the rule object is a
+    // bare class and the conditional a ConditionalRules, and each is taken as the trace takes it.
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyze(
+        'app/Http/Requests/AssembledRulesRequest.php',
+        'App\\Http\\Requests\\AssembledRulesRequest',
+        'rules',
+    ));
+
+    $shapes = new ShapeToRuleSet;
+    $rules = $shapes->convert($analysis->returns[0]->type);
+
+    expect(array_map(static fn (array $field): array => array_map(static fn ($rule): string => $rule->name, $field), $rules->fields))
+        ->toBe(['title' => ['required', 'string', 'max']])
+        ->and($shapes->unread())->toBe(['title' => ['new App\\Rules\\NoProfanity']])
+        ->and($shapes->opaque())->toBe(['summary' => 'new Illuminate\\Validation\\ConditionalRules']);
+})->group('fixture');
+
 it('leaves a soft-delete filter unresolved when its key is not written at the call', function (): void {
     // Spatie documents `AllowedFilter::trashed()` as filtering on `trashed`, which is true of a call that
     // passed NO name. This one passes one it reads from config, so the endpoint accepts some other key and

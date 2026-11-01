@@ -1336,8 +1336,19 @@ The attribute is the contract, not the `ValidationRule` interface (a vendor rule
 author adds it) and ctor args are ignored. Every recovery path shares the fold or the reader (FormRequest
 /laravel-actions `rules()`, inline `validate()`/`Validator::make`, spatie `#[Rule(new X)]`); each records
 the rule class file as a fragment dependency, whether or not it carried the attribute, so adding the
-attribute invalidates. No attribute → the unchanged `validation.rule-unrecoverable` path; closures stay
-opaque by nature.
+attribute invalidates. An empty attribute says the rule states nothing and reads as no rules. No
+attribute → `validation.rule-unrecoverable`; closures stay opaque by nature.
+
+**A rule seen but not read** (`Integrations/Validation/UnreadRule`). Beside rules that read, an unread rule
+is never dropped quietly, and what leaving it out costs follows Laravel's own `ValidationRuleParser`: a
+check (a closure, a rule contract, one of Laravel's `Rules\*` objects or factories) can only refuse values,
+so the field keeps the rest, documented wider than the endpoint; a rule whose content is unknown
+(`Rule::when`/`unless`/`forEach`, `ConditionalRules`, `NestedRules`, the exclude rules, a macro or app
+helper, an object Laravel would cast to a rule string, a spread, an unread value) can be `nullable`,
+`sometimes` or `exclude`, so the field is given up and the literal shape reading may not restate it. Both
+are `validation.rule-unrecoverable`, naming the rule. The constant shape reading (`ShapeToRuleSet`) and
+spatie's `#[Rule(new X)]` follow the same rule over the class alone. A `new` receiver carries a chain the
+way a descriptor does, so `(new Enum(X::class))->only([…])` reads as `Rule::enum(X::class)->only([…])`.
 
 `--provenance=none|winners|full`, default `winners` for committed artifacts. A component only a dropped
 member referred to — a trail's overridden value, a 3.0 artifact's webhooks — is dropped with it

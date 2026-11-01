@@ -605,6 +605,12 @@ importantly, NOT followed where the key only chose between sizes.
   `app/Http/Requests/StorePaymentRequest.php` — a custom rule class carrying `#[RuleSchema]`, an
   unannotated sibling, and a FormRequest validating with `new` instances of both: the real fold proves an
   annotated rule OBJECT documents from its class attribute while the unannotated one stays diagnosed.
+- `app/Rules/NoProfanity.php`, `app/Http/Requests/UnreadRulesRequest.php` and
+  `app/Http/Requests/AssembledRulesRequest.php` — each field writes one rule the build cannot read beside
+  rules it can: an unannotated rule object and a closure, which only refuse values and are left out by
+  name, and `Rule::when(…)` and a ternary, which can be `nullable` or `sometimes` and give up the field.
+  `status` is `(new Enum(…))->only([…])`. The second request assembles its rules in a variable, so the
+  constant shape answers alone and must read them the same way.
 
 ### API version changes
 
