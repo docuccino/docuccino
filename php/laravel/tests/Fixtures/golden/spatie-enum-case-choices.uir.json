@@ -159,24 +159,55 @@
         "type": "object",
         "properties": {
           "channel": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "Email"
+            ],
+            "example": "Email",
+            "x-enum-varnames": [
+              "Email"
+            ],
+            "x-enumNames": [
+              "Email"
+            ]
           },
           "phase": {
-            "type": "string"
+            "type": "string",
+            "not": {
+              "enum": [
+                "archived"
+              ]
+            }
           },
           "priority": {
-            "type": "integer"
+            "type": "integer",
+            "enum": [
+              1,
+              10
+            ],
+            "example": 1,
+            "x-enum-varnames": [
+              "_1",
+              "_10"
+            ],
+            "x-enumNames": [
+              "_1",
+              "_10"
+            ]
           },
           "schedule": {
             "type": "string",
             "enum": [
+              "draft",
               "scheduled"
             ],
-            "example": "scheduled",
+            "example": "draft",
             "x-enum-varnames": [
+              "Draft",
               "Scheduled"
             ],
             "x-enumNames": [
+              "Draft",
               "Scheduled"
             ]
           },
@@ -214,7 +245,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "96762ce1f51febe9831bed7a586b242664fee828aa685905270bec61978edc5b"
+      "contentHash": "b236bdc9feb551f0b15fc2b7e63ec09436b5eb0e33cdff7df8b6b8ae5d143796"
     },
     "generator": {
       "name": "docuccino/laravel",
