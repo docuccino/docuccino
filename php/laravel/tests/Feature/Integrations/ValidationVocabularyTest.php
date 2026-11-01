@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Contract\ContractIndex;
+use Docuccino\Core\Contract\SchemaCheck;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
@@ -706,6 +708,57 @@ it('refuses an authored example that reads as neither container', function (): v
     expect($result->schema['properties']['f'])->toBe(['type' => ['array', 'object']])
         ->and(array_map(static fn ($d): string => $d->code, $diagnostics))->toBe(['docblock.example-untypable'])
         ->and($diagnostics[0]->message)->toContain('does not read as array/object');
+});
+
+/*
+ * A stated example is a value for the field as a whole, and `nullable` is part of the field: it admits the
+ * null beside whatever else the rules settled. Read against the type words alone — which never carry the
+ * null, since nullability is a flag — `example:null` on a nullable integer was refused as not an integer,
+ * and on a nullable value list was published as the string `"null"`, which no member of the list is.
+ */
+it('reads a stated example against the null a nullable field admits', function (string $rules, RepresentationPolicy $policy, mixed $expected): void {
+    $context = vocabularyContext($policy);
+    $ordered = (new RuleOrdering)->order(new RuleSet(['f' => RuleParsing::tokens($rules)]));
+    $field = (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, $context)->schema['properties']['f'];
+
+    expect(array_key_exists('example', $field))->toBeTrue()
+        ->and($field['example'])->toBe($expected)
+        ->and($context->components()->diagnostics())->toBe([]);
+
+    // Held to the field's own published schema by the validator the example audit runs.
+    $document = ContractIndex::fromArray([
+        'openapi' => '3.2.0',
+        'info' => ['title' => 't', 'version' => '1'],
+        'paths' => [],
+        'components' => ['schemas' => ['Field' => $field]],
+    ]);
+
+    expect((new SchemaCheck($document))->check($field['example'], ['components', 'schemas', 'Field'], 'the example'))->toBe([]);
+})->with([
+    'null on a nullable integer' => ['nullable|integer|example:null', new RepresentationPolicy, null],
+    'null on a nullable integer, as an anyOf' => ['nullable|integer|example:null', new RepresentationPolicy(nullable: 'anyof'), null],
+    'a number on a nullable integer, as an anyOf' => ['nullable|integer|example:7', new RepresentationPolicy(nullable: 'anyof'), 7],
+    'null on a nullable value list' => ['nullable|in:draft,published|example:null', new RepresentationPolicy, null],
+    'a member of a nullable value list' => ['nullable|in:draft,published|example:draft', new RepresentationPolicy, 'draft'],
+    'a number in a nullable numeric list' => ['nullable|in:1,2|example:2', new RepresentationPolicy, 2],
+]);
+
+it('refuses a stated example the field\'s value list does not hold', function (): void {
+    // The value list is part of what the field accepts, so a word outside it is no reading of it — and
+    // `null` on a list that is NOT nullable is the same refusal, rather than the string `"null"`.
+    $context = vocabularyContext();
+    $ordered = (new RuleOrdering)->order(new RuleSet([
+        'f' => RuleParsing::tokens('in:draft,published|example:active'),
+        'g' => RuleParsing::tokens('in:draft,published|example:null'),
+    ]));
+    $properties = (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, $context)->schema['properties'];
+
+    expect($properties['f']['example'] ?? 'none')->toBe('draft')
+        ->and($properties['g']['example'] ?? 'none')->toBe('draft')
+        ->and(array_map(static fn ($d): string => $d->message, $context->components()->diagnostics()))->toBe([
+            'The example on field "f" ("active") does not read as "draft"/"published", so none is published.',
+            'The example on field "g" ("null") does not read as "draft"/"published", so none is published.',
+        ]);
 });
 
 it('raises an info diagnostic for a rule no transformer handles', function (): void {

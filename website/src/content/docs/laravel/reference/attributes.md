@@ -1168,6 +1168,12 @@ attribute beats it where both are written:
 public string $tenant;
 ```
 
+That text is read as a value the property's schema accepts, so `@example false` on a `bool` is
+`false`, `@example 7` on an `int` is `7`, and `@example null` on a `?InvoiceStatus` is `null` rather
+than the word. An enum's cases count too: on an enum backed by integers, `@example 2` publishes the
+number, and a value no case carries is left out with a
+[`docblock.example-untypable`](/laravel/reference/diagnostics/#docblock-tags) warning rather than published.
+
 A property publishes one bare value, not an Example Object, so `name:`, `summary:`, `description:`,
 `file:`, `externalValue:`, `status:`, `mediaType:`, `parameter:` and `request:` have nowhere to go
 there and are reported as
