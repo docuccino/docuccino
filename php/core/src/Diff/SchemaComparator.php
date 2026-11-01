@@ -793,11 +793,9 @@ final class SchemaComparator
 
         if ($oldBare === $newBare && $oldBare !== []) {
             // Unwritten on both sides, the keyword is no reading of its own and the type union is the
-            // whole statement, so it is handed over from here.
+            // whole statement: exactly one side holds the `null`, so it was admitted or withdrawn.
             if (($old['nullable'] ?? null) === null && ($new['nullable'] ?? null) === null) {
-                foreach ($this->compareNullability($old, $new, $path, $id, $request) as $change) {
-                    $changes[] = $change;
-                }
+                $changes[] = $this->nullabilityChange(isset($newSet['null']) ? RefinementMove::Widened : RefinementMove::Narrowed, $request, $path, $id);
             }
 
             return;
@@ -942,10 +940,7 @@ final class SchemaComparator
 
             $found = match ($kind) {
                 ReadingKind::Discriminator => $this->compareDiscriminator($old, $new, $path, $id, $request),
-                // Unwritten on both sides, `null` is the type union's to state, and {@see compareType()} hands it over.
-                ReadingKind::Nullability => ($old['nullable'] ?? null) === null && ($new['nullable'] ?? null) === null
-                    ? []
-                    : $this->compareNullability($old, $new, $path, $id, $request),
+                ReadingKind::Nullability => $this->compareNullability($old, $new, $path, $id, $request),
                 // `$anchor`: a `$ref` may name it and this class resolves none, so a name CHANGED or gone
                 // may leave a pointer naming nothing — the reading a `$defs` member leaving already gets
                 // — while one arriving is safe, nothing having been able to point at it before.
