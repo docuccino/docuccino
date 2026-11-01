@@ -129,13 +129,80 @@ it('compares a wrapper round a different component as that component', function 
     ]);
 });
 
-it('still reads a one-branch composition with an asserting sibling as the refinement it is', function () use ($owner): void {
-    // `maxProperties` beside the branch constrains the value, so the wrapper is not its branch any more.
-    $changes = loneBranchDiff($owner, ['allOf' => [$owner], 'maxProperties' => 1]);
+it('reads a reference wrapped beside an asserting sibling as the reference with that sibling', function (string $openapi) use ($owner): void {
+    // `allOf: [{$ref: Owner}]` and `$ref: Owner` both apply `Owner` in place, so a `maxProperties` beside
+    // either is the same intersection: one constraint arriving on `Owner`, never `Owner`'s own keywords
+    // going and a branch arriving.
+    $narrowed = [
+        'GET breaking schema.refinement-narrowed owner.maxProperties',
+        'PUT breaking schema.refinement-narrowed owner.maxProperties',
+    ];
 
-    expect(loneBranchChanges($changes))->toContain('GET breaking schema.refinement-narrowed owner.maxProperties')
-        ->toContain('PUT breaking schema.refinement-narrowed owner.maxProperties');
+    expect(loneBranchChanges(loneBranchDiff($owner, ['allOf' => [$owner], 'maxProperties' => 1], $openapi)))->toBe($narrowed)
+        ->and(loneBranchChanges(loneBranchDiff(['allOf' => [$owner], 'maxProperties' => 1], $owner, $openapi)))->toBe([
+            'GET breaking schema.refinement-widened owner.maxProperties',
+            'PUT schema.refinement-widened owner.maxProperties',
+        ]);
+})->with(['3.1.1', '3.0.3']);
+
+it('reads the wrapped and the bare reference beside one sibling as the same schema', function () use ($owner): void {
+    // At 3.1 a `$ref`'s siblings apply, so these are two spellings of `Owner` capped at one property.
+    $capped = ['maxProperties' => 1];
+
+    expect(loneBranchDiff($owner + $capped, ['allOf' => [$owner]] + $capped)->changes)->toBe([])
+        ->and(loneBranchDiff(['anyOf' => [$owner]] + $capped, ['allOf' => [$owner]] + $capped)->changes)->toBe([])
+        // The same edit in either spelling is the same finding.
+        ->and(loneBranchChanges(loneBranchDiff($owner + $capped, ['allOf' => [$owner], 'maxProperties' => 5])))
+        ->toBe(loneBranchChanges(loneBranchDiff($owner + $capped, $owner + ['maxProperties' => 5])));
+
+    // 3.0 ignores a `$ref`'s siblings, so its export hoists them into the wrapper and the newer side's
+    // narrowing is read there.
+    expect(loneBranchChanges(loneBranchDiff($owner, $owner + $capped, '3.0.3', '3.1.1')))->toBe([
+        'GET breaking schema.refinement-narrowed owner.maxProperties',
+        'PUT breaking schema.refinement-narrowed owner.maxProperties',
+    ]);
 });
+
+it('never merges an inline branch into the siblings beside it', function (): void {
+    // `additionalProperties` sees only the `properties` beside it, so beside the wrapper it refuses `id`,
+    // while merged up beside `properties` it would admit `id` again. The wrapper compares as written.
+    $object = ['type' => 'object', 'properties' => ['id' => ['type' => 'integer']]];
+    $codes = array_map(
+        static fn ($change): string => $change->code,
+        loneBranchDiff($object, ['allOf' => [$object], 'additionalProperties' => false])->changes,
+    );
+
+    expect($codes)->toContain('schema.all-of-branch-added')
+        ->toContain('schema.property-removed');
+});
+
+it('compares a wrapper beside a sibling round another component as written', function () use ($owner): void {
+    // A pointer with siblings is not read through, so merging would compare `Owner` and `Keeper` by name
+    // alone and miss the member `Keeper` requires. As written, the intersection arriving gates a request.
+    $keeper = ['$ref' => '#/components/schemas/Keeper'];
+
+    expect(loneBranchChanges(loneBranchDiff($owner + ['maxProperties' => 1], ['allOf' => [$keeper], 'maxProperties' => 5])))
+        ->toContain('PUT breaking schema.all-of-branch-added owner.allOf');
+});
+
+it('compares a lone branch repointed inside its wrapper as the bare reference repointed', function (string $keyword, string $openapi) use ($owner): void {
+    // A one-branch composition is its branch, so repointing the branch repoints the schema: the move is
+    // reported and the two components are compared, as between two bare references, never a branch gone
+    // and another arrived. `Keeper` requiring a member `Owner` never had gates a request.
+    $keeper = ['$ref' => '#/components/schemas/Keeper'];
+    $repointed = [
+        "GET schema.property-added owner.{$keyword}.0.properties.since",
+        "GET schema.ref-changed owner.{$keyword}.0.\$ref",
+        "GET schema.required-added owner.{$keyword}.0.required",
+        "PUT breaking schema.required-added owner.{$keyword}.0.required",
+        "PUT schema.property-added owner.{$keyword}.0.properties.since",
+        "PUT schema.ref-changed owner.{$keyword}.0.\$ref",
+    ];
+
+    expect(loneBranchChanges(loneBranchDiff([$keyword => [$owner], 'description' => 'Who'], [$keyword => [$keeper], 'description' => 'Who'], $openapi)))->toBe($repointed)
+        // An asserting sibling the two sides share changes nothing about the branch.
+        ->and(loneBranchChanges(loneBranchDiff([$keyword => [$owner], 'maxProperties' => 1], [$keyword => [$keeper], 'maxProperties' => 1], $openapi)))->toBe($repointed);
+})->with(['allOf', 'anyOf', 'oneOf'])->with(['3.1.1', '3.0.3']);
 
 it('compares two compositions under one keyword branch by branch', function () use ($owner): void {
     // Both sides spell an `allOf`, so the branches pair and only what differs beside them is reported.
