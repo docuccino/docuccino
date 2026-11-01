@@ -16,9 +16,9 @@ use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 /**
  * Folds one field's statically-recovered rules — from an inline `validate([...])` or
  * `Validator::make(...)` — into {@see ValidationRule}s: pipe strings, array-of-rule forms, `Rule::*`
- * factory descriptors, and `new` rule objects whose class carries a `#[RuleSchema]`. Descriptors are why
- * folding happens at the AST level: `Rule::enum(Status::class)` has to be caught as a call, before
- * PHPStan collapses it to a bare object.
+ * factory descriptors, the framework rule objects those factories build, and `new` rule objects whose
+ * class carries a `#[RuleSchema]`. Descriptors are why folding happens at the AST level:
+ * `Rule::enum(Status::class)` has to be caught as a call, before PHPStan collapses it to a bare object.
  *
  * The rule classes it read come back as {@see dependencyFiles()} for the caller to record — editing an
  * annotated rule has to re-document every field using it. One folder per recovery, never shared.
@@ -35,6 +35,17 @@ final class ConstValueToRules
     private const EXCLUDE_FIELD_OBJECTS = [
         'Illuminate\\Validation\\Rules\\ExcludeWith' => 'exclude_with',
         'Illuminate\\Validation\\Rules\\ExcludeWithout' => 'exclude_without',
+    ];
+
+    /**
+     * Framework rule objects a `Rule::` factory constructs, by that factory: `new Enum(X::class)` is the
+     * object `Rule::enum(X::class)` returns, with the same arguments, so it reads as the same rule.
+     */
+    private const FACTORY_OBJECTS = [
+        'Illuminate\\Validation\\Rules\\Enum' => 'enum',
+        'Illuminate\\Validation\\Rules\\In' => 'in',
+        'Illuminate\\Validation\\Rules\\Exists' => 'exists',
+        'Illuminate\\Validation\\Rules\\Unique' => 'unique',
     ];
 
     private readonly DependencyFileSet $dependencyFiles;
@@ -131,6 +142,12 @@ final class ConstValueToRules
 
         if (isset(self::EXCLUDE_FIELD_OBJECTS[$class])) {
             return [self::excludeByFields(self::EXCLUDE_FIELD_OBJECTS[$class], $value->args)];
+        }
+
+        if (isset(self::FACTORY_OBJECTS[$class])) {
+            $rule = $this->descriptor(ConstValue::descriptor(self::FACTORY_OBJECTS[$class], $value->args));
+
+            return $rule === null ? [] : [$rule];
         }
 
         $facts = $this->customRules->read($class);
