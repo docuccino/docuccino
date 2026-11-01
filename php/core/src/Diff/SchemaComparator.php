@@ -517,9 +517,14 @@ final class SchemaComparator
         }
 
         $ref = Hydrate::stringOrNull($map['$ref'] ?? null);
-        $body = $ref === null || $refs === null || isset($seen[$ref]) ? null : $refs->resolveSchema($map);
 
-        return $body === null || $ref === null ? null : self::instanceTypes($body, $refs, $seen + [$ref => true]);
+        if ($ref === null || $refs === null || isset($seen[$ref])) {
+            return null;
+        }
+
+        $body = $refs->resolveSchema($map);
+
+        return $body === null ? null : self::instanceTypes($body, $refs, $seen + [$ref => true]);
     }
 
     /**
