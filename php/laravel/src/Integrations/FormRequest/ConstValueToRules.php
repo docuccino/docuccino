@@ -14,6 +14,7 @@ use Docuccino\Laravel\Integrations\Support\EnumCaseValue;
 use Docuccino\Laravel\Integrations\Support\RuleParsing;
 use Docuccino\Laravel\Integrations\Validation\CustomRuleReader;
 use Docuccino\Laravel\Integrations\Validation\RuleFactories;
+use Docuccino\Laravel\Integrations\Validation\RuleLosses;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\UnreadRule;
 
@@ -62,15 +63,13 @@ final class ConstValueToRules
 
     private bool $widened = false;
 
-    /** @var list<string> */
-    private array $unread = [];
-
-    private ?string $opaque = null;
+    private RuleLosses $losses;
 
     public function __construct(
         private readonly CustomRuleReader $customRules = new CustomRuleReader,
     ) {
         $this->dependencyFiles = new DependencyFileSet;
+        $this->losses = new RuleLosses;
     }
 
     /**
@@ -79,8 +78,7 @@ final class ConstValueToRules
     public function fold(ConstValue $value): array
     {
         $this->widened = false;
-        $this->unread = [];
-        $this->opaque = null;
+        $this->losses = new RuleLosses;
 
         if ($value->isScalar() && is_string($value->scalar)) {
             return RuleParsing::tokens($value->scalar);
@@ -91,7 +89,7 @@ final class ConstValueToRules
             $out = [...$out, ...$this->item($item)];
         }
 
-        return $this->opaque === null ? $out : [];
+        return $this->losses->opaque() === null ? $out : [];
     }
 
     /**
@@ -113,7 +111,7 @@ final class ConstValueToRules
      */
     public function unread(): array
     {
-        return $this->unread;
+        return $this->losses->unread();
     }
 
     /**
@@ -122,7 +120,7 @@ final class ConstValueToRules
      */
     public function opaque(): ?string
     {
-        return $this->opaque;
+        return $this->losses->opaque();
     }
 
     /**
@@ -150,7 +148,7 @@ final class ConstValueToRules
             $item->isInstance() => $this->instance($item),
             // A spread, a value from a call or a variable, a nested array: any of them could be `nullable`
             // or `sometimes`, so nothing written beside it is true on its own.
-            default => $this->leaveOut($item, false),
+            default => $this->leaveOut(self::label($item), false),
         };
     }
 
@@ -187,7 +185,13 @@ final class ConstValueToRules
 
         $this->dependencyFiles->add($facts->file);
 
-        return $facts->annotated ? $facts->rules : $this->leaveOut($value, UnreadRule::objectNarrows($class));
+        if ($facts->annotated) {
+            return $facts->rules;
+        }
+
+        $unread = UnreadRule::classify($class);
+
+        return $this->leaveOut($unread['label'], $unread['narrows']);
     }
 
     /**
@@ -210,7 +214,7 @@ final class ConstValueToRules
 
         return $string !== null
             ? RuleParsing::tokens($string)
-            : $this->leaveOut($descriptor, UnreadRule::factoryNarrows((string) $descriptor->factory));
+            : $this->leaveOut(self::label($descriptor), UnreadRule::factoryNarrows((string) $descriptor->factory));
     }
 
     /**
@@ -218,25 +222,17 @@ final class ConstValueToRules
      *
      * @return list<ValidationRule>
      */
-    private function leaveOut(ConstValue $rule, bool $narrows): array
+    private function leaveOut(string $label, bool $narrows): array
     {
-        $label = self::label($rule);
-
-        if (! $narrows) {
-            $this->opaque ??= $label;
-        } elseif (! in_array($label, $this->unread, true)) {
-            $this->unread[] = $label;
-        }
+        $this->losses->add($label, $narrows);
 
         return [];
     }
 
-    /** How a diagnostic names a rule: the class to annotate, or the call as written, without its arguments. */
+    /** How a diagnostic names a rule that is no object: the call as written, without its arguments. */
     private static function label(ConstValue $rule): string
     {
         return match (true) {
-            $rule->isInstance() && ltrim((string) $rule->class, '\\') === 'Closure' => 'a closure',
-            $rule->isInstance() => 'new '.ltrim((string) $rule->class, '\\'),
             $rule->isDescriptor() => self::shortFactory((string) $rule->factory).'(…)',
             $rule->isSpread() => 'a spread',
             $rule->isArray() => 'a nested array',

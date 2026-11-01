@@ -41,6 +41,19 @@ final class UnreadRule
     private const RULES_NAMESPACE = 'Illuminate\\Validation\\Rules\\';
 
     /**
+     * How a diagnostic names a rule object of this class — `a closure`, or the `new` that built it — and
+     * whether it only refuses values ({@see objectNarrows()}).
+     *
+     * @return array{label: string, narrows: bool}
+     */
+    public static function classify(string $class): array
+    {
+        $class = ltrim($class, '\\');
+
+        return ['label' => $class === 'Closure' ? 'a closure' : 'new '.$class, 'narrows' => self::objectNarrows($class)];
+    }
+
+    /**
      * Whether a rule object of this class only refuses values. A class this build cannot load is taken
      * as a rule object, which is what a `new` in a rules list is; a loaded class that is none of Laravel's
      * own and implements no rule contract is cast to a rule string nothing here can read.

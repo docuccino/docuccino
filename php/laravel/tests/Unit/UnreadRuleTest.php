@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Docuccino\Laravel\Integrations\Validation\RuleLosses;
 use Docuccino\Laravel\Integrations\Validation\UnreadRule;
 use Docuccino\Laravel\Tests\Fixtures\Rules\LegacyStringRule;
 use Docuccino\Laravel\Tests\Fixtures\Rules\OpaqueCheck;
@@ -92,3 +93,26 @@ it('classifies a rule object by what Laravel does with it', function (string $cl
     'nested rules, compiled per item' => ['Illuminate\\Validation\\NestedRules', false],
     'an object Laravel casts to a rule string' => [LegacyStringRule::class, false],
 ]);
+
+it('names a rule object the way a diagnostic shows it, beside what leaving it out does', function (string $class, array $expected): void {
+    expect(UnreadRule::classify($class))->toBe($expected);
+})->with([
+    'a closure' => ['Closure', ['label' => 'a closure', 'narrows' => true]],
+    'a rule object, by the new that built it' => [OpaqueCheck::class, ['label' => 'new '.OpaqueCheck::class, 'narrows' => true]],
+    'a leading backslash' => ['\\'.OpaqueCheck::class, ['label' => 'new '.OpaqueCheck::class, 'narrows' => true]],
+    'an object Laravel casts to a rule string' => [LegacyStringRule::class, ['label' => 'new '.LegacyStringRule::class, 'narrows' => false]],
+]);
+
+it('keeps each rule that only refuses values once, and the first that could loosen the rest', function (): void {
+    // A field gives up on its first loosening rule, so a later one names nothing new for the author.
+    $losses = new RuleLosses;
+    $losses->add('new App\\Rules\\Slug', true);
+    $losses->add('Rule::when(…)', false);
+    $losses->add('new App\\Rules\\Slug', true);
+    $losses->add('a spread', false);
+    $losses->add('a closure', true);
+
+    expect($losses->unread())->toBe(['new App\\Rules\\Slug', 'a closure'])
+        ->and($losses->opaque())->toBe('Rule::when(…)')
+        ->and((new RuleLosses)->opaque())->toBeNull();
+});
