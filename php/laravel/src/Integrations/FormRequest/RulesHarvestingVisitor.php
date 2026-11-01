@@ -27,7 +27,8 @@ use PhpParser\Node\Scalar\String_;
  * unresolvable expression) is recorded as unrecoverable so the caller can diagnose it instead of losing
  * it. A field that folds to SOME of its rules is recorded with what it left out: values it could not read
  * (widened), or whole rules that can only refuse values (unread). A field with a rule whose content is
- * unknown is given up and recorded as opaque, and no other recovery may restate it ({@see ConstValueToRules}).
+ * unknown is given up and recorded as opaque: it is published with no rules at all, and no other recovery
+ * may restate the ones it had ({@see ConstValueToRules}).
  */
 abstract class RulesHarvestingVisitor implements TraceVisitor
 {
@@ -40,7 +41,7 @@ abstract class RulesHarvestingVisitor implements TraceVisitor
 
     public const string UNREAD_HELP = 'The rule is a closure, a custom Rule object with no #[RuleSchema], or a framework rule this build does not read, and it can only refuse values, so the field is documented without it: wider than the endpoint, and true. Annotate the rule class with #[RuleSchema] to document what it accepts (an empty #[RuleSchema] says it states nothing a schema can), or write the rule as one the build reads (string rules, Rule::enum(), Rule::in(), …).';
 
-    public const string OPAQUE_HELP = 'A rule whose content is unknown (Rule::when(), Rule::forEach(), a spread, or a value from a call or a variable) can make the field optional, nullable or excluded, so none of the rules beside it are true on their own. Write the rules out where they apply, or declare the field with #[BodyParameter] or #[QueryParameter].';
+    public const string OPAQUE_HELP = 'A rule whose content is unknown (Rule::when(), Rule::forEach(), a spread, or a value from a call or a variable) can make the field optional, nullable or excluded, so none of the rules beside it are true on their own and the field is published with no constraints. Write the rules out where they apply, or declare the field with #[BodyParameter] or #[QueryParameter].';
 
     public const string WIDENED_HELP = 'A value the rule states is not written at the rule — it comes from a call, a variable or a spread — and a partial list would make a client reject a value the API accepts. Write every value where the rule is, which is what settles it; an overlay corrects the document instead, and this notice keeps naming the rule.';
 
@@ -73,9 +74,13 @@ abstract class RulesHarvestingVisitor implements TraceVisitor
         private readonly ConstValueToRules $folder = new ConstValueToRules,
     ) {}
 
+    /**
+     * The recovered fields. A field given up ({@see opaqueFields()}) stays, with no rules: its name is
+     * known, and an unconstrained, optional field is true whatever the unread rule turns out to be.
+     */
     public function ruleSet(): RuleSet
     {
-        return new RuleSet(array_diff_key($this->fields, $this->opaque));
+        return new RuleSet($this->fields);
     }
 
     /**
@@ -144,8 +149,9 @@ abstract class RulesHarvestingVisitor implements TraceVisitor
             $rules = $value === null ? [] : $this->folder->fold(self::withClosures($value, $item->value));
 
             $opaque = $value === null ? null : $this->folder->opaque();
-            if ($opaque !== null) {
-                $this->opaque[$field] ??= $opaque;
+            if ($opaque !== null || isset($this->opaque[$field])) {
+                $this->opaque[$field] ??= (string) $opaque;
+                $this->fields[$field] = [];
 
                 continue;
             }

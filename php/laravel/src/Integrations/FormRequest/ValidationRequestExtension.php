@@ -97,7 +97,7 @@ final class ValidationRequestExtension implements OperationExtension
         }
 
         foreach ($visitor->opaqueFields() as $field => $rule) {
-            $notes->opaque($context, $field, sprintf('Inline validation field "%s" has a rule whose content this build cannot read (%s), which can make the field optional, nullable or excluded; none of its rules are documented, and it is omitted from %s.', $field, $rule, RecoveredRequest::destination($context)));
+            $notes->opaque($context, $field, sprintf('Inline validation field "%s" has a rule whose content this build cannot read (%s), which can make the field optional, nullable or excluded; none of its rules are documented, so it is published in %s, optional and unconstrained.', $field, $rule, RecoveredRequest::destination($context)));
         }
 
         foreach ($visitor->unreadRules() as $field => $rules) {

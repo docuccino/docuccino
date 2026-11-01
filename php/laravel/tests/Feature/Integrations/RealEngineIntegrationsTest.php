@@ -871,7 +871,8 @@ it('widens a rule whose values come from a call, in the shape an app reaches for
 it('leaves out a rule it cannot read that only refuses values, and gives up a field whose rule could loosen the rest', function (): void {
     // A custom rule object and a closure are run as checks, so without them `title` and `slug` are wider
     // than the endpoint and still true. `Rule::when(…, ['nullable'])` and a rule chosen by a ternary can be
-    // `nullable` or `sometimes`, so the `string` beside them is not true on its own. `status` is
+    // `nullable` or `sometimes`, so the `string` beside them is not true on its own and the field is left
+    // with no rules at all. `status` is
     // `(new Enum(…))->only([…])`, which reads as the factory chain that builds it.
     $trace = FixtureRunner::traceRules(
         'app/Http/Requests/UnreadRulesRequest.php',
@@ -884,7 +885,10 @@ it('leaves out a rule it cannot read that only refuses values, and gives up a fi
         $trace['fields'][$field],
     );
 
-    expect(array_keys($trace['fields']))->toBe(['title', 'slug', 'status'])
+    // The given-up fields keep their names with no rules, so they publish optional and unconstrained.
+    expect(array_keys($trace['fields']))->toBe(['title', 'slug', 'status', 'summary', 'tier'])
+        ->and($trace['fields']['summary'])->toBe([])
+        ->and($trace['fields']['tier'])->toBe([])
         ->and($names('title'))->toBe(['required', 'string', 'max'])
         ->and($names('slug'))->toBe(['required', 'string'])
         ->and($names('status'))->toBe(['required', 'enum'])

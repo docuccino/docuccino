@@ -571,8 +571,9 @@ When only one of a field's rules can't be read, what happens depends on what tha
   rules that were read, so it's documented a little wider than your endpoint, which is still true.
 - **A rule whose content isn't known until runtime** — `Rule::when()`, `Rule::forEach()`, a spread, or a
   rule chosen by a call or a ternary — could turn out to be `nullable`, `sometimes` or `exclude`. Then none
-  of the rules beside it hold on their own, so the field is left out rather than published as stricter
-  than your endpoint.
+  of the rules beside it hold on their own, so the field is published by name with no constraints and not
+  required, rather than as stricter than your endpoint. A Data property keeps what its type says, since
+  the type holds whatever the rule turns out to be.
 
 Either way the same `validation.rule-unrecoverable` diagnostic names the field and the rule.
 

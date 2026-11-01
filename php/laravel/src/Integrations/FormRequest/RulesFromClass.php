@@ -99,14 +99,23 @@ final class RulesFromClass
         $notes = new UnrecoveredRules(RecoveredRequest::declaredFields($context, $class));
 
         // The literal path reads the string rules of a list and skips the rest, so it would publish the
-        // very rules the trace found untrue on their own.
+        // very rules the trace found untrue on their own. The field itself stays, with none.
         foreach ($opaque as $field => $rule) {
             $field = (string) $field;
-            unset($shapeFields[$field]);
 
-            $notes->opaque($context, $field, in_array($field, $documentedElsewhere, true)
-                ? sprintf('Validation field "%s" on %s has a rule whose content this build cannot read (%s), which can make the field optional, nullable or excluded; it is documented from its type alone, without the constraints its rules state.', $field, $class, $rule)
-                : sprintf('Validation field "%s" on %s has a rule whose content this build cannot read (%s), which can make the field optional, nullable or excluded; none of its rules are documented, and it is omitted from %s.', $field, $class, $rule, RecoveredRequest::destination($context)));
+            // Another producer documenting the field from its type answers for it instead.
+            if (in_array($field, $documentedElsewhere, true)) {
+                unset($shapeFields[$field], $traceFields[$field]);
+                $notes->opaque($context, $field, sprintf('Validation field "%s" on %s has a rule whose content this build cannot read (%s), which can make the field optional, nullable or excluded; it is documented from its type alone, without the constraints its rules state.', $field, $class, $rule));
+
+                continue;
+            }
+
+            if (isset($shapeFields[$field]) || ! isset($traceFields[$field])) {
+                $shapeFields[$field] = [];
+            }
+
+            $notes->opaque($context, $field, sprintf('Validation field "%s" on %s has a rule whose content this build cannot read (%s), which can make the field optional, nullable or excluded; none of its rules are documented, so it is published in %s, optional and unconstrained.', $field, $class, $rule, RecoveredRequest::destination($context)));
         }
 
         foreach ($unread as $field => $rules) {

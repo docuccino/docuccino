@@ -1345,7 +1345,10 @@ check (a closure, a rule contract, one of Laravel's `Rules\*` objects or factori
 so the field keeps the rest, documented wider than the endpoint; a rule whose content is unknown
 (`Rule::when`/`unless`/`forEach`, `ConditionalRules`, `NestedRules`, the exclude rules, a macro or app
 helper, an object Laravel would cast to a rule string, a spread, an unread value) can be `nullable`,
-`sometimes` or `exclude`, so the field is given up and the literal shape reading may not restate it. Both
+`sometimes` or `exclude`, so the field is given up: it keeps its name with no rules (`{}`, not required,
+true whatever the rule turns out to be; under `exclude` the key is still accepted) and the literal shape
+reading may not restate its rules. A spatie Data property keeps what its type says instead, which
+construction enforces whatever the rule is. Both
 are `validation.rule-unrecoverable`, naming the rule. The constant shape reading (`ShapeToRuleSet`) and
 spatie's `#[Rule(new X)]` follow the same rule over the class alone. A `new` receiver carries a chain the
 way a descriptor does, so `(new Enum(X::class))->only([…])` reads as `Rule::enum(X::class)->only([…])`.

@@ -40,13 +40,14 @@ use Illuminate\Validation\Rule;
  * A rule the build can see but not read is never dropped quietly. One Laravel runs as a check can only
  * refuse values, so the field is documented without it — wider than the endpoint, still true — and the
  * author is told which rule. One whose content is unknown can make the field nullable, optional or
- * unchecked, so the rules beside it are not true on their own and the field is given up, named.
+ * unchecked, so the rules beside it are not true on their own: the field is published by name with no
+ * constraints, optional, and the rule is named.
  */
 
-function unreadRuleContext(string $symbol, string $snippet, array $analyses = []): RouteContext
+function unreadRuleContext(string $symbol, string $snippet, array $analyses = [], string $verb = 'POST'): RouteContext
 {
     return new RouteContext(
-        route: new RouteDescriptor(['POST'], 'api/payments'),
+        route: new RouteDescriptor([$verb], 'api/payments'),
         actionRef: new ActionRef('', 'App\\PaymentController', 'store'),
         attributes: new AttributeSet,
         engine: new StubTypeEngine(analyses: $analyses, traces: [$symbol => RulesTraceScript::forPhp($snippet)]),
@@ -92,6 +93,18 @@ it('is right to keep the rules beside a check and drop the rules beside a condit
         ->and(Validator::make(['note' => null], ['note' => ['string']])->passes())->toBeFalse();
 });
 
+it('is right to publish a given-up field optional and unconstrained, whatever the hidden rule turns out to be', function (array $written, string $hidden, array $body): void {
+    // The server takes each body below, which the rules written beside the hidden one would refuse on
+    // their own. `{}`, not required, refuses none of them. Under `exclude` the key is still accepted, only
+    // left out of the validated data, so naming the field stays true there too.
+    expect(Validator::make($body, ['note' => [Rule::when(true, [$hidden]), ...$written]])->passes())->toBeTrue()
+        ->and(Validator::make($body, ['note' => $written])->passes())->toBeFalse();
+})->with([
+    'nullable takes null' => [['string'], 'nullable', ['note' => null]],
+    'sometimes takes no value' => [['required', 'string'], 'sometimes', []],
+    'exclude takes anything' => [['required', 'string'], 'exclude', ['note' => ['not', 'a', 'string']]],
+]);
+
 it('documents a FormRequest field without the rule it cannot read, and names the rule', function (): void {
     $context = unreadRuleContext(CustomRuleRequest::class.'::rules', <<<'PHP'
         return [
@@ -135,13 +148,14 @@ it('gives up a FormRequest field whose rule could loosen the rest, and names tha
 
     $rules = (new RulesFromClass)->analyse($context, CustomRuleRequest::class);
 
-    expect(unreadRuleNames($rules))->toBe(['title' => ['required', 'string']]);
+    // Each keeps its name and loses every rule, so it is published unconstrained and optional.
+    expect(unreadRuleNames($rules))->toBe(['note' => [], 'tier' => [], 'title' => ['required', 'string']]);
 
     $messages = array_map(static fn (Diagnostic $d): string => $d->message, unreadRuleNotes($context));
 
     expect($messages)->toBe([
-        'Validation field "note" on '.CustomRuleRequest::class.' has a rule whose content this build cannot read (Rule::when(…)), which can make the field optional, nullable or excluded; none of its rules are documented, and it is omitted from the request schema.',
-        'Validation field "tier" on '.CustomRuleRequest::class.' has a rule whose content this build cannot read (a value this build cannot read), which can make the field optional, nullable or excluded; none of its rules are documented, and it is omitted from the request schema.',
+        'Validation field "note" on '.CustomRuleRequest::class.' has a rule whose content this build cannot read (Rule::when(…)), which can make the field optional, nullable or excluded; none of its rules are documented, so it is published in the request schema, optional and unconstrained.',
+        'Validation field "tier" on '.CustomRuleRequest::class.' has a rule whose content this build cannot read (a value this build cannot read), which can make the field optional, nullable or excluded; none of its rules are documented, so it is published in the request schema, optional and unconstrained.',
     ])
         ->and(unreadRuleNotes($context)[0]->help)->toContain('Rule::when()');
 });
@@ -180,9 +194,9 @@ it('lets the literal reading restate neither a field the trace gave up nor a rul
     foreach (['Rule::when(…)' => $traced, 'new Illuminate\\Validation\\ConditionalRules' => $assembled] as $named => $context) {
         $rules = (new RulesFromClass)->analyse($context, CustomRuleRequest::class);
 
-        expect(unreadRuleNames($rules))->toBe(['token' => ['string']])
+        expect(unreadRuleNames($rules))->toBe(['token' => ['string'], 'note' => []])
             ->and(array_map(static fn (Diagnostic $d): string => $d->message, unreadRuleNotes($context)))->toBe([
-                'Validation field "note" on '.CustomRuleRequest::class.' has a rule whose content this build cannot read ('.$named.'), which can make the field optional, nullable or excluded; none of its rules are documented, and it is omitted from the request schema.',
+                'Validation field "note" on '.CustomRuleRequest::class.' has a rule whose content this build cannot read ('.$named.'), which can make the field optional, nullable or excluded; none of its rules are documented, so it is published in the request schema, optional and unconstrained.',
                 'Validation field "token" on '.CustomRuleRequest::class.' has a rule this build cannot read (new '.OpaqueCheck::class.'), so that rule is left off the request schema; the rest of its rules are documented.',
             ]);
     }
@@ -212,9 +226,10 @@ it('reads a rule list the literal reading alone answers for with the grammar the
 
     expect(unreadRuleNames($rules))->toBe([
         'reference' => ['required', 'string', 'regex', 'min', 'max', 'format', 'description', 'example'],
+        'tier' => [],
     ])
         ->and(array_map(static fn (Diagnostic $d): string => $d->message, unreadRuleNotes($context)))->toBe([
-            'Validation field "tier" on '.CustomRuleRequest::class.' has a rule whose content this build cannot read (a value this build cannot read), which can make the field optional, nullable or excluded; none of its rules are documented, and it is omitted from the request schema.',
+            'Validation field "tier" on '.CustomRuleRequest::class.' has a rule whose content this build cannot read (a value this build cannot read), which can make the field optional, nullable or excluded; none of its rules are documented, so it is published in the request schema, optional and unconstrained.',
             'Validation field "token" on '.CustomRuleRequest::class.' has no statically recoverable rules; it is omitted from the request schema.',
         ])
         ->and($context->dependencyFiles())->toContain((string) (new ReflectionClass('Docuccino\\Laravel\\Tests\\Fixtures\\Rules\\BankReference'))->getFileName());
@@ -224,7 +239,7 @@ it('reports the same two losses on an inline validate(), and publishes only what
     $context = unreadRuleContext('App\\PaymentController::store', <<<'PHP'
         $request->validate([
             'token' => ['required', 'string', new \Docuccino\Laravel\Tests\Fixtures\Rules\OpaqueCheck],
-            'note' => ['string', \Illuminate\Validation\Rule::when($request->isMethod('PATCH'), ['nullable'])],
+            'note' => ['required', 'string', \Illuminate\Validation\Rule::when($request->isMethod('PATCH'), ['nullable'])],
         ]);
         PHP);
 
@@ -233,12 +248,31 @@ it('reports the same two losses on an inline validate(), and publishes only what
     $body = $operation->freeze()->toArray()['requestBody'] ?? [];
     $schema = is_array($body) ? $body['content']['application/json']['schema'] : [];
 
-    // `note` is gone rather than published as a string the endpoint does not insist on.
-    expect($schema['properties'])->toBe(['token' => ['type' => 'string']])
+    // `note` keeps its name, with no type the endpoint does not insist on, and is not required.
+    expect($schema['properties'])->toBe(['token' => ['type' => 'string'], 'note' => []])
+        ->and($schema['required'] ?? [])->toBe(['token'])
         ->and(array_map(static fn (Diagnostic $d): string => $d->message, unreadRuleNotes($context)))->toBe([
-            'Inline validation field "note" has a rule whose content this build cannot read (Rule::when(…)), which can make the field optional, nullable or excluded; none of its rules are documented, and it is omitted from the request schema.',
+            'Inline validation field "note" has a rule whose content this build cannot read (Rule::when(…)), which can make the field optional, nullable or excluded; none of its rules are documented, so it is published in the request schema, optional and unconstrained.',
             'Inline validation field "token" has a rule this build cannot read (new '.OpaqueCheck::class.'), so that rule is left off the request schema; the rest of its rules are documented.',
         ]);
+});
+
+it('names a given-up field as an optional, unconstrained query parameter on a read verb', function (): void {
+    $context = unreadRuleContext('App\\PaymentController::store', <<<'PHP'
+        $request->validate([
+            'note' => ['required', 'string', \Illuminate\Validation\Rule::when($request->boolean('lax'), ['nullable'])],
+        ]);
+        PHP, verb: 'GET');
+
+    (new ValidationRequestExtension)->handle($operation = new OperationDraft, $context);
+
+    $parameters = array_map(
+        static fn (array $parameter): array => array_intersect_key($parameter, array_flip(['name', 'in', 'required', 'schema'])),
+        json_decode((string) json_encode($operation->freeze()->toArray()['parameters'] ?? []), true),
+    );
+
+    expect($parameters)->toBe([['name' => 'note', 'in' => 'query', 'required' => false, 'schema' => []]])
+        ->and(unreadRuleNotes($context)[0]->message)->toContain('so it is published in the query parameters, optional and unconstrained');
 });
 
 it('names a spatie #[Rule(new X)] it cannot read, against the Data property that carries it', function (): void {
