@@ -157,7 +157,7 @@ final class StubTraceScope implements FoldsCallReturns, TypeScope
             return ConstValue::descriptor($factory, $this->foldArgs($expr->getArgs()));
         }
 
-        // A fluent call over a descriptor receiver appends to its chain, as the real engine does, so
+        // A fluent call over a descriptor or `new` receiver appends to its chain, as the real engine does, so
         // `AllowedFilter::partial('email')->nullable()` keeps both halves. A first-class callable carries no
         // args (and `getArgs()` asserts on one), so it declines.
         if ($expr instanceof Node\Expr\MethodCall
@@ -165,7 +165,7 @@ final class StubTraceScope implements FoldsCallReturns, TypeScope
             && ! $expr->isFirstClassCallable()
         ) {
             $receiver = $this->fold($expr->var);
-            if ($receiver !== null && $receiver->isDescriptor()) {
+            if ($receiver !== null && ($receiver->isDescriptor() || $receiver->isInstance())) {
                 return $receiver->withChainedCall($expr->name->toString(), $this->foldArgs($expr->getArgs()));
             }
         }

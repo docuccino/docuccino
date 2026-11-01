@@ -99,7 +99,10 @@ it('folds an ordinary factory call and its chain to a descriptor', function (): 
         ->and(ConstantFolder::fold(foldableExpr("Rule::in('a')->only('b')"), $scope)?->render())
         ->toBe("Rule::in('a')->only('b')")
         ->and(ConstantFolder::fold(foldableExpr("new Enum('a')"), $scope)?->render())
-        ->toBe("new Enum('a')");
+        ->toBe("new Enum('a')")
+        // A chained call on a `new` object keeps the object and the call, as it does on a factory.
+        ->and(ConstantFolder::fold(foldableExpr("(new Enum('a'))->only('b')"), $scope)?->render())
+        ->toBe("(new Enum('a'))->only('b')");
 });
 
 it('declines a first-class callable rather than asserting inside getArgs()', function (string $code): void {

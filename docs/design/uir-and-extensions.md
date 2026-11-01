@@ -1336,8 +1336,25 @@ The attribute is the contract, not the `ValidationRule` interface (a vendor rule
 author adds it) and ctor args are ignored. Every recovery path shares the fold or the reader (FormRequest
 /laravel-actions `rules()`, inline `validate()`/`Validator::make`, spatie `#[Rule(new X)]`); each records
 the rule class file as a fragment dependency, whether or not it carried the attribute, so adding the
-attribute invalidates. No attribute → the unchanged `validation.rule-unrecoverable` path; closures stay
-opaque by nature.
+attribute invalidates. An empty attribute says the rule states nothing and reads as no rules. No
+attribute → `validation.rule-unrecoverable`; closures stay opaque by nature.
+
+**A rule seen but not read** (`Integrations/Validation/UnreadRule`). Beside rules that read, an unread rule
+is never dropped quietly, and what leaving it out costs follows Laravel's own `ValidationRuleParser`: a
+check (a closure, a rule contract, one of Laravel's `Rules\*` objects or factories) can only refuse values,
+so the field keeps the rest, documented wider than the endpoint; a rule whose content is unknown
+(`Rule::when`/`unless`/`forEach`, `ConditionalRules`, `NestedRules`, the exclude rules, a macro or app
+helper, an object Laravel would cast to a rule string, a spread, an unread value) can be `nullable`,
+`sometimes` or `exclude`, so the field is given up: it keeps its name with no rules (`{}`, not required,
+true whatever the rule turns out to be; under `exclude` the key is still accepted) and the literal shape
+reading may not restate its rules. A spatie Data property keeps what its type says instead, which
+construction enforces whatever the rule is. Both
+are `validation.rule-unrecoverable`, naming the rule. The constant shape reading (`ShapeToRuleSet`) and
+spatie's `#[Rule(new X)]` follow the same rule over the class alone. A `Rule::` static is judged by what the
+installed `Rule` declares it returns (`RuleFactories`), never by a list of names: a rule object by the rule
+above, a rule string by calling the static, so `Rule::nullable()` reads as `'nullable'`, and anything else
+as unknown. A `new` receiver carries a chain the
+way a descriptor does, so `(new Enum(X::class))->only([…])` reads as `Rule::enum(X::class)->only([…])`.
 
 `--provenance=none|winners|full`, default `winners` for committed artifacts. A component only a dropped
 member referred to — a trail's overridden value, a 3.0 artifact's webhooks — is dropped with it

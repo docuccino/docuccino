@@ -55,8 +55,23 @@ it('leaves an unchained descriptor serialization byte-identical (no chain key)',
         ->and($value->chain)->toBe([]);
 });
 
-it('is a no-op to chain a call onto a non-descriptor', function (): void {
-    expect(ConstValue::scalar('x')->withChainedCall('only', [])->isScalar())->toBeTrue();
+it('is a no-op to chain a call onto a value that is neither a call nor a new', function (): void {
+    expect(ConstValue::scalar('x')->withChainedCall('only', [])->isScalar())->toBeTrue()
+        ->and(ConstValue::array([])->withChainedCall('only', [])->chain)->toBe([]);
+});
+
+it('carries chained calls on an instance, renders them, and round-trips', function (): void {
+    // `(new Enum(Status::class))->only([...])` is the same rule as the factory form, so the narrowing has
+    // to survive on the object as it does on the descriptor. An unchained instance keeps its old bytes.
+    $value = ConstValue::instance('Illuminate\\Validation\\Rules\\Enum', [ConstValue::scalar('App\\Enums\\Status')])
+        ->withChainedCall('only', [ConstValue::array([ConstValue::scalar('Active')])]);
+
+    expect($value->isInstance())->toBeTrue()
+        ->and($value->class)->toBe('Illuminate\\Validation\\Rules\\Enum')
+        ->and($value->chain)->toHaveCount(1)
+        ->and($value->render())->toBe("(new Enum('App\\Enums\\Status'))->only(['Active'])")
+        ->and(ConstValue::fromArray($value->toArray())->toArray())->toBe($value->toArray())
+        ->and(ConstValue::instance('App\\Rules\\Iban', [])->toArray())->not->toHaveKey('chain');
 });
 
 it('round-trips an array of mixed const values', function (): void {

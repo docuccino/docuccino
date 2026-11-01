@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 use Docuccino\Core\Inference\ConstValue;
 use Docuccino\Laravel\Integrations\FormRequest\ConstValueToRules;
+use Docuccino\Laravel\Integrations\Validation\RuleFactories;
 use Docuccino\Laravel\Tests\Fixtures\Rules\BankReference;
+use Docuccino\Laravel\Tests\Fixtures\Rules\LegacyStringRule;
 use Docuccino\Laravel\Tests\Fixtures\Rules\OpaqueCheck;
+use Docuccino\Laravel\Tests\Fixtures\Rules\TenantMember;
 use Illuminate\Validation\Rule;
 use Workbench\App\Enums\WidgetStatus;
 
@@ -216,25 +219,104 @@ it('publishes no enum where the class itself is spread in', function (): void {
         ->and($folder->widened())->toBeTrue();
 });
 
-it('reports a rules list that spread rules in as widened, keeping the ones written beside them', function (): void {
+it('gives up a rules list that spread rules in, rather than keeping the ones written beside them', function (): void {
+    // `['string', ...$this->extra()]` is only `string` while the spread holds no `nullable`, `sometimes` or
+    // `exclude`. Holding one, the endpoint takes null or no value at all, and a document publishing the
+    // `string` beside it refuses a request the API accepts. Nothing written beside the spread is true on
+    // its own, so the field is given up and named.
     $folder = new ConstValueToRules;
     $rules = $folder->fold(ConstValue::array([
-        ConstValue::scalar('required'),
+        ConstValue::scalar('string'),
         ConstValue::spread('spread array item'),
     ]));
 
-    expect(array_map(static fn ($rule): string => $rule->name, $rules))->toBe(['required'])
-        ->and($folder->widened())->toBeTrue();
+    expect($rules)->toBe([])
+        ->and($folder->opaque())->toBe('a spread')
+        ->and($folder->widened())->toBeFalse();
 });
 
-it('reports nothing widened for a fold that lost nothing', function (): void {
+it('reports nothing lost for a fold that read every rule', function (): void {
     $folder = new ConstValueToRules;
     $folder->fold(ConstValue::array([
         ConstValue::scalar('required'),
         ConstValue::descriptor('Illuminate\\Validation\\Rule::in', [ConstValue::scalar('a'), ConstValue::scalar('b')]),
+        ConstValue::instance(BankReference::class, []),
+        ConstValue::instance(TenantMember::class, []),
     ]));
 
-    expect($folder->widened())->toBeFalse();
+    expect($folder->widened())->toBeFalse()
+        ->and($folder->unread())->toBe([])
+        ->and($folder->opaque())->toBeNull();
+});
+
+it('leaves out a rule it cannot read that can only refuse values, keeps the rest and names it', function (ConstValue $unread, string $named): void {
+    // Each of these is run by Laravel as a check on the value, or is one of its own rules, and a check can
+    // only refuse: the field without it accepts everything the endpoint does and more. That is wider than
+    // the endpoint and still true, so `string` stands and the rule is named for the author.
+    $folder = new ConstValueToRules;
+    $rules = $folder->fold(ConstValue::array([ConstValue::scalar('string'), $unread]));
+
+    expect(array_map(static fn ($rule): string => $rule->name, $rules))->toBe(['string'])
+        ->and($folder->unread())->toBe([$named])
+        ->and($folder->opaque())->toBeNull();
+})->with([
+    'an unannotated rule object' => [ConstValue::instance(OpaqueCheck::class, []), 'new '.OpaqueCheck::class],
+    'a rule object chained after new' => [ConstValue::instance(OpaqueCheck::class, [])->withChainedCall('strict', []), 'new '.OpaqueCheck::class],
+    'a rule object of a class this build cannot load' => [ConstValue::instance('App\\Rules\\Missing', []), 'new App\\Rules\\Missing'],
+    'a closure' => [ConstValue::instance('Closure', []), 'a closure'],
+    'Password::min()' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\Password::min', [ConstValue::scalar(8)]), 'Password::min(…)'],
+    'File::types()' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\File::types', [ConstValue::scalar('pdf')]), 'File::types(…)'],
+    'Rule::notIn()' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::notIn', [ConstValue::scalar('root')]), 'Rule::notIn(…)'],
+    'Rule::requiredIf()' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::requiredIf', [ConstValue::unknown('closure')]), 'Rule::requiredIf(…)'],
+    'new Password()' => [ConstValue::instance('Illuminate\\Validation\\Rules\\Password', [ConstValue::scalar(8)]), 'new Illuminate\\Validation\\Rules\\Password'],
+    'new NotIn()' => [ConstValue::instance('Illuminate\\Validation\\Rules\\NotIn', [ConstValue::array([ConstValue::scalar('root')])]), 'new Illuminate\\Validation\\Rules\\NotIn'],
+]);
+
+it('gives up a field one of whose rules has content it cannot read, and names that rule', function (ConstValue $opaque, string $named): void {
+    // Each of these can turn into `nullable`, `sometimes` or `exclude` at runtime — a conditional or
+    // nested rule expands to other rules, an app's helper or a variable returns any of them, and Laravel
+    // casts a rule object implementing no contract to the string it returns. Any of those makes the
+    // `string` beside it untrue on its own, so no rule of the field is kept.
+    $folder = new ConstValueToRules;
+    $rules = $folder->fold(ConstValue::array([ConstValue::scalar('string'), $opaque, ConstValue::instance(OpaqueCheck::class, [])]));
+
+    expect($rules)->toBe([])
+        ->and($folder->opaque())->toBe($named);
+})->with([
+    'Rule::when()' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::when', [ConstValue::unknown('call'), ConstValue::array([ConstValue::scalar('nullable')])]), 'Rule::when(…)'],
+    'Rule::unless()' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::unless', [ConstValue::scalar(true), ConstValue::scalar('sometimes')]), 'Rule::unless(…)'],
+    'Rule::forEach()' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::forEach', [ConstValue::unknown('closure')]), 'Rule::forEach(…)'],
+    'a Rule macro' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::optionalSlug', []), 'Rule::optionalSlug(…)'],
+    'an application helper' => [ConstValue::descriptor('App\\Support\\Rules::nullableName', []), 'Rules::nullableName(…)'],
+    'new ConditionalRules()' => [ConstValue::instance('Illuminate\\Validation\\ConditionalRules', [ConstValue::scalar(true), ConstValue::scalar('nullable')]), 'new Illuminate\\Validation\\ConditionalRules'],
+    'new NestedRules()' => [ConstValue::instance('Illuminate\\Validation\\NestedRules', [ConstValue::unknown('closure')]), 'new Illuminate\\Validation\\NestedRules'],
+    'a rule object Laravel casts to a string' => [ConstValue::instance(LegacyStringRule::class, []), 'new '.LegacyStringRule::class],
+    'a value from a call or a variable' => [ConstValue::unknown('non-constant array item'), 'a value this build cannot read'],
+    'a nested array' => [ConstValue::array([ConstValue::scalar('nullable')]), 'a nested array'],
+]);
+
+it('reads a framework rule object narrowed by a chained call as the factory chain that builds it', function (): void {
+    // `(new Enum(X::class))->only([...])` is `Rule::enum(X::class)->only([...])`, so it publishes the cases
+    // the endpoint takes, not every case of the enum.
+    $chained = static fn (string $method): ConstValue => ConstValue::instance('Illuminate\\Validation\\Rules\\Enum', [ConstValue::scalar(WidgetStatus::class)])
+        ->withChainedCall($method, [ConstValue::array([ConstValue::scalar('Draft'), ConstValue::scalar('Published')])]);
+
+    $only = (new ConstValueToRules)->fold($chained('only'));
+    $except = (new ConstValueToRules)->fold($chained('except'));
+
+    expect(array_map(static fn ($r): array => [$r->name, $r->parameters], $only))->toBe([['enum', ['draft', 'published']]])
+        ->and(array_map(static fn ($r): array => [$r->name, $r->parameters], $except))->toBe([['enum', ['archived']]]);
+});
+
+it('widens an enum rule whose class it cannot read, rather than dropping it unnamed', function (): void {
+    $folder = new ConstValueToRules;
+    $rules = $folder->fold(ConstValue::array([
+        ConstValue::scalar('string'),
+        ConstValue::instance('Illuminate\\Validation\\Rules\\Enum', [ConstValue::unknown('non-constant constructor arg')]),
+    ]));
+
+    expect(array_map(static fn ($rule): string => $rule->name, $rules))->toBe(['string'])
+        ->and($folder->widened())->toBeTrue();
 });
 
 it('publishes no choice list where a value comes from a call, and says it widened', function (): void {
@@ -366,6 +448,7 @@ it('folds a framework rule object written with new as the Rule factory that buil
     // `new Enum(X::class)` is the object `Rule::enum(X::class)` returns, so the two are one rule however
     // it is written. Every factory whose descriptor folds is asked, and the class it builds is Laravel's
     // own answer, by calling it.
+    // A static that returns a rule string builds no object, and reads as its string (below).
     $samples = [
         'enum' => [[WidgetStatus::class], [ConstValue::scalar(WidgetStatus::class)]],
         'exists' => [['users'], [ConstValue::scalar('users')]],
@@ -376,6 +459,7 @@ it('folds a framework rule object written with new as the Rule factory that buil
     $folding = array_values(array_filter(
         array_map(static fn (ReflectionMethod $method): string => $method->getName(), (new ReflectionClass(Rule::class))->getMethods(ReflectionMethod::IS_STATIC)),
         static fn (string $name): bool => ! str_starts_with($name, 'exclude')
+            && RuleFactories::builtClass($name) !== null
             && (new ConstValueToRules)->fold(ConstValue::descriptor('Illuminate\\Validation\\Rule::'.$name, [ConstValue::scalar(WidgetStatus::class)])) !== [],
     ));
     sort($folding);
@@ -402,4 +486,42 @@ it('folds new Enum beside the rules written with it', function (): void {
         ['distinct', [], null],
         ['enum', ['draft', 'published', 'archived'], WidgetStatus::class],
     ]);
+});
+
+it('reads a Rule static that returns a rule string as the string it returns', function (ConstValue $static, array $expected): void {
+    // `Rule::nullable()` is `'nullable'` to Laravel, so it documents as `'nullable'` does: dropped as a check,
+    // the `string` beside it would refuse the null the endpoint takes.
+    $folder = new ConstValueToRules;
+    $rules = $folder->fold(ConstValue::array([ConstValue::scalar('string'), $static]));
+
+    expect(array_map(static fn ($rule): array => [$rule->name, $rule->parameters], $rules))->toBe([['string', []], ...$expected])
+        ->and($folder->unread())->toBe([])
+        ->and($folder->opaque())->toBeNull();
+})->with([
+    'Rule::nullable()' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::nullable', []), [['nullable', []]]],
+    'a leading backslash, any case' => [ConstValue::descriptor('\\Illuminate\\Validation\\Rule::SOMETIMES', []), [['sometimes', []]]],
+    'an argument written at the call' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::boolean', [ConstValue::scalar(true)]), [['boolean', ['strict']]]],
+])->skip(! method_exists(Rule::class, 'nullable'), 'This Laravel declares no Rule static that returns a rule string.');
+
+it('gives up a field whose rule-string static it cannot call as written', function (ConstValue $static, string $named): void {
+    // Unread, a rule string could be `nullable` or `sometimes` itself, so nothing beside it holds alone.
+    $folder = new ConstValueToRules;
+
+    expect($folder->fold(ConstValue::array([ConstValue::scalar('string'), $static])))->toBe([])
+        ->and($folder->opaque())->toBe($named);
+})->with([
+    'an argument nothing can read' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::boolean', [ConstValue::unknown('variable')]), 'Rule::boolean(…)'],
+    'an argument spread in' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::boolean', [ConstValue::spread('unplaceable factory arg')]), 'Rule::boolean(…)'],
+    'a call chained on it' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::nullable', [])->withChainedCall('strict', []), 'Rule::nullable(…)'],
+    'an application class of the same name' => [ConstValue::descriptor('App\\Support\\Rule::nullable', []), 'Rule::nullable(…)'],
+]);
+
+it('gives up a field using a Rule static the installed Laravel does not declare', function (): void {
+    // On a Laravel without `Rule::nullable()` the call goes through the macro table, which could hold any rule.
+    $folder = new ConstValueToRules;
+
+    expect($folder->fold(ConstValue::array([ConstValue::scalar('string'), ConstValue::descriptor('Illuminate\\Validation\\Rule::optionalSlug', [])])))->toBe([])
+        ->and($folder->opaque())->toBe('Rule::optionalSlug(…)')
+        ->and(RuleFactories::ruleString('Illuminate\\Validation\\Rule::optionalSlug', []))->toBeNull()
+        ->and(RuleFactories::builtClass('optionalSlug'))->toBeNull();
 });

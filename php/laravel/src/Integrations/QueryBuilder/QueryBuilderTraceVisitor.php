@@ -858,7 +858,7 @@ final class QueryBuilderTraceVisitor implements FollowsReturnType, TraceVisitor
             return $second->scalar;
         }
 
-        if ($second instanceof ConstValue && $second->isInstance() && is_string($second->class) && $second->class !== '') {
+        if ($second instanceof ConstValue && $second->isInstance() && $second->chain === [] && is_string($second->class) && $second->class !== '') {
             return $second->class;
         }
 
