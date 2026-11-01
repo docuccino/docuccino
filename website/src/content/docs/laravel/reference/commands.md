@@ -448,7 +448,9 @@ against. The exception is a union one of whose branches *is* the old schema — 
 removed. A `oneOf` reads this way only where `Y` can hold no value of `X`'s type, since a value matching
 both is refused. Branches are paired by what they *are* — a schema's identity, then the component it names, then
 its content — never by where they sit, so reordering a `oneOf` is not a change, while swapping one branch
-for another is a removal plus an addition. `contains` demands a matching element, so it arriving narrows
+for another is a removal plus an addition. A composition of one branch on both sides is the exception:
+that branch is the whole schema, so repointing it reads as `schema.ref-changed` and compares the two
+components, as a bare `$ref` does. `contains` demands a matching element, so it arriving narrows
 unless its own bounds say it asserts nothing — `minContains: 0` with no `maxContains` capping how many may
 match — and those two bounds keep a code of their own (`schema.contains-bound-narrowed`,
 `schema.contains-bound-widened`) because they bound a keyword rather than the value. They take the same

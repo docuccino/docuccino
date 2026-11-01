@@ -281,7 +281,7 @@ final readonly class ComponentRefs
      *
      * @param  array<string, mixed>  $schema
      */
-    private static function isBarePointer(array $schema): bool
+    public static function isBarePointer(array $schema): bool
     {
         foreach (array_keys($schema) as $keyword) {
             if ($keyword === '$ref' || $keyword === 'x-docuccino' || SchemaKeywords::isAnnotationOnly($keyword)) {

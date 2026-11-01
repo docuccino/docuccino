@@ -194,10 +194,16 @@ pointer alone, so this comes up only against a hand-written or third-party artif
 schema, with nothing beside it but a `title`, a `description` or an example, accepts exactly what that
 schema accepts. It is how OpenAPI 3.0 has to write a described reference, so wrapping `Customer` in
 `allOf: [{$ref: Customer}]` to give it a `description` reports the `description` and nothing else, and a
-union branch wrapped that way still pairs with `Customer` on the other side. Put a constraint beside the
-wrapper, such as a `maxProperties`, and it is an intersection again, compared as written. A
-`nullable: true` beside it is not a constraint: it is how OpenAPI 3.0 makes a reference nullable, and
-reads as `Customer` admitting `null`.
+union branch wrapped that way still pairs with `Customer` on the other side. Repointing the wrapper at
+another component reads as repointing a bare `$ref` does: `schema.ref-changed`, and the two components
+compared. A `nullable: true` beside it is not a constraint: it is how OpenAPI 3.0 makes a reference
+nullable, and reads as `Customer` admitting `null`.
+
+Put a constraint beside the wrapper, such as a `maxProperties`, and it is an intersection. JSON Schema
+applies the wrapped `$ref` and a bare one in place alike, so against `Customer` on the other side,
+`allOf: [{$ref: Customer}]` beside `maxProperties: 1` reads as `Customer` gaining that one constraint. An
+inline branch is compared as written, since a keyword such as `additionalProperties` sees only the
+`properties` written beside it, and so is a wrapper round a different component from the other side's.
 
 **A union holding the old schema widens it.** OpenAPI 3.1 makes a reference nullable by writing it as
 `anyOf: [{$ref: Customer}, {type: 'null'}]`. Every value `Customer` admitted is still admitted, so the

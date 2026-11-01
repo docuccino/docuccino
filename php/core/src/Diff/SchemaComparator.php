@@ -269,8 +269,16 @@ final class SchemaComparator
      * same keyword. `allOf`, `anyOf` and `oneOf` of one schema each validate exactly what that schema
      * does, so with nothing beside the keyword but annotations and the identity — the siblings a bare
      * pointer may carry ({@see ComponentRefs::resolveSchema()}) — the wrapper is its branch, the
-     * wrapper's annotations written over the branch's. An asserting sibling makes it an intersection, and
-     * it compares as written. Where both sides spell the keyword, their branches pair as written.
+     * wrapper's annotations written over the branch's. Where both sides spell the keyword, their branches
+     * pair as written.
+     *
+     * An asserting sibling makes it an intersection. Where the branch is a bare pointer naming the
+     * component `$other` names, it is read as that pointer with the siblings beside it, which 2020-12
+     * applies in place exactly as it applies the wrapper, so the two compare as one component under two
+     * sets of siblings. An inline branch never merges: `additionalProperties` and `unevaluated*` see the
+     * siblings beside them, so moving a branch's keywords up beside them changes what they admit. And a
+     * pointer naming another component compares as written, since a pointer with siblings beside it is
+     * not read through.
      *
      * A `nullable` beside it is not an intersection: it is how OpenAPI 3.0 writes a nullable `$ref`, and
      * reads as that branch admitting null, so it is carried onto the branch.
@@ -282,36 +290,30 @@ final class SchemaComparator
     private static function loneBranch(mixed $schema, mixed $other): array|false|null
     {
         $map = Hydrate::mapOrNull($schema);
+        $composition = $map === null ? null : self::composition($map);
 
-        if ($map === null) {
+        if ($map === null || $composition === null) {
             return null;
         }
 
-        $keyword = null;
+        [$keyword, $branch, $asserts] = $composition;
 
-        foreach (array_keys($map) as $member) {
-            if ($member === 'x-docuccino' || SchemaKeywords::isAnnotationOnly($member) || ($member === 'nullable' && is_bool($map[$member]))) {
-                continue;
-            }
+        if (array_key_exists($keyword, Hydrate::mapOrNull($other) ?? [])) {
+            return null;
+        }
 
-            // A list whose members are not tuple slots applies each one to the instance itself.
-            if ($keyword !== null
-                || SchemaKeywords::positionOf($member) !== SchemaKeywords::POSITION_SCHEMA_LIST
-                || SchemaPolarity::rule($member)['pairsByIndex']) {
+        if ($asserts) {
+            $pointer = self::barePointer($branch);
+
+            if ($pointer === null || $pointer['$ref'] !== self::componentOf($other)) {
                 return null;
             }
 
-            $keyword = $member;
-        }
-
-        $branches = $keyword === null ? [] : self::branches($map[$keyword]);
-
-        if ($keyword === null || count($branches) !== 1 || array_key_exists($keyword, Hydrate::mapOrNull($other) ?? [])) {
-            return null;
+            $branch = $pointer;
         }
 
         // `false` admitting null is no schema a keyword map spells.
-        if ($branches[0] === false) {
+        if ($branch === false) {
             return ($map['nullable'] ?? null) === true ? null : false;
         }
 
@@ -322,7 +324,83 @@ final class SchemaComparator
 
         unset($map[$keyword]);
 
-        return $map + self::asSchema($branches[0]);
+        return $map + self::asSchema($branch);
+    }
+
+    /**
+     * The one composition keyword `$map` spells with a single branch, that branch, and whether anything
+     * beside it asserts; or null where there is no such keyword, two of them, or a `$ref` beside it.
+     *
+     * @param  array<string, mixed>  $map
+     * @return array{string, mixed, bool}|null
+     */
+    private static function composition(array $map): ?array
+    {
+        $keyword = null;
+        $asserts = false;
+
+        foreach (array_keys($map) as $member) {
+            if ($member === 'x-docuccino' || SchemaKeywords::isAnnotationOnly($member) || ($member === 'nullable' && is_bool($map[$member]))) {
+                continue;
+            }
+
+            // A list whose members are not tuple slots applies each one to the instance itself.
+            if (SchemaKeywords::positionOf($member) === SchemaKeywords::POSITION_SCHEMA_LIST && ! SchemaPolarity::rule($member)['pairsByIndex']) {
+                if ($keyword !== null) {
+                    return null;
+                }
+
+                $keyword = $member;
+
+                continue;
+            }
+
+            if ($member === '$ref') {
+                return null;
+            }
+
+            $asserts = true;
+        }
+
+        $branches = $keyword === null ? [] : self::branches($map[$keyword]);
+
+        return $keyword === null || count($branches) !== 1 ? null : [$keyword, $branches[0], $asserts];
+    }
+
+    /**
+     * `$schema` as the bare pointer it is, read through annotation-only wrappers, or null where it is not
+     * one.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function barePointer(mixed $schema): ?array
+    {
+        $map = Hydrate::mapOrNull(self::unwrapped($schema));
+
+        return $map !== null && is_string($map['$ref'] ?? null) && ComponentRefs::isBarePointer($map) ? $map : null;
+    }
+
+    /**
+     * The component `$schema` names: its own pointer, or the bare pointer a one-branch composition holds
+     * with siblings beside it.
+     */
+    private static function componentOf(mixed $schema): ?string
+    {
+        $ref = self::refKey($schema);
+        $map = Hydrate::mapOrNull($schema);
+        $composition = $ref !== null || $map === null ? null : self::composition($map);
+
+        return $ref ?? Hydrate::stringOrNull(self::barePointer($composition[1] ?? null)['$ref'] ?? null);
+    }
+
+    /** `$schema` read through every one-branch composition with only annotations beside it. */
+    private static function unwrapped(mixed $schema): mixed
+    {
+        while (($branch = self::loneBranch($schema, null)) !== null) {
+            $schema = $branch;
+        }
+
+        return $schema;
     }
 
     /**
@@ -496,9 +574,7 @@ final class SchemaComparator
      */
     private static function instanceTypes(mixed $schema, ?ComponentRefs $refs, array $seen = []): ?array
     {
-        while (($branch = self::loneBranch($schema, null)) !== null) {
-            $schema = $branch;
-        }
+        $schema = self::unwrapped($schema);
 
         if ($schema === false) {
             return [];
@@ -1411,7 +1487,8 @@ final class SchemaComparator
      * naming a component, is one branch changed. Two members naming DIFFERENT components are never
      * that — a branch naming a component IS that component, so swapping the name swaps the branch, and
      * pairing them would publish `schema.ref-changed` (non-breaking) over a union branch a consumer has
-     * no case for.
+     * no case for. A list of ONE on each side is the exception, because a one-branch composition is its
+     * branch: its branch repointed is the schema repointed, read as a bare pointer's move is.
      *
      * @param  list<mixed>  $old
      * @param  list<mixed>  $new
@@ -1460,8 +1537,8 @@ final class SchemaComparator
         }
 
         if (count($oldLeft) === 1 && count($newLeft) === 1
-            && self::refKey($old[$oldLeft[0]]) === null
-            && self::refKey($new[$newLeft[0]]) === null) {
+            && ((count($old) === 1 && count($new) === 1)
+                || (self::refKey($old[$oldLeft[0]]) === null && self::refKey($new[$newLeft[0]]) === null))) {
             $pairs[] = [$oldLeft[0], $newLeft[0]];
             $oldLeft = [];
             $newLeft = [];
@@ -1484,11 +1561,7 @@ final class SchemaComparator
     /** The component a branch names, which is what the branch IS — wrapped in a one-branch composition or not. */
     private static function refKey(mixed $member): ?string
     {
-        while (($branch = self::loneBranch($member, null)) !== null) {
-            $member = $branch;
-        }
-
-        $map = Hydrate::mapOrNull($member);
+        $map = Hydrate::mapOrNull(self::unwrapped($member));
 
         return $map === null ? null : Hydrate::stringOrNull($map['$ref'] ?? null);
     }
