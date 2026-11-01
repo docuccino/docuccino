@@ -469,3 +469,25 @@ it('names the values a refused example could have been', function (array $schema
     'a type union' => [['anyOf' => [['type' => 'integer'], ['type' => 'boolean']]], 'integer/boolean'],
     'a long list, cut short' => [['enum' => ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']], '"a"/"b"/"c"/"d"/"e"/"f" (and 2 more)'],
 ]);
+
+it('reads a component reached by many paths once, and one reached from itself as open', function (): void {
+    // Each level is a union of the next level twice, so the paths to the bottom double at every level.
+    // Read once per path, 24 levels are 2^24 readings of the bottom; read once per component, 25.
+    $components = ['Level24' => ['type' => 'integer', 'enum' => [1]]];
+
+    for ($level = 0; $level < 24; $level++) {
+        $next = ['$ref' => '#/components/schemas/Level'.($level + 1)];
+        $components['Level'.$level] = ['anyOf' => [$next, $next]];
+    }
+
+    $top = ['$ref' => '#/components/schemas/Level0'];
+
+    expect(TypedExample::against('1', $top, $components))->toBe([1])
+        ->and(TypedExample::against('2', $top, $components))->toBeNull()
+        ->and(TypedExample::unreadable('field "x"', '2', $top, $components)->message)->toContain('does not read as 1,');
+
+    // The bottom naming the top again is a component that refers to itself, which states nothing.
+    $components['Level24'] = ['anyOf' => [['type' => 'integer', 'enum' => [1]], $top]];
+
+    expect(TypedExample::against('2', $top, $components))->toBe(['2']);
+});

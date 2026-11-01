@@ -73,7 +73,7 @@ final class TypedExample
      */
     public static function against(string $text, array $schema, array $schemas = []): ?array
     {
-        $branches = self::branches($schema, $schemas, []);
+        $branches = self::branches($schema, $schemas);
 
         foreach (self::ORDER as $candidate) {
             $admitting = array_values(array_filter(
@@ -132,7 +132,7 @@ final class TypedExample
                 'The example on %s ("%s") does not read as %s, so none is published.',
                 $subject,
                 $text,
-                self::accepted(self::branches($schema, $schemas, [])),
+                self::accepted(self::branches($schema, $schemas)),
             ),
             help: 'Write the example as the value the property really is — `@example false` for a boolean, '
                 .'`@example 7` for an integer, a JSON literal for an array or object, and one of the listed '
@@ -170,23 +170,37 @@ final class TypedExample
     }
 
     /**
-     * Every branch `$schema` admits a value through. `$seen` holds the `$ref`s already followed, so a
-     * component that refers to itself ends as an open branch rather than a loop.
+     * Every branch `$schema` admits a value through. Each `$ref` is followed once, `$followed` marking it
+     * true while it is read and false once it is: a component reached again while it is being read refers
+     * to itself and ends as an open branch rather than a loop, and one already read adds nothing new, so
+     * a component reached by many paths is read once rather than once per path.
      *
      * @param  array<mixed>  $schema
      * @param  array<mixed>  $schemas
-     * @param  list<string>  $seen
+     * @param  array<string, bool>  $followed
      * @return list<Branch>
      */
-    private static function branches(array $schema, array $schemas, array $seen): array
+    private static function branches(array $schema, array $schemas, array &$followed = []): array
     {
         $nullable = ($schema['nullable'] ?? null) === true ? [['types' => ['null'], 'values' => null]] : [];
 
         $ref = $schema['$ref'] ?? null;
         if (is_string($ref)) {
-            $body = in_array($ref, $seen, true) ? null : DiscriminatedUnion::component($ref, $schemas);
+            if (isset($followed[$ref])) {
+                return [...($followed[$ref] ? [self::OPEN] : []), ...$nullable];
+            }
 
-            return [...($body === null ? [self::OPEN] : self::branches($body, $schemas, [...$seen, $ref])), ...$nullable];
+            $body = DiscriminatedUnion::component($ref, $schemas);
+
+            if ($body === null) {
+                return [self::OPEN, ...$nullable];
+            }
+
+            $followed[$ref] = true;
+            $branches = self::branches($body, $schemas, $followed);
+            $followed[$ref] = false;
+
+            return [...$branches, ...$nullable];
         }
 
         foreach (['anyOf', 'oneOf'] as $keyword) {
@@ -197,7 +211,7 @@ final class TypedExample
 
             $branches = [];
             foreach ($members as $member) {
-                $branches = [...$branches, ...(is_array($member) ? self::branches($member, $schemas, $seen) : [self::OPEN])];
+                $branches = [...$branches, ...(is_array($member) ? self::branches($member, $schemas, $followed) : [self::OPEN])];
             }
 
             return [...$branches, ...$nullable];
@@ -209,7 +223,7 @@ final class TypedExample
         if (is_array($allOf) && $allOf !== []) {
             $only = count($allOf) === 1 ? reset($allOf) : null;
 
-            return [...(is_array($only) ? self::branches($only, $schemas, $seen) : [self::OPEN]), ...$nullable];
+            return [...(is_array($only) ? self::branches($only, $schemas, $followed) : [self::OPEN]), ...$nullable];
         }
 
         $types = self::types($schema['type'] ?? null);
