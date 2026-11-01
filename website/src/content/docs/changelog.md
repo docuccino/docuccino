@@ -13,6 +13,17 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.23.3
+
+### Features
+
+- **core**: read Arazzo 1.0 and 1.1 descriptions, with every finding's line and column ([#701](https://github.com/docuccino/docuccino/pull/701))
+- **core**: workflow steps carry their success criteria and outcomes ([#700](https://github.com/docuccino/docuccino/pull/700))
+
+### Bug fixes
+
+- **laravel**: work with phpstan/phpdoc-parser 2.4, symfony/yaml 7.4.22 and Laravel 13.39 ([#695](https://github.com/docuccino/docuccino/pull/695))
+
 ## v0.23.2
 
 ### Features
