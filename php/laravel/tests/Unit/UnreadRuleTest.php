@@ -15,7 +15,11 @@ it('classifies a Rule static by what leaving it out does', function (string $met
 })->with([
     // Checks on the value: each builds one of Laravel's rule objects, run as a check.
     'can' => ['can', true], 'in' => ['in', true], 'enum' => ['enum', true], 'requiredIf' => ['requiredIf', true],
-    'anyOf' => ['anyOf', true], 'dateTime' => ['dateTime', true],
+    // Later Laravel 12 releases added these; where the installed one lacks them they are macros.
+    ...array_filter(
+        ['anyOf' => ['anyOf', true], 'dateTime' => ['dateTime', true]],
+        static fn (array $row): bool => method_exists(Rule::class, $row[0]),
+    ),
     // Rules chosen at runtime, or applied to each item by a callback.
     'when' => ['when', false], 'unless' => ['unless', false], 'forEach' => ['forEach', false], 'compile' => ['compile', false],
     // `exclude` stops the field's other rules running at all.
@@ -43,8 +47,9 @@ it('classifies every static the installed Rule class declares by what it returns
         expect(UnreadRule::factoryNarrows('Illuminate\\Validation\\Rule::'.$method->getName()))->toBe($isClass && ! $loosens, $method->getName());
     }
 
-    expect($counts['check'])->toBeGreaterThan(20)
-        ->and($counts['loosens'])->toBeGreaterThanOrEqual(5)
+    // What Laravel 12.0, the lowest supported, declares: 15 checks, 4 loosening, and Macroable's 5.
+    expect($counts['check'])->toBeGreaterThanOrEqual(15)
+        ->and($counts['loosens'])->toBeGreaterThanOrEqual(4)
         ->and($counts['other'])->toBeGreaterThanOrEqual(5);
 });
 
@@ -67,7 +72,8 @@ it('takes every framework rule object as a check, except the exclude rules', fun
         glob(dirname((string) (new ReflectionClass(Rule::class))->getFileName()).'/Rules/*.php') ?: [],
     );
 
-    expect(count($classes))->toBeGreaterThan(20);
+    // Laravel 12.0, the lowest supported, ships 18.
+    expect(count($classes))->toBeGreaterThanOrEqual(18);
     foreach ($classes as $class) {
         $excludes = str_starts_with(substr($class, (int) strrpos($class, '\\') + 1), 'Exclude');
 
