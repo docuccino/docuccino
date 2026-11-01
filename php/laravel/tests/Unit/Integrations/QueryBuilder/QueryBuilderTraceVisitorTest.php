@@ -565,6 +565,8 @@ it('leaves a named factory entry untouched when its body fold answers with anyth
     'fold declined' => ['allowed', []],
     // Folded to a non-custom factory — call-site typing already answers those.
     'fold non-custom' => ['allowed', ['allowed' => TraceScript::foldOf("\\Spatie\\QueryBuilder\\AllowedFilter::exact('legacy_id')")]],
+    // A call on the `new` object may return something else, so the class it was built from names nothing.
+    'fold chained instance' => ['allowed', ['allowed' => TraceScript::foldOf("\\Spatie\\QueryBuilder\\AllowedFilter::custom('legacy_id', (new \\Workbench\\App\\Filters\\PublicIdFilter)->decorated())")]],
 ]);
 
 it('does not upgrade a factory entry that types off a backed-enum class-string argument', function (): void {

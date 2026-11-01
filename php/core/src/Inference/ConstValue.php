@@ -20,7 +20,9 @@ use Docuccino\Core\Support\Fqcn;
  *     builder-style narrowing survives the same fold;
  *   - `instance`   — a `new X(...)` expression: the class FQCN plus its constant-foldable args. Like a
  *     descriptor, the CALL is what the docs need — a rule object in a rules array is only
- *     documentable by its class;
+ *     documentable by its class — and it carries a `chain` the same way
+ *     (`(new Enum(Status::class))->only([…])`). A chained call may return something other than the
+ *     object, so a reader that only knows the class reads an unchained instance;
  *   - `array`      — an array of the above (per-item recursion);
  *   - `spread`     — a run of values no position can be pinned to: a spread the fold could not read
  *     ({@see ArgumentSlots}), or, in a list that has nowhere to put a name, the named arguments after
@@ -80,22 +82,23 @@ final readonly class ConstValue
     }
 
     /**
-     * A copy of this descriptor with one fluent call appended to its chain (`->only([…])` and
-     * friends). Any other kind returns itself unchanged.
+     * A copy of this descriptor or instance with one fluent call appended to its chain (`->only([…])`
+     * and friends). Any other kind returns itself unchanged.
      *
      * @param  list<ConstValue>  $args
      */
     public function withChainedCall(string $method, array $args): self
     {
-        if ($this->kind !== self::KIND_DESCRIPTOR) {
+        if ($this->kind !== self::KIND_DESCRIPTOR && $this->kind !== self::KIND_INSTANCE) {
             return $this;
         }
 
         return new self(
-            self::KIND_DESCRIPTOR,
+            $this->kind,
             factory: $this->factory,
             args: $this->args,
             chain: [...$this->chain, ['method' => $method, 'args' => $args]],
+            class: $this->class,
         );
     }
 
@@ -158,9 +161,10 @@ final readonly class ConstValue
                 $this->renderChain(),
             ),
             self::KIND_INSTANCE => sprintf(
-                'new %s(%s)',
+                $this->chain === [] ? 'new %s(%s)%s' : '(new %s(%s))%s',
                 Fqcn::short((string) $this->class),
                 implode(', ', array_map(static fn (ConstValue $a): string => $a->render(), $this->args)),
+                $this->renderChain(),
             ),
             self::KIND_ARRAY => sprintf(
                 '[%s]',
@@ -171,7 +175,7 @@ final readonly class ConstValue
         };
     }
 
-    /** Rendered `->method(args)` suffix for a descriptor's chained calls (empty when unchained). */
+    /** Rendered `->method(args)` suffix for chained calls (empty when unchained). */
     private function renderChain(): string
     {
         $out = '';
@@ -198,6 +202,7 @@ final readonly class ConstValue
                 'kind' => self::KIND_INSTANCE,
                 'class' => $this->class,
                 'args' => array_map(static fn (ConstValue $a): array => $a->toArray(), $this->args),
+                ...$this->chainToArray(),
             ],
             self::KIND_ARRAY => [
                 'kind' => self::KIND_ARRAY,
@@ -209,29 +214,36 @@ final readonly class ConstValue
     }
 
     /**
-     * `chain` is emitted only when non-empty, so unchained descriptors keep their old bytes.
-     *
      * @return array<string, mixed>
      */
     private function descriptorToArray(): array
     {
-        $out = [
+        return [
             'kind' => self::KIND_DESCRIPTOR,
             'factory' => $this->factory,
             'args' => array_map(static fn (ConstValue $a): array => $a->toArray(), $this->args),
+            ...$this->chainToArray(),
         ];
+    }
 
-        if ($this->chain !== []) {
-            $out['chain'] = array_map(
-                static fn (array $call): array => [
-                    'method' => $call['method'],
-                    'args' => array_map(static fn (ConstValue $a): array => $a->toArray(), $call['args']),
-                ],
-                $this->chain,
-            );
+    /**
+     * `chain` is emitted only when non-empty, so unchained values keep their old bytes.
+     *
+     * @return array<string, mixed>
+     */
+    private function chainToArray(): array
+    {
+        if ($this->chain === []) {
+            return [];
         }
 
-        return $out;
+        return ['chain' => array_map(
+            static fn (array $call): array => [
+                'method' => $call['method'],
+                'args' => array_map(static fn (ConstValue $a): array => $a->toArray(), $call['args']),
+            ],
+            $this->chain,
+        )];
     }
 
     /**
@@ -243,11 +255,14 @@ final readonly class ConstValue
 
         return match ($kind) {
             self::KIND_SCALAR => self::scalar(self::scalarFrom($data['scalar'] ?? null)),
-            self::KIND_DESCRIPTOR => self::descriptorFrom($data),
-            self::KIND_INSTANCE => self::instance(
+            self::KIND_DESCRIPTOR => self::chainFrom(self::descriptor(
+                is_string($data['factory'] ?? null) ? $data['factory'] : '',
+                self::listFrom($data['args'] ?? []),
+            ), $data),
+            self::KIND_INSTANCE => self::chainFrom(self::instance(
                 is_string($data['class'] ?? null) ? $data['class'] : '',
                 self::listFrom($data['args'] ?? []),
-            ),
+            ), $data),
             self::KIND_ARRAY => self::array(self::listFrom($data['items'] ?? [])),
             self::KIND_SPREAD => self::spread(is_string($data['reason'] ?? null) ? $data['reason'] : '?'),
             default => self::unknown(is_string($data['reason'] ?? null) ? $data['reason'] : '?'),
@@ -257,25 +272,20 @@ final readonly class ConstValue
     /**
      * @param  array<array-key, mixed>  $data
      */
-    private static function descriptorFrom(array $data): self
+    private static function chainFrom(self $value, array $data): self
     {
-        $descriptor = self::descriptor(
-            is_string($data['factory'] ?? null) ? $data['factory'] : '',
-            self::listFrom($data['args'] ?? []),
-        );
-
         $chain = $data['chain'] ?? [];
         if (! is_array($chain)) {
-            return $descriptor;
+            return $value;
         }
 
         foreach ($chain as $call) {
             if (is_array($call) && is_string($call['method'] ?? null)) {
-                $descriptor = $descriptor->withChainedCall($call['method'], self::listFrom($call['args'] ?? []));
+                $value = $value->withChainedCall($call['method'], self::listFrom($call['args'] ?? []));
             }
         }
 
-        return $descriptor;
+        return $value;
     }
 
     private static function scalarFrom(mixed $value): string|int|float|bool|null

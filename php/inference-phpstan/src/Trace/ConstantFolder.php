@@ -79,13 +79,13 @@ final class ConstantFolder
             return ConstValue::descriptor($factory, self::foldArgs($expr->getArgs(), $scope, $bindings, 'factory arg'));
         }
 
-        // 3. Fluent call over a descriptor receiver — append to the receiver's chain.
+        // 3. Fluent call over a descriptor or `new` receiver — append to the receiver's chain.
         if ($expr instanceof Node\Expr\MethodCall
             && $expr->name instanceof Node\Identifier
             && ! $expr->isFirstClassCallable()
         ) {
             $receiver = self::fold($expr->var, $scope, $bindings);
-            if ($receiver !== null && $receiver->isDescriptor()) {
+            if ($receiver !== null && ($receiver->isDescriptor() || $receiver->isInstance())) {
                 return $receiver->withChainedCall(
                     $expr->name->toString(),
                     self::foldArgs($expr->getArgs(), $scope, $bindings, 'chained-call arg'),
