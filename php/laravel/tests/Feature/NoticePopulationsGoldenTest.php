@@ -180,6 +180,11 @@ function fieldNoticeTraces(): array
                 'visibility' => ['required', \Illuminate\Validation\Rule::in('draft', ...$this->tiers())],
                 'tags' => ['array'],
                 'meta' => ['array'],
+                'channel' => ['string', new \Workbench\App\Rules\NoticeFilter],
+                'reference' => ['string', new \Workbench\App\Rules\NoticeFilter],
+                'author' => ['integer', new \Workbench\App\Rules\NoticeAuthor],
+                'body' => ['string', static fn (string $attribute, mixed $value, \Closure $fail): bool => true],
+                'audience' => ['string', \Illuminate\Validation\Rule::when($this->isMethod('PATCH'), ['nullable'])],
             ];
             PHP),
         SearchNoticesRequest::class.'::rules' => RulesTraceScript::forPhp(<<<'PHP'
@@ -188,6 +193,7 @@ function fieldNoticeTraces(): array
                 'secret' => [static fn (): bool => true],
                 'scope' => ['array'],
                 'window' => ['array'],
+                'term' => ['string', new \Workbench\App\Rules\NoticeFilter],
             ];
             PHP),
         InlineValidationController::class.'::store' => RulesTraceScript::forPhp(<<<'PHP'
@@ -195,6 +201,7 @@ function fieldNoticeTraces(): array
                 'title' => 'required|string',
                 'payload' => [static fn (): bool => true],
                 'secret' => [static fn (): bool => true],
+                'summary' => ['string', new \Workbench\App\Rules\NoticeFilter],
             ]);
             PHP),
     ];
@@ -239,6 +246,6 @@ it('emits the validation notice population and its document byte-identically', f
             'validation.rule-unrecoverable',
         ],
         ['"secret"', '"visibility"', '"window"', '"meta"', 'omitted from the query parameters', 'omitted from the request schema'],
-        ['"attachment"', '"status"', '"tags"', '"marker"', '"scope"', '"payload"', '"title"'],
+        ['"attachment"', '"status"', '"tags"', '"marker"', '"scope"', '"payload"', '"title"', '"channel"', '"author"', '"reference"', '"body"', '"audience"', '"term"', '"summary"'],
     );
 });
