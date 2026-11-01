@@ -70,23 +70,38 @@
           "abilities": {
             "type": "array",
             "items": {
-              "type": "array",
-              "uniqueItems": true
-            }
+              "$ref": "#/components/schemas/TokenAbility"
+            },
+            "uniqueItems": true
           },
           "aliases": {
             "type": "array",
             "items": {
               "type": "string",
-              "uniqueItems": true,
               "nullable": true
             }
           },
           "channels": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "email",
+                "sms"
+              ],
+              "example": "email",
+              "x-enum-varnames": [
+                "Email",
+                "Sms"
+              ],
+              "x-enumNames": [
+                "Email",
+                "Sms"
+              ]
             }
+          },
+          "default_ability": {
+            "$ref": "#/components/schemas/TokenAbility"
           },
           "grants": {
             "type": "array",
@@ -94,8 +109,7 @@
               "type": "object",
               "properties": {
                 "ability": {
-                  "type": "array",
-                  "uniqueItems": true
+                  "$ref": "#/components/schemas/TokenAbility"
                 },
                 "note": {
                   "type": "string"
@@ -111,30 +125,26 @@
             "items": {
               "type": "string",
               "maxLength": 20,
-              "uniqueItems": true,
               "example": "example"
-            }
+            },
+            "uniqueItems": true
           },
           "matrix": {
             "type": "array",
             "items": {
               "type": "array",
               "items": {
-                "type": "integer",
-                "uniqueItems": true
-              }
+                "type": "integer"
+              },
+              "uniqueItems": true
             }
           },
           "roles": {
             "type": "array",
             "items": {
-              "uniqueItems": true,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/TokenAbility"
-                }
-              ]
-            }
+              "$ref": "#/components/schemas/TokenAbility"
+            },
+            "uniqueItems": true
           },
           "scopes": {
             "type": "array",
@@ -159,8 +169,7 @@
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "uniqueItems": true
+            }
           }
         },
         "required": [

@@ -161,9 +161,9 @@
           "abilities": {
             "type": "array",
             "items": {
-              "type": "array",
-              "uniqueItems": true
-            }
+              "$ref": "#/components/schemas/TokenAbility"
+            },
+            "uniqueItems": true
           },
           "aliases": {
             "type": "array",
@@ -176,15 +176,30 @@
               "type": [
                 "string",
                 "null"
-              ],
-              "uniqueItems": true
+              ]
             }
           },
           "channels": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "email",
+                "sms"
+              ],
+              "example": "email",
+              "x-enum-varnames": [
+                "Email",
+                "Sms"
+              ],
+              "x-enumNames": [
+                "Email",
+                "Sms"
+              ]
             }
+          },
+          "default_ability": {
+            "$ref": "#/components/schemas/TokenAbility"
           },
           "grants": {
             "type": "array",
@@ -192,8 +207,7 @@
               "type": "object",
               "properties": {
                 "ability": {
-                  "type": "array",
-                  "uniqueItems": true
+                  "$ref": "#/components/schemas/TokenAbility"
                 },
                 "note": {
                   "type": "string"
@@ -209,26 +223,26 @@
             "items": {
               "type": "string",
               "maxLength": 20,
-              "uniqueItems": true,
               "example": "example"
-            }
+            },
+            "uniqueItems": true
           },
           "matrix": {
             "type": "array",
             "items": {
               "type": "array",
               "items": {
-                "type": "integer",
-                "uniqueItems": true
-              }
+                "type": "integer"
+              },
+              "uniqueItems": true
             }
           },
           "roles": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/TokenAbility",
-              "uniqueItems": true
-            }
+              "$ref": "#/components/schemas/TokenAbility"
+            },
+            "uniqueItems": true
           },
           "scopes": {
             "type": "array",
@@ -253,8 +267,7 @@
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "uniqueItems": true
+            }
           }
         },
         "required": [
@@ -288,7 +301,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "895d6ea5d1a293d4bfa35b131cedefcbbcaad9a31c143dcdae035fec934f9a37"
+      "contentHash": "1275da7aa78f623396f61a9b5864f557902f673881cf042c4cc7836459b5bff8"
     },
     "generator": {
       "name": "docuccino/laravel",
