@@ -186,6 +186,12 @@ final class SchemaComparator
             return $beside;
         }
 
+        $parts = $this->compareIntersection($old, $new, $path, $id, $request);
+
+        if ($parts !== null) {
+            return $parts;
+        }
+
         $resolved = $this->resolvePointers($old, $new, $path, $id);
 
         if ($resolved !== null) {
@@ -265,6 +271,39 @@ final class SchemaComparator
     }
 
     /**
+     * A pointer with an asserting sibling compared part by part against a side that does not spell the
+     * same pointer, or null to compare as written. 2020-12 applies `{$ref: X, …S}` as X and S both, in
+     * place, so it is their intersection: the pointer and its annotations are compared with the other
+     * side's pointer, read through as a bare one is, and S with the other side's siblings. An inline side
+     * is all pointer part and no siblings. Each part holding is enough for the intersection to, so a
+     * break in either is never lost, where comparing as written never looks behind the pointer at all.
+     *
+     * @return list<Change>|null
+     */
+    private function compareIntersection(mixed $old, mixed $new, string $path, string $id, bool $request): ?array
+    {
+        if ($this->oldRefs === null || $this->newRefs === null || $old === false || $new === false) {
+            return null;
+        }
+
+        $old = self::asSchema($old);
+        $new = self::asSchema($new);
+        $oldRef = Hydrate::stringOrNull($old['$ref'] ?? null);
+        $newRef = Hydrate::stringOrNull($new['$ref'] ?? null);
+        $oldSiblings = $oldRef === null ? [] : ComponentRefs::siblings($old);
+        $newSiblings = $newRef === null ? [] : ComponentRefs::siblings($new);
+
+        if ($oldRef === $newRef || ($oldSiblings === [] && $newSiblings === [])) {
+            return null;
+        }
+
+        return [
+            ...$this->compareSubschema(array_diff_key($old, $oldSiblings), array_diff_key($new, $newSiblings), $path, $id, $request),
+            ...$this->compareSubschema($oldSiblings, $newSiblings, $path, $id, $request),
+        ];
+    }
+
+    /**
      * The schema a one-branch composition IS, or null where `$schema` is not one or `$other` spells the
      * same keyword. `allOf`, `anyOf` and `oneOf` of one schema each validate exactly what that schema
      * does, so with nothing beside the keyword but annotations and the identity — the siblings a bare
@@ -272,13 +311,14 @@ final class SchemaComparator
      * wrapper's annotations written over the branch's. Where both sides spell the keyword, their branches
      * pair as written.
      *
-     * An asserting sibling makes it an intersection. Where the branch is a bare pointer naming the
-     * component `$other` names, it is read as that pointer with the siblings beside it, which 2020-12
-     * applies in place exactly as it applies the wrapper, so the two compare as one component under two
-     * sets of siblings. An inline branch never merges: `additionalProperties` and `unevaluated*` see the
-     * siblings beside them, so moving a branch's keywords up beside them changes what they admit. And a
-     * pointer naming another component compares as written, since a pointer with siblings beside it is
-     * not read through.
+     * An asserting sibling makes it an intersection. Where the branch is a bare pointer and `$other`
+     * names a component too, it is read as that pointer with the siblings beside it, which 2020-12
+     * applies in place exactly as it applies the wrapper, and which {@see compareIntersection()} compares
+     * part by part. Against a side naming no component the wrapper compares as written: a comparison
+     * with no documents could not read the merged pointer, and there its branch arriving or going is the
+     * one thing that says a component did. An inline branch never merges: `additionalProperties` and
+     * `unevaluated*` see the siblings beside them, so moving a branch's keywords up beside them changes
+     * what they admit.
      *
      * A `nullable` beside it is not an intersection: it is how OpenAPI 3.0 writes a nullable `$ref`, and
      * reads as that branch admitting null, so it is carried onto the branch.
@@ -305,7 +345,7 @@ final class SchemaComparator
         if ($asserts) {
             $pointer = self::barePointer($branch);
 
-            if ($pointer === null || $pointer['$ref'] !== self::componentOf($other)) {
+            if ($pointer === null || self::componentOf($other) === null) {
                 return null;
             }
 

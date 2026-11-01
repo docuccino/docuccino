@@ -356,9 +356,15 @@ A **schema** pointer is the exception, because JSON Schema 2020-12 keeps every k
 in force: the schema at such a position is the *intersection* of the pointer and its neighbours, and
 neither one states it. So only a *bare* pointer is read through — `$ref` alone, or with annotation
 keywords, which are read through and override the component's. A pointer with anything beside it that
-constrains the value is compared as written rather than flattened into a shape neither side declares —
-at the position, or at whichever hop of a chain first states one. Docuccino spells a hoisted shape as
-the pointer alone, so this arises only against a hand-written or third-party artifact.
+constrains the value is never flattened into a shape neither side declares. Against the same pointer it
+is compared as written. Against anything else it is compared in two parts, since an intersection holds
+wherever both of its parts do: the pointer as a bare one, read through to the component, and the
+constraints beside it against the other side's, an inline shape having none. So
+`{$ref: Owner, maxProperties: 1}` becoming `{$ref: Keeper, maxProperties: 5}` reports
+`schema.ref-changed`, what `Keeper` says that `Owner` did not, and the widened `maxProperties`. A
+constraint beside the pointer that only restates the component still reads as arriving or leaving,
+which can over-report but never hides a break. Docuccino spells a hoisted shape as the pointer alone, so
+this arises only against a hand-written or third-party artifact.
 
 A pointer the diff cannot follow — a name the document does not declare, a chain, a cycle, a pointer into
 another file — is a comparison it cannot make, and it says so rather than guessing. Where a path item or a

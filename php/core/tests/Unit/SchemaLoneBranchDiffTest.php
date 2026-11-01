@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Core\Diff\Changeset;
 use Docuccino\Core\Diff\DocumentDiffer;
+use Docuccino\Core\Diff\SchemaComparator;
 use Docuccino\Core\Document\UirDocument;
 
 /*
@@ -176,13 +177,34 @@ it('never merges an inline branch into the siblings beside it', function (): voi
         ->toContain('schema.property-removed');
 });
 
-it('compares a wrapper beside a sibling round another component as written', function () use ($owner): void {
-    // A pointer with siblings is not read through, so merging would compare `Owner` and `Keeper` by name
-    // alone and miss the member `Keeper` requires. As written, the intersection arriving gates a request.
+it('reads a wrapper beside a sibling round another component as that reference with its sibling', function () use ($owner): void {
+    // The wrapper and a bare `$ref` both apply `Keeper` in place, so this is `Owner` capped at one
+    // property becoming `Keeper` capped at five, in either spelling: the move, what `Keeper` requires that
+    // `Owner` never did, gating a request, and the cap widening, gating a response.
     $keeper = ['$ref' => '#/components/schemas/Keeper'];
+    $repointed = [
+        'GET breaking schema.refinement-widened owner.maxProperties',
+        'GET schema.property-added owner.properties.since',
+        'GET schema.ref-changed owner.$ref',
+        'GET schema.required-added owner.required',
+        'PUT breaking schema.required-added owner.required',
+        'PUT schema.property-added owner.properties.since',
+        'PUT schema.ref-changed owner.$ref',
+        'PUT schema.refinement-widened owner.maxProperties',
+    ];
 
-    expect(loneBranchChanges(loneBranchDiff($owner + ['maxProperties' => 1], ['allOf' => [$keeper], 'maxProperties' => 5])))
-        ->toContain('PUT breaking schema.all-of-branch-added owner.allOf');
+    expect(loneBranchChanges(loneBranchDiff($owner + ['maxProperties' => 1], ['allOf' => [$keeper], 'maxProperties' => 5])))->toBe($repointed)
+        ->and(loneBranchChanges(loneBranchDiff($owner + ['maxProperties' => 1], $keeper + ['maxProperties' => 5])))->toBe($repointed);
+});
+
+it('compares a wrapper beside a sibling as written against a side naming no component', function (): void {
+    // Merged into `{$ref: Keeper, …}`, a comparison with no documents to read `Keeper` in would see
+    // nothing but the sibling, and lose the one thing that says a component arrived: the branch.
+    $keeper = ['$ref' => '#/components/schemas/Keeper'];
+    $changes = (new SchemaComparator)->compare(['type' => 'object'], ['allOf' => [$keeper], 'type' => 'object'], 'S', 'sch:v1:0000000000000000', true);
+
+    expect(array_map(static fn ($change): string => ($change->breaking ? 'breaking ' : '').$change->code, $changes))
+        ->toBe(['breaking schema.all-of-branch-added']);
 });
 
 it('compares a lone branch repointed inside its wrapper as the bare reference repointed', function (string $keyword, string $openapi) use ($owner): void {

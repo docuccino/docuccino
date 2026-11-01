@@ -181,13 +181,16 @@ NON-BREAKING
 ```
 
 <Aside type="note">
-One schema pointer is left as written: a `$ref` with a keyword beside it that constrains the value.
-Under JSON Schema 2020-12 both still apply, so the position is the *intersection* of the pointer and
-its neighbours and neither one states it — reading through would be a guess. Such a position compares
-as the keywords written there, so against an inline shape on the other side it reads as that shape's
-keywords leaving. A `title`, a `description` or an `example` beside the pointer is not a constraint,
-so those *are* read through, and override the component's. Docuccino writes a hoisted shape as the
-pointer alone, so this comes up only against a hand-written or third-party artifact.
+A `$ref` with a keyword beside it that constrains the value, such as a `maxProperties`, is never
+flattened into one shape. Under JSON Schema 2020-12 both still apply, so the position is the
+*intersection* of the pointer and its neighbours, and neither one states it. Against a different pointer
+or an inline shape, the diff compares the two parts: the component, read through as a bare `$ref` is,
+and the keywords beside it against the other side's. A change that breaks either part is reported. A
+keyword that only restates what the component says still reads as arriving or leaving, so this can
+over-report, but it never misses a break. A `title`, a `description` or an `example` beside the
+pointer is not a constraint, so it is read through and overrides the component's. Docuccino writes a
+hoisted shape as the pointer alone, so this comes up only against a hand-written or third-party
+artifact.
 </Aside>
 
 **A one-branch composition is the schema inside it.** An `allOf`, `anyOf` or `oneOf` holding a single
@@ -200,10 +203,11 @@ compared. A `nullable: true` beside it is not a constraint: it is how OpenAPI 3.
 nullable, and reads as `Customer` admitting `null`.
 
 Put a constraint beside the wrapper, such as a `maxProperties`, and it is an intersection. JSON Schema
-applies the wrapped `$ref` and a bare one in place alike, so against `Customer` on the other side,
-`allOf: [{$ref: Customer}]` beside `maxProperties: 1` reads as `Customer` gaining that one constraint. An
-inline branch is compared as written, since a keyword such as `additionalProperties` sees only the
-`properties` written beside it, and so is a wrapper round a different component from the other side's.
+applies the wrapped `$ref` and a bare one in place alike, so where the other side also names a
+component, `allOf: [{$ref: Customer}]` beside `maxProperties: 1` reads as the `$ref` with that
+constraint beside it. Against `Customer`, that is `Customer` gaining one constraint. Against another
+component, it is compared in the two parts described above. An inline branch is compared as written,
+since a keyword such as `additionalProperties` sees only the `properties` written beside it.
 
 **A union holding the old schema widens it.** OpenAPI 3.1 makes a reference nullable by writing it as
 `anyOf: [{$ref: Customer}, {type: 'null'}]`. Every value `Customer` admitted is still admitted, so the
