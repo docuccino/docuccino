@@ -197,8 +197,9 @@ final class OpenApi30Upgrade
      * build's to raise, not a reader's.
      *
      * @param  array<string, mixed>  $document
+     * @return array{array<string, mixed>, OpenApi30Restatement}|null
      */
-    public static function restate(array $document): ?OpenApi30Restatement
+    public static function restate(array $document): ?array
     {
         $openapi = $document['openapi'] ?? null;
 
@@ -210,7 +211,7 @@ final class OpenApi30Upgrade
         $diagnostics = [];
         $restated = $upgrade->walkObject(self::DOCUMENT, $document, '#', $diagnostics);
 
-        return new OpenApi30Restatement($restated, $upgrade->wrapped);
+        return [$restated, new OpenApi30Restatement($upgrade->wrapped)];
     }
 
     /**
@@ -357,7 +358,7 @@ final class OpenApi30Upgrade
                 $schema[$keyword] = $this->schema(Arr::stringKeyed($value), JsonPointer::child($pointer, $keyword), $diagnostics, $below);
             } elseif (is_array($value) && ($position === SchemaKeywords::POSITION_SCHEMA_MAP || $position === SchemaKeywords::POSITION_SCHEMA_LIST)) {
                 $schema[$keyword] = $this->subschemas($value, $position === SchemaKeywords::POSITION_SCHEMA_LIST, JsonPointer::child($pointer, $keyword), $diagnostics, $below);
-            } else {
+            } elseif (is_array($value) || $value instanceof stdClass) {
                 $below = self::height($value);
             }
 
@@ -406,7 +407,9 @@ final class OpenApi30Upgrade
         $deepest = 0;
 
         foreach ($value as $member) {
-            $deepest = max($deepest, self::height($member));
+            if ((is_array($member) || $member instanceof stdClass) && ($below = self::height($member)) > $deepest) {
+                $deepest = $below;
+            }
         }
 
         return $deepest + 1;

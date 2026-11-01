@@ -41,6 +41,22 @@ it('still refuses what the 3.0 contract refuses', function (array $schema, array
     'null where nothing says nullable' => [['type' => 'string', 'nullable' => false], [], 'null'],
 ]);
 
+it('indexes and checks a 3.0 contract nested deeper than a restated `nullable` can wrap', function (): void {
+    // Each type-less `nullable` here would be wrapped in an `anyOf`, two levels deeper apiece. Past the
+    // bound a document can be written out at, the restatement once failed to encode and the contract read
+    // as one with no operations, failing every route as undocumented.
+    $deep = ['type' => 'string'];
+
+    for ($level = 0; $level < 200; $level++) {
+        $deep = ['nullable' => true, 'not' => $deep];
+    }
+
+    $document = versionedContract('3.0.3', ['type' => 'object', 'properties' => ['ok' => ['type' => 'boolean'], 'deep' => $deep], 'required' => ['ok']]);
+
+    expect(checkVersionedResponse($document, '{"ok":true}')->violations)->toBe([])
+        ->and(checkVersionedResponse($document, '{"ok":"yes"}')->ok())->toBeFalse();
+});
+
 it('names the document as written wherever a failure lands', function (array $schema, string $body, array $pointers): void {
     $document = versionedContract('3.0.3', $schema);
     $outcome = checkVersionedResponse($document, $body);
