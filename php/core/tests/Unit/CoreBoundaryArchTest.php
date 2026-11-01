@@ -468,6 +468,9 @@ it('freezes the rule-transformer field façade at the methods it means to promis
         'admitBlank',
         'get',
         'has',
+        // The counterpart of `isRequired()`: `types()` never carries the null, so a rule reading what the
+        // field accepts — a stated example, say — has no other way to learn it admits one.
+        'isNullable',
         'isRequired',
         'markMultipart',
         'markNullable',

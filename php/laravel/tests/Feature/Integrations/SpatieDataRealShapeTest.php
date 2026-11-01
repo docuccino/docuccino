@@ -49,7 +49,9 @@ function realMetadataAs(string $fixtureFqcn, string $twinFqcn): ClassMetadata
  * class the recovered types reference keeps its fixture-app FQCN — nothing in-process can load it — so its
  * real metadata is seeded under that name, which is what lets it hoist as a component of its own.
  *
- * @return array{0: array<string, mixed>, 1: array<string, mixed>}
+ * The third member is the codes of the diagnostics the conversion raised.
+ *
+ * @return array{0: array<string, mixed>, 1: array<string, mixed>, 2: list<string>}
  */
 function realDataComponent(string $fixtureFqcn, string $twinFqcn, string ...$nested): array
 {
@@ -65,7 +67,11 @@ function realDataComponent(string $fixtureFqcn, string $twinFqcn, string ...$nes
 
     $schemas = $components->schemas();
 
-    return [$schemas, $schemas[substr((string) strrchr($twinFqcn, '\\'), 1)]];
+    return [
+        $schemas,
+        $schemas[substr((string) strrchr($twinFqcn, '\\'), 1)],
+        array_map(static fn ($d): string => $d->code, $components->diagnostics()),
+    ];
 }
 
 /**
@@ -157,7 +163,7 @@ it('hoists the item class a recovered list names into components', function (): 
     // The knock-on that makes reading the tag worth it: `forms` is a `list<SnapshotFormData>`, so its type
     // is the only reference to that Data class in the whole document. It hoists with its own members,
     // enum column included.
-    [$schemas] = realDataComponent('App\\Data\\SnapshotData', SnapshotData::class, 'App\\Data\\SnapshotFormData');
+    [$schemas, , $codes] = realDataComponent('App\\Data\\SnapshotData', SnapshotData::class, 'App\\Data\\SnapshotFormData');
 
     // The `enum` below is CASE NAMES, which is a harness artifact: this converter has no EnumSchema and
     // `App\Enums\ListingStatus` isn't autoloadable in-process, so neither route to reflection is open and
@@ -166,12 +172,10 @@ it('hoists the item class a recovered list names into components', function (): 
     // assertion is for is the HOIST: that the item class becomes a component of its own at all.
     // The nested class is mapped by the GENERIC class mapper here, for the same reason the enum shows
     // case names: `App\Data\SnapshotFormData` isn't autoloadable in-process, so `isData()` says no and
-    // DataSchema declines it. That makes this the real-metadata proof that the fallback mapper now reads
-    // a property's `@example` — the tag was recovered all along and only the Data mapper published it.
-    // `open` is the enum's BACKING value, so the pair agrees wherever the product emits backing values;
-    // the case names beside it are the harness artifact named above, and an example that really did
-    // violate its schema is caught by the document-level example audit, which validates against the
-    // whole schema rather than its `type` alone.
+    // DataSchema declines it. That makes this the real-metadata proof that the fallback mapper reads a
+    // property's `@example`: the authored `open` is the enum's BACKING value, which the case names beside
+    // it here do not list, so it is read against them, refused rather than published against a value set
+    // that rejects it, and reported. Where the product emits the backing values, `open` is a member.
     expect(array_keys($schemas))->toBe(['SnapshotFormData', 'SnapshotData'])
         ->and($schemas['SnapshotFormData']['properties']['status'])->toBe([
             'type' => 'string',
@@ -179,8 +183,8 @@ it('hoists the item class a recovered list names into components', function (): 
             'x-enum-varnames' => ['Open', 'Closed', 'Draft'],
             'x-enumNames' => ['Open', 'Closed', 'Draft'],
             'description' => 'Publication status frozen at submit.',
-            'example' => 'open',
-        ]);
+        ])
+        ->and($codes)->toContain('docblock.example-untypable');
 })->group('fixture');
 
 it('emits a referenced item for a DataCollection whose generic only the docblock states', function (): void {
