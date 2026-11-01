@@ -20,6 +20,7 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
+use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
@@ -27,6 +28,7 @@ use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Integrations\FormRequest\RulesFromClass;
 use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataRequestExtension;
+use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Tests\Fixtures\FormRequest\CustomRuleRequest;
 use Docuccino\Laravel\Tests\Fixtures\Rules\OpaqueCheck;
@@ -308,6 +310,20 @@ it('names a spatie #[Rule(new X)] it cannot read, against the Data property that
             'Data property '.UnreadRuleData::class.'::$note has a rule whose content this build cannot read (new Illuminate\\Validation\\ConditionalRules), which can make the field optional, nullable or excluded; it is documented from its type alone, without the constraints its attributes state.',
         ]);
 });
+
+it('names a closure in a spatie #[Rule] as the other rule readers do', function (): void {
+    // A closure in an attribute is PHP 8.5 syntax, so the class is compiled here rather than kept as a file.
+    $class = 'Docuccino\\Laravel\\Tests\\Fixtures\\SpatieData\\ClosureRuleData';
+    if (! class_exists($class)) {
+        eval('namespace Docuccino\\Laravel\\Tests\\Fixtures\\SpatieData; final class ClosureRuleData extends \\Spatie\\LaravelData\\Data { public function __construct(#[\\Spatie\\LaravelData\\Attributes\\Validation\\Rule(static function (string $attribute, mixed $value, \\Closure $fail): void {})] public string $slug) {} }');
+    }
+
+    $rules = new DataValidationRules;
+    $rules->build($class, new ClassMetadata($class, [new PropertyMetadata('slug', ScalarT::string())]), new NullTypeEngine, null, schemaConverter());
+
+    // Laravel runs a closure as a check, so it is left off and the field's other rules stand.
+    expect($rules->unreadRuleObjects())->toBe([['key' => 'slug', 'class' => $class, 'property' => 'slug', 'rule' => 'a closure', 'narrows' => true]]);
+})->skip(PHP_VERSION_ID < 80500, 'A closure in an attribute argument needs PHP 8.5.');
 
 it('is right to read a Rule static that returns a rule string as that string, by Laravel', function (string $static, array $written, array $body, Closure $admits): void {
     // Laravel runs the string the static returns. Each body passes with it and fails on the rules beside it
