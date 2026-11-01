@@ -1758,10 +1758,11 @@ author never wrote, and every check downstream agrees with it, because they all 
 next day and a leap second the next minute, all from PHP's calendar; a timestamp written as a mapping key
 became a count of seconds, since keys are read with no flags, so `2024-01-01:` published `"1704067200"`.
 `!!float abc` was cast to 0, and so were `!!float "1.5"`, `.inf` and `0x1A`. A merge of an alias naming a
-list became a map keyed `0`, `1`; a merged map whose first key is `0` was read as a list of maps; and
-`<<: &m {a: 1}` became a key named `<<` holding null. `tRUE` and `nULL` became `true` and `null`, which no
-YAML version reads them as, and `! 12`, a string under YAML's non-specific tag, became 12. A key written
-twice after a merge kept the second silently, as did one whose first value was null, on 7.4.
+list became a map keyed `0`, `1`; a merged map whose first key is `0` was read as a list of maps, before
+7.4.22 and 8.1.10; and `<<: &m {a: 1}` became a key named `<<` holding null. `tRUE` and `nULL` became
+`true` and `null`, which no YAML version reads them as, and `! 12`, a string under YAML's non-specific tag,
+became 12. A key written twice after a merge kept the second silently, as did one whose first value was
+null, on 7.4.
 
 *The tell.* A value type the source format has no literal for, or a normalising constructor between the
 text and the value: `new DateTimeImmutable($text)`, `(float) $text`, `$data += $refValue`. Ask what the
@@ -1777,7 +1778,9 @@ every merge key a member of its own name, every `!!float` a `!!str` — and hold
 number. Refuse what is plainly not what it claims, saying what to write instead; and where the parser
 itself says, listen — 7.4 reports a duplicate key only as a deprecation, which is caught and refused as
 8.1 refuses it. Each row of the tests also asserts its premise against the bare parser, so a release that
-stops misreading shows up as a row to delete rather than a guard quietly testing nothing.
+stops misreading shows up as a failing row rather than a guard quietly testing nothing. While the
+constraint's floor still misreads, that row holds the reader to both answers, chosen by what the
+installed parser does (7.4.22 and 8.1.10 stopped reading a merged map with a `0` key as a list).
 
 *What it cannot see.* The parser gives no sign of a flow mapping's key written twice whose first value is
 null, and a quoted `<<` spelt with an escape still merges on releases before 7.4.21 and 8.1.9. The
