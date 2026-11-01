@@ -12,6 +12,7 @@ use Docuccino\Core\Support\Fqcn;
 use Docuccino\Laravel\Integrations\Support\DependencyFileSet;
 use Docuccino\Laravel\Integrations\Support\RuleParsing;
 use Docuccino\Laravel\Integrations\Validation\CustomRuleReader;
+use Docuccino\Laravel\Integrations\Validation\RuleFactories;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\UnreadRule;
 
@@ -190,7 +191,8 @@ final class ConstValueToRules
     }
 
     /**
-     * A factory call in the rules list, or a framework object read as one. A descriptor that does not
+     * A factory call in the rules list, or a framework object read as one. A `Rule::` static that returns
+     * a rule string reads as that string, so `Rule::nullable()` is `'nullable'`. A descriptor that does not
      * read is left out like any other unread rule.
      *
      * @return list<ValidationRule>
@@ -198,7 +200,11 @@ final class ConstValueToRules
     private function descriptorItem(ConstValue $descriptor): array
     {
         if (! in_array(self::method($descriptor), self::READ_FACTORIES, true)) {
-            return $this->leaveOut($descriptor, UnreadRule::factoryNarrows((string) $descriptor->factory));
+            $string = $descriptor->chain === [] ? RuleFactories::ruleString((string) $descriptor->factory, $descriptor->args) : null;
+
+            return $string !== null
+                ? RuleParsing::tokens($string)
+                : $this->leaveOut($descriptor, UnreadRule::factoryNarrows((string) $descriptor->factory));
         }
 
         // One that reads to nothing has either said why ({@see $widened}) or excludes nothing.

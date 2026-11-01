@@ -557,8 +557,9 @@ The rules array is recovered without ever being executed, from any of these:
 Within a rules array, Docuccino reads pipe strings (`'required|integer'`), arrays of rules
 (`['required', 'integer']`), the `Rule::` factories `Rule::enum()`, `Rule::in()`, `Rule::exists()` and
 `Rule::unique()` or the objects they build (`new Enum(Currency::class)`, `new In([...])`, chained calls
-included), and your own rule objects — `new SortCode` documents from the rule class's
-[`#[RuleSchema]`](#documenting-a-custom-rule). A field whose rules are a closure, a rule object with no
+included), the `Rule::` methods that return a rule string, such as `Rule::nullable()` and
+`Rule::sometimes()`, which document exactly as `'nullable'` and `'sometimes'` do, and your own rule
+objects — `new SortCode` documents from the rule class's [`#[RuleSchema]`](#documenting-a-custom-rule). A field whose rules are a closure, a rule object with no
 `#[RuleSchema]`, or a values-at-runtime factory like `Rule::in(MediaCollections::names())` can't be read
 statically. It raises a `validation.rule-unrecoverable` info diagnostic naming the field, so nothing
 disappears silently: the field is omitted from the schema, or — when something else documents it, such

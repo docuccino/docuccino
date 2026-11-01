@@ -308,3 +308,50 @@ it('names a spatie #[Rule(new X)] it cannot read, against the Data property that
             'Data property '.UnreadRuleData::class.'::$note has a rule whose content this build cannot read (new Illuminate\\Validation\\ConditionalRules), which can make the field optional, nullable or excluded; it is documented from its type alone, without the constraints its attributes state.',
         ]);
 });
+
+it('is right to read a Rule static that returns a rule string as that string, by Laravel', function (string $static, array $written, array $body, Closure $admits): void {
+    // Laravel runs the string the static returns. Each body passes with it and fails on the rules beside it
+    // alone, so leaving the static out as a check would publish a field stricter than the endpoint.
+    expect(Validator::make($body, ['note' => [...$written, Rule::{$static}()]])->passes())->toBeTrue()
+        ->and(Validator::make($body, ['note' => $written])->passes())->toBeFalse();
+
+    $rules = implode(', ', [...array_map(static fn (string $rule): string => var_export($rule, true), $written), '\\Illuminate\\Validation\\Rule::'.$static.'()']);
+    $context = unreadRuleContext('App\\PaymentController::store', "\$request->validate(['note' => [{$rules}]]);");
+    (new ValidationRequestExtension)->handle($operation = new OperationDraft, $context);
+    $body = $operation->freeze()->toArray()['requestBody'] ?? [];
+
+    expect($admits(is_array($body) ? $body['content']['application/json']['schema'] : []))->toBeTrue()
+        ->and(unreadRuleNotes($context))->toBe([]);
+})->with([
+    'nullable takes null' => ['nullable', ['string'], ['note' => null], static fn (array $schema): bool => $schema['properties']['note']['type'] === ['string', 'null']],
+    'sometimes takes no value' => ['sometimes', ['required', 'string'], [], static fn (array $schema): bool => ! in_array('note', $schema['required'] ?? [], true)],
+])->skip(! method_exists(Rule::class, 'nullable'), 'This Laravel declares no Rule static that returns a rule string.');
+
+it('publishes every Rule static the installed Laravel declares to return a rule string as that string', function (): void {
+    // Read off the installed framework by what each static declares it returns, so one Laravel adds is
+    // held to the same answer the day it ships.
+    $statics = array_values(array_filter(
+        (new ReflectionClass(Rule::class))->getMethods(ReflectionMethod::IS_STATIC),
+        static fn (ReflectionMethod $method): bool => ($method->getReturnType()?->__toString() ?? (preg_match('/@return\s+(\S+)/', (string) $method->getDocComment(), $m) === 1 ? $m[1] : '')) === 'string',
+    ));
+
+    expect(count($statics))->toBeGreaterThan(15);
+
+    $published = static function (string $rule): array {
+        $context = unreadRuleContext('App\\PaymentController::store', "\$request->validate(['note' => ['string', {$rule}], 'title' => 'string']);");
+        (new ValidationRequestExtension)->handle($operation = new OperationDraft, $context);
+
+        return [
+            $operation->freeze()->toArray()['requestBody'] ?? [],
+            array_map(static fn (Diagnostic $d): string => $d->code.' '.$d->message, $context->components->diagnostics()),
+        ];
+    };
+
+    // The same body and the same notes: a rule the string form leaves unhandled is unhandled here too.
+    foreach ($statics as $method) {
+        $string = Rule::{$method->getName()}();
+
+        expect($string)->toBeString()
+            ->and($published('\\Illuminate\\Validation\\Rule::'.$method->getName().'()'))->toBe($published(var_export($string, true)), $method->getName());
+    }
+})->skip(! method_exists(Rule::class, 'nullable'), 'This Laravel declares no Rule static that returns a rule string.');

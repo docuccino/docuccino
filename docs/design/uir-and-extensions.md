@@ -1350,7 +1350,10 @@ true whatever the rule turns out to be; under `exclude` the key is still accepte
 reading may not restate its rules. A spatie Data property keeps what its type says instead, which
 construction enforces whatever the rule is. Both
 are `validation.rule-unrecoverable`, naming the rule. The constant shape reading (`ShapeToRuleSet`) and
-spatie's `#[Rule(new X)]` follow the same rule over the class alone. A `new` receiver carries a chain the
+spatie's `#[Rule(new X)]` follow the same rule over the class alone. A `Rule::` static is judged by what the
+installed `Rule` declares it returns (`RuleFactories`), never by a list of names: a rule object by the rule
+above, a rule string by calling the static, so `Rule::nullable()` reads as `'nullable'`, and anything else
+as unknown. A `new` receiver carries a chain the
 way a descriptor does, so `(new Enum(X::class))->only([…])` reads as `Rule::enum(X::class)->only([…])`.
 
 `--provenance=none|winners|full`, default `winners` for committed artifacts. A component only a dropped

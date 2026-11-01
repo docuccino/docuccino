@@ -5,55 +5,47 @@ declare(strict_types=1);
 use Docuccino\Laravel\Integrations\Validation\UnreadRule;
 use Docuccino\Laravel\Tests\Fixtures\Rules\LegacyStringRule;
 use Docuccino\Laravel\Tests\Fixtures\Rules\OpaqueCheck;
+use Illuminate\Validation\ConditionalRules;
+use Illuminate\Validation\NestedRules;
 use Illuminate\Validation\Rule;
 
-/**
- * Whether leaving out an unread rule keeps the rules beside it true. Stated per factory from what Laravel
- * does with the rule it builds: a check can only refuse values, while a conditional, nested or exclude rule
- * — and anything a macro registered — can make the field optional, nullable or unchecked.
- *
- * @return array<string, bool>
- */
-function ruleFactoryNarrows(): array
-{
-    return [
-        // Checks on the value, or rule strings that only add a requirement.
-        'can' => true, 'array' => true, 'unique' => true, 'exists' => true, 'in' => true, 'notIn' => true,
-        'requiredIf' => true, 'requiredUnless' => true, 'prohibitedIf' => true, 'prohibitedUnless' => true,
-        'date' => true, 'dateTime' => true, 'email' => true, 'enum' => true, 'file' => true,
-        'imageFile' => true, 'dimensions' => true, 'string' => true, 'numeric' => true, 'anyOf' => true,
-        'contains' => true, 'doesntContain' => true,
-        // Rules chosen at runtime, or applied to each item by a callback.
-        'when' => false, 'unless' => false, 'forEach' => false, 'compile' => false,
-        // `exclude` stops the field's other rules running at all.
-        'excludeIf' => false, 'excludeUnless' => false,
-        // Macro plumbing: a call through it builds whatever was registered.
-        'macro' => false, 'mixin' => false, 'hasMacro' => false, 'flushMacros' => false, '__callStatic' => false,
-    ];
-}
-
-it('classifies every Rule factory by what leaving it out does', function (string $method, bool $narrows): void {
+it('classifies a Rule static by what leaving it out does', function (string $method, bool $narrows): void {
     expect(UnreadRule::factoryNarrows('Illuminate\\Validation\\Rule::'.$method))->toBe($narrows)
         ->and(UnreadRule::factoryNarrows('\\Illuminate\\Validation\\Rule::'.strtolower($method)))->toBe($narrows);
-})->with(static function (): Generator {
-    foreach (ruleFactoryNarrows() as $method => $narrows) {
-        yield $method => [$method, $narrows];
+})->with([
+    // Checks on the value: each builds one of Laravel's rule objects, run as a check.
+    'can' => ['can', true], 'in' => ['in', true], 'enum' => ['enum', true], 'requiredIf' => ['requiredIf', true],
+    'anyOf' => ['anyOf', true], 'dateTime' => ['dateTime', true],
+    // Rules chosen at runtime, or applied to each item by a callback.
+    'when' => ['when', false], 'unless' => ['unless', false], 'forEach' => ['forEach', false], 'compile' => ['compile', false],
+    // `exclude` stops the field's other rules running at all.
+    'excludeIf' => ['excludeIf', false], 'excludeUnless' => ['excludeUnless', false],
+    // Macro plumbing: a call through it builds whatever was registered.
+    'macro' => ['macro', false], 'mixin' => ['mixin', false], 'hasMacro' => ['hasMacro', false],
+    'flushMacros' => ['flushMacros', false], '__callStatic' => ['__callStatic', false],
+]);
+
+it('classifies every static the installed Rule class declares by what it returns', function (): void {
+    // Read off the installed framework, so a static Laravel adds is classified the day it ships. Stated
+    // from what Laravel does with each return: an object it runs as a check can only refuse values; a
+    // conditional, nested or exclude rule can loosen the rules beside it; and a rule string left unread
+    // could be `nullable` itself. Only the first keeps the rules beside it.
+    $counts = ['check' => 0, 'loosens' => 0, 'other' => 0];
+    foreach ((new ReflectionClass(Rule::class))->getMethods(ReflectionMethod::IS_STATIC) as $method) {
+        $returns = ltrim($method->getReturnType()?->__toString()
+            ?? (preg_match('/@return\s+(\S+)/', (string) $method->getDocComment(), $match) === 1 ? $match[1] : ''), '\\');
+        $isClass = class_exists($returns);
+        $loosens = $isClass && (is_a($returns, ConditionalRules::class, true)
+            || is_a($returns, NestedRules::class, true)
+            || str_starts_with(class_basename($returns), 'Exclude'));
+        $counts[$isClass ? ($loosens ? 'loosens' : 'check') : 'other']++;
+
+        expect(UnreadRule::factoryNarrows('Illuminate\\Validation\\Rule::'.$method->getName()))->toBe($isClass && ! $loosens, $method->getName());
     }
-});
 
-it('has a row for every static the installed Rule class declares', function (): void {
-    // A factory Laravel adds reads as a macro until it has a row, which gives up every field using it.
-    $declared = array_map(
-        static fn (ReflectionMethod $method): string => $method->getName(),
-        (new ReflectionClass(Rule::class))->getMethods(ReflectionMethod::IS_STATIC),
-    );
-    sort($declared);
-    $rows = array_keys(ruleFactoryNarrows());
-    sort($rows);
-
-    expect($declared)->toHaveCount(count(array_unique($declared)))
-        ->and(count($declared))->toBeGreaterThan(20)
-        ->and($rows)->toBe($declared);
+    expect($counts['check'])->toBeGreaterThan(20)
+        ->and($counts['loosens'])->toBeGreaterThanOrEqual(5)
+        ->and($counts['other'])->toBeGreaterThanOrEqual(5);
 });
 
 it('takes any factory on a framework rule class as a check, and any other factory as unknown', function (string $factory, bool $narrows): void {
@@ -63,6 +55,7 @@ it('takes any factory on a framework rule class as a check, and any other factor
     'Password::defaults' => ['Illuminate\\Validation\\Rules\\Password::defaults', true],
     'File::types' => ['Illuminate\\Validation\\Rules\\File::types', true],
     'an undeclared Rule static (a macro)' => ['Illuminate\\Validation\\Rule::optionalSlug', false],
+    'an application class also named Rule' => ['App\\Validation\\Rule::in', false],
     'an application helper' => ['App\\Support\\Rules::slug', false],
     'a function name with no class' => ['strtolower', false],
 ]);

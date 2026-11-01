@@ -24,6 +24,8 @@ final class UnreadRule
         'Illuminate\\Contracts\\Validation\\CompilableRules',
         'Illuminate\\Validation\\Rules\\ExcludeIf',
         'Illuminate\\Validation\\Rules\\ExcludeUnless',
+        'Illuminate\\Validation\\Rules\\ExcludeWith',
+        'Illuminate\\Validation\\Rules\\ExcludeWithout',
     ];
 
     /** The contracts Laravel runs as a check on the value. */
@@ -33,12 +35,6 @@ final class UnreadRule
         'Illuminate\\Contracts\\Validation\\ValidationRule',
         'Illuminate\\Contracts\\Validation\\InvokableRule',
     ];
-
-    /**
-     * `Rule::` statics that do not build a check: conditional and nested rules, the exclude rules, and
-     * the macro plumbing, which builds whatever was registered.
-     */
-    private const EXPANDING_FACTORIES = ['when', 'unless', 'foreach', 'compile', 'excludeif', 'excludeunless', 'macro', 'mixin', 'hasmacro', 'flushmacros', '__callstatic'];
 
     private const RULE = 'Illuminate\\Validation\\Rule';
 
@@ -74,8 +70,9 @@ final class UnreadRule
 
     /**
      * Whether a static call written in a rules list builds a rule that only refuses values: a `Rule::`
-     * factory Laravel declares, other than the conditional and nested ones, or a factory on one of its
-     * rule classes (`Password::min(8)`). A macro or an application's own helper could return anything.
+     * static Laravel declares to return a rule object that does ({@see RuleFactories}), or a factory on one
+     * of its rule classes (`Password::min(8)`). Anything else could return any rule: a static that returns
+     * a rule string, a macro, or an application's own helper.
      */
     public static function factoryNarrows(string $factory): bool
     {
@@ -85,14 +82,13 @@ final class UnreadRule
         }
 
         $class = ltrim(substr($factory, 0, $separator), '\\');
-        $method = substr($factory, $separator + 2);
 
         if (str_starts_with($class, self::RULES_NAMESPACE)) {
             return true;
         }
 
-        return strcasecmp($class, self::RULE) === 0
-            && ! in_array(strtolower($method), self::EXPANDING_FACTORIES, true)
-            && method_exists(self::RULE, $method);
+        $built = strcasecmp($class, self::RULE) === 0 ? RuleFactories::builtClass(substr($factory, $separator + 2)) : null;
+
+        return $built !== null && self::objectNarrows($built);
     }
 }
