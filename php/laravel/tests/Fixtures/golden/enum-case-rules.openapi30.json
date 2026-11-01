@@ -64,6 +64,24 @@
   },
   "components": {
     "schemas": {
+      "PostStatus": {
+        "type": "string",
+        "enum": [
+          "draft",
+          "published",
+          "archived"
+        ],
+        "x-enum-varnames": [
+          "Draft",
+          "Published",
+          "Archived"
+        ],
+        "x-enumNames": [
+          "Draft",
+          "Published",
+          "Archived"
+        ]
+      },
       "StorePostRequest": {
         "type": "object",
         "properties": {
@@ -71,17 +89,17 @@
             "type": "string",
             "not": {
               "enum": [
-                "Archived"
+                "archived"
               ]
             }
           },
           "priority": {
-            "type": "string",
+            "type": "integer",
             "enum": [
-              "Low",
-              "High"
+              1,
+              3
             ],
-            "example": "Low",
+            "example": 1,
             "x-enum-varnames": [
               "Low",
               "High"
@@ -110,10 +128,10 @@
           "schedule": {
             "type": "string",
             "enum": [
-              "Draft",
+              "draft",
               "scheduled"
             ],
-            "example": "Draft",
+            "example": "draft",
             "x-enum-varnames": [
               "Draft",
               "Scheduled"
@@ -127,36 +145,20 @@
             "type": "string",
             "not": {
               "enum": [
-                "Archived"
+                "archived"
               ]
             }
           },
           "state": {
-            "type": "string",
-            "enum": [
-              "Draft",
-              "Published",
-              "Archived"
-            ],
-            "example": "Draft",
-            "x-enum-varnames": [
-              "Draft",
-              "Published",
-              "Archived"
-            ],
-            "x-enumNames": [
-              "Draft",
-              "Published",
-              "Archived"
-            ]
+            "$ref": "#/components/schemas/PostStatus"
           },
           "status": {
             "type": "string",
             "enum": [
-              "Draft",
-              "Published"
+              "draft",
+              "published"
             ],
-            "example": "Draft",
+            "example": "draft",
             "x-enum-varnames": [
               "Draft",
               "Published"

@@ -152,6 +152,27 @@
   },
   "components": {
     "schemas": {
+      "PostStatus": {
+        "x-docuccino": {
+          "id": "sch:v1:uothjjknxlz7egnt"
+        },
+        "type": "string",
+        "enum": [
+          "draft",
+          "published",
+          "archived"
+        ],
+        "x-enum-varnames": [
+          "Draft",
+          "Published",
+          "Archived"
+        ],
+        "x-enumNames": [
+          "Draft",
+          "Published",
+          "Archived"
+        ]
+      },
       "StorePostRequest": {
         "x-docuccino": {
           "id": "sch:v1:bck56x2rtqhetuim"
@@ -162,17 +183,17 @@
             "type": "string",
             "not": {
               "enum": [
-                "Archived"
+                "archived"
               ]
             }
           },
           "priority": {
-            "type": "string",
+            "type": "integer",
             "enum": [
-              "Low",
-              "High"
+              1,
+              3
             ],
-            "example": "Low",
+            "example": 1,
             "x-enum-varnames": [
               "Low",
               "High"
@@ -201,10 +222,10 @@
           "schedule": {
             "type": "string",
             "enum": [
-              "Draft",
+              "draft",
               "scheduled"
             ],
-            "example": "Draft",
+            "example": "draft",
             "x-enum-varnames": [
               "Draft",
               "Scheduled"
@@ -218,36 +239,20 @@
             "type": "string",
             "not": {
               "enum": [
-                "Archived"
+                "archived"
               ]
             }
           },
           "state": {
-            "type": "string",
-            "enum": [
-              "Draft",
-              "Published",
-              "Archived"
-            ],
-            "example": "Draft",
-            "x-enum-varnames": [
-              "Draft",
-              "Published",
-              "Archived"
-            ],
-            "x-enumNames": [
-              "Draft",
-              "Published",
-              "Archived"
-            ]
+            "$ref": "#/components/schemas/PostStatus"
           },
           "status": {
             "type": "string",
             "enum": [
-              "Draft",
-              "Published"
+              "draft",
+              "published"
             ],
-            "example": "Draft",
+            "example": "draft",
             "x-enum-varnames": [
               "Draft",
               "Published"
@@ -297,7 +302,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "11bafee6e83b01550eb117643149df9d7537d59f70ec19c306899c8822d3b50d"
+      "contentHash": "b8906688385f441d788d81ce30d8ebd392a19c41cbbb36b58629d742723aa748"
     },
     "generator": {
       "name": "docuccino/laravel",
