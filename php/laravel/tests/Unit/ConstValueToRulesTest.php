@@ -361,3 +361,45 @@ it('folds every framework factory and rule object that excludes a field', functi
         expect((new ConstValueToRules)->fold(ConstValue::instance($class, [ConstValue::unknown('closure')])))->toHaveCount(1, $class);
     }
 });
+
+it('folds a framework rule object written with new as the Rule factory that builds it', function (): void {
+    // `new Enum(X::class)` is the object `Rule::enum(X::class)` returns, so the two are one rule however
+    // it is written. Every factory whose descriptor folds is asked, and the class it builds is Laravel's
+    // own answer, by calling it.
+    $samples = [
+        'enum' => [[WidgetStatus::class], [ConstValue::scalar(WidgetStatus::class)]],
+        'exists' => [['users'], [ConstValue::scalar('users')]],
+        'in' => [[['a', 'b']], [ConstValue::array([ConstValue::scalar('a'), ConstValue::scalar('b')])]],
+        'unique' => [['users'], [ConstValue::scalar('users')]],
+    ];
+
+    $folding = array_values(array_filter(
+        array_map(static fn (ReflectionMethod $method): string => $method->getName(), (new ReflectionClass(Rule::class))->getMethods(ReflectionMethod::IS_STATIC)),
+        static fn (string $name): bool => ! str_starts_with($name, 'exclude')
+            && (new ConstValueToRules)->fold(ConstValue::descriptor('Illuminate\\Validation\\Rule::'.$name, [ConstValue::scalar(WidgetStatus::class)])) !== [],
+    ));
+    sort($folding);
+
+    expect($folding)->toBe(array_keys($samples));
+
+    foreach ($samples as $factory => [$arguments, $folded]) {
+        $class = get_class(Rule::{$factory}(...$arguments));
+        $asObject = (new ConstValueToRules)->fold(ConstValue::instance($class, $folded));
+        $asFactory = (new ConstValueToRules)->fold(ConstValue::descriptor('Illuminate\\Validation\\Rule::'.$factory, $folded));
+
+        expect($asObject)->not->toBe([], $class)
+            ->and($asObject)->toEqual($asFactory);
+    }
+});
+
+it('folds new Enum beside the rules written with it', function (): void {
+    $rules = (new ConstValueToRules)->fold(ConstValue::array([
+        ConstValue::scalar('distinct'),
+        ConstValue::instance('Illuminate\\Validation\\Rules\\Enum', [ConstValue::scalar(WidgetStatus::class)]),
+    ]));
+
+    expect(array_map(static fn ($r): array => [$r->name, $r->parameters, $r->note], $rules))->toBe([
+        ['distinct', [], null],
+        ['enum', ['draft', 'published', 'archived'], WidgetStatus::class],
+    ]);
+});

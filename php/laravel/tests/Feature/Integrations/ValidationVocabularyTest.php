@@ -258,9 +258,10 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'lt (numeric literal)' => [[['lt', ['100']]], ['exclusiveMaximum' => 100, 'type' => 'number', 'example' => 1]],
     'lte (numeric literal)' => [[['lte', ['99']]], ['maximum' => 99, 'type' => 'number', 'example' => 1]],
 
-    // ArrayShapeRuleTransformer — list → array; distinct → uniqueItems.
+    // ArrayShapeRuleTransformer — list → array; distinct speaks about the list a `*` item is in, so on a
+    // named field it publishes nothing (its `*` positions are asserted on separately).
     'list' => [[['list']], ['type' => 'array']],
-    'distinct' => [[['distinct']], ['type' => 'array', 'uniqueItems' => true]],
+    'distinct (a named field, which Laravel compares only with itself)' => [[['string'], ['distinct']], ['type' => 'string']],
 
     // AdditionalPropertiesRuleTransformer — the words the Laravel vocabulary has none of. `object`
     // says a JSON object; `additional_properties` says the same and states the value schema, which
@@ -615,6 +616,55 @@ it('applies size rules type-aware and independent of author order', function ():
         ->and($reorderedName)->toBe(['example' => 'example', 'maxLength' => 100, 'minLength' => 2, 'type' => 'string'])
         ->and($int['properties']['age'])->toBe(['type' => 'integer', 'minimum' => 1, 'maximum' => 120, 'example' => 1]);
 });
+
+/*
+ * `distinct` on `tags.*` refuses a body whose `tags` repeat a value, so the repeat is the LIST's to refuse:
+ * `uniqueItems` on `tags`. Each row states the server's answer, read from Laravel itself, and the document
+ * must never refuse a body the server takes. Where `exact`, it refuses the body too; elsewhere the server
+ * refuses more than any keyword can say, and the document is the wider, true answer.
+ */
+it('publishes distinct as the uniqueness of the list its items are in, never refusing what the server takes', function (array $rules, array $body, bool $accepted, bool $exact): void {
+    expect(Validator::make($body, $rules)->passes())->toBe($accepted);
+
+    $schema = json_decode((string) json_encode(convertLaravelRules($rules)->schema), flags: JSON_THROW_ON_ERROR);
+    $published = (new Opis\JsonSchema\Validator)->validate(json_decode((string) json_encode($body), flags: JSON_THROW_ON_ERROR), $schema)->isValid();
+
+    expect($published)->toBe($accepted || ! $exact);
+})->with([
+    'a repeated item' => [['tags.*' => 'string|distinct'], ['tags' => ['a', 'a']], false, true],
+    'items that differ' => [['tags.*' => 'string|distinct'], ['tags' => ['a', 'b']], true, true],
+    'a repeated enum case' => [['tags.*' => 'distinct|in:read,write'], ['tags' => ['read', 'read']], false, true],
+    'a repeated boolean' => [['tags.*' => 'boolean|distinct'], ['tags' => [true, true]], false, true],
+    'a repeat under strict' => [['tags.*' => 'string|distinct:strict'], ['tags' => ['a', 'a']], false, true],
+    'a repeat under ignore_case' => [['tags.*' => 'string|distinct:ignore_case'], ['tags' => ['a', 'a']], false, true],
+    // Stricter than any keyword: the document takes it.
+    'another case under ignore_case' => [['tags.*' => 'string|distinct:ignore_case'], ['tags' => ['a', 'A']], false, false],
+    // The body itself is the list.
+    'a repeat in a top-level list' => [['*' => 'integer|distinct'], [1, 1], false, true],
+    'a repeat inside one row of a matrix' => [['m.*.*' => 'integer|distinct'], ['m' => [[1, 1]]], false, true],
+    // Laravel compares every cell, across rows too: each row is unique, and that is all a keyword says.
+    'a repeat across rows of a matrix' => [['m.*.*' => 'integer|distinct'], ['m' => [[1], [1]]], false, false],
+    'a repeat across lists in objects' => [['a.*.b.*' => 'integer|distinct'], ['a' => [['b' => [1]], ['b' => [1]]]], false, false],
+    // Laravel skips a null on a nullable item, and never compares an array item, so neither is a repeat.
+    'repeated nulls on nullable items' => [['tags.*' => 'nullable|string|distinct'], ['tags' => [null, null]], true, true],
+    'repeated arrays on array items' => [['tags.*' => 'array|distinct'], ['tags' => [[1], [1]]], true, true],
+    // Strict comparison tells an int from a float of the same value; JSON does not.
+    'one and one point nought under strict' => [['tags.*' => 'integer|distinct:strict'], ['tags' => [1, 1.0]], true, true],
+    // A named field's pattern matches only itself, so there is nothing to compare it with.
+    'a repeat in a list whose own key is distinct' => [['tags' => 'array|distinct'], ['tags' => [1, 1]], true, true],
+    // `lines.*.sku` compares skus across objects. Two equal objects without one repeat nothing.
+    'equal objects with no value to compare' => [['lines.*.sku' => 'string|distinct'], ['lines' => [['note' => 'x'], ['note' => 'x']]], true, true],
+    'a value repeated across objects' => [['lines.*.sku' => 'string|distinct'], ['lines' => [['sku' => 'a'], ['sku' => 'a']]], false, false],
+]);
+
+it('states no uniqueness where no keyword says what distinct does', function (array $rules, string $field, array $expected): void {
+    expect(convertLaravelRules($rules)->schema['properties'][$field])->toBe($expected);
+})->with([
+    // Laravel compares an object's values, and `uniqueItems` speaks only about an array's.
+    'the values of an object' => [['meta' => 'additional_properties:{"type":"string"}', 'meta.*' => 'string|distinct'], 'meta', ['type' => 'object', 'additionalProperties' => ['type' => 'string']]],
+    // Nothing says the items are scalars, and an array item is never compared.
+    'untyped items' => [['tags.*' => 'distinct'], 'tags', ['type' => 'array', 'items' => []]],
+]);
 
 it('maps type + format + choice + regex + date_format rules', function (): void {
     $schema = convertLaravelRules([

@@ -192,6 +192,15 @@ final readonly class ValidationField
         $this->node->blankRefused = true;
     }
 
+    /**
+     * The list this field is an element of — `tags` for `tags.*` — or null where the field is a named
+     * member. For a rule that speaks about the elements together, such as one requiring them distinct.
+     */
+    public function container(): ?self
+    {
+        return $this->builder->containerOf($this->path);
+    }
+
     /** Flag the whole request as multipart (a `file`/`image` rule was seen). */
     public function markMultipart(): void
     {
