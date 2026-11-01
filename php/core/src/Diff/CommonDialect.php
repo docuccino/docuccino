@@ -9,6 +9,7 @@ use Docuccino\Core\Canonical\CanonicalJsonSerializer;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\EmitOptions;
 use Docuccino\Core\Emit\OpenApi30DownlevelEmitter;
+use Docuccino\Core\Emit\OpenApi30Upgrade;
 use Docuccino\Core\Support\Arr;
 use Docuccino\Core\Support\JsonValue;
 
@@ -50,7 +51,7 @@ final class CommonDialect
 
     private static function is30(UirDocument $document): bool
     {
-        return preg_match('/^3\.0(\.|$)/', $document->openapi) === 1;
+        return OpenApi30Upgrade::reads30($document->openapi);
     }
 
     /**
