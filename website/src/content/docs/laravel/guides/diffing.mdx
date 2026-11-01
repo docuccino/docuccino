@@ -195,7 +195,20 @@ schema, with nothing beside it but a `title`, a `description` or an example, acc
 schema accepts. It is how OpenAPI 3.0 has to write a described reference, so wrapping `Customer` in
 `allOf: [{$ref: Customer}]` to give it a `description` reports the `description` and nothing else, and a
 union branch wrapped that way still pairs with `Customer` on the other side. Put a constraint beside the
-wrapper, such as a `maxProperties`, and it is an intersection again, compared as written.
+wrapper, such as a `maxProperties`, and it is an intersection again, compared as written. A
+`nullable: true` beside it is not a constraint: it is how OpenAPI 3.0 makes a reference nullable, and
+reads as `Customer` admitting `null`.
+
+**A union holding the old schema widens it.** OpenAPI 3.1 makes a reference nullable by writing it as
+`anyOf: [{$ref: Customer}, {type: 'null'}]`. Every value `Customer` admitted is still admitted, so the
+diff reports the `null` it now accepts as `schema.nullable-widened`, exactly as it reports
+`nullable: true` or `type: [string, 'null']`: safe on a request and breaking on a response. Any other
+branch beside the old schema is a branch added to a union, with the same verdict, and a union shrinking
+back down to the old schema is those branches removed, breaking on both sides.
+
+A `oneOf` matches exactly one branch, so a branch that overlaps the old schema refuses the values both
+match. The diff reads a `oneOf` this way only when the other branches can't hold a value of the old
+schema's type, as `{type: 'null'}` can't beside an object. Anything else is compared as written.
 
 
 ## Breaking depends on which way the data flows

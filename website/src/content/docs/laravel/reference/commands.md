@@ -443,7 +443,10 @@ response `enum`. That is a branch of a union that was
 already there; the union *keyword* arriving is a different change, and breaking on both sides, because the
 schema it landed on was not an empty union but an unconstrained one. It leaving reads like
 `schema.enum-removed`: a request widens, while a response reader loses the closed set of shapes it typed
-against. Branches are paired by what they *are* — a schema's identity, then the component it names, then
+against. The exception is a union one of whose branches *is* the old schema — `X` becoming
+`anyOf: [X, Y]` — which admits everything `X` did: that is `Y` added to a union, and going back is `Y`
+removed. A `oneOf` reads this way only where `Y` can hold no value of `X`'s type, since a value matching
+both is refused. Branches are paired by what they *are* — a schema's identity, then the component it names, then
 its content — never by where they sit, so reordering a `oneOf` is not a change, while swapping one branch
 for another is a removal plus an addition. `contains` demands a matching element, so it arriving narrows
 unless its own bounds say it asserts nothing — `minContains: 0` with no `maxContains` capping how many may
@@ -499,7 +502,9 @@ sides: the server stops accepting a value your clients are still sending. Admitt
 joining a response `enum` is. Because OpenAPI 3.0's `nullable: true` and 3.1's `type: [string, null]` are
 one statement in two dialects, migrating between them reports nothing at all — the keyword is read
 together with the type union beside it, and the `type` comparison leaves the `null` member to it, so one
-edit is one finding and switching spellings is not mistaken for a contract change. Writing `nullable: false` out where nothing was written reports nothing either, since that is what
+edit is one finding and switching spellings is not mistaken for a contract change. The same edit in any
+spelling is the same finding: a `null` joining `type`, `nullable: true` arriving, a reference becoming
+`anyOf: [{$ref: …}, {type: null}]`, or 3.0's `allOf: [{$ref: …}]` beside `nullable: true`. Writing `nullable: false` out where nothing was written reports nothing either, since that is what
 its absence already meant. A `nullable` that is no boolean at all — the sort of thing a hand-written `old`
 artifact carries — is a change nothing can order: `schema.nullable-changed`, breaking on both sides.
 
