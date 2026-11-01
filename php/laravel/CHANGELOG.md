@@ -7,6 +7,19 @@ User-facing changes to `docuccino/laravel` — features, fixes, performance work
 taken from the commit messages scoped `laravel`. Entries begin after v0.1.2; older history is in
 the [repository](https://github.com/docuccino/docuccino) git log.
 
+## v0.24.0
+
+### Breaking changes
+
+- an enum case in a choice rule publishes the value Laravel compares, not its name ([#708](https://github.com/docuccino/docuccino/pull/708))
+  - `TypeScope::constantValueOf()` now folds an enum case to a `ConstValue` of kind `case` (`isCase()`, `class`, `caseName()`) instead of a scalar holding the case name, and a plain constant on an enum folds to its value. A trace visitor that read a case's name from `scalar` must read `caseName()`.
+
+### Bug fixes
+
+- Rule::notIn() and new NotIn publish the values they exclude, and Rule::array() reads as array ([#706](https://github.com/docuccino/docuccino/pull/706))
+- name a validation rule the build cannot read, and publish a field such a rule could loosen as optional and unconstrained ([#704](https://github.com/docuccino/docuccino/pull/704))
+- distinct on tags.* makes the list unique rather than each tag, and new Enum or new In publishes its values ([#699](https://github.com/docuccino/docuccino/pull/699))
+
 ## v0.23.3
 
 ### Bug fixes

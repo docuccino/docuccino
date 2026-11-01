@@ -7,6 +7,12 @@ User-facing changes to `docuccino/inference-phpstan` — features, fixes, perfor
 taken from the commit messages scoped `inference-phpstan`. Entries begin after v0.1.2; older history is in
 the [repository](https://github.com/docuccino/docuccino) git log.
 
+## v0.24.0
+
+### Bug fixes
+
+- analyse a closure route's action, arrow function or not ([#696](https://github.com/docuccino/docuccino/pull/696))
+
 ## v0.21.0
 
 ### Breaking changes
