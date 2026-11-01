@@ -220,8 +220,8 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
 
     /**
      * The 3.0 document as an array, before it is canonicalised or checked against the 3.0 meta-schema —
-     * for a caller that reads the document rather than publishing it, as the differ does to compare a 3.1
-     * or 3.2 document with a 3.0 one ({@see CommonDialect}).
+     * for a caller that reads the document rather than publishing it, as the differ does to compare any
+     * document with a 3.0 one ({@see CommonDialect}).
      *
      * @param  list<Diagnostic>  $diagnostics
      * @return array<string, mixed>
