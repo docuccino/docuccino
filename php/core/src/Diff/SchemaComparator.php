@@ -278,12 +278,9 @@ final class SchemaComparator
     }
 
     /**
-     * A pointer with an asserting sibling compared part by part against a side that does not spell the
-     * same pointer, or null to compare as written. 2020-12 applies `{$ref: X, …S}` as X and S both, in
-     * place, so it is their intersection: the pointer and its annotations are compared with the other
-     * side's pointer, read through as a bare one is, and S with the other side's siblings. An inline side
-     * is all pointer part and no siblings. Each part holding is enough for the intersection to, so a
-     * break in either is never lost, where comparing as written never looks behind the pointer at all.
+     * A pointer with an asserting sibling compared part by part, as the intersection it is, against a side
+     * that does not spell the same pointer; or null to compare as written. The reading is
+     * docs/design/uir-and-extensions.md §1 "Reading through a spelling".
      *
      * @return list<Change>|null
      */
@@ -311,26 +308,10 @@ final class SchemaComparator
     }
 
     /**
-     * The schema a one-branch composition IS, or null where `$schema` is not one or `$other` spells the
-     * same keyword. `allOf`, `anyOf` and `oneOf` of one schema each validate exactly what that schema
-     * does, so with nothing beside the keyword but annotations and the identity — the siblings a bare
-     * pointer may carry ({@see ComponentRefs::resolveSchema()}) — the wrapper is its branch, the
-     * wrapper's annotations written over the branch's. Where both sides spell the keyword, their branches
-     * pair as written.
-     *
-     * An asserting sibling makes it an intersection. Where the branch is a bare pointer, it is read as
-     * that pointer with the siblings beside it, which 2020-12 applies in place exactly as it applies the
-     * wrapper, and which {@see compareIntersection()} compares part by part. With no `$documents` that
-     * holds only against a side naming a component too: the merged pointer cannot be read through, and
-     * against an inline side the branch arriving or going is the one thing that says a component did.
-     * An inline branch never merges: `additionalProperties` and
-     * `unevaluated*` see the siblings beside them, so moving a branch's keywords up beside them changes
-     * what they admit.
-     *
-     * A `nullable` beside it is not an intersection: it is how OpenAPI 3.0 writes a nullable `$ref`, and
-     * reads as that branch admitting null, so it is carried onto the branch.
-     *
-     * Changes found under an unwrapped branch are reported at the position, as a resolved pointer's are.
+     * The schema a one-branch composition IS, its wrapper's annotations and `nullable` laid over it, or null
+     * where `$schema` is not one or `$other` spells the same keyword. An asserting sibling merges only onto
+     * a bare pointer, and without `$documents` only against a side naming a component. The reading is
+     * docs/design/uir-and-extensions.md §1 "Reading through a spelling".
      *
      * @return array<string, mixed>|false|null
      */
@@ -486,16 +467,9 @@ final class SchemaComparator
     }
 
     /**
-     * A union on one side whose branches include the schema the other side IS — `X` becoming
-     * `anyOf: [X, {type: null}]`, which is how 2020-12 makes a `$ref` nullable — or null to compare as
-     * written. Such a union admits everything X does, so it arriving is the branches beside X arriving,
-     * each the widening a branch added to a union is, and never the union keyword landing on an
-     * unconstrained schema; it going is those branches going. X is compared with its branch, and a
-     * `{type: null}` beside an X that provably admits no null is the null admitted or withdrawn, reported
-     * as `nullable` is ({@see nullabilityChange()}).
-     *
-     * `oneOf` is exactly one, so a branch overlapping X narrows it, refusing what both match: it reads this
-     * way only where every other branch's types are disjoint from X's, and otherwise compares as written.
+     * A union on one side one of whose branches IS the other side's schema — `X` becoming
+     * `anyOf: [X, {type: null}]` — compared as its other branches arriving or going, or null to compare as
+     * written. The reading is docs/design/uir-and-extensions.md §1 "Reading through a spelling".
      *
      * @return list<Change>|null
      */
