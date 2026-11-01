@@ -30,9 +30,9 @@
     {
         "severity": "info",
         "code": "validation.rule-unrecoverable",
-        "message": "Validation field \"audience\" on Workbench\\App\\Http\\Requests\\StoreNoticeRequest has a rule whose content this build cannot read (Rule::when(\u2026)), which can make the field optional, nullable or excluded; none of its rules are documented, and it is omitted from the request schema.",
+        "message": "Validation field \"audience\" on Workbench\\App\\Http\\Requests\\StoreNoticeRequest has a rule whose content this build cannot read (Rule::when(\u2026)), which can make the field optional, nullable or excluded; none of its rules are documented, so it is published in the request schema, optional and unconstrained.",
         "routeSignature": "POST /api/field-notices",
-        "help": "A rule whose content is unknown (Rule::when(), Rule::forEach(), a spread, or a value from a call or a variable) can make the field optional, nullable or excluded, so none of the rules beside it are true on their own. Write the rules out where they apply, or declare the field with #[BodyParameter] or #[QueryParameter]."
+        "help": "A rule whose content is unknown (Rule::when(), Rule::forEach(), a spread, or a value from a call or a variable) can make the field optional, nullable or excluded, so none of the rules beside it are true on their own and the field is published with no constraints. Write the rules out where they apply, or declare the field with #[BodyParameter] or #[QueryParameter]."
     },
     {
         "severity": "info",
