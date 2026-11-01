@@ -303,7 +303,8 @@ against how you work before you commit:
   inside the generator itself; that's the trade for one that needs no database and has no side
   effects, and an endpoint no test exercises gets an inferred or authored example.
 - **Closure rules aren't documented.** Built-in `Rule::` objects fold statically — `Rule::enum`
-  (including `->only()` / `->except()` chains), `Rule::in`, `Rule::exists` and `Rule::unique` —
+  (including `->only()` / `->except()` chains), `Rule::in`, `Rule::notIn`, `Rule::array`, `Rule::exists`
+  and `Rule::unique` —
   alongside the whole string-rule vocabulary; your own rule classes document from a
   [`#[RuleSchema]`](/laravel/documenting/requests/#documenting-a-custom-rule) on the class; and a
   `RuleTransformer` teaches Docuccino any rule you invent. But a closure rule, a `Rule::when()`

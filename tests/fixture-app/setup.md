@@ -611,6 +611,10 @@ importantly, NOT followed where the key only chose between sizes.
   name, and `Rule::when(…)` and a ternary, which can be `nullable` or `sometimes` and give up the field.
   `status` is `(new Enum(…))->only([…])`. The second request assembles its rules in a variable, so the
   constant shape answers alone and must read them the same way.
+- `app/Http/Requests/ExcludedValuesRequest.php` — the same excluded values written as `not_in:`,
+  `Rule::notIn()` with one array and with separate arguments, and `new NotIn(…)`, which must read alike;
+  `Rule::notIn(ListingStatus::cases())` and `Rule::notIn(collect(…))`, whose values are known only at
+  runtime; and `Rule::array([…])` beside `new ArrayRule([…])`.
 
 ### API version changes
 

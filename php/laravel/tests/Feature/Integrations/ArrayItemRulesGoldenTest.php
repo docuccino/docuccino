@@ -80,4 +80,10 @@ it('takes every body the server takes, and refuses the repeats and outsiders it 
     'two abilities granted' => [['grants' => [['ability' => 'read'], ['ability' => 'write']]], true, true],
     'a cell repeated in its row' => [['matrix' => [[1, 1]]], false, true],
     'a cell repeated in another row' => [['matrix' => [[1], [1]]], false, false],
+    'a handle Rule::notIn excludes' => [['handles' => ['ops', 'root']], false, true],
+    'handles Rule::notIn does not exclude' => [['handles' => ['ops', 'support']], true, true],
+    'a nickname new NotIn excludes' => [['nicknames' => ['admin']], false, true],
+    'settings with the key Rule::array names' => [['settings' => ['theme' => 'dark']], true, true],
+    'settings with a key Rule::array does not name' => [['settings' => ['colour' => 'red']], false, false],
+    'settings that are not an array' => [['settings' => 'dark'], false, true],
 ]);

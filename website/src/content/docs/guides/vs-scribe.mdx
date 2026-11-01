@@ -271,8 +271,8 @@ carefully before you switch — for some teams they're the whole reason to stay.
   wherever the rule object appears — and Docuccino maps the whole string-rule vocabulary besides: 80
   named Laravel rules, from `alpha` and `starts_with` patterns to `const` for `accepted`/`declined`, date
   comparisons, numeric bounds, `not_in` and `distinct`, plus `Rule::enum` (including `->only()` /
-  `->except()`), `Rule::in`, `Rule::exists` and `Rule::unique`. A `RuleTransformer` teaches it any rule
-  you invent. What neither tool reads is a **closure** rule or a `Rule::when()` conditional — there's no
+  `->except()`), `Rule::in`, `Rule::notIn`, `Rule::array`, `Rule::exists` and `Rule::unique`. A
+  `RuleTransformer` teaches it any rule you invent. What neither tool reads is a **closure** rule or a `Rule::when()` conditional — there's no
   `docs()` to call on a closure — so both fall back to something you write by hand: a comment beside the
   rule in Scribe (lighter, and its advantage here), a
   [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter) in Docuccino, which also names the
