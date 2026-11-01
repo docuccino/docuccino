@@ -34,6 +34,8 @@ function unionBesideDocument(string $openapi, array $schema): array
         ]],
         'components' => ['schemas' => [
             'Owner' => ['type' => 'object', 'properties' => ['id' => ['type' => 'integer']]],
+            // A component that is another under a description of its own.
+            'Guardian' => ['allOf' => [['$ref' => '#/components/schemas/Owner']], 'description' => 'Who answers for the pet'],
             // A name resolving only to itself, which describes no value at all.
             'Loop' => ['$ref' => '#/components/schemas/Loop'],
         ]],
@@ -124,6 +126,16 @@ it('reads the null admitted the same way across OpenAPI versions', function (str
         ->and(unionBesideChanges(unionBesideDiff($union, $owner, $newer, '3.0.3')))->toBe($withdrawn);
 })->with(['3.1.1', '3.2.0']);
 
+it('reads through a component that only wraps another to see it admits no null', function (string $keyword) use ($nothing, $admitted, $withdrawn): void {
+    // `Guardian` is `Owner` under a description, so it admits only objects: null is disjoint from it, and
+    // the union is the null admitted even under `oneOf`, not a branch whose overlap is unknown.
+    $guardian = ['$ref' => '#/components/schemas/Guardian'];
+    $union = [$keyword => [$guardian, $nothing]];
+
+    expect(unionBesideChanges(unionBesideDiff($guardian, $union)))->toBe($admitted)
+        ->and(unionBesideChanges(unionBesideDiff($union, $guardian)))->toBe($withdrawn);
+})->with(['anyOf', 'oneOf']);
+
 it('reads a description moved onto the union as no change of its own', function () use ($owner, $nothing, $admitted): void {
     $described = ['description' => 'Who owns the pet'];
 
@@ -180,6 +192,27 @@ it('never reads a `oneOf` branch overlapping the old schema as a widening', func
     [$onRequest] = unionBesideCodes(['$ref' => '#/components/schemas/A'], ['oneOf' => [['$ref' => '#/components/schemas/A'], ['type' => 'null']]]);
 
     expect($onRequest)->toContain('schema.one-of-branch-added! S.oneOf');
+});
+
+it('never reads a `oneOf` beside a branch admitting anything as a widening', function (): void {
+    // `true` admits every object, so every object now matches two branches and `oneOf` refuses it: a
+    // request that sent one is rejected, which must gate the request.
+    [$onRequest] = unionBesideCodes(['type' => 'object'], ['oneOf' => [['type' => 'object'], true]]);
+
+    expect($onRequest)->toContain('schema.one-of-branch-added! S.oneOf');
+});
+
+it('reads a schema edited and made nullable at once, under one identity, as its edits and the null admitted', function (): void {
+    // One identity is one schema, so the branch carrying it is the old schema edited, not a new branch:
+    // its added property is reported as an edit, and the null beside it as the null admitted.
+    $identity = ['x-docuccino' => ['id' => 'sch:v1:00000000000000aa']];
+    $before = ['type' => 'object', 'properties' => ['name' => ['type' => 'string']]] + $identity;
+    $after = ['type' => 'object', 'properties' => ['name' => ['type' => 'string'], 'age' => ['type' => 'integer']]] + $identity;
+
+    expect(unionBesideCodes($before, ['anyOf' => [$after, ['type' => 'null']]]))->toBe([
+        ['schema.nullable-widened S.nullable', 'schema.property-added S.properties.age'],
+        ['schema.nullable-widened! S.nullable', 'schema.property-added S.properties.age'],
+    ]);
 });
 
 it('never claims a null admitted where the old schema may already have admitted one', function (): void {
