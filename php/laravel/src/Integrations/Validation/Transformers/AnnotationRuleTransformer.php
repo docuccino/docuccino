@@ -52,7 +52,7 @@ final class AnnotationRuleTransformer implements RuleTransformer
      * A stated example, read as a value the field accepts — {@see RuleOrdering} puts the annotations last,
      * so its type, value list and nullability are final by the time this runs. Every word of that type:
      * a field the rules left as either container carries several, and reading against one of them would
-     * drop an example the other accepts. One that reads as nothing the field accepts publishes nothing
+     * drop an example the other accepts. One that reads as nothing the field accepts is not published,
      * and says so, rather than a coercion's `0` for `n/a`.
      */
     private function exemplify(ValidationField $field, string $value, SchemaContext $context): void
@@ -61,7 +61,7 @@ final class AnnotationRuleTransformer implements RuleTransformer
         $example = TypedExample::against($value, $schema);
 
         if ($example === null) {
-            $context->diagnostic(TypedExample::unreadable('field "'.$field->path().'"', $value, $schema));
+            $context->diagnostic(TypedExample::unreadableOnField($field->path(), $value, $schema));
 
             return;
         }

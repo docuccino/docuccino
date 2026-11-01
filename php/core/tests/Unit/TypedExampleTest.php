@@ -293,6 +293,16 @@ it('names the property, the text and the declared type when it publishes nothing
         ->and($diagnostic->help)->toContain('@example 7');
 });
 
+it('says on a validation field that a generated example may stand in for the refused one', function (): void {
+    // A field's own rules earn it an example where they pin a value, so on a field "none is published"
+    // can be false: the refused text is what is not published. Same code and help as everywhere else.
+    $field = TypedExample::unreadableOnField('status', 'active', ['type' => 'string', 'enum' => ['draft', 'published']]);
+    $docblock = TypedExample::unreadable('field "status"', 'active', ['type' => 'string', 'enum' => ['draft', 'published']]);
+
+    expect($field->message)->toBe('The example on field "status" ("active") does not read as "draft"/"published", so it is not published; where the field\'s rules pin a value, an example generated from them is published instead.')
+        ->and([$field->severity, $field->code, $field->help])->toBe([$docblock->severity, $docblock->code, $docblock->help]);
+});
+
 it('spells a union and an unknown type in the message the same way it reads them', function (mixed $type, string $reads): void {
     expect(TypedExample::untypable('field "x"', 'n/a', $type)->message)->toContain('does not read as '.$reads);
 })->with([

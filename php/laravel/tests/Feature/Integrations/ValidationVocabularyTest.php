@@ -795,7 +795,9 @@ it('reads a stated example against the null a nullable field admits', function (
 
 it('refuses a stated example the field\'s value list does not hold', function (): void {
     // The value list is part of what the field accepts, so a word outside it is no reading of it — and
-    // `null` on a list that is NOT nullable is the same refusal, rather than the string `"null"`.
+    // `null` on a list that is NOT nullable is the same refusal, rather than the string `"null"`. The list
+    // still pins a value, so the field earns the example its rules generate, and the warning says that
+    // one stands in for the refused one rather than that the field has none.
     $context = vocabularyContext();
     $ordered = (new RuleOrdering)->order(new RuleSet([
         'f' => RuleParsing::tokens('in:draft,published|example:active'),
@@ -806,8 +808,8 @@ it('refuses a stated example the field\'s value list does not hold', function ()
     expect($properties['f']['example'] ?? 'none')->toBe('draft')
         ->and($properties['g']['example'] ?? 'none')->toBe('draft')
         ->and(array_map(static fn ($d): string => $d->message, $context->components()->diagnostics()))->toBe([
-            'The example on field "f" ("active") does not read as "draft"/"published", so none is published.',
-            'The example on field "g" ("null") does not read as "draft"/"published", so none is published.',
+            'The example on field "f" ("active") does not read as "draft"/"published", so it is not published; where the field\'s rules pin a value, an example generated from them is published instead.',
+            'The example on field "g" ("null") does not read as "draft"/"published", so it is not published; where the field\'s rules pin a value, an example generated from them is published instead.',
         ]);
 });
 

@@ -125,15 +125,31 @@ final class TypedExample
      */
     public static function unreadable(string $subject, string $text, array $schema, array $schemas = []): Diagnostic
     {
+        return self::refusal($subject, $text, self::accepted(self::branches($schema, $schemas)), 'none is published');
+    }
+
+    /**
+     * {@see unreadable()} for a validation field, whose own rules earn an example where they pin a value,
+     * so a refused one may leave a generated one in its place.
+     *
+     * @param  array<mixed>  $schema
+     */
+    public static function unreadableOnField(string $path, string $text, array $schema): Diagnostic
+    {
+        return self::refusal(
+            'field "'.$path.'"',
+            $text,
+            self::accepted(self::branches($schema, [])),
+            'it is not published; where the field\'s rules pin a value, an example generated from them is published instead',
+        );
+    }
+
+    private static function refusal(string $subject, string $text, string $accepted, string $outcome): Diagnostic
+    {
         return new Diagnostic(
             severity: Severity::Warning,
             code: 'docblock.example-untypable',
-            message: sprintf(
-                'The example on %s ("%s") does not read as %s, so none is published.',
-                $subject,
-                $text,
-                self::accepted(self::branches($schema, $schemas)),
-            ),
+            message: sprintf('The example on %s ("%s") does not read as %s, so %s.', $subject, $text, $accepted, $outcome),
             help: 'Write the example as the value the property really is — `@example false` for a boolean, '
                 .'`@example 7` for an integer, a JSON literal for an array or object, and one of the listed '
                 .'values where the schema lists them. An example the schema rejects gets copied out of the '
