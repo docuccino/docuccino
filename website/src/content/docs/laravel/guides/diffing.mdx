@@ -203,10 +203,10 @@ compared. A `nullable: true` beside it is not a constraint: it is how OpenAPI 3.
 nullable, and reads as `Customer` admitting `null`.
 
 Put a constraint beside the wrapper, such as a `maxProperties`, and it is an intersection. JSON Schema
-applies the wrapped `$ref` and a bare one in place alike, so where the other side also names a
-component, `allOf: [{$ref: Customer}]` beside `maxProperties: 1` reads as the `$ref` with that
-constraint beside it. Against `Customer`, that is `Customer` gaining one constraint. Against another
-component, it is compared in the two parts described above. An inline branch is compared as written,
+applies the wrapped `$ref` and a bare one in place alike, so `allOf: [{$ref: Customer}]` beside
+`maxProperties: 1` reads as the `$ref` with that constraint beside it. Against `Customer`, that is
+`Customer` gaining one constraint. Against another component, or an inline schema, it is compared in
+the two parts described above. An inline branch is compared as written,
 since a keyword such as `additionalProperties` sees only the `properties` written beside it.
 
 **A union holding the old schema widens it.** OpenAPI 3.1 makes a reference nullable by writing it as

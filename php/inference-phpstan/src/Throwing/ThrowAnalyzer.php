@@ -13,6 +13,7 @@ use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Support\Fqcn;
+use Docuccino\Inference\PhpStan\Analysis\CallableBody;
 use Docuccino\Inference\PhpStan\Analysis\FileAnalyzer;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Trace\Callee;
@@ -108,25 +109,35 @@ final class ThrowAnalyzer
     }
 
     /**
-     * @return list<ThrownException>
-     */
-    public function analyze(MethodReturnStatementsNode|ClosureReturnStatementsNode $node, string $selfLabel): array
-    {
-        $this->begin();
-
-        return $this->deduped($this->analyzeMethod($node, $selfLabel, 0, [], [], []));
-    }
-
-    /**
-     * What an arrow function's one expression throws, read by {@see arrowPoints()}.
+     * What a method, closure or arrow function throws.
      *
      * @return list<ThrownException>
      */
-    public function analyzeArrow(Node\Expr\ArrowFunction $arrow, Scope $scope, string $selfLabel): array
+    public function analyze(CallableBody $body, string $selfLabel): array
     {
         $this->begin();
 
-        return $this->deduped($this->arrowPoints($arrow, $this->fileAnalyzer->stableScope($scope), $selfLabel, 0, [], [], []));
+        if ($body->declaration instanceof Node\Expr\ArrowFunction) {
+            $body = CallableBody::ofArrow($body->declaration, $this->fileAnalyzer->stableScope($body->returns[0]['scope']));
+        }
+
+        return $this->deduped($this->bodyPoints($body, $selfLabel, 0, [], [], []));
+    }
+
+    /**
+     * A body's throws: a method's or closure's off its throw points ({@see analyzeMethod()}), an arrow
+     * function's off its one expression ({@see arrowPoints()}).
+     *
+     * @param  list<string>  $visited
+     * @param  list<Frame>  $priorChain
+     * @param  list<string>  $caught
+     * @return list<ThrownException>
+     */
+    private function bodyPoints(CallableBody $body, string $selfLabel, int $depth, array $visited, array $priorChain, array $caught): array
+    {
+        return $body->declaration instanceof Node\Expr\ArrowFunction
+            ? $this->arrowPoints($body->declaration, $body->returns[0]['scope'], $selfLabel, $depth, $visited, $priorChain, $caught)
+            : $this->analyzeMethod($body->declaration, $selfLabel, $depth, $visited, $priorChain, $caught);
     }
 
     private function begin(): void
@@ -688,9 +699,7 @@ final class ThrowAnalyzer
             // and the depth it spends is what bounds it. What it must not do is lose the callees the path
             // has already descended into, which is what that list is.
             foreach ($inCallee['sites'] ?? [[]] as $site) {
-                $read = $closure instanceof ClosureReturnStatementsNode
-                    ? $this->analyzeMethod($closure, $selfLabel.'::{closure}', $depth + 1, $visited, [...$priorChain, $frame], [...$caught, ...$site])
-                    : $this->arrowPoints($closure[0], $closure[1], $selfLabel.'::{closure}', $depth + 1, $visited, [...$priorChain, $frame], [...$caught, ...$site]);
+                $read = $this->bodyPoints($closure, $selfLabel.'::{closure}', $depth + 1, $visited, [...$priorChain, $frame], [...$caught, ...$site]);
                 foreach ($read as $result) {
                     $results[] = $result;
                 }
@@ -701,24 +710,22 @@ final class ThrowAnalyzer
     }
 
     /**
-     * The harvested closure one argument is — written at the call, or held in a local behind it — or the
-     * arrow function, with the scope inside it.
-     *
-     * @return ClosureReturnStatementsNode|array{Node\Expr\ArrowFunction, Scope}|null
+     * The harvested closure or arrow function one argument is — written at the call, or held in a local
+     * behind it — an arrow with the scope inside it.
      */
-    private function closureArgument(Node\Expr $expr, Scope $scope): ClosureReturnStatementsNode|array|null
+    private function closureArgument(Node\Expr $expr, Scope $scope): ?CallableBody
     {
         [$written] = $this->localValue($expr, $scope);
 
         if ($written instanceof Node\Expr\ArrowFunction) {
             $arrow = $this->fileAnalyzer->arrows($scope->getFile())[$written->getStartFilePos()] ?? null;
 
-            return $arrow === null ? null : [$arrow[0], $this->fileAnalyzer->stableScope($arrow[1])];
+            return $arrow === null ? null : CallableBody::ofArrow($arrow[0], $this->fileAnalyzer->stableScope($arrow[1]));
         }
 
-        return $written instanceof Node\Expr\Closure
-            ? ($this->fileAnalyzer->closures($scope->getFile())[$written->getStartFilePos()] ?? null)
-            : null;
+        $closure = $written instanceof Node\Expr\Closure ? ($this->fileAnalyzer->closures($scope->getFile())[$written->getStartFilePos()] ?? null) : null;
+
+        return $closure === null ? null : CallableBody::ofClosure($closure);
     }
 
     /**

@@ -514,7 +514,7 @@ final class SchemaCheck
                 location: $location,
                 pointer: $pointer,
                 message: $message,
-                schemaPointer: Pointer::of($this->index->written($segments)),
+                schemaPointer: $this->index->writtenPointer($segments),
                 provenance: $this->index->provenanceAt($segments),
             );
         }

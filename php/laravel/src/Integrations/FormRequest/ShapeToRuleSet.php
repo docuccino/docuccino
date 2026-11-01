@@ -13,6 +13,7 @@ use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Laravel\Integrations\Support\DependencyFileSet;
 use Docuccino\Laravel\Integrations\Support\RuleParsing;
 use Docuccino\Laravel\Integrations\Validation\CustomRuleReader;
+use Docuccino\Laravel\Integrations\Validation\RuleLosses;
 use Docuccino\Laravel\Integrations\Validation\UnreadRule;
 
 /**
@@ -131,6 +132,7 @@ final class ShapeToRuleSet
         }
 
         $out = [];
+        $losses = new RuleLosses;
         foreach ($value->fields as $item) {
             $type = $item->type;
             if ($type instanceof LiteralT) {
@@ -142,7 +144,7 @@ final class ShapeToRuleSet
             }
 
             if (! $type instanceof ClassT) {
-                $this->opaque[$key] ??= 'a value this build cannot read';
+                $losses->add('a value this build cannot read', false);
 
                 continue;
             }
@@ -155,12 +157,16 @@ final class ShapeToRuleSet
                 continue;
             }
 
-            $label = $type->fqcn === 'Closure' ? 'a closure' : 'new '.$type->fqcn;
-            if (! UnreadRule::objectNarrows($type->fqcn)) {
-                $this->opaque[$key] ??= $label;
-            } elseif (! in_array($label, $this->unread[$key] ?? [], true)) {
-                $this->unread[$key][] = $label;
-            }
+            $unread = UnreadRule::classify($type->fqcn);
+            $losses->add($unread['label'], $unread['narrows']);
+        }
+
+        if ($losses->opaque() !== null) {
+            $this->opaque[$key] = $losses->opaque();
+        }
+
+        if ($losses->unread() !== []) {
+            $this->unread[$key] = $losses->unread();
         }
 
         return $out;

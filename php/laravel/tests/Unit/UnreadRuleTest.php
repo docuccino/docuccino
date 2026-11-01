@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Docuccino\Laravel\Integrations\Validation\RuleLosses;
 use Docuccino\Laravel\Integrations\Validation\UnreadRule;
 use Docuccino\Laravel\Tests\Fixtures\Rules\LegacyStringRule;
 use Docuccino\Laravel\Tests\Fixtures\Rules\OpaqueCheck;
@@ -15,7 +16,11 @@ it('classifies a Rule static by what leaving it out does', function (string $met
 })->with([
     // Checks on the value: each builds one of Laravel's rule objects, run as a check.
     'can' => ['can', true], 'in' => ['in', true], 'enum' => ['enum', true], 'requiredIf' => ['requiredIf', true],
-    'anyOf' => ['anyOf', true], 'dateTime' => ['dateTime', true],
+    // Later Laravel 12 releases added these; where the installed one lacks them they are macros.
+    ...array_filter(
+        ['anyOf' => ['anyOf', true], 'dateTime' => ['dateTime', true]],
+        static fn (array $row): bool => method_exists(Rule::class, $row[0]),
+    ),
     // Rules chosen at runtime, or applied to each item by a callback.
     'when' => ['when', false], 'unless' => ['unless', false], 'forEach' => ['forEach', false], 'compile' => ['compile', false],
     // `exclude` stops the field's other rules running at all.
@@ -43,8 +48,9 @@ it('classifies every static the installed Rule class declares by what it returns
         expect(UnreadRule::factoryNarrows('Illuminate\\Validation\\Rule::'.$method->getName()))->toBe($isClass && ! $loosens, $method->getName());
     }
 
-    expect($counts['check'])->toBeGreaterThan(20)
-        ->and($counts['loosens'])->toBeGreaterThanOrEqual(5)
+    // What Laravel 12.0, the lowest supported, declares: 15 checks, 4 loosening, and Macroable's 5.
+    expect($counts['check'])->toBeGreaterThanOrEqual(15)
+        ->and($counts['loosens'])->toBeGreaterThanOrEqual(4)
         ->and($counts['other'])->toBeGreaterThanOrEqual(5);
 });
 
@@ -67,7 +73,8 @@ it('takes every framework rule object as a check, except the exclude rules', fun
         glob(dirname((string) (new ReflectionClass(Rule::class))->getFileName()).'/Rules/*.php') ?: [],
     );
 
-    expect(count($classes))->toBeGreaterThan(20);
+    // Laravel 12.0, the lowest supported, ships 18.
+    expect(count($classes))->toBeGreaterThanOrEqual(18);
     foreach ($classes as $class) {
         $excludes = str_starts_with(substr($class, (int) strrpos($class, '\\') + 1), 'Exclude');
 
@@ -86,3 +93,26 @@ it('classifies a rule object by what Laravel does with it', function (string $cl
     'nested rules, compiled per item' => ['Illuminate\\Validation\\NestedRules', false],
     'an object Laravel casts to a rule string' => [LegacyStringRule::class, false],
 ]);
+
+it('names a rule object the way a diagnostic shows it, beside what leaving it out does', function (string $class, array $expected): void {
+    expect(UnreadRule::classify($class))->toBe($expected);
+})->with([
+    'a closure' => ['Closure', ['label' => 'a closure', 'narrows' => true]],
+    'a rule object, by the new that built it' => [OpaqueCheck::class, ['label' => 'new '.OpaqueCheck::class, 'narrows' => true]],
+    'a leading backslash' => ['\\'.OpaqueCheck::class, ['label' => 'new '.OpaqueCheck::class, 'narrows' => true]],
+    'an object Laravel casts to a rule string' => [LegacyStringRule::class, ['label' => 'new '.LegacyStringRule::class, 'narrows' => false]],
+]);
+
+it('keeps each rule that only refuses values once, and the first that could loosen the rest', function (): void {
+    // A field gives up on its first loosening rule, so a later one names nothing new for the author.
+    $losses = new RuleLosses;
+    $losses->add('new App\\Rules\\Slug', true);
+    $losses->add('Rule::when(…)', false);
+    $losses->add('new App\\Rules\\Slug', true);
+    $losses->add('a spread', false);
+    $losses->add('a closure', true);
+
+    expect($losses->unread())->toBe(['new App\\Rules\\Slug', 'a closure'])
+        ->and($losses->opaque())->toBe('Rule::when(…)')
+        ->and((new RuleLosses)->opaque())->toBeNull();
+});

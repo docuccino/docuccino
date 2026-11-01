@@ -127,7 +127,7 @@ final class SchemaReading
      *
      * Absent is not nullable, so the keyword arriving with `true` widens and it leaving narrows. A value
      * that is no boolean is a change nothing can order rather than a null admitted or withdrawn. Unwritten
-     * on both sides, the type union's `null` is the whole statement.
+     * on both sides it says nothing, and the type union's `null` is {@see SchemaComparator}'s to read.
      *
      * @param  array<string, mixed>  $old
      * @param  array<string, mixed>  $new
@@ -137,7 +137,7 @@ final class SchemaReading
         $before = $old['nullable'] ?? null;
         $after = $new['nullable'] ?? null;
 
-        if ($before !== null && ValueKey::of($before) === ValueKey::of($after)) {
+        if (ValueKey::of($before) === ValueKey::of($after)) {
             return RefinementMove::Unchanged;
         }
 

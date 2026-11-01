@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Diff;
 
+use Closure;
 use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Extensions\Schema\ComponentNames;
 use Docuccino\Core\Support\Arr;
 use Docuccino\Core\Support\Hydrate;
+use stdClass;
 
 /**
  * Field-level schema comparison with breaking-change classification. What a schema position describes is
@@ -102,6 +104,9 @@ final class SchemaComparator
      */
     private array $open = [];
 
+    /** @var array<string, true>|null the keywords {@see anatomy()} reads as a composition, by name */
+    private static ?array $compositions = null;
+
     /** What the walk's changes are about: the caller's to name, as `$path` and `$id` are. */
     private ?ChangeSubject $subject = null;
 
@@ -173,20 +178,22 @@ final class SchemaComparator
      */
     private function compareSubschema(mixed $old, mixed $new, string $path, string $id, bool $request): array
     {
-        $oldBranch = self::loneBranch($old, $new);
-        $newBranch = self::loneBranch($new, $old);
+        $readings = self::spellsComposition($old) || self::spellsComposition($new);
+        $documents = $this->oldRefs !== null && $this->newRefs !== null;
+        $oldBranch = $readings ? self::loneBranch($old, $new, $documents) : null;
+        $newBranch = $readings ? self::loneBranch($new, $old, $documents) : null;
 
         if ($oldBranch !== null || $newBranch !== null) {
             return $this->compareSubschema($oldBranch ?? $old, $newBranch ?? $new, $path, $id, $request);
         }
 
-        $beside = $this->compareUnionBeside($old, $new, $path, $id, $request);
+        $beside = $readings ? $this->compareUnionBeside($old, $new, $path, $id, $request) : null;
 
         if ($beside !== null) {
             return $beside;
         }
 
-        $parts = $this->compareIntersection($old, $new, $path, $id, $request);
+        $parts = $readings ? $this->compareIntersection($old, $new, $path, $id, $request) : null;
 
         if ($parts !== null) {
             return $parts;
@@ -271,12 +278,9 @@ final class SchemaComparator
     }
 
     /**
-     * A pointer with an asserting sibling compared part by part against a side that does not spell the
-     * same pointer, or null to compare as written. 2020-12 applies `{$ref: X, …S}` as X and S both, in
-     * place, so it is their intersection: the pointer and its annotations are compared with the other
-     * side's pointer, read through as a bare one is, and S with the other side's siblings. An inline side
-     * is all pointer part and no siblings. Each part holding is enough for the intersection to, so a
-     * break in either is never lost, where comparing as written never looks behind the pointer at all.
+     * A pointer with an asserting sibling compared part by part, as the intersection it is, against a side
+     * that does not spell the same pointer; or null to compare as written. The reading is
+     * docs/design/uir-and-extensions.md §1 "Reading through a spelling".
      *
      * @return list<Change>|null
      */
@@ -304,48 +308,33 @@ final class SchemaComparator
     }
 
     /**
-     * The schema a one-branch composition IS, or null where `$schema` is not one or `$other` spells the
-     * same keyword. `allOf`, `anyOf` and `oneOf` of one schema each validate exactly what that schema
-     * does, so with nothing beside the keyword but annotations and the identity — the siblings a bare
-     * pointer may carry ({@see ComponentRefs::resolveSchema()}) — the wrapper is its branch, the
-     * wrapper's annotations written over the branch's. Where both sides spell the keyword, their branches
-     * pair as written.
-     *
-     * An asserting sibling makes it an intersection. Where the branch is a bare pointer and `$other`
-     * names a component too, it is read as that pointer with the siblings beside it, which 2020-12
-     * applies in place exactly as it applies the wrapper, and which {@see compareIntersection()} compares
-     * part by part. Against a side naming no component the wrapper compares as written: a comparison
-     * with no documents could not read the merged pointer, and there its branch arriving or going is the
-     * one thing that says a component did. An inline branch never merges: `additionalProperties` and
-     * `unevaluated*` see the siblings beside them, so moving a branch's keywords up beside them changes
-     * what they admit.
-     *
-     * A `nullable` beside it is not an intersection: it is how OpenAPI 3.0 writes a nullable `$ref`, and
-     * reads as that branch admitting null, so it is carried onto the branch.
-     *
-     * Changes found under an unwrapped branch are reported at the position, as a resolved pointer's are.
+     * The schema a one-branch composition IS, its wrapper's annotations and `nullable` laid over it, or null
+     * where `$schema` is not one or `$other` spells the same keyword. An asserting sibling merges only onto
+     * a bare pointer, and without `$documents` only against a side naming a component. The reading is
+     * docs/design/uir-and-extensions.md §1 "Reading through a spelling".
      *
      * @return array<string, mixed>|false|null
      */
-    private static function loneBranch(mixed $schema, mixed $other): array|false|null
+    private static function loneBranch(mixed $schema, mixed $other, bool $documents = false): array|false|null
     {
         $map = Hydrate::mapOrNull($schema);
-        $composition = $map === null ? null : self::composition($map);
+        $anatomy = $map === null ? null : self::anatomy($map);
 
-        if ($map === null || $composition === null) {
+        if ($map === null || $anatomy === null || count($anatomy['branches']) !== 1) {
             return null;
         }
 
-        [$keyword, $branch, $asserts] = $composition;
+        $keyword = $anatomy['keyword'];
+        $branch = $anatomy['branches'][0];
 
         if (array_key_exists($keyword, Hydrate::mapOrNull($other) ?? [])) {
             return null;
         }
 
-        if ($asserts) {
+        if ($anatomy['asserts']) {
             $pointer = self::barePointer($branch);
 
-            if ($pointer === null || self::componentOf($other) === null) {
+            if ($pointer === null || (! $documents && self::componentOf($other) === null)) {
                 return null;
             }
 
@@ -368,24 +357,59 @@ final class SchemaComparator
     }
 
     /**
-     * The one composition keyword `$map` spells with a single branch, that branch, and whether anything
-     * beside it asserts; or null where there is no such keyword, two of them, or a `$ref` beside it.
+     * Whether `$schema` spells what {@see loneBranch()}, {@see compareUnionBeside()} and
+     * {@see compareIntersection()} read: a list keyword applying each member to the instance itself, or a
+     * `$ref` with anything beside it. Where neither side does, each of them declines, so none is asked.
+     */
+    private static function spellsComposition(mixed $schema): bool
+    {
+        $map = $schema instanceof stdClass ? get_object_vars($schema) : $schema;
+
+        if (! is_array($map)) {
+            return false;
+        }
+
+        return (isset($map['$ref']) && count($map) > 1) || array_intersect_key($map, self::compositions()) !== [];
+    }
+
+    /**
+     * The list keywords whose members are not tuple slots, so each applies to the instance itself.
+     *
+     * @return array<string, true>
+     */
+    private static function compositions(): array
+    {
+        return self::$compositions ??= array_fill_keys(array_filter(
+            SchemaPolarity::decided(),
+            static fn (string $keyword): bool => SchemaKeywords::positionOf($keyword) === SchemaKeywords::POSITION_SCHEMA_LIST && ! SchemaPolarity::rule($keyword)['pairsByIndex'],
+        ), true);
+    }
+
+    /**
+     * The one composition keyword `$map` spells, its branches, whether anything beside it but the asides
+     * and a boolean `nullable` asserts, and that `nullable`; or null where it spells none, two, or a `$ref`.
      *
      * @param  array<string, mixed>  $map
-     * @return array{string, mixed, bool}|null
+     * @return array{keyword: string, branches: list<mixed>, asserts: bool, nullable: ?bool}|null
      */
-    private static function composition(array $map): ?array
+    private static function anatomy(array $map): ?array
     {
         $keyword = null;
         $asserts = false;
+        $nullable = null;
 
-        foreach (array_keys($map) as $member) {
-            if ($member === 'x-docuccino' || SchemaKeywords::isAnnotationOnly($member) || ($member === 'nullable' && is_bool($map[$member]))) {
+        foreach ($map as $member => $value) {
+            if (ComponentRefs::isAside($member)) {
                 continue;
             }
 
-            // A list whose members are not tuple slots applies each one to the instance itself.
-            if (SchemaKeywords::positionOf($member) === SchemaKeywords::POSITION_SCHEMA_LIST && ! SchemaPolarity::rule($member)['pairsByIndex']) {
+            if ($member === 'nullable' && is_bool($value)) {
+                $nullable = $value;
+
+                continue;
+            }
+
+            if (isset(self::compositions()[$member])) {
                 if ($keyword !== null) {
                     return null;
                 }
@@ -402,9 +426,7 @@ final class SchemaComparator
             $asserts = true;
         }
 
-        $branches = $keyword === null ? [] : self::branches($map[$keyword]);
-
-        return $keyword === null || count($branches) !== 1 ? null : [$keyword, $branches[0], $asserts];
+        return $keyword === null ? null : ['keyword' => $keyword, 'branches' => self::branches($map[$keyword]), 'asserts' => $asserts, 'nullable' => $nullable];
     }
 
     /**
@@ -428,9 +450,10 @@ final class SchemaComparator
     {
         $ref = self::refKey($schema);
         $map = Hydrate::mapOrNull($schema);
-        $composition = $ref !== null || $map === null ? null : self::composition($map);
+        $anatomy = $ref !== null || $map === null ? null : self::anatomy($map);
+        $branch = $anatomy !== null && count($anatomy['branches']) === 1 ? $anatomy['branches'][0] : null;
 
-        return $ref ?? Hydrate::stringOrNull(self::barePointer($composition[1] ?? null)['$ref'] ?? null);
+        return $ref ?? Hydrate::stringOrNull(self::barePointer($branch)['$ref'] ?? null);
     }
 
     /** `$schema` read through every one-branch composition with only annotations beside it. */
@@ -444,16 +467,9 @@ final class SchemaComparator
     }
 
     /**
-     * A union on one side whose branches include the schema the other side IS — `X` becoming
-     * `anyOf: [X, {type: null}]`, which is how 2020-12 makes a `$ref` nullable — or null to compare as
-     * written. Such a union admits everything X does, so it arriving is the branches beside X arriving,
-     * each the widening a branch added to a union is, and never the union keyword landing on an
-     * unconstrained schema; it going is those branches going. X is compared with its branch, and a
-     * `{type: null}` beside an X that provably admits no null is the null admitted or withdrawn, reported
-     * as `nullable` is ({@see nullabilityChange()}).
-     *
-     * `oneOf` is exactly one, so a branch overlapping X narrows it, refusing what both match: it reads this
-     * way only where every other branch's types are disjoint from X's, and otherwise compares as written.
+     * A union on one side one of whose branches IS the other side's schema — `X` becoming
+     * `anyOf: [X, {type: null}]` — compared as its other branches arriving or going, or null to compare as
+     * written. The reading is docs/design/uir-and-extensions.md §1 "Reading through a spelling".
      *
      * @return list<Change>|null
      */
@@ -519,33 +535,23 @@ final class SchemaComparator
     private static function besideUnion(mixed $union, mixed $plain): ?array
     {
         $map = Hydrate::mapOrNull($union);
+        $anatomy = $map === null ? null : self::anatomy($map);
 
-        if ($map === null) {
+        if ($map === null || $anatomy === null || $anatomy['asserts'] || $anatomy['nullable'] !== null) {
             return null;
         }
 
-        $keyword = null;
+        $keyword = $anatomy['keyword'];
 
-        foreach (array_keys($map) as $member) {
-            if ($member === 'x-docuccino' || SchemaKeywords::isAnnotationOnly($member)) {
-                continue;
-            }
-
-            if ($keyword !== null || SchemaPolarity::rule($member)['member'] !== SchemaMember::Union) {
-                return null;
-            }
-
-            $keyword = $member;
-        }
-
-        if ($keyword === null || array_key_exists($keyword, Hydrate::mapOrNull($plain) ?? [])) {
+        if (SchemaPolarity::rule($keyword)['member'] !== SchemaMember::Union || array_key_exists($keyword, Hydrate::mapOrNull($plain) ?? [])) {
             return null;
         }
 
-        $branches = self::branches($map[$keyword]);
+        $branches = $anatomy['branches'];
+        $isPlain = self::sameBranchAs($plain);
 
         foreach ($branches as $j => $branch) {
-            if (! self::isSameBranch($plain, $branch)) {
+            if (! $isPlain($branch)) {
                 continue;
             }
 
@@ -558,24 +564,41 @@ final class SchemaComparator
     }
 
     /**
-     * Whether a union branch is `$schema`: the component it names, its identity, or what it asserts once
-     * annotations are set aside — never the inexact pairing {@see pairBranches()} falls back on.
+     * A test of whether a union branch is `$schema`: the component it names, its identity, or what it
+     * asserts once annotations are set aside — never the inexact pairing {@see pairBranches()} falls back
+     * on. `$schema` is read once however many branches are tested, and a branch naming other keywords is
+     * settled without encoding either side.
+     *
+     * @return Closure(mixed): bool
      */
-    private static function isSameBranch(mixed $schema, mixed $branch): bool
+    private static function sameBranchAs(mixed $schema): Closure
     {
         $ref = self::refKey($schema);
 
         if ($ref !== null) {
-            return $ref === self::refKey($branch);
+            return static fn (mixed $branch): bool => $ref === self::refKey($branch);
         }
 
         $identity = self::identityKey($schema);
+        $assertions = self::assertions($schema);
+        $key = null;
 
-        if ($identity !== null && $identity === self::identityKey($branch)) {
-            return true;
-        }
+        return static function (mixed $branch) use ($identity, $assertions, &$key): bool {
+            if ($identity !== null && $identity === self::identityKey($branch)) {
+                return true;
+            }
 
-        return ValueKey::of(self::assertions($schema)) === ValueKey::of(self::assertions($branch));
+            $other = self::assertions($branch);
+
+            // Maps with different members never encode alike.
+            if (is_array($assertions) && is_array($other) && (count($assertions) !== count($other) || array_diff_key($assertions, $other) !== [])) {
+                return false;
+            }
+
+            $key ??= ValueKey::of($assertions);
+
+            return $key === ValueKey::of($other);
+        };
     }
 
     /** A subschema with its annotations and identity set aside: what it says about a value. */
@@ -587,13 +610,7 @@ final class SchemaComparator
             return $schema;
         }
 
-        foreach (array_keys($map) as $member) {
-            if ($member === 'x-docuccino' || SchemaKeywords::isAnnotationOnly($member)) {
-                unset($map[$member]);
-            }
-        }
-
-        return $map;
+        return array_filter($map, static fn (string $member): bool => ! ComponentRefs::isAside($member), ARRAY_FILTER_USE_KEY);
     }
 
     /** Whether a branch admits null and nothing else, as `{type: null}` does. */
@@ -743,11 +760,9 @@ final class SchemaComparator
 
         if ($oldBare === $newBare && $oldBare !== []) {
             // Unwritten on both sides, the keyword is no reading of its own and the type union is the
-            // whole statement, so it is handed over from here.
+            // whole statement: exactly one side holds the `null`, so it was admitted or withdrawn.
             if (($old['nullable'] ?? null) === null && ($new['nullable'] ?? null) === null) {
-                foreach ($this->compareNullability($old, $new, $path, $id, $request) as $change) {
-                    $changes[] = $change;
-                }
+                $changes[] = $this->nullabilityChange(isset($newSet['null']) ? RefinementMove::Widened : RefinementMove::Narrowed, $request, $path, $id);
             }
 
             return;
@@ -892,10 +907,7 @@ final class SchemaComparator
 
             $found = match ($kind) {
                 ReadingKind::Discriminator => $this->compareDiscriminator($old, $new, $path, $id, $request),
-                // Unwritten on both sides, `null` is the type union's to state, and {@see compareType()} hands it over.
-                ReadingKind::Nullability => ($old['nullable'] ?? null) === null && ($new['nullable'] ?? null) === null
-                    ? []
-                    : $this->compareNullability($old, $new, $path, $id, $request),
+                ReadingKind::Nullability => $this->compareNullability($old, $new, $path, $id, $request),
                 // `$anchor`: a `$ref` may name it and this class resolves none, so a name CHANGED or gone
                 // may leave a pointer naming nothing — the reading a `$defs` member leaving already gets
                 // — while one arriving is safe, nothing having been able to point at it before.

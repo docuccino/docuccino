@@ -129,6 +129,17 @@ it('gives the same findings and verdicts however the repointed intersection is s
     expect($flattened(refSiblingsChanges(refSiblingsDiff(['allOf' => [$owner], 'maxProperties' => 1], ['allOf' => [$keeper], 'maxProperties' => 5]))))->toBe($bare)
         ->and($flattened(refSiblingsChanges(refSiblingsDiff(['allOf' => [$owner], 'maxProperties' => 1], $keeper + ['maxProperties' => 5], '3.0.3', '3.1.1'))))->toBe($bare)
         ->and($flattened(refSiblingsChanges(refSiblingsDiff(['allOf' => [$owner], 'maxProperties' => 1], $keeper + ['maxProperties' => 5], '3.1.1', '3.0.3'))))->toBe($bare);
+
+    // An inline side names no component, and the wrapper beside it is the same intersection: a 3.1 author
+    // wrote it, or the 3.0 export of `{$ref: Keeper, maxProperties: 5}` did. Compared as written, the
+    // inline `id` read as removed and the wrapper's branch as arriving.
+    $inline = ['type' => 'object', 'properties' => ['id' => ['type' => 'integer']]];
+    $direct = refSiblingsChanges(refSiblingsDiff($inline, $keeper + ['maxProperties' => 5]));
+
+    expect(refSiblingsChanges(refSiblingsDiff($inline, ['allOf' => [$keeper], 'maxProperties' => 5])))->toBe($direct)
+        ->and(refSiblingsChanges(refSiblingsDiff($inline, $keeper + ['maxProperties' => 5], '3.0.3', '3.1.1')))->toBe($direct)
+        ->and(refSiblingsChanges(refSiblingsDiff($keeper + ['maxProperties' => 5], $inline, '3.1.1', '3.0.3')))
+        ->toBe(refSiblingsChanges(refSiblingsDiff($keeper + ['maxProperties' => 5], $inline)));
 });
 
 it('reports only the sibling where both sides name the same component', function () use ($owner): void {

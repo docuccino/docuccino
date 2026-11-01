@@ -255,3 +255,30 @@ it('reads a branch beside `false` as everything the union now admits', function 
         ['schema.one-of-branch-added! S.oneOf.1'],
     ]);
 });
+
+it('encodes the old schema a fixed number of times, however wide the union beside it', function (): void {
+    // Each branch is tested against the old schema, and re-encoding the old schema per branch makes a
+    // large schema beside a wide union cost their product: an uploaded document would hold the diff for
+    // minutes. The marker counts every encoding of the old schema, so the count is the work, not a timing.
+    $encodings = static function (int $width): int {
+        $marker = new class implements JsonSerializable
+        {
+            public int $count = 0;
+
+            public function jsonSerialize(): string
+            {
+                $this->count++;
+
+                return 'marker';
+            }
+        };
+
+        // Every branch names the old schema's keywords, so none is settled before encoding.
+        $union = ['anyOf' => array_map(static fn (int $i): array => ['type' => 'integer', 'enum' => [$i]], range(1, $width))];
+        (new SchemaComparator)->compare(['type' => 'string', 'enum' => [$marker]], $union, 'S', 'sch:v1:0000000000000000', true);
+
+        return $marker->count;
+    };
+
+    expect($encodings(200))->toBe($encodings(2))->toBeLessThan(4);
+});

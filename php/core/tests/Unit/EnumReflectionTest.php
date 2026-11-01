@@ -8,7 +8,10 @@ use Docuccino\Core\Tests\Fixtures\SampleShape;
 use Docuccino\Core\Tests\Fixtures\SampleStatus;
 
 it('gives one case the value values() lists for it', function (string $enum, string $case, string|int|null $value): void {
-    expect(EnumReflection::valueOf($enum, $case))->toBe($value);
+    expect(EnumReflection::valueOf($enum, $case))->toBe($value)
+        // Asked again, the answer comes from the enum read once, and is the same.
+        ->and(EnumReflection::valueOf($enum, $case))->toBe($value)
+        ->and(EnumReflection::file($enum))->toBe(EnumReflection::file($enum));
 
     if ($value !== null) {
         // The same value, at the same position as the case's name.

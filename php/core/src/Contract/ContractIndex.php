@@ -37,6 +37,9 @@ use stdClass;
  */
 final class ContractIndex
 {
+    /** How deep a contract document may nest, as read and as restated. */
+    private const int DEPTH = 512;
+
     private ?object $graph = null;
 
     /** @var array<string, list<string>>|null */
@@ -49,7 +52,8 @@ final class ContractIndex
      * @param  string  $json  the document's own JSON text, kept because associative decoding cannot
      *                        tell an empty object from an empty array and JSON Schema very much can
      * @param  array<string, mixed>  $asWritten  the document as written
-     * @param  string|null  $readJson  the JSON text of what the checks read, where that is not `$json`
+     * @param  string|null  $readJson  the JSON text of what the checks read, where that is not `$json`,
+     *                                 kept until the graph is read off it
      */
     private function __construct(
         private readonly array $document,
@@ -58,12 +62,14 @@ final class ContractIndex
         private readonly string $json,
         private readonly array $asWritten,
         private readonly ?OpenApi30Restatement $restatement = null,
-        private readonly ?string $readJson = null,
+        private ?string $readJson = null,
     ) {}
 
     /**
      * @param  array<string, mixed>  $document
      * @param  string|null  $json  the document's original JSON text, when the caller still has it
+     *
+     * @throws JsonException when a 3.0 document's restatement cannot be written as JSON
      */
     public static function fromArray(array $document, ?string $json = null): self
     {
@@ -73,17 +79,18 @@ final class ContractIndex
         // read touches a use's `x-docuccino`.
         $document = UseSites::lower($document);
         $json ??= (string) json_encode($document);
-        $restatement = self::restated($document, $json);
+        $restated = self::restated($document, $json);
 
-        if ($restatement === null) {
+        if ($restated === null) {
             return new self($document, self::index($document), self::indexWebhooks($document), $json, $document);
         }
 
-        $readJson = (string) json_encode($restatement->document, JSON_PRESERVE_ZERO_FRACTION);
-        $read = json_decode($readJson, true);
+        // Written to text and read back once, at the depth it was read at, which is all a restatement nests.
+        $readJson = json_encode($restated[0], JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR, self::DEPTH);
+        $read = json_decode($readJson, true, self::DEPTH, JSON_THROW_ON_ERROR);
         $read = UseSites::lower(is_array($read) ? Arr::stringKeyed($read) : []);
 
-        return new self($read, self::index($read), self::indexWebhooks($read), $json, $document, $restatement, $readJson);
+        return new self($read, self::index($read), self::indexWebhooks($read), $json, $document, $restated[1], $readJson);
     }
 
     /**
@@ -91,12 +98,11 @@ final class ContractIndex
      * empty object stays one ({@see JsonValue}), and off the array where the text is all that was lost.
      *
      * @param  array<string, mixed>  $document
+     * @return array{array<string, mixed>, OpenApi30Restatement}|null
      */
-    private static function restated(array $document, string $json): ?OpenApi30Restatement
+    private static function restated(array $document, string $json): ?array
     {
-        $openapi = $document['openapi'] ?? null;
-
-        if (! is_string($openapi) || ! OpenApi30Upgrade::reads30($openapi)) {
+        if (! OpenApi30Upgrade::states30($document)) {
             return null;
         }
 
@@ -114,7 +120,7 @@ final class ContractIndex
      */
     public static function fromJson(string $json): self
     {
-        $decoded = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        $decoded = json_decode($json, true, self::DEPTH, JSON_THROW_ON_ERROR);
 
         if (! is_array($decoded)) {
             throw new JsonException('The contract document is not a JSON object.');
@@ -145,15 +151,23 @@ final class ContractIndex
     }
 
     /**
-     * Pointer segments into {@see document()}, as the segments naming that place in the document as
+     * Pointer segments into {@see document()}, as the pointer naming that place in the document as
      * written — which every pointer a reader is shown must be.
      *
      * @param  list<string>  $segments
-     * @return list<string>
      *
      * @internal
      */
-    public function written(array $segments): array
+    public function writtenPointer(array $segments): string
+    {
+        return Pointer::of($this->written($segments));
+    }
+
+    /**
+     * @param  list<string>  $segments
+     * @return list<string>
+     */
+    private function written(array $segments): array
     {
         return $this->restatement?->written($segments) ?? $segments;
     }
@@ -186,6 +200,7 @@ final class ContractIndex
         }
 
         $decoded = json_decode($this->readJson ?? $this->json, false);
+        $this->readJson = null;
 
         return $this->graph = is_object($decoded) ? $decoded : new stdClass;
     }
@@ -200,7 +215,7 @@ final class ContractIndex
      */
     public function comparable(): UirDocument
     {
-        $graph = $this->readJson === null ? $this->graph() : json_decode($this->json, false);
+        $graph = $this->restatement === null ? $this->graph() : json_decode($this->json, false);
 
         return UirDocument::fromArray(Arr::stringKeyed((array) JsonValue::normalize(is_object($graph) ? $graph : new stdClass)));
     }

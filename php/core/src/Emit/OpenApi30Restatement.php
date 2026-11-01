@@ -7,7 +7,7 @@ namespace Docuccino\Core\Emit;
 use Docuccino\Core\Support\JsonPointer;
 
 /**
- * A 3.0 document as {@see OpenApi30Upgrade} restates it, with the way back to where each part was written.
+ * The way back from a 3.0 document as {@see OpenApi30Upgrade} restates it to where each part was written.
  * Everything stays where it stood but one: a `nullable` with no `type` beside it becomes an `anyOf` whose
  * first branch is what the schema asserted and whose second admits null, so a pointer through that `anyOf`
  * names a place the source does not have.
@@ -17,14 +17,10 @@ use Docuccino\Core\Support\JsonPointer;
 final readonly class OpenApi30Restatement
 {
     /**
-     * @param  array<string, mixed>  $document
      * @param  array<string, bool>  $wrapped  each wrapped schema's pointer in the source, true where its
      *                                        branch is the lone `allOf` member it had
      */
-    public function __construct(
-        public array $document,
-        private array $wrapped,
-    ) {}
+    public function __construct(private array $wrapped) {}
 
     /**
      * Pointer segments into the restatement, as the segments naming the same place in the source: a

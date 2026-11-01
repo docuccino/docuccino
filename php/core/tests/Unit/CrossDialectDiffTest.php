@@ -9,6 +9,7 @@ use Docuccino\Core\Emit\EmitOptions;
 use Docuccino\Core\Emit\OpenApi30DownlevelEmitter;
 use Docuccino\Core\Emit\OpenApi31DownlevelEmitter;
 use Docuccino\Core\Emit\OpenApi32Emitter;
+use Docuccino\Core\Support\Arr;
 use Docuccino\Core\Support\JsonValue;
 
 /*
@@ -304,3 +305,76 @@ it('finds no change between a hand-written 3.0 document and its export at every 
     expect(crossDialectDiff($source, $export)->changes)->toBe([])
         ->and(crossDialectDiff($export, $source)->changes)->toBe([]);
 })->with(['openapi30-source.openapi30.json', 'openapi30-source.openapi31.json', 'openapi30-source.openapi32.json']);
+
+/**
+ * Edits to a 3.0 document touching every member its 3.0 export either drops or restates and spells back.
+ *
+ * @return array<string, Closure(array<string, mixed>): array<string, mixed>>
+ */
+function crossDialectEdits(): array
+{
+    $walk = static function (mixed $node, Closure $edit) use (&$walk): mixed {
+        if (! is_array($node)) {
+            return $node;
+        }
+
+        foreach ($node as $key => $value) {
+            $node[$key] = $walk($value, $edit);
+        }
+
+        return $edit($node);
+    };
+
+    $each = static fn (Closure $edit): Closure => static function (array $document) use ($walk, $edit): array {
+        $count = 0;
+
+        return $walk($document, static function (array $node) use ($edit, &$count): array {
+            return $edit($node, $count++);
+        });
+    };
+
+    return [
+        'nullable turned off' => $each(static fn (array $n, int $i): array => ($n['nullable'] ?? null) === true && $i % 2 === 0 ? array_diff_key($n, ['nullable' => true]) : $n),
+        'nullable turned on' => $each(static fn (array $n, int $i): array => is_string($n['type'] ?? null) && $i % 3 === 0 ? $n + ['nullable' => true] : $n),
+        'nullable beside a lone allOf' => $each(static fn (array $n): array => array_keys($n) === ['allOf'] ? $n + ['nullable' => true] : $n),
+        'a type changed' => $each(static fn (array $n, int $i): array => ($n['type'] ?? null) === 'string' && $i % 4 === 0 ? ['type' => 'integer'] + $n : $n),
+        'bounds moved' => $each(static fn (array $n): array => is_int($n['maxLength'] ?? null) ? ['maxLength' => $n['maxLength'] + 1] + $n : (is_string($n['type'] ?? null) ? $n + ['maximum' => 9] : $n)),
+        'bounds made exclusive' => $each(static fn (array $n): array => is_string($n['type'] ?? null) ? $n + ['minimum' => 0, 'exclusiveMinimum' => true, 'exclusiveMaximum' => true] : $n),
+        'false spelled out' => $each(static fn (array $n, int $i): array => is_string($n['type'] ?? null) ? $n + ($i % 2 === 0 ? ['nullable' => false] : ['exclusiveMaximum' => false]) : $n),
+        'a $ref described' => $each(static fn (array $n): array => is_string($n['$ref'] ?? null) ? $n + ['description' => 'Beside the reference.', 'maxProperties' => 1] : $n),
+        'a property replaced' => $each(static fn (array $n): array => is_array($n['properties'] ?? null) && count($n['properties']) > 1
+            ? ['properties' => array_slice($n['properties'], 1, null, true) + ['added' => ['type' => 'string']]] + $n
+            : $n),
+    ];
+}
+
+/*
+ * Two 3.0 documents compare as their 3.0 exports say. That export drops what 3.0 ignores and spells the
+ * rest back as written, so the differ drops only that and keeps the round trip through 3.1. Its findings
+ * must be the ones the two full exports give, compared as written, for every edit over every 3.0
+ * document the corpus holds.
+ */
+it('compares two 3.0 documents exactly as their full 3.0 exports compare', function (string $path): void {
+    $source = Arr::stringKeyed(JsonValue::decode((string) file_get_contents($path)));
+    // The export, labelled as a version the differ takes as written.
+    $exported = static fn (array $document): UirDocument => UirDocument::fromArray(
+        ['openapi' => '3.1.0'] + Arr::stringKeyed(JsonValue::decode((new OpenApi30DownlevelEmitter)->emit(UirDocument::fromArray($document), new EmitOptions(keepIds: true)))),
+    );
+    $found = 0;
+
+    foreach (crossDialectEdits() as $edit) {
+        $edited = $edit($source);
+
+        foreach ([[$source, $edited], [$edited, $source]] as [$old, $new]) {
+            $changes = (new DocumentDiffer)->diff(UirDocument::fromArray($old), UirDocument::fromArray($new))->toArray();
+
+            expect($changes)->toBe((new DocumentDiffer)->diff($exported($old), $exported($new))->toArray());
+            $found += count($changes['changes']);
+        }
+    }
+
+    expect($found)->toBeGreaterThan(20);
+})->with(static fn (): array => [
+    dirname(__DIR__).'/Fixtures/openapi30-source.json',
+    ...glob(dirname(__DIR__).'/Fixtures/golden/*.openapi30.json') ?: [],
+]);

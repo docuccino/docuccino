@@ -484,6 +484,47 @@ pairs by key and a composition list pairs by what a member IS — identity, then
 its content, never its position, `ComponentNames`' rule applied to branches — and the position already says
 which of those two applies.
 
+**Reading through a spelling.** Two subschemas are compared keyword by keyword only once neither is
+another spelling of a schema the comparison can read directly. `SchemaComparator::compareSubschema()` asks
+four readings in order, each declining unless it applies, and compares what the first one hands back; the
+first three run only where a side spells a composition or a `$ref` with something beside it. The order is
+part of the reading: a lone branch is unwrapped first, so the pointer inside it can meet the intersection
+or the resolution below.
+
+1. **A lone branch** (`loneBranch()`). `allOf`, `anyOf` and `oneOf` of one schema each validate exactly
+   what that schema does, so with nothing beside the keyword but annotations and the identity — the
+   members a bare pointer may carry — the wrapper IS its branch, the wrapper's annotations written over
+   the branch's. Where both sides spell the keyword, their branches pair as written instead. A `nullable`
+   beside it is not an intersection: it is how 3.0 writes a nullable `$ref`, so it is carried onto the
+   branch as that branch admitting null. An ASSERTING sibling makes the wrapper an intersection. Where the
+   branch is a bare pointer, `{allOf: [{$ref: X}], …S}` is read as `{$ref: X, …S}`, which 2020-12 applies
+   in place exactly as it applies the wrapper, and which the intersection below compares part by part.
+   With no documents to resolve against, that holds only against a side naming a component too: the
+   merged pointer cannot be read through, and against an inline side the branch arriving or going is the
+   one thing that says a component did. An inline branch never merges, because `additionalProperties` and
+   `unevaluated*` see the siblings beside them, and moving a branch's keywords up beside them changes what
+   they admit. Changes found under an unwrapped branch are reported at the position, as a resolved
+   pointer's are.
+2. **A union beside** (`compareUnionBeside()`). One side is a union, with nothing beside the keyword but
+   annotations, one of whose branches IS the other side's schema — by the component it names, its
+   identity, or what it asserts once annotations are set aside, never by the inexact pairing the branch
+   lists fall back on. `X` becoming `anyOf: [X, {type: null}]` is how 2020-12 makes a `$ref` nullable.
+   Such a union admits everything `X` does, so it arriving is the branches beside `X` arriving, each the
+   widening a branch added is, and never the union keyword landing on an unconstrained schema; it going is
+   those branches going. `X` is compared with its branch, and a `{type: null}` beside an `X` that provably
+   admits no null is the `Nullability` reading below. `oneOf` is exactly one, so a branch overlapping `X`
+   refuses what both match: it reads this way only where every other branch's types are disjoint from
+   `X`'s, and otherwise compares as written.
+3. **An intersection** (`compareIntersection()`). A pointer with an asserting sibling, against a side that
+   does not spell the same pointer. 2020-12 applies `{$ref: X, …S}` as `X` and `S` both, in place, so it
+   is their intersection: the pointer and its annotations are compared with the other side's pointer, read
+   through as a bare one is, and `S` with the other side's siblings. An inline side is all pointer part
+   and no siblings. Each part holding is enough for the intersection to, so a break in either is never
+   lost, where comparing as written never looks behind the pointer at all.
+4. **Pointers resolved** (`resolvePointers()`). Two sides pointing differently are compared as the shapes
+   they name, the pointer move reported beside them; two spelling one pointer compare opaquely, the
+   component's own row carrying its edits.
+
 **Refinement** is the same defect one level down and a different set of questions. A refinement carries
 no subschema, so there is no polarity to invert, no `if` to make a direction incomputable and no member
 list to pair; what a `maxLength: 3` is worth beside a `maxLength: 100` is a direction in the keyword's
@@ -550,8 +591,8 @@ stop a sixth member hiding in the same gap — and `Diff\ReadingKind` is the clo
   leaves the `null` member of a union to this reading wherever both sides still state a type besides it,
   so one edit is one finding — without that, the migration published a `schema.type-widened` beside the
   nothing this reports, which was harmless only while a widening was safe on both sides. Unwritten on both
-  sides, the union's `null` is the whole statement and the TYPE comparison hands it over, so a `null`
-  joining `type` is the same finding as `nullable: true` arriving. Absent is not nullable, so the keyword arriving with `true` widens
+  sides, the union's `null` is the whole statement and the TYPE comparison reports it as this reading, so
+  a `null` joining `type` is the same finding as `nullable: true` arriving. Absent is not nullable, so the keyword arriving with `true` widens
   and a null withdrawn narrows. This is the `exclusiveMinimum` split answered the other way round: there
   the sibling keyword could not be folded, here it can and exactly.
 - `Identity` — `$anchor`. A `$ref` may name one and the differ resolves none, so a name CHANGED or gone

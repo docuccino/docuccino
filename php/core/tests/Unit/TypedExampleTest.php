@@ -293,6 +293,16 @@ it('names the property, the text and the declared type when it publishes nothing
         ->and($diagnostic->help)->toContain('@example 7');
 });
 
+it('says on a validation field that a generated example may stand in for the refused one', function (): void {
+    // A field's own rules earn it an example where they pin a value, so on a field "none is published"
+    // can be false: the refused text is what is not published. Same code and help as everywhere else.
+    $field = TypedExample::unreadableOnField('status', 'active', ['type' => 'string', 'enum' => ['draft', 'published']]);
+    $docblock = TypedExample::unreadable('field "status"', 'active', ['type' => 'string', 'enum' => ['draft', 'published']]);
+
+    expect($field->message)->toBe('The example on field "status" ("active") does not read as "draft"/"published", so it is not published; where the field\'s rules pin a value, an example generated from them is published instead.')
+        ->and([$field->severity, $field->code, $field->help])->toBe([$docblock->severity, $docblock->code, $docblock->help]);
+});
+
 it('spells a union and an unknown type in the message the same way it reads them', function (mixed $type, string $reads): void {
     expect(TypedExample::untypable('field "x"', 'n/a', $type)->message)->toContain('does not read as '.$reads);
 })->with([
@@ -469,3 +479,25 @@ it('names the values a refused example could have been', function (array $schema
     'a type union' => [['anyOf' => [['type' => 'integer'], ['type' => 'boolean']]], 'integer/boolean'],
     'a long list, cut short' => [['enum' => ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']], '"a"/"b"/"c"/"d"/"e"/"f" (and 2 more)'],
 ]);
+
+it('reads a component reached by many paths once, and one reached from itself as open', function (): void {
+    // Each level is a union of the next level twice, so the paths to the bottom double at every level.
+    // Read once per path, 24 levels are 2^24 readings of the bottom; read once per component, 25.
+    $components = ['Level24' => ['type' => 'integer', 'enum' => [1]]];
+
+    for ($level = 0; $level < 24; $level++) {
+        $next = ['$ref' => '#/components/schemas/Level'.($level + 1)];
+        $components['Level'.$level] = ['anyOf' => [$next, $next]];
+    }
+
+    $top = ['$ref' => '#/components/schemas/Level0'];
+
+    expect(TypedExample::against('1', $top, $components))->toBe([1])
+        ->and(TypedExample::against('2', $top, $components))->toBeNull()
+        ->and(TypedExample::unreadable('field "x"', '2', $top, $components)->message)->toContain('does not read as 1,');
+
+    // The bottom naming the top again is a component that refers to itself, which states nothing.
+    $components['Level24'] = ['anyOf' => [['type' => 'integer', 'enum' => [1]], $top]];
+
+    expect(TypedExample::against('2', $top, $components))->toBe(['2']);
+});

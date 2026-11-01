@@ -294,11 +294,13 @@ final readonly class ComponentRefs
      */
     public static function siblings(array $schema): array
     {
-        return array_filter(
-            $schema,
-            static fn (string $keyword): bool => $keyword !== '$ref' && $keyword !== 'x-docuccino' && ! SchemaKeywords::isAnnotationOnly($keyword),
-            ARRAY_FILTER_USE_KEY,
-        );
+        return array_filter($schema, static fn (string $keyword): bool => $keyword !== '$ref' && ! self::isAside($keyword), ARRAY_FILTER_USE_KEY);
+    }
+
+    /** Whether a Schema Object member says nothing about the value: an annotation, or the identity. */
+    public static function isAside(string $keyword): bool
+    {
+        return $keyword === 'x-docuccino' || SchemaKeywords::isAnnotationOnly($keyword);
     }
 
     /**

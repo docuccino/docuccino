@@ -667,9 +667,9 @@ final class DataValidationRules
             $this->dependencyFiles->add($facts->file);
 
             if (! $facts->annotated) {
-                $narrows = UnreadRule::objectNarrows($ruleClass);
-                $opaque = $opaque || ! $narrows;
-                $this->unread[] = ['key' => $key, 'class' => $fqcn, 'property' => $property, 'rule' => 'new '.$ruleClass, 'narrows' => $narrows];
+                $unread = UnreadRule::classify($ruleClass);
+                $opaque = $opaque || ! $unread['narrows'];
+                $this->unread[] = ['key' => $key, 'class' => $fqcn, 'property' => $property, 'rule' => $unread['label'], 'narrows' => $unread['narrows']];
             }
 
             $rules = [...$rules, ...$facts->rules];
