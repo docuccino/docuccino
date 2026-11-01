@@ -1163,7 +1163,8 @@ a `format` claim about it would be a guess.
 | `accepted`, `accepted_if` | `boolean` with `const: true` (the `_if` form adds "Must be accepted when …"). |
 | `declined`, `declined_if` | `boolean` with `const: false`. |
 | `list` | `array` |
-| `distinct` | `uniqueItems: true` |
+| `distinct` on `tags.*` | `uniqueItems: true` on `tags`, where the items are strings, numbers or booleans. Nothing where an item may be null, an array or an object, since Laravel lets those repeat, or a number under `distinct:strict`, which takes `1` beside `1.0`. `distinct:ignore_case` also refuses a repeat in another case, which no keyword says. |
+| `distinct` anywhere else | Nothing. On `tags` Laravel compares the value only with itself, and on `lines.*.sku` it compares skus across the objects in `lines`, which JSON Schema has no keyword for. |
 | `exists`, `unique` | A type only (`string` if the field is otherwise untyped) — a foreign-key lookup isn't a documentable shape. |
 | `confirmed` | Adds the implicit `{field}_confirmation` partner, mirroring the field's type and required flag. |
 

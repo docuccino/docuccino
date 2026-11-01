@@ -16,6 +16,8 @@ use Docuccino\Laravel\Tests\Support\TraceScript;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\Router;
+use Illuminate\Support\Facades\Validator;
+use Opis\JsonSchema\Validator as SchemaValidator;
 
 /*
  * Lists validated item by item through `field.*` keys, locked in emitted bytes: closed sets written as
@@ -49,3 +51,33 @@ it('emits item-level rules byte-identical to their committed goldens', function 
     assertGolden('array-item-rules.uir.json', (new UirEmitter)->emit($result->document));
     assertGolden('array-item-rules.openapi30.json', (new OpenApi30DownlevelEmitter)->emit($result->document));
 });
+
+it('takes every body the server takes, and refuses the repeats and outsiders it can name', function (array $fields, bool $accepted, bool $exact): void {
+    $body = ['abilities' => ['read'], ...$fields];
+
+    // The server's answer, by Laravel itself.
+    expect(Validator::make($body, (new IssueTokenRequest)->rules())->passes())->toBe($accepted);
+
+    // The document's, `$ref`s resolved through the document the body schema stands in.
+    $document = json_decode((new UirEmitter)->emit(arrayItemRulesBuild()->document), flags: JSON_THROW_ON_ERROR);
+    $document->{'$ref'} = '#/components/schemas/IssueTokenRequest';
+    $published = (new SchemaValidator)->validate(json_decode((string) json_encode($body), flags: JSON_THROW_ON_ERROR), $document)->isValid();
+
+    // Never narrower than the server; as narrow wherever a keyword can say so.
+    expect($published)->toBe($accepted || ! $exact);
+})->with([
+    'two abilities' => [['abilities' => ['read', 'write']], true, true],
+    'an ability repeated' => [['abilities' => ['read', 'read']], false, true],
+    'an ability new Enum does not hold' => [['abilities' => ['root']], false, true],
+    'a role repeated under strict' => [['roles' => ['read', 'read']], false, true],
+    'a channel new In does not hold' => [['channels' => ['fax']], false, true],
+    'a default ability new Enum does not hold' => [['default_ability' => 'root'], false, true],
+    'a label repeated in another case' => [['labels' => ['ops', 'OPS']], false, false],
+    'a label repeated' => [['labels' => ['ops', 'ops']], false, true],
+    'two null aliases, which Laravel skips' => [['aliases' => [null, null]], true, true],
+    'a tag repeated, under a key Laravel compares only with itself' => [['tags' => ['a', 'a']], true, true],
+    'one ability granted twice, across objects' => [['grants' => [['ability' => 'read'], ['ability' => 'read']]], false, false],
+    'two abilities granted' => [['grants' => [['ability' => 'read'], ['ability' => 'write']]], true, true],
+    'a cell repeated in its row' => [['matrix' => [[1, 1]]], false, true],
+    'a cell repeated in another row' => [['matrix' => [[1], [1]]], false, false],
+]);
