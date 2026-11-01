@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Diff;
 
+use Closure;
 use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Extensions\Schema\ComponentNames;
 use Docuccino\Core\Support\Arr;
@@ -543,9 +544,10 @@ final class SchemaComparator
         }
 
         $branches = self::branches($map[$keyword]);
+        $isPlain = self::sameBranchAs($plain);
 
         foreach ($branches as $j => $branch) {
-            if (! self::isSameBranch($plain, $branch)) {
+            if (! $isPlain($branch)) {
                 continue;
             }
 
@@ -558,24 +560,41 @@ final class SchemaComparator
     }
 
     /**
-     * Whether a union branch is `$schema`: the component it names, its identity, or what it asserts once
-     * annotations are set aside — never the inexact pairing {@see pairBranches()} falls back on.
+     * A test of whether a union branch is `$schema`: the component it names, its identity, or what it
+     * asserts once annotations are set aside — never the inexact pairing {@see pairBranches()} falls back
+     * on. `$schema` is read once however many branches are tested, and a branch naming other keywords is
+     * settled without encoding either side.
+     *
+     * @return Closure(mixed): bool
      */
-    private static function isSameBranch(mixed $schema, mixed $branch): bool
+    private static function sameBranchAs(mixed $schema): Closure
     {
         $ref = self::refKey($schema);
 
         if ($ref !== null) {
-            return $ref === self::refKey($branch);
+            return static fn (mixed $branch): bool => $ref === self::refKey($branch);
         }
 
         $identity = self::identityKey($schema);
+        $assertions = self::assertions($schema);
+        $key = null;
 
-        if ($identity !== null && $identity === self::identityKey($branch)) {
-            return true;
-        }
+        return static function (mixed $branch) use ($identity, $assertions, &$key): bool {
+            if ($identity !== null && $identity === self::identityKey($branch)) {
+                return true;
+            }
 
-        return ValueKey::of(self::assertions($schema)) === ValueKey::of(self::assertions($branch));
+            $other = self::assertions($branch);
+
+            // Maps with different members never encode alike.
+            if (is_array($assertions) && is_array($other) && (count($assertions) !== count($other) || array_diff_key($assertions, $other) !== [])) {
+                return false;
+            }
+
+            $key ??= ValueKey::of($assertions);
+
+            return $key === ValueKey::of($other);
+        };
     }
 
     /** A subschema with its annotations and identity set aside: what it says about a value. */
