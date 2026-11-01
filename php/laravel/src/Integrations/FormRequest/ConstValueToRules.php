@@ -58,9 +58,6 @@ final class ConstValueToRules
         'Illuminate\\Validation\\Rules\\Unique' => 'unique',
     ];
 
-    /** The `Rule::` factories {@see descriptor()} reads. */
-    private const READ_FACTORIES = ['enum', 'in', 'notin', 'array', 'exists', 'unique', 'excludeif', 'excludeunless', 'exclude', 'excludewith', 'excludewithout'];
-
     private readonly DependencyFileSet $dependencyFiles;
 
     private bool $widened = false;
@@ -202,18 +199,18 @@ final class ConstValueToRules
      */
     private function descriptorItem(ConstValue $descriptor): array
     {
-        if (! in_array(self::method($descriptor), self::READ_FACTORIES, true)) {
-            $string = $descriptor->chain === [] ? RuleFactories::ruleString((string) $descriptor->factory, $descriptor->args) : null;
-
-            return $string !== null
-                ? RuleParsing::tokens($string)
-                : $this->leaveOut($descriptor, UnreadRule::factoryNarrows((string) $descriptor->factory));
-        }
-
-        // One that reads to nothing has either said why ({@see $widened}) or excludes nothing.
         $rule = $this->descriptor($descriptor);
 
-        return $rule === null ? [] : [$rule];
+        if ($rule !== false) {
+            // One that reads to nothing has either said why ({@see $widened}) or excludes nothing.
+            return $rule === null ? [] : [$rule];
+        }
+
+        $string = $descriptor->chain === [] ? RuleFactories::ruleString((string) $descriptor->factory, $descriptor->args) : null;
+
+        return $string !== null
+            ? RuleParsing::tokens($string)
+            : $this->leaveOut($descriptor, UnreadRule::factoryNarrows((string) $descriptor->factory));
     }
 
     /**
@@ -262,7 +259,8 @@ final class ConstValueToRules
         return str_contains($factory, '::') ? substr($factory, strrpos($factory, '::') + 2) : $factory;
     }
 
-    private function descriptor(ConstValue $descriptor): ?ValidationRule
+    /** The rule a `Rule::` factory this reads builds, null where it builds none, or false where this reads no such factory. */
+    private function descriptor(ConstValue $descriptor): ValidationRule|false|null
     {
         $method = self::method($descriptor);
 
@@ -284,7 +282,7 @@ final class ConstValueToRules
             $method === 'exclude' => ValidationRule::of('exclude'),
             $method === 'excludewith' => self::excludeByFields('exclude_with', $descriptor->args),
             $method === 'excludewithout' => self::excludeByFields('exclude_without', $descriptor->args),
-            default => null,
+            default => false,
         };
     }
 
