@@ -120,6 +120,12 @@
               ]
             }
           },
+          "handles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "labels": {
             "type": "array",
             "items": {
@@ -137,6 +143,12 @@
                 "type": "integer"
               },
               "uniqueItems": true
+            }
+          },
+          "nicknames": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           },
           "roles": {

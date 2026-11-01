@@ -8,10 +8,11 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Enum;
 use Illuminate\Validation\Rules\In;
+use Illuminate\Validation\Rules\NotIn;
 
 /**
- * A body whose lists are validated item by item through `field.*` keys: closed sets written as rule
- * objects and as `Rule::` factories, and `distinct` at each depth a `*` can put it.
+ * A body whose lists are validated item by item through `field.*` keys: closed sets and excluded values
+ * written as rule objects and as `Rule::` factories, and `distinct` at each depth a `*` can put it.
  */
 final class IssueTokenRequest extends FormRequest
 {
@@ -47,6 +48,11 @@ final class IssueTokenRequest extends FormRequest
             'matrix' => ['array'],
             'matrix.*' => ['array'],
             'matrix.*.*' => ['integer', 'distinct'],
+            'handles' => ['array'],
+            'handles.*' => ['string', Rule::notIn(['root', 'admin'])],
+            'nicknames' => ['array'],
+            'nicknames.*' => ['string', new NotIn(['root', 'admin'])],
+            'settings' => [Rule::array(['theme'])],
         ];
     }
 }
