@@ -465,6 +465,9 @@ $result = match ($mode) {
                 // callback closure the engine folded out of a helper's body.
                 'typeColumn' => $filter->typeColumn,
                 'nullable' => $filter->nullable,
+                // A `->default(…)` value, as the query it filters on would bind it.
+                'hasDefault' => $filter->hasDefault,
+                'default' => $filter->default,
                 // The recovered leading comment — PHPStan's parser attributes it to the array item the
                 // same way ParserFactory does, which is what makes it usable as an override description.
                 'comment' => $filter->comment,
@@ -497,6 +500,8 @@ $result = match ($mode) {
             'pageSizeDefault' => $facts->pageSize?->default,
             'visitedBasenames' => array_map('basename', $dependencyFiles),
             'dependencyFiles' => $dependencyFiles,
+            // Files the visitor read by reflection, beyond the walk's own.
+            'visitorDependencyBasenames' => array_map('basename', $visitor->dependencyFiles()),
         ];
     })(),
     'trace-rules' => (static function () use ($engine, $ref): array {

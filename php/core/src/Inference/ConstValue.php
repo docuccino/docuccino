@@ -23,6 +23,9 @@ use Docuccino\Core\Support\Fqcn;
  *     documentable by its class — and it carries a `chain` the same way
  *     (`(new Enum(Status::class))->only([…])`). A chained call may return something other than the
  *     object, so a reader that only knows the class reads an unchained instance;
+ *   - `case`       — an enum case (`Status::Active`): the enum's FQCN in `class` and the case name in
+ *     `scalar`. A case is not its name, nor its backing value: which value it stands for is the
+ *     reader's to say, by the casting its framework applies, so the fold keeps the case whole;
  *   - `array`      — an array of the above (per-item recursion);
  *   - `spread`     — a run of values no position can be pinned to: a spread the fold could not read
  *     ({@see ArgumentSlots}), or, in a list that has nowhere to put a name, the named arguments after
@@ -37,6 +40,8 @@ final readonly class ConstValue
     public const KIND_DESCRIPTOR = 'descriptor';
 
     public const KIND_INSTANCE = 'instance';
+
+    public const KIND_CASE = 'case';
 
     public const KIND_ARRAY = 'array';
 
@@ -79,6 +84,14 @@ final readonly class ConstValue
     public static function instance(string $class, array $args): self
     {
         return new self(self::KIND_INSTANCE, class: $class, args: $args);
+    }
+
+    /**
+     * The case `$name` of the enum `$class`.
+     */
+    public static function enumCase(string $class, string $name): self
+    {
+        return new self(self::KIND_CASE, scalar: $name, class: $class);
     }
 
     /**
@@ -139,6 +152,17 @@ final readonly class ConstValue
         return $this->kind === self::KIND_INSTANCE;
     }
 
+    public function isCase(): bool
+    {
+        return $this->kind === self::KIND_CASE;
+    }
+
+    /** The case name, for a `case` value; null for any other kind. */
+    public function caseName(): ?string
+    {
+        return $this->kind === self::KIND_CASE && is_string($this->scalar) ? $this->scalar : null;
+    }
+
     public function isArray(): bool
     {
         return $this->kind === self::KIND_ARRAY;
@@ -166,6 +190,7 @@ final readonly class ConstValue
                 implode(', ', array_map(static fn (ConstValue $a): string => $a->render(), $this->args)),
                 $this->renderChain(),
             ),
+            self::KIND_CASE => Fqcn::short((string) $this->class).'::'.$this->scalar,
             self::KIND_ARRAY => sprintf(
                 '[%s]',
                 implode(', ', array_map(static fn (ConstValue $i): string => $i->render(), $this->items)),
@@ -204,6 +229,7 @@ final readonly class ConstValue
                 'args' => array_map(static fn (ConstValue $a): array => $a->toArray(), $this->args),
                 ...$this->chainToArray(),
             ],
+            self::KIND_CASE => ['kind' => self::KIND_CASE, 'class' => $this->class, 'case' => $this->scalar],
             self::KIND_ARRAY => [
                 'kind' => self::KIND_ARRAY,
                 'items' => array_map(static fn (ConstValue $i): array => $i->toArray(), $this->items),
@@ -263,6 +289,10 @@ final readonly class ConstValue
                 is_string($data['class'] ?? null) ? $data['class'] : '',
                 self::listFrom($data['args'] ?? []),
             ), $data),
+            self::KIND_CASE => self::enumCase(
+                is_string($data['class'] ?? null) ? $data['class'] : '',
+                is_string($data['case'] ?? null) ? $data['case'] : '',
+            ),
             self::KIND_ARRAY => self::array(self::listFrom($data['items'] ?? [])),
             self::KIND_SPREAD => self::spread(is_string($data['reason'] ?? null) ? $data['reason'] : '?'),
             default => self::unknown(is_string($data['reason'] ?? null) ? $data['reason'] : '?'),

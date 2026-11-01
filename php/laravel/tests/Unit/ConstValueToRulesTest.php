@@ -9,8 +9,11 @@ use Docuccino\Laravel\Tests\Fixtures\Rules\BankReference;
 use Docuccino\Laravel\Tests\Fixtures\Rules\LegacyStringRule;
 use Docuccino\Laravel\Tests\Fixtures\Rules\OpaqueCheck;
 use Docuccino\Laravel\Tests\Fixtures\Rules\TenantMember;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationRuleParser;
+use Workbench\App\Enums\FormChannel;
+use Workbench\App\Enums\WidgetPriority;
 use Workbench\App\Enums\WidgetStatus;
 
 /**
@@ -95,9 +98,9 @@ it('ignores a descriptor it does not recognise', function (): void {
 
 it('narrows a Rule::enum case list with an ->only([...]) chain (validation §4 #10)', function (): void {
     // Rule::enum(WidgetStatus::class)->only([WidgetStatus::Draft, WidgetStatus::Published]) — the chain
-    // args fold to case NAMES; narrowEnum keeps their backing values in declaration order.
+    // args fold to the cases; narrowEnum keeps their backing values in declaration order.
     $value = ConstValue::descriptor('Illuminate\\Validation\\Rule::enum', [ConstValue::scalar(WidgetStatus::class)])
-        ->withChainedCall('only', [ConstValue::array([ConstValue::scalar('Draft'), ConstValue::scalar('Published')])]);
+        ->withChainedCall('only', [ConstValue::array([ConstValue::enumCase(WidgetStatus::class, 'Draft'), ConstValue::enumCase(WidgetStatus::class, 'Published')])]);
 
     $rules = (new ConstValueToRules)->fold($value);
 
@@ -109,7 +112,7 @@ it('narrows a Rule::enum case list with an ->only([...]) chain (validation §4 #
 
 it('narrows a Rule::enum case list with an ->except([...]) chain', function (): void {
     $value = ConstValue::descriptor('Illuminate\\Validation\\Rule::enum', [ConstValue::scalar(WidgetStatus::class)])
-        ->withChainedCall('except', [ConstValue::array([ConstValue::scalar('Archived')])]);
+        ->withChainedCall('except', [ConstValue::array([ConstValue::enumCase(WidgetStatus::class, 'Archived')])]);
 
     $rules = (new ConstValueToRules)->fold($value);
 
@@ -119,10 +122,10 @@ it('narrows a Rule::enum case list with an ->except([...]) chain', function (): 
 });
 
 it('applies chained only() then except() left to right, spread-arg form included', function (): void {
-    // only(Draft, Published, Archived) as spread scalar args, then except([Published]).
+    // only(Draft, Published, Archived) as separate args, then except([Published]).
     $value = ConstValue::descriptor('Illuminate\\Validation\\Rule::enum', [ConstValue::scalar(WidgetStatus::class)])
-        ->withChainedCall('only', [ConstValue::scalar('Draft'), ConstValue::scalar('Published'), ConstValue::scalar('Archived')])
-        ->withChainedCall('except', [ConstValue::array([ConstValue::scalar('Published')])]);
+        ->withChainedCall('only', [ConstValue::enumCase(WidgetStatus::class, 'Draft'), ConstValue::enumCase(WidgetStatus::class, 'Published'), ConstValue::enumCase(WidgetStatus::class, 'Archived')])
+        ->withChainedCall('except', [ConstValue::array([ConstValue::enumCase(WidgetStatus::class, 'Published')])]);
 
     $rules = (new ConstValueToRules)->fold($value);
 
@@ -170,7 +173,7 @@ it('folds a rule object of an unknown class to nothing with no dependency', func
 
 it('ignores an unknown chained method and keeps the full case list', function (): void {
     $value = ConstValue::descriptor('Illuminate\\Validation\\Rule::enum', [ConstValue::scalar(WidgetStatus::class)])
-        ->withChainedCall('somethingElse', [ConstValue::array([ConstValue::scalar('Draft')])]);
+        ->withChainedCall('somethingElse', [ConstValue::array([ConstValue::enumCase(WidgetStatus::class, 'Draft')])]);
 
     $rules = (new ConstValueToRules)->fold($value);
 
@@ -300,7 +303,7 @@ it('reads a framework rule object narrowed by a chained call as the factory chai
     // `(new Enum(X::class))->only([...])` is `Rule::enum(X::class)->only([...])`, so it publishes the cases
     // the endpoint takes, not every case of the enum.
     $chained = static fn (string $method): ConstValue => ConstValue::instance('Illuminate\\Validation\\Rules\\Enum', [ConstValue::scalar(WidgetStatus::class)])
-        ->withChainedCall($method, [ConstValue::array([ConstValue::scalar('Draft'), ConstValue::scalar('Published')])]);
+        ->withChainedCall($method, [ConstValue::array([ConstValue::enumCase(WidgetStatus::class, 'Draft'), ConstValue::enumCase(WidgetStatus::class, 'Published')])]);
 
     $only = (new ConstValueToRules)->fold($chained('only'));
     $except = (new ConstValueToRules)->fold($chained('except'));
@@ -345,7 +348,7 @@ it('keeps every enum case where a narrowing chain names one from a call', functi
         'Illuminate\\Validation\\Rule::enum',
         [ConstValue::scalar(WidgetStatus::class)],
     )->withChainedCall('only', [ConstValue::array([
-        ConstValue::scalar('Draft'),
+        ConstValue::enumCase(WidgetStatus::class, 'Draft'),
         ConstValue::unknown('non-constant array item'),
     ])]);
 
@@ -580,4 +583,88 @@ it('reads Rule::array and new ArrayRule as the array rule, keys or not', functio
     'keys in one array' => [[ConstValue::array([ConstValue::scalar('name'), ConstValue::scalar('email')])], ['name', 'email']],
     'keys as separate arguments' => [[ConstValue::scalar('name'), ConstValue::scalar('email')], ['name', 'email']],
     'keys from a call' => [[ConstValue::descriptor('App\\Support\\Keys::all', [])], []],
+]);
+
+it('reads an enum case in a value list as the value Laravel casts it to, never its name', function (string $factory, string $rule, array $cases): void {
+    // Laravel's In, NotIn and ArrayRule cast each case with `enum_value()` before comparing: a backed case is
+    // its backing value and a pure one its name. So the rule Laravel's own parser reads off the object built
+    // from the real cases is the rule the fold owes, for every spelling of it.
+    [, $expected] = ValidationRuleParser::parse((string) Rule::{$factory}($cases));
+    $folded = array_map(static fn (UnitEnum $case): ConstValue => ConstValue::enumCase($case::class, $case->name), $cases);
+
+    $spellings = [
+        'one array' => ConstValue::descriptor('Illuminate\\Validation\\Rule::'.$factory, [ConstValue::array($folded)]),
+        'separate arguments' => ConstValue::descriptor('Illuminate\\Validation\\Rule::'.$factory, $folded),
+        'the object' => ConstValue::instance(RuleFactories::builtClass($factory) ?? '', [ConstValue::array($folded)]),
+    ];
+
+    foreach ($spellings as $spelling => $written) {
+        $folder = new ConstValueToRules;
+        $rules = $folder->fold(ConstValue::array([$written]));
+
+        expect(array_map(static fn ($r): array => [$r->name, $r->parameters], $rules))->toBe([[$rule, $expected]], $spelling)
+            ->and($folder->widened())->toBeFalse()
+            // The values are written in the enum's file, so it keys the fragment.
+            ->and($folder->dependencyFiles())->toBe([(new ReflectionEnum($cases[0]))->getFileName()]);
+    }
+})->with([
+    'in, string-backed' => ['in', 'in', [WidgetStatus::Draft, WidgetStatus::Archived]],
+    'in, int-backed' => ['in', 'in', [WidgetPriority::Low, WidgetPriority::High]],
+    'in, pure' => ['in', 'in', [FormChannel::Email]],
+    'notIn, string-backed' => ['notIn', 'not_in', [WidgetStatus::Archived]],
+    'notIn, int-backed' => ['notIn', 'not_in', [WidgetPriority::Low]],
+    'array, keys named by cases' => ['array', 'array', [WidgetStatus::Draft, WidgetStatus::Published]],
+]);
+
+it('names the enum a choice list is drawn from only where every entry is one of its cases', function (array $entries, ?string $enum): void {
+    // A list of one enum's cases is a choice from that enum: its case names and prose describe it. A plain
+    // value or another enum's case beside them makes it a list of values.
+    $rules = (new ConstValueToRules)->fold(ConstValue::array([
+        ConstValue::descriptor('Illuminate\\Validation\\Rule::in', [ConstValue::array($entries)]),
+    ]));
+
+    expect($rules[0]->note)->toBe($enum);
+})->with([
+    'one enum' => [[ConstValue::enumCase(WidgetStatus::class, 'Draft'), ConstValue::enumCase(WidgetStatus::class, 'Published')], WidgetStatus::class],
+    'a case and a value' => [[ConstValue::enumCase(WidgetStatus::class, 'Draft'), ConstValue::scalar('scheduled')], null],
+    'two enums' => [[ConstValue::enumCase(WidgetStatus::class, 'Draft'), ConstValue::enumCase(FormChannel::class, 'Email')], null],
+    'values only' => [[ConstValue::scalar('draft')], null],
+]);
+
+it('widens a choice list naming a case this build cannot reflect, rather than publishing a short list', function (): void {
+    $folder = new ConstValueToRules;
+    $rules = $folder->fold(ConstValue::array([
+        ConstValue::scalar('string'),
+        ConstValue::descriptor('Illuminate\\Validation\\Rule::in', [ConstValue::array([
+            ConstValue::enumCase(WidgetStatus::class, 'Draft'),
+            ConstValue::enumCase(WidgetStatus::class, 'Retired'),
+        ])]),
+    ]));
+
+    expect(array_map(static fn ($r): string => $r->name, $rules))->toBe(['string'])
+        ->and($folder->widened())->toBeTrue();
+});
+
+it('selects with only() and except() exactly the cases Laravel compares equal', function (string $method, array $selectors, array $values): void {
+    // Laravel keeps or drops a case by comparing it strictly with the ones listed, so only a case of the
+    // rule's own enum selects anything: a string, or another enum's case of the same name, never does.
+    $rule = Rule::enum(WidgetStatus::class)->{$method}(array_map(static fn (ConstValue $s): mixed => $s->isCase() ? constant($s->class.'::'.$s->caseName()) : $s->scalar, $selectors));
+    $accepted = array_values(array_filter(
+        array_map(static fn (WidgetStatus $case): string => $case->value, WidgetStatus::cases()),
+        static fn (string $value): bool => Validator::make(['v' => $value], ['v' => [$rule]])->passes(),
+    ));
+
+    $rules = (new ConstValueToRules)->fold(ConstValue::array([
+        ConstValue::descriptor('Illuminate\\Validation\\Rule::enum', [ConstValue::scalar(WidgetStatus::class)])
+            ->withChainedCall($method, [ConstValue::array($selectors)]),
+    ]));
+
+    expect($accepted)->toBe($values)
+        ->and(array_map(static fn ($r): array => $r->parameters, $rules))->toBe($values === [] ? [] : [$values]);
+})->with([
+    'only, a case' => ['only', [ConstValue::enumCase(WidgetStatus::class, 'Draft')], ['draft']],
+    'except, a case' => ['except', [ConstValue::enumCase(WidgetStatus::class, 'Draft')], ['published', 'archived']],
+    'except, the case name as a string' => ['except', [ConstValue::scalar('Draft')], ['draft', 'published', 'archived']],
+    'except, another enum\'s case' => ['except', [ConstValue::enumCase(FormChannel::class, 'Email')], ['draft', 'published', 'archived']],
+    'only, the case name as a string' => ['only', [ConstValue::scalar('Draft')], []],
 ]);

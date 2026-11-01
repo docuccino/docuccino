@@ -615,6 +615,13 @@ importantly, NOT followed where the key only chose between sizes.
   `Rule::notIn()` with one array and with separate arguments, and `new NotIn(…)`, which must read alike;
   `Rule::notIn(ListingStatus::cases())` and `Rule::notIn(collect(…))`, whose values are known only at
   runtime; and `Rule::array([…])` beside `new ArrayRule([…])`.
+- `app/Http/Requests/EnumCaseValuesRequest.php` — choice rules naming enum cases where a value goes:
+  `Rule::in()`, `new In()`, `Rule::notIn()` and `new NotIn()` over the string-backed `ListingStatus`,
+  the int-backed `ListingPriority` (with a constant aliasing a case and a plain constant) and the pure
+  `ListingVisibility`, beside a plain value and an enum rule's `->only()`/`->except()`.
+- `app/Http/Controllers/ListingDefaultFilterController.php` — Query Builder filters defaulting to an
+  enum case, at the call site and through a helper's parameter default, and `operator` filters naming a
+  `FilterOperator` case.
 
 ### API version changes
 

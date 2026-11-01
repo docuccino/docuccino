@@ -281,6 +281,10 @@ contract.
 - `ConstValue` is a closed set that MUST include a **call-descriptor variant**
   `{factory, args: ConstValue[]}` — factory statics (`AllowedFilter::exact('status')`)
   must be folded at the AST level BEFORE PHPStan collapses them to a plain object type.
+- An enum case folds to a `case` variant carrying its enum and its name, read off PHPStan's type (so a
+  constant aliasing a case is that case). Never to the name or the backing value: which value a case
+  stands for is the reader's framework's to say — Laravel's `enum_value()` makes a backed case its
+  backing value and a pure one its name — so that casting lives in the adapter.
 - Terminal detection has two separable outputs: "reaches a paginating terminal" =
   name-match on a builder-typed receiver (works at any depth); the per-page value folds
   from the OUTERMOST terminal call's argument (lives at the call site).
