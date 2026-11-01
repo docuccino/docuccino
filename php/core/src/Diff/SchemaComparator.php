@@ -104,7 +104,7 @@ final class SchemaComparator
      */
     private array $open = [];
 
-    /** @var array<string, true>|null the keywords {@see composition()} reads as a composition, by name */
+    /** @var array<string, true>|null the keywords {@see anatomy()} reads as a composition, by name */
     private static ?array $compositions = null;
 
     /** What the walk's changes are about: the caller's to name, as `$path` and `$id` are. */
@@ -337,19 +337,20 @@ final class SchemaComparator
     private static function loneBranch(mixed $schema, mixed $other, bool $documents = false): array|false|null
     {
         $map = Hydrate::mapOrNull($schema);
-        $composition = $map === null ? null : self::composition($map);
+        $anatomy = $map === null ? null : self::anatomy($map);
 
-        if ($map === null || $composition === null) {
+        if ($map === null || $anatomy === null || count($anatomy['branches']) !== 1) {
             return null;
         }
 
-        [$keyword, $branch, $asserts] = $composition;
+        $keyword = $anatomy['keyword'];
+        $branch = $anatomy['branches'][0];
 
         if (array_key_exists($keyword, Hydrate::mapOrNull($other) ?? [])) {
             return null;
         }
 
-        if ($asserts) {
+        if ($anatomy['asserts']) {
             $pointer = self::barePointer($branch);
 
             if ($pointer === null || (! $documents && self::componentOf($other) === null)) {
@@ -387,37 +388,47 @@ final class SchemaComparator
             return false;
         }
 
-        if (isset($map['$ref']) && count($map) > 1) {
-            return true;
-        }
-
-        self::$compositions ??= array_fill_keys(array_filter(
-            SchemaPolarity::decided(),
-            static fn (string $keyword): bool => SchemaKeywords::positionOf($keyword) === SchemaKeywords::POSITION_SCHEMA_LIST && ! SchemaPolarity::rule($keyword)['pairsByIndex'],
-        ), true);
-
-        return array_intersect_key($map, self::$compositions) !== [];
+        return (isset($map['$ref']) && count($map) > 1) || array_intersect_key($map, self::compositions()) !== [];
     }
 
     /**
-     * The one composition keyword `$map` spells with a single branch, that branch, and whether anything
-     * beside it asserts; or null where there is no such keyword, two of them, or a `$ref` beside it.
+     * The list keywords whose members are not tuple slots, so each applies to the instance itself.
+     *
+     * @return array<string, true>
+     */
+    private static function compositions(): array
+    {
+        return self::$compositions ??= array_fill_keys(array_filter(
+            SchemaPolarity::decided(),
+            static fn (string $keyword): bool => SchemaKeywords::positionOf($keyword) === SchemaKeywords::POSITION_SCHEMA_LIST && ! SchemaPolarity::rule($keyword)['pairsByIndex'],
+        ), true);
+    }
+
+    /**
+     * The one composition keyword `$map` spells, its branches, whether anything beside it but the asides
+     * and a boolean `nullable` asserts, and that `nullable`; or null where it spells none, two, or a `$ref`.
      *
      * @param  array<string, mixed>  $map
-     * @return array{string, mixed, bool}|null
+     * @return array{keyword: string, branches: list<mixed>, asserts: bool, nullable: ?bool}|null
      */
-    private static function composition(array $map): ?array
+    private static function anatomy(array $map): ?array
     {
         $keyword = null;
         $asserts = false;
+        $nullable = null;
 
-        foreach (array_keys($map) as $member) {
-            if ($member === 'x-docuccino' || SchemaKeywords::isAnnotationOnly($member) || ($member === 'nullable' && is_bool($map[$member]))) {
+        foreach ($map as $member => $value) {
+            if (ComponentRefs::isAside($member)) {
                 continue;
             }
 
-            // A list whose members are not tuple slots applies each one to the instance itself.
-            if (SchemaKeywords::positionOf($member) === SchemaKeywords::POSITION_SCHEMA_LIST && ! SchemaPolarity::rule($member)['pairsByIndex']) {
+            if ($member === 'nullable' && is_bool($value)) {
+                $nullable = $value;
+
+                continue;
+            }
+
+            if (isset(self::compositions()[$member])) {
                 if ($keyword !== null) {
                     return null;
                 }
@@ -434,9 +445,7 @@ final class SchemaComparator
             $asserts = true;
         }
 
-        $branches = $keyword === null ? [] : self::branches($map[$keyword]);
-
-        return $keyword === null || count($branches) !== 1 ? null : [$keyword, $branches[0], $asserts];
+        return $keyword === null ? null : ['keyword' => $keyword, 'branches' => self::branches($map[$keyword]), 'asserts' => $asserts, 'nullable' => $nullable];
     }
 
     /**
@@ -460,9 +469,10 @@ final class SchemaComparator
     {
         $ref = self::refKey($schema);
         $map = Hydrate::mapOrNull($schema);
-        $composition = $ref !== null || $map === null ? null : self::composition($map);
+        $anatomy = $ref !== null || $map === null ? null : self::anatomy($map);
+        $branch = $anatomy !== null && count($anatomy['branches']) === 1 ? $anatomy['branches'][0] : null;
 
-        return $ref ?? Hydrate::stringOrNull(self::barePointer($composition[1] ?? null)['$ref'] ?? null);
+        return $ref ?? Hydrate::stringOrNull(self::barePointer($branch)['$ref'] ?? null);
     }
 
     /** `$schema` read through every one-branch composition with only annotations beside it. */
@@ -551,30 +561,19 @@ final class SchemaComparator
     private static function besideUnion(mixed $union, mixed $plain): ?array
     {
         $map = Hydrate::mapOrNull($union);
+        $anatomy = $map === null ? null : self::anatomy($map);
 
-        if ($map === null) {
+        if ($map === null || $anatomy === null || $anatomy['asserts'] || $anatomy['nullable'] !== null) {
             return null;
         }
 
-        $keyword = null;
+        $keyword = $anatomy['keyword'];
 
-        foreach (array_keys($map) as $member) {
-            if ($member === 'x-docuccino' || SchemaKeywords::isAnnotationOnly($member)) {
-                continue;
-            }
-
-            if ($keyword !== null || SchemaPolarity::rule($member)['member'] !== SchemaMember::Union) {
-                return null;
-            }
-
-            $keyword = $member;
-        }
-
-        if ($keyword === null || array_key_exists($keyword, Hydrate::mapOrNull($plain) ?? [])) {
+        if (SchemaPolarity::rule($keyword)['member'] !== SchemaMember::Union || array_key_exists($keyword, Hydrate::mapOrNull($plain) ?? [])) {
             return null;
         }
 
-        $branches = self::branches($map[$keyword]);
+        $branches = $anatomy['branches'];
         $isPlain = self::sameBranchAs($plain);
 
         foreach ($branches as $j => $branch) {
@@ -637,13 +636,7 @@ final class SchemaComparator
             return $schema;
         }
 
-        foreach (array_keys($map) as $member) {
-            if ($member === 'x-docuccino' || SchemaKeywords::isAnnotationOnly($member)) {
-                unset($map[$member]);
-            }
-        }
-
-        return $map;
+        return array_filter($map, static fn (string $member): bool => ! ComponentRefs::isAside($member), ARRAY_FILTER_USE_KEY);
     }
 
     /** Whether a branch admits null and nothing else, as `{type: null}` does. */
