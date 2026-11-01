@@ -3130,16 +3130,16 @@
         },
         {
             "name": "phpstan/phpdoc-parser",
-            "version": "2.3.3",
+            "version": "2.4.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/phpstan/phpdoc-parser.git",
-                "reference": "fb19eedd2bb67ff8cf7a5502ad329e701d6398a3"
+                "reference": "af8e840551031d254cfdb3a18a62c3470a309c10"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpdoc-parser/zipball/fb19eedd2bb67ff8cf7a5502ad329e701d6398a3",
-                "reference": "fb19eedd2bb67ff8cf7a5502ad329e701d6398a3",
+                "url": "https://api.github.com/repos/phpstan/phpdoc-parser/zipball/af8e840551031d254cfdb3a18a62c3470a309c10",
+                "reference": "af8e840551031d254cfdb3a18a62c3470a309c10",
                 "shasum": ""
             },
             "require": {
@@ -3171,9 +3171,9 @@
             "description": "PHPDoc parser with support for nullable, intersection and generic types",
             "support": {
                 "issues": "https://github.com/phpstan/phpdoc-parser/issues",
-                "source": "https://github.com/phpstan/phpdoc-parser/tree/2.3.3"
+                "source": "https://github.com/phpstan/phpdoc-parser/tree/2.4.1"
             },
-            "time": "2026-07-08T07:01:06+00:00"
+            "time": "2026-10-30T19:36:28+00:00"
         },
         {
             "name": "phpstan/phpstan",
@@ -6421,16 +6421,16 @@
         },
         {
             "name": "symfony/yaml",
-            "version": "v7.4.21",
+            "version": "v7.4.22",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/yaml.git",
-                "reference": "044907929c7999814378be22da34722c7a86bad4"
+                "reference": "1ed6afa13d48c579c51cbf32e38f50686313497b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/yaml/zipball/044907929c7999814378be22da34722c7a86bad4",
-                "reference": "044907929c7999814378be22da34722c7a86bad4",
+                "url": "https://api.github.com/repos/symfony/yaml/zipball/1ed6afa13d48c579c51cbf32e38f50686313497b",
+                "reference": "1ed6afa13d48c579c51cbf32e38f50686313497b",
                 "shasum": ""
             },
             "require": {
@@ -6473,7 +6473,7 @@
             "description": "Loads and dumps YAML files",
             "homepage": "https://symfony.com",
             "support": {
-                "source": "https://github.com/symfony/yaml/tree/v7.4.21"
+                "source": "https://github.com/symfony/yaml/tree/v7.4.22"
             },
             "funding": [
                 {
@@ -6493,7 +6493,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-10-12T12:34:30+00:00"
+            "time": "2026-10-18T14:39:27+00:00"
         },
         {
             "name": "tijsverkoyen/css-to-inline-styles",

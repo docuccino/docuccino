@@ -324,6 +324,10 @@ document built against the wrong environment from ever being released.
 so opting out of `auth:web` with `Authenticate::using('web')` really does remove it and the route is
 documented without its `401`.
 
+It follows the Laravel release you run, too. From Laravel 13.39, `withoutMiddleware('auth')` removes
+`auth:web` as well, so the route is documented without its `401`; before 13.39 Laravel keeps `auth:web`
+running, and so does the document.
+
 Your own aliases and your own middleware groups are read too: they are registered on the router when
 the HTTP kernel is constructed, and a build resolves that kernel so it reads the same map a request
 does. Where an exclusion still resolves to nothing and removed nothing — a typo, usually — the build
