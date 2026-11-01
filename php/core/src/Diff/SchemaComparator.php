@@ -9,6 +9,7 @@ use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Extensions\Schema\ComponentNames;
 use Docuccino\Core\Support\Arr;
 use Docuccino\Core\Support\Hydrate;
+use stdClass;
 
 /**
  * Field-level schema comparison with breaking-change classification. What a schema position describes is
@@ -103,6 +104,9 @@ final class SchemaComparator
      */
     private array $open = [];
 
+    /** @var array<string, true>|null the keywords {@see composition()} reads as a composition, by name */
+    private static ?array $compositions = null;
+
     /** What the walk's changes are about: the caller's to name, as `$path` and `$id` are. */
     private ?ChangeSubject $subject = null;
 
@@ -174,21 +178,22 @@ final class SchemaComparator
      */
     private function compareSubschema(mixed $old, mixed $new, string $path, string $id, bool $request): array
     {
+        $readings = self::spellsComposition($old) || self::spellsComposition($new);
         $documents = $this->oldRefs !== null && $this->newRefs !== null;
-        $oldBranch = self::loneBranch($old, $new, $documents);
-        $newBranch = self::loneBranch($new, $old, $documents);
+        $oldBranch = $readings ? self::loneBranch($old, $new, $documents) : null;
+        $newBranch = $readings ? self::loneBranch($new, $old, $documents) : null;
 
         if ($oldBranch !== null || $newBranch !== null) {
             return $this->compareSubschema($oldBranch ?? $old, $newBranch ?? $new, $path, $id, $request);
         }
 
-        $beside = $this->compareUnionBeside($old, $new, $path, $id, $request);
+        $beside = $readings ? $this->compareUnionBeside($old, $new, $path, $id, $request) : null;
 
         if ($beside !== null) {
             return $beside;
         }
 
-        $parts = $this->compareIntersection($old, $new, $path, $id, $request);
+        $parts = $readings ? $this->compareIntersection($old, $new, $path, $id, $request) : null;
 
         if ($parts !== null) {
             return $parts;
@@ -367,6 +372,31 @@ final class SchemaComparator
         unset($map[$keyword]);
 
         return $map + self::asSchema($branch);
+    }
+
+    /**
+     * Whether `$schema` spells what {@see loneBranch()}, {@see compareUnionBeside()} and
+     * {@see compareIntersection()} read: a list keyword applying each member to the instance itself, or a
+     * `$ref` with anything beside it. Where neither side does, each of them declines, so none is asked.
+     */
+    private static function spellsComposition(mixed $schema): bool
+    {
+        $map = $schema instanceof stdClass ? get_object_vars($schema) : $schema;
+
+        if (! is_array($map)) {
+            return false;
+        }
+
+        if (isset($map['$ref']) && count($map) > 1) {
+            return true;
+        }
+
+        self::$compositions ??= array_fill_keys(array_filter(
+            SchemaPolarity::decided(),
+            static fn (string $keyword): bool => SchemaKeywords::positionOf($keyword) === SchemaKeywords::POSITION_SCHEMA_LIST && ! SchemaPolarity::rule($keyword)['pairsByIndex'],
+        ), true);
+
+        return array_intersect_key($map, self::$compositions) !== [];
     }
 
     /**
