@@ -391,6 +391,14 @@ final class SchemaComparator
         unset($oldBare['null'], $newBare['null']);
 
         if ($oldBare === $newBare && $oldBare !== []) {
+            // Unwritten on both sides, the keyword is no reading of its own and the type union is the
+            // whole statement, so it is handed over from here.
+            if (($old['nullable'] ?? null) === null && ($new['nullable'] ?? null) === null) {
+                foreach ($this->compareNullability($old, $new, $path, $id, $request) as $change) {
+                    $changes[] = $change;
+                }
+            }
+
             return;
         }
 
@@ -533,7 +541,10 @@ final class SchemaComparator
 
             $found = match ($kind) {
                 ReadingKind::Discriminator => $this->compareDiscriminator($old, $new, $path, $id, $request),
-                ReadingKind::Nullability => $this->compareNullability($old, $new, $path, $id, $request),
+                // Unwritten on both sides, `null` is the type union's to state, and {@see compareType()} hands it over.
+                ReadingKind::Nullability => ($old['nullable'] ?? null) === null && ($new['nullable'] ?? null) === null
+                    ? []
+                    : $this->compareNullability($old, $new, $path, $id, $request),
                 // `$anchor`: a `$ref` may name it and this class resolves none, so a name CHANGED or gone
                 // may leave a pointer naming nothing — the reading a `$defs` member leaving already gets
                 // — while one arriving is safe, nothing having been able to point at it before.
@@ -635,18 +646,24 @@ final class SchemaComparator
             return [];
         }
 
+        return [$this->nullabilityChange($move, $request, $path, $id, $old['nullable'] ?? null, $new['nullable'] ?? null)];
+    }
+
+    /**
+     * A null admitted or withdrawn, in whichever spelling: one code and one pointer, so the same edit is
+     * the same finding however it was written. Where no side wrote the keyword, its fields say what it
+     * would have said.
+     */
+    private function nullabilityChange(RefinementMove $move, bool $request, string $path, string $id, mixed $before = null, mixed $after = null): Change
+    {
         [$breaking, $suffix] = self::verdict($move, $request);
 
-        return [$this->change(
-            ChangeKind::Changed,
-            $id,
-            $path.'.nullable',
-            $breaking,
-            'schema.nullable-'.$suffix,
-            'nullable',
-            $old['nullable'] ?? null,
-            $new['nullable'] ?? null,
-        )];
+        if ($before === null && $after === null) {
+            $before = $move === RefinementMove::Narrowed;
+            $after = $move === RefinementMove::Widened;
+        }
+
+        return $this->change(ChangeKind::Changed, $id, $path.'.nullable', $breaking, 'schema.nullable-'.$suffix, 'nullable', $before, $after);
     }
 
     /**
