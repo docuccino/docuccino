@@ -180,6 +180,12 @@ final class SchemaComparator
             return $this->compareSubschema($oldBranch ?? $old, $newBranch ?? $new, $path, $id, $request);
         }
 
+        $beside = $this->compareUnionBeside($old, $new, $path, $id, $request);
+
+        if ($beside !== null) {
+            return $beside;
+        }
+
         $resolved = $this->resolvePointers($old, $new, $path, $id);
 
         if ($resolved !== null) {
@@ -266,6 +272,9 @@ final class SchemaComparator
      * wrapper's annotations written over the branch's. An asserting sibling makes it an intersection, and
      * it compares as written. Where both sides spell the keyword, their branches pair as written.
      *
+     * A `nullable` beside it is not an intersection: it is how OpenAPI 3.0 writes a nullable `$ref`, and
+     * reads as that branch admitting null, so it is carried onto the branch.
+     *
      * Changes found under an unwrapped branch are reported at the position, as a resolved pointer's are.
      *
      * @return array<string, mixed>|false|null
@@ -281,7 +290,7 @@ final class SchemaComparator
         $keyword = null;
 
         foreach (array_keys($map) as $member) {
-            if ($member === 'x-docuccino' || SchemaKeywords::isAnnotationOnly($member)) {
+            if ($member === 'x-docuccino' || SchemaKeywords::isAnnotationOnly($member) || ($member === 'nullable' && is_bool($map[$member]))) {
                 continue;
             }
 
@@ -301,13 +310,239 @@ final class SchemaComparator
             return null;
         }
 
+        // `false` admitting null is no schema a keyword map spells.
         if ($branches[0] === false) {
-            return false;
+            return ($map['nullable'] ?? null) === true ? null : false;
+        }
+
+        // Absent is not nullable, so `false` says nothing the branch does not.
+        if (($map['nullable'] ?? null) === false) {
+            unset($map['nullable']);
         }
 
         unset($map[$keyword]);
 
         return $map + self::asSchema($branches[0]);
+    }
+
+    /**
+     * A union on one side whose branches include the schema the other side IS — `X` becoming
+     * `anyOf: [X, {type: null}]`, which is how 2020-12 makes a `$ref` nullable — or null to compare as
+     * written. Such a union admits everything X does, so it arriving is the branches beside X arriving,
+     * each the widening a branch added to a union is, and never the union keyword landing on an
+     * unconstrained schema; it going is those branches going. X is compared with its branch, and a
+     * `{type: null}` beside an X that provably admits no null is the null admitted or withdrawn, reported
+     * as `nullable` is ({@see nullabilityChange()}).
+     *
+     * `oneOf` is exactly one, so a branch overlapping X narrows it, refusing what both match: it reads this
+     * way only where every other branch's types are disjoint from X's, and otherwise compares as written.
+     *
+     * @return list<Change>|null
+     */
+    private function compareUnionBeside(mixed $old, mixed $new, string $path, string $id, bool $request): ?array
+    {
+        foreach ([true, false] as $arriving) {
+            [$plain, $union, $plainRefs, $unionRefs] = $arriving
+                ? [$old, $new, $this->oldRefs, $this->newRefs]
+                : [$new, $old, $this->newRefs, $this->oldRefs];
+
+            $beside = self::besideUnion($union, $plain);
+
+            if ($beside === null) {
+                continue;
+            }
+
+            [$keyword, $branch, $others] = $beside;
+            $types = self::instanceTypes($plain, $plainRefs);
+
+            if ($keyword === 'oneOf') {
+                foreach ($others as $other) {
+                    if (! self::disjoint($types, self::instanceTypes($other, $unionRefs))) {
+                        continue 2;
+                    }
+                }
+            }
+
+            $changes = $arriving
+                ? $this->compareSubschema($plain, $branch, $path, $id, $request)
+                : $this->compareSubschema($branch, $plain, $path, $id, $request);
+
+            $rule = SchemaPolarity::rule($keyword);
+            $admitsNull = $types === null || isset($types['null']);
+            $nullBeside = false;
+
+            foreach ($others as $j => $other) {
+                if (! $admitsNull && self::isNullOnly($other)) {
+                    $nullBeside = true;
+
+                    continue;
+                }
+
+                $changes[] = $this->presence($keyword, $rule, $arriving, SchemaPolarity::memberPresence($rule['member'], $arriving, $request), $request, $path.'.'.$keyword.'.'.$j, $id);
+            }
+
+            if ($nullBeside) {
+                $changes[] = $this->nullabilityChange($arriving ? RefinementMove::Widened : RefinementMove::Narrowed, $request, $path, $id);
+            }
+
+            return $changes;
+        }
+
+        return null;
+    }
+
+    /**
+     * The union keyword `$union` spells with nothing beside it but annotations, the union read as the
+     * branch that is `$plain` (its annotations laid over that branch's, as {@see loneBranch()} does), and
+     * the other branches by index; or null where `$plain` spells the same keyword or no branch is it.
+     *
+     * @return array{string, mixed, array<int, mixed>}|null
+     */
+    private static function besideUnion(mixed $union, mixed $plain): ?array
+    {
+        $map = Hydrate::mapOrNull($union);
+
+        if ($map === null) {
+            return null;
+        }
+
+        $keyword = null;
+
+        foreach (array_keys($map) as $member) {
+            if ($member === 'x-docuccino' || SchemaKeywords::isAnnotationOnly($member)) {
+                continue;
+            }
+
+            if ($keyword !== null || SchemaPolarity::rule($member)['member'] !== SchemaMember::Union) {
+                return null;
+            }
+
+            $keyword = $member;
+        }
+
+        if ($keyword === null || array_key_exists($keyword, Hydrate::mapOrNull($plain) ?? [])) {
+            return null;
+        }
+
+        $branches = self::branches($map[$keyword]);
+
+        foreach ($branches as $j => $branch) {
+            if (! self::isSameBranch($plain, $branch)) {
+                continue;
+            }
+
+            unset($map[$keyword], $branches[$j]);
+
+            return [$keyword, $branch === false ? false : $map + self::asSchema($branch), $branches];
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether a union branch is `$schema`: the component it names, its identity, or what it asserts once
+     * annotations are set aside — never the inexact pairing {@see pairBranches()} falls back on.
+     */
+    private static function isSameBranch(mixed $schema, mixed $branch): bool
+    {
+        $ref = self::refKey($schema);
+
+        if ($ref !== null) {
+            return $ref === self::refKey($branch);
+        }
+
+        $identity = self::identityKey($schema);
+
+        if ($identity !== null && $identity === self::identityKey($branch)) {
+            return true;
+        }
+
+        return ValueKey::of(self::assertions($schema)) === ValueKey::of(self::assertions($branch));
+    }
+
+    /** A subschema with its annotations and identity set aside: what it says about a value. */
+    private static function assertions(mixed $schema): mixed
+    {
+        $map = Hydrate::mapOrNull($schema);
+
+        if ($map === null) {
+            return $schema;
+        }
+
+        foreach (array_keys($map) as $member) {
+            if ($member === 'x-docuccino' || SchemaKeywords::isAnnotationOnly($member)) {
+                unset($map[$member]);
+            }
+        }
+
+        return $map;
+    }
+
+    /** Whether a branch admits null and nothing else, as `{type: null}` does. */
+    private static function isNullOnly(mixed $branch): bool
+    {
+        $map = Hydrate::mapOrNull(self::assertions($branch));
+
+        return $map !== null && array_keys($map) === ['type'] && self::typeSet($map) === ['null' => true];
+    }
+
+    /**
+     * The instance types `$schema` may take, or null where nothing bounds them. A `type` bounds the value
+     * whatever sits beside it, which is all a test of two schemas being disjoint needs. A pointer is read
+     * through, each name once.
+     *
+     * @param  array<string, true>  $seen
+     * @return array<string, true>|null
+     */
+    private static function instanceTypes(mixed $schema, ?ComponentRefs $refs, array $seen = []): ?array
+    {
+        while (($branch = self::loneBranch($schema, null)) !== null) {
+            $schema = $branch;
+        }
+
+        if ($schema === false) {
+            return [];
+        }
+
+        $map = Hydrate::mapOrNull($schema);
+
+        if ($map === null) {
+            return null;
+        }
+
+        $types = self::typeSet($map);
+
+        if ($types !== []) {
+            return ($map['nullable'] ?? null) === true ? $types + ['null' => true] : $types;
+        }
+
+        $ref = Hydrate::stringOrNull($map['$ref'] ?? null);
+
+        if ($ref === null || $refs === null || isset($seen[$ref])) {
+            return null;
+        }
+
+        $body = $refs->resolveSchema($map);
+
+        return $body === null ? null : self::instanceTypes($body, $refs, $seen + [$ref => true]);
+    }
+
+    /**
+     * Whether no value is of both type sets, where both are known. An integer is a number.
+     *
+     * @param  array<string, true>|null  $a
+     * @param  array<string, true>|null  $b
+     */
+    private static function disjoint(?array $a, ?array $b): bool
+    {
+        if ($a === null || $b === null) {
+            return false;
+        }
+
+        $a += isset($a['integer']) ? ['number' => true] : [];
+        $b += isset($b['integer']) ? ['number' => true] : [];
+
+        return array_intersect_key($a, $b) === [];
     }
 
     /**

@@ -463,7 +463,11 @@ default and a kind added with no verdict is a PHPStan failure rather than a cons
   of an existing `anyOf`/`oneOf` removed narrows the union, while one added widens it. The KEYWORD
   arriving is not that: the old side was not an empty union, it was unconstrained, so the union landing
   narrows, and it leaving widens. Both then take the verdict rule above, which is where a union branch
-  added comes to be safe on a request and breaking on a response.
+  added comes to be safe on a request and breaking on a response. A union one of whose branches IS the
+  other side's schema is the exception (`SchemaComparator::compareUnionBeside()`): `X` becoming
+  `anyOf: [X, Y]` admits everything `X` did, so it is `Y` arriving as a branch, and a `{type: null}` there
+  is the `Nullability` reading below. `oneOf` takes it only where `Y`'s types are disjoint from `X`'s,
+  since a value both match is refused.
 - `Store` — a `$defs` member. Arriving moves nothing (nothing can name a definition that did not also
   change); leaving may dangle a `$ref` the differ does not resolve, which is a direction it cannot
   compute rather than one it can.
@@ -545,7 +549,9 @@ stop a sixth member hiding in the same gap — and `Diff\ReadingKind` is the clo
   narrowing and fails the gate on it. The division is exclusive in both directions: the TYPE comparison
   leaves the `null` member of a union to this reading wherever both sides still state a type besides it,
   so one edit is one finding — without that, the migration published a `schema.type-widened` beside the
-  nothing this reports, which was harmless only while a widening was safe on both sides. Absent is not nullable, so the keyword arriving with `true` widens
+  nothing this reports, which was harmless only while a widening was safe on both sides. Unwritten on both
+  sides, the union's `null` is the whole statement and the TYPE comparison hands it over, so a `null`
+  joining `type` is the same finding as `nullable: true` arriving. Absent is not nullable, so the keyword arriving with `true` widens
   and a null withdrawn narrows. This is the `exclusiveMinimum` split answered the other way round: there
   the sibling keyword could not be folded, here it can and exactly.
 - `Identity` — `$anchor`. A `$ref` may name one and the differ resolves none, so a name CHANGED or gone
