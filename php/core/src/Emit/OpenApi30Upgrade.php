@@ -19,11 +19,12 @@ use Docuccino\Core\Support\JsonPointer;
  *
  * The 3.0.4 text is the reading: 3.0.x are editorial revisions of one spec. Where its reading and the
  * one 3.0 code generators act on disagree — a `nullable` with no `type` beside it — the wider of the two
- * is published, and said; a 3.0 artifact keeps the source's own spelling, which carries both.
+ * is published, and said; a 3.0 artifact keeps the source's own spelling, which carries both. A reader
+ * that holds values to a 3.0 document reads the same restatement ({@see restate()}).
  *
  * @internal
  */
-final readonly class OpenApi30Upgrade
+final class OpenApi30Upgrade
 {
     private const string DOCUMENT = 'document';
 
@@ -132,8 +133,11 @@ final readonly class OpenApi30Upgrade
     /** What 3.1 lets a Reference Object say beside its `$ref`, overriding the component's own wording. */
     private const array REFERENCE_PROSE = ['summary', 'description'];
 
+    /** @var array<string, bool> each schema {@see untypedNullable()} wrapped, by pointer: true where its branch is a lone `allOf` member */
+    private array $wrapped = [];
+
     /** @param  bool  $for30  whether the restatement is headed for a 3.0 artifact, which spells a no-type `nullable` itself */
-    private function __construct(private bool $for30) {}
+    private function __construct(private readonly bool $for30) {}
 
     /** Whether a document stating this `openapi` version is read as 3.0. */
     public static function reads30(string $openapi): bool
@@ -159,6 +163,28 @@ final readonly class OpenApi30Upgrade
         }
 
         return (new self($for30))->walkObject(self::DOCUMENT, $document, '#', $diagnostics);
+    }
+
+    /**
+     * $document restated as a newer export reads it, for a reader that holds values to its schemas, with
+     * the way back to where each part was written; null where it is not read as 3.0. Diagnostics are the
+     * build's to raise, not a reader's.
+     *
+     * @param  array<string, mixed>  $document
+     */
+    public static function restate(array $document): ?OpenApi30Restatement
+    {
+        $openapi = $document['openapi'] ?? null;
+
+        if (! is_string($openapi) || ! self::reads30($openapi)) {
+            return null;
+        }
+
+        $upgrade = new self(false);
+        $diagnostics = [];
+        $restated = $upgrade->walkObject(self::DOCUMENT, $document, '#', $diagnostics);
+
+        return new OpenApi30Restatement($restated, $upgrade->wrapped);
     }
 
     /**
@@ -444,9 +470,14 @@ final readonly class OpenApi30Upgrade
 
         $allOf = $branch['allOf'] ?? null;
 
-        if (count($branch) === 1 && is_array($allOf) && count($allOf) === 1 && is_array($only = array_values($allOf)[0])) {
+        $only = count($branch) === 1 && is_array($allOf) && count($allOf) === 1 ? array_values($allOf)[0] : null;
+        $hoisted = is_array($only);
+
+        if (is_array($only)) {
             $branch = $only;
         }
+
+        $this->wrapped[$pointer] = $hoisted;
 
         $diagnostics[] = new Diagnostic(
             severity: Severity::Info,

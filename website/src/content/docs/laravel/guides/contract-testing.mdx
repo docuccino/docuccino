@@ -603,6 +603,10 @@ ApiContract::using('docs/api.full.json');    // or name the artifact yourself
 `ApiContract::assertions()` hands you the same assertions as an object, for a test case you cannot add
 the trait to.
 
+An OpenAPI 3.0 artifact is held to what 3.0 means: `nullable: true` admits null, and anything written
+beside a `$ref` is ignored. So a response gets the same verdict from it as from your full, 3.1 or 3.2
+artifact, and every pointer in a failure names the 3.0 file as you committed it.
+
 Moving between documents mid-suite is what a per-version check is made of: pin an API version on the
 request, point the assertions at that version's document, and require the response to validate against
 it. See [API versioning](/laravel/guides/api-versioning/).

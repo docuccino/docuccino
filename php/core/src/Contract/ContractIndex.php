@@ -10,6 +10,8 @@ use Docuccino\Core\Document\NodeIdentity;
 use Docuccino\Core\Document\PathItem;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Document\UseSites;
+use Docuccino\Core\Emit\OpenApi30Restatement;
+use Docuccino\Core\Emit\OpenApi30Upgrade;
 use Docuccino\Core\Support\Arr;
 use Docuccino\Core\Support\JsonValue;
 use JsonException;
@@ -27,6 +29,11 @@ use stdClass;
  * It reads the raw decoded document rather than {@see UirDocument} because
  * everything downstream — JSON Schema validation, the provenance trail, the example audit — needs the
  * schema keyword space and the `x-docuccino` members verbatim, which the typed model folds away.
+ *
+ * A document read at OpenAPI 3.0 is checked in the meaning a newer export gives it ({@see OpenApi30Upgrade}),
+ * since its schemas are not JSON Schema 2020-12 and the validator reads nothing else: `nullable` admits
+ * null and a `$ref`'s siblings say nothing. Everything here reads that restatement; what a reader is told
+ * — a pointer, a provenance trail, an id — names the document as written ({@see written()}).
  */
 final class ContractIndex
 {
@@ -36,17 +43,22 @@ final class ContractIndex
     private ?array $identities = null;
 
     /**
-     * @param  array<string, mixed>  $document
+     * @param  array<string, mixed>  $document  the document as the checks read it
      * @param  list<ContractOperation>  $operations
      * @param  list<ContractWebhook>  $webhooks
      * @param  string  $json  the document's own JSON text, kept because associative decoding cannot
      *                        tell an empty object from an empty array and JSON Schema very much can
+     * @param  array<string, mixed>  $asWritten  the document as written
+     * @param  string|null  $readJson  the JSON text of what the checks read, where that is not `$json`
      */
     private function __construct(
         private readonly array $document,
         private readonly array $operations,
         private readonly array $webhooks,
         private readonly string $json,
+        private readonly array $asWritten,
+        private readonly ?OpenApi30Restatement $restatement = null,
+        private readonly ?string $readJson = null,
     ) {}
 
     /**
@@ -60,13 +72,41 @@ final class ContractIndex
         // lowered array would lose `{}` against `[]`, which is what the graph is kept for, and no graph
         // read touches a use's `x-docuccino`.
         $document = UseSites::lower($document);
+        $json ??= (string) json_encode($document);
+        $restatement = self::restated($document, $json);
 
-        return new self(
-            $document,
-            self::index($document),
-            self::indexWebhooks($document),
-            $json ?? (string) json_encode($document),
-        );
+        if ($restatement === null) {
+            return new self($document, self::index($document), self::indexWebhooks($document), $json, $document);
+        }
+
+        $readJson = (string) json_encode($restatement->document, JSON_PRESERVE_ZERO_FRACTION);
+        $read = json_decode($readJson, true);
+        $read = UseSites::lower(is_array($read) ? Arr::stringKeyed($read) : []);
+
+        return new self($read, self::index($read), self::indexWebhooks($read), $json, $document, $restatement, $readJson);
+    }
+
+    /**
+     * A 3.0 document restated, or null for any other. Restated off its JSON text where that decodes, so an
+     * empty object stays one ({@see JsonValue}), and off the array where the text is all that was lost.
+     *
+     * @param  array<string, mixed>  $document
+     */
+    private static function restated(array $document, string $json): ?OpenApi30Restatement
+    {
+        $openapi = $document['openapi'] ?? null;
+
+        if (! is_string($openapi) || ! OpenApi30Upgrade::reads30($openapi)) {
+            return null;
+        }
+
+        try {
+            $source = JsonValue::decode($json);
+        } catch (JsonException) {
+            $source = null;
+        }
+
+        return OpenApi30Upgrade::restate(is_array($source) ? Arr::stringKeyed($source) : $document);
     }
 
     /**
@@ -94,10 +134,40 @@ final class ContractIndex
         return isset($this->document['x-docuccino']);
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * The document as the checks read it: as written, or a 3.0 one restated in a newer version's meaning.
+     *
+     * @return array<string, mixed>
+     */
     public function document(): array
     {
         return $this->document;
+    }
+
+    /**
+     * Pointer segments into {@see document()}, as the segments naming that place in the document as
+     * written — which every pointer a reader is shown must be.
+     *
+     * @param  list<string>  $segments
+     * @return list<string>
+     *
+     * @internal
+     */
+    public function written(array $segments): array
+    {
+        return $this->restatement?->written($segments) ?? $segments;
+    }
+
+    /**
+     * Who wrote the node at those segments of {@see document()}, read off the document as written.
+     *
+     * @param  list<string>  $segments
+     *
+     * @internal
+     */
+    public function provenanceAt(array $segments): ProvenanceTrail
+    {
+        return ProvenanceTrail::at($this->asWritten, $this->written($segments));
     }
 
     /**
@@ -115,21 +185,24 @@ final class ContractIndex
             return $this->graph;
         }
 
-        $decoded = json_decode($this->json, false);
+        $decoded = json_decode($this->readJson ?? $this->json, false);
 
         return $this->graph = is_object($decoded) ? $decoded : new stdClass;
     }
 
     /**
-     * The document as the typed model, for the SEMANTIC DIFF. Read off {@see graph()} rather than off
+     * The document as the typed model, for the SEMANTIC DIFF. Read off the JSON text rather than off
      * the associative copy this class indexes, and for the same reason validation is: only the object
-     * form tells `{}` from `[]`, and at a compared keyword those are two different values.
+     * form tells `{}` from `[]`, and at a compared keyword those are two different values. As written,
+     * a 3.0 document included: the differ reads 3.0 itself.
      *
      * @internal
      */
     public function comparable(): UirDocument
     {
-        return UirDocument::fromArray(Arr::stringKeyed((array) JsonValue::normalize($this->graph())));
+        $graph = $this->readJson === null ? $this->graph() : json_decode($this->json, false);
+
+        return UirDocument::fromArray(Arr::stringKeyed((array) JsonValue::normalize(is_object($graph) ? $graph : new stdClass)));
     }
 
     /**
@@ -294,7 +367,7 @@ final class ContractIndex
      */
     public function identities(): array
     {
-        return $this->identities ??= self::collectIdentities($this->document, []);
+        return $this->identities ??= self::collectIdentities($this->asWritten, []);
     }
 
     /** The provenance recorded on the node with this id, empty when there is none to read. */
@@ -302,7 +375,7 @@ final class ContractIndex
     {
         $segments = $this->identities()[$id] ?? null;
 
-        return $segments === null ? ProvenanceTrail::none() : ProvenanceTrail::at($this->document, $segments);
+        return $segments === null ? ProvenanceTrail::none() : ProvenanceTrail::at($this->asWritten, $segments);
     }
 
     /**
