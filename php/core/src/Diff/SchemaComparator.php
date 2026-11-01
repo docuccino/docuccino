@@ -174,8 +174,9 @@ final class SchemaComparator
      */
     private function compareSubschema(mixed $old, mixed $new, string $path, string $id, bool $request): array
     {
-        $oldBranch = self::loneBranch($old, $new);
-        $newBranch = self::loneBranch($new, $old);
+        $documents = $this->oldRefs !== null && $this->newRefs !== null;
+        $oldBranch = self::loneBranch($old, $new, $documents);
+        $newBranch = self::loneBranch($new, $old, $documents);
 
         if ($oldBranch !== null || $newBranch !== null) {
             return $this->compareSubschema($oldBranch ?? $old, $newBranch ?? $new, $path, $id, $request);
@@ -312,12 +313,12 @@ final class SchemaComparator
      * wrapper's annotations written over the branch's. Where both sides spell the keyword, their branches
      * pair as written.
      *
-     * An asserting sibling makes it an intersection. Where the branch is a bare pointer and `$other`
-     * names a component too, it is read as that pointer with the siblings beside it, which 2020-12
-     * applies in place exactly as it applies the wrapper, and which {@see compareIntersection()} compares
-     * part by part. Against a side naming no component the wrapper compares as written: a comparison
-     * with no documents could not read the merged pointer, and there its branch arriving or going is the
-     * one thing that says a component did. An inline branch never merges: `additionalProperties` and
+     * An asserting sibling makes it an intersection. Where the branch is a bare pointer, it is read as
+     * that pointer with the siblings beside it, which 2020-12 applies in place exactly as it applies the
+     * wrapper, and which {@see compareIntersection()} compares part by part. With no `$documents` that
+     * holds only against a side naming a component too: the merged pointer cannot be read through, and
+     * against an inline side the branch arriving or going is the one thing that says a component did.
+     * An inline branch never merges: `additionalProperties` and
      * `unevaluated*` see the siblings beside them, so moving a branch's keywords up beside them changes
      * what they admit.
      *
@@ -328,7 +329,7 @@ final class SchemaComparator
      *
      * @return array<string, mixed>|false|null
      */
-    private static function loneBranch(mixed $schema, mixed $other): array|false|null
+    private static function loneBranch(mixed $schema, mixed $other, bool $documents = false): array|false|null
     {
         $map = Hydrate::mapOrNull($schema);
         $composition = $map === null ? null : self::composition($map);
@@ -346,7 +347,7 @@ final class SchemaComparator
         if ($asserts) {
             $pointer = self::barePointer($branch);
 
-            if ($pointer === null || self::componentOf($other) === null) {
+            if ($pointer === null || (! $documents && self::componentOf($other) === null)) {
                 return null;
             }
 
