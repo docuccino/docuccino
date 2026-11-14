@@ -42,7 +42,7 @@ Then match the symptom:
 followed by Docuccino's own note naming the two levers to reach for:
 
 ```
-PHP Fatal error: Allowed memory size of 134217728 bytes exhausted
+PHP Fatal error: Allowed memory size of 1073741824 bytes exhausted
   (tried to allocate 20480 bytes) in .../phpstan.phar/resources/functionMap.php on line 59
 
 Docuccino ran out of memory building your documentation.
@@ -59,11 +59,11 @@ PHP can't catch memory exhaustion, so this is the one failure Docuccino explains
 of degrading around.
 
 **Cause.** Docuccino's inference runs a real static analyzer over your codebase, and analyzers are
-memory-hungry. PHP's default `memory_limit` of 128M is nowhere near enough for an app of any size.
-This has nothing to do with your app's runtime memory use — the analysis is a separate, much heavier
-workload.
+memory-hungry. PHP's default `memory_limit` of 128M is nowhere near enough for an app of any size, so a
+build you haven't given a ceiling raises itself to 1G — and a large codebase can outgrow that too. This
+has nothing to do with your app's runtime memory use — the analysis is a separate, much heavier workload.
 
-**Fix.** Give the command room. 2G is a sensible starting point:
+**Fix.** Give the command more room. 2G is a sensible next step:
 
 <Tabs>
 <TabItem label="One-off">

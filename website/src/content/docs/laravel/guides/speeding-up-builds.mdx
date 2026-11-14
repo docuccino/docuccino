@@ -71,10 +71,10 @@ engine:
 ```
 
 Set `engine.workers` only to pin the count, on a machine where the CPUs aren't all yours to use; `0` or
-`1` turns forking off. Each worker runs under the same `memory_limit` as the build, so in a container with a
-memory limit no more workers start than fit in it at that ceiling each — and none beside the build where
-`memory_limit` is `-1`. Windows always builds in one process, and so does a viewer request that builds the
-document.
+`1` turns forking off. Each worker runs under the same `memory_limit` as the build — raised to `1G` unless
+the process already has more or you set `engine.memory_limit` — so in a container with a memory limit no
+more workers start than fit in it at that ceiling each, and none beside the build where `memory_limit` is
+`-1`. Windows always builds in one process, and so does a viewer request that builds the document.
 
 ## What makes a fragment rebuild
 

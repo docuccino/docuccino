@@ -547,7 +547,7 @@
             "dist": {
                 "type": "path",
                 "url": "php/laravel",
-                "reference": "6d23fb67f4f7febe6d5d3120e530958aa9fdbbe2"
+                "reference": "3c4501f48b450d16cd4b285d4dd01b782341e67b"
             },
             "require": {
                 "docuccino/attributes": "self.version",
@@ -600,7 +600,10 @@
             "autoload": {
                 "psr-4": {
                     "Docuccino\\Laravel\\": "src/"
-                }
+                },
+                "files": [
+                    "src/shutdown.php"
+                ]
             },
             "autoload-dev": {
                 "psr-4": {

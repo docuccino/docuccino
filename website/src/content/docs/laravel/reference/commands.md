@@ -28,7 +28,8 @@ Shared behavior:
   `diff`, `cache`, `watch`, `explain`, `install` — since inference runs a static analyzer inside the
   artisan process.
   Raise-only: a process already running with a higher limit is left alone, and `-1` is rejected. Same
-  lever as [`engine.memory_limit`](/laravel/reference/configuration/#engine), and the flag wins.
+  lever as [`engine.memory_limit`](/laravel/reference/configuration/#engine), and the flag wins. With
+  neither, a build raises itself to `1G`.
   `clear` and `coverage` build nothing — one flushes the cache, the other reads an artifact your suite
   already asserted against — so neither takes it.
 - **Long-running.** Every command runs once and exits, except `docuccino:watch`, which stays in the
