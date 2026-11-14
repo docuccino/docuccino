@@ -59,6 +59,10 @@ beforeEach(function (): void {
         $router->get('api/wave-d/moderated', [FormController::class, 'index'])
             ->middleware(PermissionMiddleware::class.':moderate forms,web');
     });
+    // A token ability and a permission on one documented action: two requirements, each of which
+    // has its own line, beneath the description the action's docblock writes.
+    $router->get('api/wave-d/moderated-reports', [FormController::class, 'index'])
+        ->middleware(['auth:sanctum', 'abilities:read', 'permission:moderate forms,web']);
     // An ability the middleware names twice, beside the `#[Abilities]` attribute restating what the
     // middleware already says — the two ways an application belts and braces one token ability.
     $router->post('api/wave-d/publish-twice', [AuthAttributesController::class, 'publish'])
