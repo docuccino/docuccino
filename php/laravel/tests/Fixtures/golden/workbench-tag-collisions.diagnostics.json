@@ -8,12 +8,6 @@
     {
         "severity": "info",
         "code": "tags.name-collision",
-        "message": "Tag \"Ledger\" is the default tag of distinct controllers (Docuccino\\Laravel\\Tests\\Fixtures\\TagNames\\Api\\LedgerController, \\Docuccino\\Laravel\\Tests\\Fixtures\\TagNames\\Api\\LedgerController), so their operations are grouped together.",
-        "help": "Intended? Nothing to do. Otherwise separate them with #[Group], or rename one through the tags.map config option."
-    },
-    {
-        "severity": "info",
-        "code": "tags.name-collision",
         "message": "Tag \"Report\" is the default tag of distinct controllers (Docuccino\\Laravel\\Tests\\Fixtures\\TagNames\\Admin\\ReportController, Docuccino\\Laravel\\Tests\\Fixtures\\TagNames\\Api\\ReportController), so their operations are grouped together.",
         "help": "Intended? Nothing to do. Otherwise separate them with #[Group], or rename one through the tags.map config option."
     }

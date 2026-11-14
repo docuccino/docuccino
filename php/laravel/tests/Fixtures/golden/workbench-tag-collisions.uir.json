@@ -180,7 +180,7 @@
               "source": {
                 "file": "tests/Fixtures/TagNames/Api/LedgerController.php",
                 "line": 10,
-                "symbol": "\\Docuccino\\Laravel\\Tests\\Fixtures\\TagNames\\Api\\LedgerController::index"
+                "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\TagNames\\Api\\LedgerController::index"
               }
             },
             {
@@ -203,7 +203,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "21a88bee66de3655bfbf4ef0e65c3fe7a70584c26956901f08cc7d3e58e558bb",
-      "contentHash": "a6fecc4208f2eee695c84defaa15fa784324bdf7e31a14619dfd67bc748765c2"
+      "contentHash": "d7e14565aed5f6ef94ff1e8c8afce7dc1110818b0bc99b61598dbaa4ac8184aa"
     },
     "generator": {
       "name": "docuccino/laravel",
