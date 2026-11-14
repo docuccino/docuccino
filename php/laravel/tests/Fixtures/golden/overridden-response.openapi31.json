@@ -29,27 +29,6 @@
   },
   "components": {
     "schemas": {
-      "FormData": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer"
-          },
-          "publishedAt": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "title": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "title"
-        ]
-      },
       "WidgetData": {
         "type": "object",
         "properties": {
