@@ -39,7 +39,7 @@ final class RuleOrdering
         // settle on.
         'object' => 12, 'additional_properties' => 12, 'date_wire' => 12,
         'file' => 15, 'image' => 15,
-        'in' => 20, 'enum' => 20, 'not_in' => 20, 'exists' => 20, 'unique' => 20,
+        'in' => 20, 'enum' => 20, 'not_in' => 20, 'array_not_in' => 20, 'exists' => 20, 'unique' => 20,
         'regex' => 25, 'alpha' => 25, 'alpha_num' => 25, 'alpha_dash' => 25,
         'starts_with' => 25, 'ends_with' => 25, 'timezone' => 25,
         'digits' => 25, 'digits_between' => 25, 'max_digits' => 25, 'min_digits' => 25,

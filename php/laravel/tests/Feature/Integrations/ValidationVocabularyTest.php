@@ -16,6 +16,7 @@ use Docuccino\Core\Extensions\Validation\ValidationSchema;
 use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Laravel\Integrations\Support\RuleParsing;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
+use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Tests\Fixtures\EnumDescription\UnbuildableCaseStage;
 use Docuccino\Laravel\Tests\Fixtures\TypedChoices\Measure;
@@ -258,6 +259,15 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'not_in (numeric set)' => [[['not_in', ['1', '2']]], ['not' => ['enum' => [1, 2]]]],
     'not_in beside string' => [[['string'], ['not_in', ['draft']]], ['not' => ['enum' => ['draft']], 'type' => 'string']],
     'not_in beside integer' => [[['integer'], ['not_in', ['1', '2']]], ['not' => ['enum' => [1, 2]], 'type' => 'integer']],
+    // ArrayNotInRuleTransformer — `not_in` beside `array`, as the normalizer rewrites it: it refuses the
+    // containers whose every element is listed, each compared by its string, so the list holds every scalar
+    // spelling an entry.
+    'array_not_in beside array' => [[['array'], ['array_not_in', ['1', 'a']]], ['not' => ['type' => 'array', 'items' => ['enum' => ['1', 'a', 1, true]]], 'type' => 'array']],
+    'array_not_in beside object' => [[['object'], ['array_not_in', ['a']]], ['not' => ['type' => 'object', 'additionalProperties' => ['enum' => ['a']]], 'type' => 'object']],
+    'array_not_in beside array_or_object' => [[['array_or_object'], ['array_not_in', ['a']]], ['not' => ['type' => ['array', 'object'], 'items' => ['enum' => ['a']], 'additionalProperties' => ['enum' => ['a']]], 'type' => ['array', 'object']]],
+    // Degradation: no container to read the elements of, or no list, excludes nothing.
+    'array_not_in beside no container' => [[['string'], ['array_not_in', ['a']]], ['type' => 'string']],
+    'array_not_in with no list' => [[['array'], ['array_not_in']], ['type' => 'array']],
 
     // NumericRuleTransformer — decimal note, multipleOf, and the numeric-literal comparison bounds.
     'decimal (fixed)' => [[['decimal', ['2']]], ['description' => 'Must have 2 decimal places.', 'type' => 'number']],
@@ -708,6 +718,71 @@ it('publishes an exclusion-only rule no narrower than the server reads it', func
     'a number beside doesnt_start_with' => ['doesnt_start_with:a', 5, true, true],
     'a number beside doesnt_end_with' => ['doesnt_end_with:a', 5, true, true],
     'a number beside prohibited_unless' => ['prohibited_unless:other,taken', 5, true, true],
+]);
+
+/*
+ * Beside Laravel's `array` rule, `in` and `not_in` compare an array value's elements, each by its string, and
+ * refuse an element that is itself an array: `array|in:a,b` takes `["a"]` and `[]`, and `array|not_in:a,b`
+ * refuses exactly those. Without `array` — `list` included — they compare the value, which no array matches.
+ * Each row states the server's answer, read from Laravel itself, and the document's, read through the
+ * normalizer every recovery runs. They differ only where a row's comment says why.
+ */
+it('publishes in and not_in beside array as the elements Laravel compares', function (array $rules, mixed $value, bool $accepted, bool $published): void {
+    expect(Validator::make(['f' => $value], $rules)->passes())->toBe($accepted);
+
+    $set = [];
+    foreach ($rules as $field => $pipe) {
+        $set[$field] = RuleParsing::tokens($pipe);
+    }
+    $ordered = (new RuleOrdering)->order((new RuleSetNormalizer)->normalize(new RuleSet($set)));
+    $schema = (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, vocabularyContext())->schema;
+    $valid = (new Opis\JsonSchema\Validator)->validate(
+        json_decode((string) json_encode(['f' => $value]), flags: JSON_THROW_ON_ERROR),
+        json_decode((string) json_encode($schema), flags: JSON_THROW_ON_ERROR),
+    )->isValid();
+
+    expect($valid)->toBe($published);
+})->with([
+    'a listed element' => [['f' => 'array|in:a,b'], ['a'], true, true],
+    'every element listed' => [['f' => 'array|in:a,b'], ['a', 'b'], true, true],
+    'an element not listed' => [['f' => 'array|in:a,b'], ['c'], false, false],
+    'one element of two not listed' => [['f' => 'array|in:a,b'], ['a', 'c'], false, false],
+    'no elements' => [['f' => 'array|in:a,b'], [], true, true],
+    'an element that is an array' => [['f' => 'array|in:a,b'], [['a']], false, false],
+    'a listed value that is no array' => [['f' => 'array|in:a,b'], 'a', false, false],
+    'null beside nullable' => [['f' => 'nullable|array|in:a,b'], null, true, true],
+    // `array` takes an object too, whose values Laravel compares. `items` says nothing of them, so the
+    // document is the wider answer.
+    'an object whose value is listed' => [['f' => 'array|in:a,b'], ['k' => 'a'], true, true],
+    'an object whose value is not listed' => [['f' => 'array|in:a,b'], ['k' => 'c'], false, true],
+    // An item rule types the list, as it types `in` written on the items.
+    'a listed element beside string items' => [['f' => 'array|in:1,2', 'f.*' => 'string'], ['1'], true, true],
+    'a number beside string items' => [['f' => 'array|in:1,2', 'f.*' => 'string'], [1], false, false],
+    'a listed element beside distinct items' => [['f' => 'array|in:a,b', 'f.*' => 'string|distinct'], ['a', 'b'], true, true],
+    'a repeat beside distinct items' => [['f' => 'array|in:a,b', 'f.*' => 'string|distinct'], ['a', 'a'], false, false],
+    // With nothing typing the elements, an all-integer list reads as integers, as `in` on a field does, and
+    // the server's other spelling is left out of it, as a bare `integer` leaves out "3".
+    'a listed integer, untyped' => [['f' => 'array|in:1,2'], [1], true, true],
+    'a listed integer as a string, untyped' => [['f' => 'array|in:1,2'], ['1'], true, false],
+    'a listed element of an item that is an array' => [['f.*' => 'array|in:a,b'], [['a']], true, true],
+    'an outsider in an item that is an array' => [['f.*' => 'array|in:a,b'], [['c']], false, false],
+    // Without `array`, `in` compares the value, and an array never matches.
+    'a list beside list' => [['f' => 'list|in:a,b'], ['a'], false, false],
+    'a list with no array rule' => [['f' => 'in:a,b'], ['a'], false, false],
+    'every element excluded' => [['f' => 'array|not_in:a,b'], ['a'], false, false],
+    'an element not excluded' => [['f' => 'array|not_in:a,b'], ['c'], true, true],
+    'one element of two excluded' => [['f' => 'array|not_in:a,b'], ['a', 'c'], true, true],
+    'no elements, which are all excluded' => [['f' => 'array|not_in:a,b'], [], false, false],
+    'an element that is an array, never excluded' => [['f' => 'array|not_in:a,b'], [['a']], true, true],
+    'an object whose value is excluded' => [['f' => 'array|not_in:a,b'], ['k' => 'a'], false, false],
+    'an object whose value is not excluded' => [['f' => 'array|not_in:a,b'], ['k' => 'c'], true, true],
+    'null beside nullable, not excluded' => [['f' => 'nullable|array|not_in:a,b'], null, true, true],
+    // Laravel compares each element's string, so it excludes a number and its string alike, and `true` as "1".
+    'an excluded number' => [['f' => 'array|not_in:1,2', 'f.*' => 'integer'], [1], false, false],
+    'an excluded number as a string' => [['f' => 'array|not_in:1,2'], ['1', 2], false, false],
+    'true, excluded as 1' => [['f' => 'array|not_in:1,2'], [true], false, false],
+    'a number not excluded' => [['f' => 'array|not_in:1,2', 'f.*' => 'integer'], [1, 3], true, true],
+    'a list beside list, never excluded' => [['f' => 'list|not_in:a,b'], ['a'], true, true],
 ]);
 
 it('lists a whole enum cast to another type inline, with its names and its sentence', function (): void {

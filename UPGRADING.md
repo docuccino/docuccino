@@ -81,7 +81,7 @@ generated from the document changes.
 ### What `docuccino:diff` reports across this upgrade
 
 Only if you diff a document committed before the upgrade against a build after it, or gate it with
-`--enforce`. Six fixes make a choice rule publish what Laravel checks, and the differ reads each as
+`--enforce`. Seven fixes make a choice rule publish what Laravel checks, and the differ reads each as
 breaking where the rule is used:
 
 - **`new Enum` and `new In` publish their values.** Both were dropped, so the field published no
@@ -112,6 +112,12 @@ breaking where the rule is used:
   `false`. An entry leaving an `enum` and a `not` arriving are breaking, as above. A `regex` holding a
   comma publishes it as written, where `/^a, b$/` published `^a,b$`; the differ reads a changed `pattern`
   as breaking.
+- **A choice list beside `array` lists the elements.** `array|in:a,b` published `enum: [a, b]` on the
+  array itself, refusing every array the server takes; the `enum` now sits on `items`, typed by any
+  `field.*` rule beside it. The differ reports it leaving the field (`schema.enum-removed`) and arriving
+  on `items` (`schema.enum-added`), a narrowing, so breaking. `array|not_in:a,b` published a `not` that
+  excluded no array; it now refuses the arrays whose every element is listed, `[]` among them, and its
+  new list arriving is breaking too.
 
 So a gate run with `--enforce` fails on the upgrade. Your API did not change: in each case the
 document now says what your server already did. Upgrade in a pull request of its own, so the
