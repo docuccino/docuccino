@@ -36,7 +36,6 @@ use Docuccino\Laravel\Commands\DiffCommand;
 use Docuccino\Laravel\Commands\ExplainCommand;
 use Docuccino\Laravel\Commands\ExportCommand;
 use Docuccino\Laravel\Commands\InstallCommand;
-use Docuccino\Laravel\Commands\MemoryLimitOption;
 use Docuccino\Laravel\Commands\ValidateCommand;
 use Docuccino\Laravel\Commands\VersionChangesCommand;
 use Docuccino\Laravel\Commands\WatchCommand;
@@ -93,11 +92,9 @@ use Docuccino\Laravel\Watch\BuildToken;
 use Docuccino\Laravel\Watch\WatchSet;
 use Docuccino\Laravel\Watch\WatchSignal;
 use Docuccino\Laravel\Webhooks\WebhookCollector;
-use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Contracts\Auth\Access\Gate as GateContract;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Foundation\Application;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 use Laravel\Passport\Passport;
 use Laravel\Passport\Scope;
@@ -234,7 +231,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             ->give(fn (): string => $this->app->storagePath('docuccino'));
 
         // Resolved (not captured) so it reads the marker as it stands when the engine is built — which is
-        // after CommandStarting has run for one of our commands, and never during a web request.
+        // after one of our commands has marked it (StartsConsoleBuild), and never during a web request.
         $this->app->when(TypeEngineFactory::class)
             ->needs('$console')
             ->give(static fn (): bool => ConsoleBuild::active());
@@ -622,10 +619,6 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
      */
     public function packageBooted(): void
     {
-        // Ahead of the off-switch: `--memory-limit` has to reach config before a command's dependencies
-        // resolve the engine, and this listener is the last hook early enough (see MemoryLimitOption).
-        Event::listen(CommandStarting::class, MemoryLimitOption::capture(...));
-
         // The BUILD configuration, joining the framework config `hasConfigFile()` already put under
         // this tag. Both of them, because the tag names the package's configuration and the package's
         // configuration is two files: on its own, `config/docuccino.php` hands an author viewer wiring
