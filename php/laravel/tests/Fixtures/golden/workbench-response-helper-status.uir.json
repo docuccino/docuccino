@@ -45,7 +45,7 @@
           "Archive"
         ],
         "responses": {
-          "200": {
+          "423": {
             "x-docuccino": {
               "provenance": [
                 {
@@ -57,7 +57,7 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "Locked"
           }
         }
       }
@@ -157,7 +157,7 @@
           "Archive"
         ],
         "responses": {
-          "200": {
+          "410": {
             "x-docuccino": {
               "provenance": [
                 {
@@ -169,7 +169,7 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "Gone"
           }
         }
       }
@@ -213,8 +213,9 @@
           "Archive"
         ],
         "responses": {
-          "200": {
+          "410": {
             "x-docuccino": {
+              "id": "res:v1:oejav6yvqtuelglt",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -225,7 +226,12 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "Gone",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           }
         }
       }
@@ -269,8 +275,9 @@
           "Archive"
         ],
         "responses": {
-          "200": {
+          "410": {
             "x-docuccino": {
+              "id": "res:v1:prmz46576hmxziib",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -281,7 +288,26 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "Gone",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -291,7 +317,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "c69941a91de3e97b0b2a1a4e8ddcb63b6d724506ecdefe7899d868285af3f16b"
+      "contentHash": "3d4ae79d229ee82538f30118040c3467209960af3a0f23907b94e3b4437586ad"
     },
     "generator": {
       "name": "docuccino/laravel",
