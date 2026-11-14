@@ -12,6 +12,7 @@ use App\Problems\HttpProblem;
 use App\Problems\InstanceProblem;
 use App\Problems\LinkedProblem;
 use App\Problems\SentProblem;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -200,6 +201,70 @@ class RespondCallbacks
             }
 
             return $response;
+        };
+    }
+
+    /** Anything but JSON, and a response an exception carries, passed through by one guard; the rest reshaped. */
+    public function jsonOrHandoffGuarded(): callable
+    {
+        return function (Response $response, Throwable $e, Request $request): Response {
+            if (! $request->is('api/*')) {
+                return $response;
+            }
+
+            if (! $response instanceof JsonResponse || $e instanceof HttpResponseException) {
+                return $response;
+            }
+
+            return ProblemEnvelope::from($response, $e);
+        };
+    }
+
+    /** Off the API, or not JSON, passed through by one guard; the rest reshaped. */
+    public function pathOrJsonGuarded(): callable
+    {
+        return function (Response $response, Throwable $e, Request $request): Response {
+            if (! $request->is('api/*') || ! $response instanceof JsonResponse) {
+                return $response;
+            }
+
+            return ProblemEnvelope::from($response, $e);
+        };
+    }
+
+    /** Off the API, or a response an exception carries, passed through by one guard; the rest reshaped. */
+    public function pathOrHandoffGuarded(): callable
+    {
+        return function (Response $response, Throwable $e, Request $request): Response {
+            if (! $request->is('api/*') || $e instanceof HttpResponseException) {
+                return $response;
+            }
+
+            return ProblemEnvelope::from($response, $e);
+        };
+    }
+
+    /** Both halves of one guard required, the guard negated: on the API and JSON, reshaped. */
+    public function pathAndJsonRequired(): callable
+    {
+        return function (Response $response, Throwable $e, Request $request): Response {
+            if (! ($request->is('api/*') && $response instanceof JsonResponse)) {
+                return $response;
+            }
+
+            return ProblemEnvelope::from($response, $e);
+        };
+    }
+
+    /** Not JSON, or a client asking for JSON, passed through: whether a client asks is not known per route. */
+    public function jsonOrAskedGuarded(): callable
+    {
+        return function (Response $response, Throwable $e, Request $request): Response {
+            if (! $response instanceof JsonResponse || $request->expectsJson()) {
+                return $response;
+            }
+
+            return ProblemEnvelope::from($response, $e);
         };
     }
 
