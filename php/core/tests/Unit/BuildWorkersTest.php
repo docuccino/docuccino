@@ -689,7 +689,9 @@ it('ends and reaps a worker whose answer nobody asks for, and frees its place', 
     $workers = new BuildWorkers(static fn (): int => 2);
     $started = $this->out.'/started';
     $answer = $workers->later(static function () use ($started): string {
-        file_put_contents($started, (string) getmypid());
+        // Written aside and renamed into place, so the file is whole from the moment it can be seen.
+        file_put_contents($started.'.part', (string) getmypid());
+        rename($started.'.part', $started);
         usleep(200_000);
 
         return (string) getmypid();
