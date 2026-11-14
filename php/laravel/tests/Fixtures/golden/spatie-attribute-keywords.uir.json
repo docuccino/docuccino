@@ -158,27 +158,38 @@
         "type": "object",
         "properties": {
           "above": {
-            "type": "integer"
+            "type": "integer",
+            "exclusiveMinimum": 5,
+            "example": 6
           },
           "atLeast": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 5,
+            "example": 5
           },
           "atMost": {
-            "type": "integer"
+            "type": "integer",
+            "maximum": 10,
+            "example": 1
           },
           "avatar": {
             "type": "string",
             "format": "binary"
           },
           "below": {
-            "type": "integer"
+            "type": "integer",
+            "exclusiveMaximum": 10,
+            "example": 1
           },
           "count": {
             "type": "integer",
-            "maximum": 1,
-            "minimum": 10
+            "maximum": 10,
+            "minimum": 1,
+            "example": 1
           },
-          "items": {},
+          "items": {
+            "type": "array"
+          },
           "v4": {
             "type": "string"
           },
@@ -193,7 +204,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "f4d797b7865bc2d41f012f05f75e8eb35673cb8f8fd18612140c10fd50ebcab0"
+      "contentHash": "344caa0d610ca6dc5bdcae51e9fe2bb5818389c4ad70df8a58e5ff25ea9405af"
     },
     "generator": {
       "name": "docuccino/laravel",
