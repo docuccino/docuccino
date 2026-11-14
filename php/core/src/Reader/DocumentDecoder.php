@@ -256,7 +256,7 @@ final class DocumentDecoder
         }, E_USER_DEPRECATED);
 
         try {
-            $parsed = Yaml::parse($text, self::YAML_FLAGS, maxAliasesForCollections: $aliases);
+            $parsed = Yaml::parse(TextScans::of($text), self::YAML_FLAGS, maxAliasesForCollections: $aliases);
         } catch (Throwable $exception) {
             throw match (true) {
                 $exception instanceof TypeError && str_starts_with($exception->getMessage(), 'Unsupported operand types: array + ') => new ParseException('A merge key (<<) inside a flow mapping is not supported; write that mapping in block style.', previous: $exception),
