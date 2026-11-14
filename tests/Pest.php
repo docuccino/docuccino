@@ -1037,7 +1037,8 @@ function componentRefsIn(mixed $node, string $bucket): array
 
 /**
  * The components a document publishes that nothing in it reaches, as `section/name`: the roots are every
- * `$ref` and `discriminator.mapping` value outside `components`, closed over the components they name. A
+ * `$ref` and `discriminator.mapping` value outside `components`, closed over the components they name —
+ * and the old value of an overridden `$ref`, which a provenance trail records as a bare pointer. A
  * pointer INTO a component reaches the component. Security schemes are named by `security`, never by a
  * `$ref`, so they are not read. Every member is read wherever it sits, so a pointer an example states
  * reaches too — the error this can make is calling an orphan reached, never the reverse.
@@ -1061,6 +1062,8 @@ function unreachableComponents(array $document): array
                 $out[] = $value;
             } elseif ($key === 'mapping' && is_array($value)) {
                 $out = [...$out, ...array_values(array_filter($value, is_string(...)))];
+            } elseif ($key === 'value' && is_string($value) && ($node['field'] ?? null) === '$ref') {
+                $out[] = $value;
             }
             $out = [...$out, ...$pointers($value)];
         }

@@ -597,6 +597,34 @@ final class ComponentRegistry
     }
 
     /**
+     * Keeps only the schemas and responses `$reached` names, by slot and section as
+     * {@see ComponentNames::reached()} answers. A warm build re-registers only what an operation reaches,
+     * so a body registered and then not used — overridden, restated inline, dropped — is published by a
+     * cold build alone; settling names over what is kept makes the two agree, names and collisions
+     * included. Security schemes are named by `security` rather than referenced, and are left alone.
+     *
+     * @param  array<string, array<string, true>>  $reached
+     */
+    public function retain(array $reached): void
+    {
+        $this->revision++;
+
+        $schemas = $reached['schemas'] ?? [];
+        foreach (array_keys($this->schemas) as $slot) {
+            if (! isset($schemas[$slot])) {
+                unset($this->schemas[$slot], $this->schemaIds[$slot], $this->schemaBases[$slot]);
+            }
+        }
+
+        $responses = $reached['responses'] ?? [];
+        foreach (array_keys($this->responses) as $slot) {
+            if (! isset($responses[$slot])) {
+                unset($this->responses[$slot], $this->responseBases[$slot]);
+            }
+        }
+    }
+
+    /**
      * @return array<string, array<string, mixed>>
      */
     public function schemas(): array
