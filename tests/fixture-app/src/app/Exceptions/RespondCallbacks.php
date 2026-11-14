@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Exceptions;
 
 use App\Http\Responses\ApiResponse;
+use App\Problems\DebugProblem;
+use App\Problems\FieldProblem;
 use App\Problems\HttpProblem;
+use App\Problems\InstanceProblem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -209,6 +212,43 @@ class RespondCallbacks
         };
     }
 
+    /** The problem built through a constructor that hands the rendered response to the one it extends. */
+    public function problemThroughParent(): callable
+    {
+        return function (Response $response, Throwable $e, Request $request): Response {
+            return (new JsonResponse(new InstanceProblem($response, $request), $response->getStatusCode(), $response->headers->all()))
+                ->header('Content-Type', 'application/problem+json');
+        };
+    }
+
+    /** Validation errors through a factory on a problem whose constructor runs its parent's; the rest as problems carrying Laravel's other members. */
+    public function problemFactories(): callable
+    {
+        return function (Response $response, Throwable $e, Request $request): Response {
+            if (! $response instanceof JsonResponse) {
+                return $response;
+            }
+
+            if ($e instanceof ValidationException) {
+                return FieldProblem::from($response, $e);
+            }
+
+            return DebugProblem::from($response);
+        };
+    }
+
+    /** Problems carrying Laravel's other members, read through a helper the rendered response is handed to. */
+    public function problemReported(): callable
+    {
+        return function (Response $response): Response {
+            if (! $response instanceof JsonResponse) {
+                return $response;
+            }
+
+            return DebugProblem::reported($response);
+        };
+    }
+
     /** The reason phrase read inline off the status it is sent with, through the subclass the table is inherited by. */
     public function statusTextInline(): callable
     {
@@ -272,11 +312,43 @@ class RespondCallbacks
         };
     }
 
+    /** The status named in a local, then the message read out of the rendered body before both go out. */
+    public function statusTextThenMessage(): callable
+    {
+        return function (Response $response): Response {
+            $status = $response->getStatusCode();
+            $rendered = $response instanceof JsonResponse ? $response->getData(true) : [];
+
+            return new JsonResponse([
+                'title' => Response::$statusTexts[$status] ?? 'Error',
+                'status' => $status,
+                'detail' => is_array($rendered) && is_string($rendered['message'] ?? null) ? $rendered['message'] : null,
+            ], $response->getStatusCode());
+        };
+    }
+
+    /** A problem built before the response is handed to a helper that restates its status, sent with the new one. */
+    public function problemRestatedByHelper(): callable
+    {
+        return function (Response $response): Response {
+            $problem = new HttpProblem($response);
+            $this->retryLater($response);
+
+            return new JsonResponse($problem, $response->getStatusCode());
+        };
+    }
+
     /** The reason phrase read through the application's own response class, which inherits the table. */
     public function statusTextThroughApp(): callable
     {
         return fn (Response $response): Response => new JsonResponse([
             'title' => ApiResponse::$statusTexts[$response->getStatusCode()] ?? 'Error',
         ], $response->getStatusCode());
+    }
+
+    private function retryLater(Response $response): void
+    {
+        $response->setStatusCode(503);
+        $response->headers->set('Retry-After', '60');
     }
 }
