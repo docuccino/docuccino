@@ -415,14 +415,7 @@
                     "symbol": "Workbench\\App\\Http\\Controllers\\ValidationController::store"
                   }
                 }
-              ],
-              "facts": {
-                "examplePlaceholders": {
-                  "application/problem+json": [
-                    "title"
-                  ]
-                }
-              }
+              ]
             },
             "description": "Forbidden",
             "content": {
@@ -448,7 +441,7 @@
                 },
                 "example": {
                   "type": "about:blank",
-                  "title": "string",
+                  "title": "Forbidden",
                   "status": 403
                 }
               }
@@ -475,8 +468,7 @@
                 "examplePlaceholders": {
                   "application/problem+json": [
                     "detail",
-                    "errors",
-                    "title"
+                    "errors"
                   ]
                 }
               }
@@ -506,7 +498,7 @@
                 "example": {
                   "errors": {},
                   "type": "about:blank",
-                  "title": "string",
+                  "title": "Unprocessable Content",
                   "status": 422,
                   "detail": "string"
                 }
@@ -736,7 +728,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "01eea42b966f0b0a5809a26f840515da54b92a32e58874dbfac24e1d8fba7a90"
+      "contentHash": "d2e3671d19fef71901b2a7b67b284fd0c6b1ad184cd4d68ca6d7789d34c47dbd"
     },
     "generator": {
       "name": "docuccino/laravel",
