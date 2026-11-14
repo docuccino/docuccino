@@ -5665,3 +5665,73 @@ function openApi30AsJsonSchema(mixed $node): mixed
 
     return $schema;
 }
+
+/**
+ * Arguments for every parameter a spatie validation attribute's constructor requires, and the same arguments as
+ * attribute source. Each value is distinct, so a reading that swaps two shows. Without a variadic they are named
+ * and written in reverse, so a reading that takes them in the order written rather than declared shows too.
+ *
+ * @param  class-string  $class
+ * @return array{0: array<array-key, mixed>, 1: string}
+ */
+function attributeSampleArguments(string $class): array
+{
+    $constructor = (new ReflectionClass($class))->getConstructor();
+    $parameters = $constructor === null ? [] : $constructor->getParameters();
+    $variadic = array_filter($parameters, static fn (ReflectionParameter $parameter): bool => $parameter->isVariadic()) !== [];
+    // An attribute that checks a string against a set of its own (`Email::RfcValidation`) declares the set.
+    $choices = array_values(array_filter((new ReflectionClass($class))->getConstants(), is_string(...)));
+
+    $sample = static function (ReflectionParameter $parameter, int $index) use ($class, $choices): int|float|bool|string|array {
+        $type = $parameter->getType();
+        $names = array_map(
+            static fn (ReflectionType $member): string => $member instanceof ReflectionNamedType ? $member->getName() : '',
+            $type instanceof ReflectionUnionType ? $type->getTypes() : ($type === null ? [] : [$type]),
+        );
+
+        return match (true) {
+            $names === [] || in_array('string', $names, true) || in_array('mixed', $names, true) => $choices === [] ? 'p'.$index : $choices[$index % count($choices)],
+            in_array('int', $names, true) => 10 + $index,
+            in_array('float', $names, true) => 10 + $index + 0.5,
+            in_array('array', $names, true) => ['p'.$index.'a', 'p'.$index.'b'],
+            in_array('bool', $names, true) => true,
+            default => throw new LogicException(sprintf('No sample for %s::$%s.', $class, $parameter->getName())),
+        };
+    };
+
+    $arguments = [];
+    $index = 0;
+    foreach ($parameters as $parameter) {
+        if ($parameter->isVariadic()) {
+            $arguments[] = $sample($parameter, $index++);
+            $arguments[] = $sample($parameter, $index++);
+        } elseif (! $parameter->isOptional()) {
+            $variadic ? $arguments[] = $sample($parameter, $index++) : $arguments[$parameter->getName()] = $sample($parameter, $index++);
+        }
+    }
+
+    if (! $variadic) {
+        $arguments = array_reverse($arguments, true);
+    }
+
+    $source = [];
+    foreach ($arguments as $name => $value) {
+        $source[] = (is_string($name) ? $name.': ' : '').var_export($value, true);
+    }
+
+    return [$arguments, implode(', ', $source)];
+}
+
+/**
+ * A class whose one property, `value`, carries the attribute written as `#[$class($arguments)]`, declared once
+ * per distinct attribute.
+ */
+function attributeCarrier(string $class, string $arguments): string
+{
+    $name = 'AttributeCarrier'.md5($class.'('.$arguments.')');
+    if (! class_exists($name, false)) {
+        eval(sprintf('final class %s { public function __construct(#[\\%s(%s)] public mixed $value = null) {} }', $name, $class, $arguments));
+    }
+
+    return $name;
+}

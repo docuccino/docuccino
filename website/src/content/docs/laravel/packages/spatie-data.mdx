@@ -188,6 +188,10 @@ and `#[In([true, false])]` beside a `bool` takes both. Presence,
 type, size, format, and pattern attributes are all covered, and a property's own type contributes the
 base type where no attribute states one.
 
+Each attribute reads as the rule laravel-data writes for it, named by the attribute itself rather than by
+its class: `#[GreaterThan(5)]` is `gt:5`, `#[ListType]` is `list` and `#[IPv4]` is `ipv4`. Its arguments
+are taken in the order the attribute declares them, so `#[Between(max: 10, min: 1)]` is `between:1,10`.
+
 On a property typed `array`, laravel-data adds the `array` rule itself, so `#[In]` and `#[NotIn]` check
 each element, as they do [beside `array` in a form request](/laravel/documenting/requests/#nested-and-array-fields).
 `#[In(['news', 'sport'])]` on a `list<string>` publishes its `enum` on `items`, and on an

@@ -13,7 +13,6 @@ use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\ListT;
 use Docuccino\Core\Inference\DType\MapT;
 use Docuccino\Core\Inference\DType\UnionT;
-use Docuccino\Core\Support\Fqcn;
 use Docuccino\Laravel\Integrations\Support\EnumCaseValue;
 use Docuccino\Laravel\Integrations\Support\RuleParsing;
 use Docuccino\Laravel\Integrations\Validation\LiveRuleValue;
@@ -165,35 +164,10 @@ final class DataClassReflector
 
     private const VALIDATION_NS = 'Spatie\\LaravelData\\Attributes\\Validation\\';
 
-    /**
-     * Spatie validation attribute short name → Laravel rule name. Tokens go through the shared
-     * validation chain, so `#[Max(100)]` documents identically to `'max:100'` on a FormRequest. Curated
-     * to the common floor — an unmapped attribute degrades (see validationTokens) rather than guessing.
-     *
-     * Reflection reports an attribute under the case it was WRITTEN in, so the key is the class name
-     * spatie declares — `IP`, not `Ip` — which is the only spelling whose source autoloads on a
-     * case-sensitive filesystem. A key that miscases one matches nothing.
-     *
-     * @var array<string, string>
-     */
-    private const RULE_MAP = [
-        'Required' => 'required', 'Nullable' => 'nullable', 'Sometimes' => 'sometimes',
-        'Present' => 'present', 'Prohibited' => 'prohibited', 'Filled' => 'filled',
-        'Email' => 'email', 'Url' => 'url', 'ActiveUrl' => 'active_url', 'Uuid' => 'uuid',
-        'Ulid' => 'ulid', 'Numeric' => 'numeric', 'IntegerType' => 'integer', 'StringType' => 'string',
-        'BooleanType' => 'boolean', 'ArrayType' => 'array', 'Alpha' => 'alpha', 'AlphaNumeric' => 'alpha_num',
-        'AlphaDash' => 'alpha_dash', 'Date' => 'date', 'Json' => 'json', 'IP' => 'ip',
-        'Max' => 'max', 'Min' => 'min', 'Size' => 'size', 'Between' => 'between',
-        'Regex' => 'regex', 'DateFormat' => 'date_format',
-        'MaxDigits' => 'max_digits', 'MinDigits' => 'min_digits', 'DigitsBetween' => 'digits_between',
-        'StartsWith' => 'starts_with', 'EndsWith' => 'ends_with',
-    ];
+    /** The attributes laravel-data writes as a rule string, from their own `keyword()` and `parameters()`. */
+    private const STRING_ATTRIBUTE = 'Spatie\\LaravelData\\Attributes\\Validation\\StringValidationAttribute';
 
-    /** Rules that carry comma-separated parameters (`max:100`, `in:a,b`); others are bare (`required`). */
-    private const VALUE_RULES = [
-        'max', 'min', 'size', 'between', 'regex', 'date_format',
-        'max_digits', 'min_digits', 'digits_between', 'starts_with', 'ends_with',
-    ];
+    private const FIELD_REFERENCE = 'Spatie\\LaravelData\\Support\\Validation\\References\\FieldReference';
 
     /** Any `BaseData` implementor that isn't itself a collectable — the schema mapper's trigger. */
     public static function isData(string $fqcn): bool
@@ -323,9 +297,9 @@ final class DataClassReflector
     }
 
     /**
-     * Laravel rule tokens recovered from a property's spatie validation attributes, read via
-     * {@see ReflectionAttribute::getArguments()} — the attribute is never instantiated, so no spatie
-     * rule logic runs. {@see DataValidationRules} feeds them through the shared validation chain.
+     * Laravel rule tokens recovered from a property's spatie validation attributes, each the rule string
+     * laravel-data writes for it ({@see attributeRule()}). {@see DataValidationRules} feeds them through the
+     * shared validation chain, so one the chain has no reader for degrades like any unknown string rule.
      *
      * @return list<string>
      */
@@ -358,16 +332,10 @@ final class DataClassReflector
                 continue;
             }
 
-            $short = Fqcn::short($name);
-            $mapped = self::RULE_MAP[$short] ?? null;
-            // Unmapped attributes degrade to the snake-cased short name, which the shared chain then
-            // treats like any unknown string rule (a transformer if one exists, else permissive + info).
-            $rule = $mapped ?? self::snake($short);
-
-            $parameters = $this->scalarArguments($attribute->getArguments());
-            $carriesParameters = in_array($rule, self::VALUE_RULES, true) || ($mapped === null && $parameters !== '');
-
-            $tokens[] = $carriesParameters && $parameters !== '' ? $rule.':'.$parameters : $rule;
+            $rule = self::attributeRule($attribute);
+            if ($rule !== null) {
+                $tokens[] = $rule;
+            }
         }
 
         return $tokens;
@@ -718,35 +686,73 @@ final class DataClassReflector
         return $found;
     }
 
-    /** CamelCase attribute short name → snake_case rule name (`StartsWith` → `starts_with`). */
-    private static function snake(string $name): string
+    /**
+     * The rule string laravel-data writes for a validation attribute: the attribute's own `keyword()`, then
+     * the `parameters()` it reports, as laravel-data's `RuleDenormalizer` joins them. An object attribute that
+     * hands over no object (`#[Required]`, `#[Exists]`) reports no parameters, and keeps the arguments it was
+     * written with. Null where laravel-data cannot build the rule either, which fails every request.
+     *
+     * @param  ReflectionAttribute<object>  $attribute
+     */
+    private static function attributeRule(ReflectionAttribute $attribute): ?string
     {
-        $snake = preg_replace('/(?<!^)[A-Z]/', '_$0', $name);
+        $class = $attribute->getName();
+        if (! method_exists($class, 'keyword')) {
+            return null;
+        }
 
-        return strtolower($snake ?? $name);
+        try {
+            $keyword = $class::keyword();
+            $instance = is_a($class, self::STRING_ATTRIBUTE, true) ? $attribute->newInstance() : null;
+            $parameters = $instance !== null && method_exists($instance, 'parameters')
+                ? $instance->parameters()
+                : array_values($attribute->getArguments());
+        } catch (Throwable) {
+            return null;
+        }
+
+        if (! is_string($keyword) || ! is_array($parameters)) {
+            return null;
+        }
+
+        $written = [];
+        foreach ($parameters as $key => $parameter) {
+            $value = self::ruleParameter($parameter);
+            if ($value !== null) {
+                $written[] = is_string($key) ? $key.'='.$value : $value;
+            }
+        }
+
+        return $written === [] ? $keyword : $keyword.':'.implode(',', $written);
     }
 
     /**
-     * Attribute arguments as a comma-joined rule parameter string, as laravel-data writes a string rule's:
-     * `Between(1, 10)` → `"1,10"`, and a boolean as `true`/`false`. An enum case is the value Laravel casts
-     * it to, so `StartsWith(Status::Open)` is `"open"` ({@see EnumCaseValue}). Other non-scalars are dropped.
-     *
-     * @param  array<array-key, mixed>  $arguments
+     * One rule parameter as laravel-data writes it, or null where it leaves it out. A bool is `true`/`false`, a
+     * list its members joined, and an enum case the value Laravel casts it to ({@see EnumCaseValue}). A field
+     * reference names its field as at the root of the request. A value only a request or the clock decides —
+     * an external reference, a date — is left out too, as nothing the build can state.
      */
-    private function scalarArguments(array $arguments): string
+    private static function ruleParameter(mixed $value): ?string
     {
-        $flat = [];
-        array_walk_recursive($arguments, static function (mixed $value) use (&$flat): void {
-            if ($value instanceof UnitEnum) {
-                $value = EnumCaseValue::ofLive($value);
-            }
+        if (is_array($value)) {
+            return $value === [] ? null : implode(',', array_map(static fn (mixed $item): string => self::ruleParameter($item) ?? '', $value));
+        }
 
-            if (is_scalar($value)) {
-                $flat[] = is_bool($value) ? ($value ? 'true' : 'false') : (string) $value;
-            }
-        });
+        return match (true) {
+            is_string($value), is_int($value), is_float($value) => (string) $value,
+            is_bool($value) => $value ? 'true' : 'false',
+            $value instanceof UnitEnum => (string) EnumCaseValue::ofLive($value),
+            is_object($value) && is_a($value, self::FIELD_REFERENCE) => self::fieldName($value),
+            default => null,
+        };
+    }
 
-        return implode(',', $flat);
+    /** The field a laravel-data field reference names. */
+    private static function fieldName(object $reference): ?string
+    {
+        $name = get_object_vars($reference)['name'] ?? null;
+
+        return is_string($name) ? $name : null;
     }
 
     /**
