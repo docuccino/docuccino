@@ -6,7 +6,7 @@ full record either way.
 
 ## v0.24.0
 
-Three changes, each for a different reader, and a last part on what a diff across the upgrade
+Four changes, each for a different reader, and a last part on what a diff across the upgrade
 reports, for anyone who compares or gates a committed document.
 
 ### A pointer in `lint.leakage.allow`
@@ -60,6 +60,23 @@ defaults name an enum case changes, so read the first point even if you write no
   scalar holding the case's name: `isCase()` is true, `class` holds the enum and `caseName()` the
   case. A plain constant on an enum folds to its value. Read the name from `caseName()` rather than
   `scalar`.
+
+### A `#[BodyParameter]` naming a tagged union
+
+Only if a `#[BodyParameter]` names a sealed interface or abstract class over a tagged object, and your
+rules limit one of its members further than the class does. Nothing needs editing, but a client
+generated from the document changes.
+
+- **The field lists the union's members.** It was a `$ref` to the union with the rules' limits beside
+  it, which client generators drop, so a generated validator enforced none of them. It is now a `oneOf`
+  of the members, each one the rules limit written as `allOf: [{$ref: member}, limits]`, with the
+  union's own discriminator. The member components and the union's component are unchanged.
+- **A generated client's type for that field is the members' union.** TypeScript generators write
+  `CardPayment | (TransferPayment & {…})` where they wrote `Payment`; a `Payment` value is still
+  assignable to it. A generator for a nominal language may mint a new type for the field. Code that
+  builds the request from the member classes needs no change.
+- **`docuccino:diff` reads it as no change.** The two spellings say the same thing, so a diff across
+  the upgrade reports nothing for that field.
 
 ### What `docuccino:diff` reports across this upgrade
 
