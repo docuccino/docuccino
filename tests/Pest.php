@@ -17,6 +17,7 @@ use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
 use Docuccino\Core\Diff\SchemaComparator;
 use Docuccino\Core\Document\BlankAsNull;
+use Docuccino\Core\Document\Operation;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Draft\SchemaDraft;
@@ -1692,14 +1693,18 @@ function emptyCollectionPositions(): array
 
 /**
  * Assemble one document over a filled component registry and hand back `components.schemas` as the
- * document publishes it — the published names, the bodies, and the node id stamped on each.
+ * document publishes it — the published names, the bodies, and the node id stamped on each. The one
+ * operation refers to every registered schema, since the build publishes only what an operation reaches.
  *
  * @return array<string, array<string, mixed>>
  */
 function assembledComponentSchemas(ComponentRegistry $components): array
 {
+    $refs = array_map(static fn (string|int $slot): array => ['$ref' => '#/components/schemas/'.$slot], array_keys($components->schemas()));
+    $operation = Operation::fromArray(['responses' => ['200' => ['description' => 'OK', 'content' => ['application/json' => ['schema' => ['anyOf' => $refs]]]]]]);
+
     $result = (new Assembler('docuccino'))->assemble(
-        [new OperationFragment('/api/reports', 'get', (new OperationDraft)->freeze(), 'GET /api/reports')],
+        [new OperationFragment('/api/reports', 'get', $operation, 'GET /api/reports')],
         new DocumentConfig('default', ['title' => 'T', 'version' => '1.0.0']),
         'doc:default',
         $components,
