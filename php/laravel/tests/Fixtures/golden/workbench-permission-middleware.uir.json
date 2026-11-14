@@ -51,7 +51,29 @@
                 "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
               }
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "403": {
+                "id": "res:v1:hxnj53n4s2yfute4",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/FormController.php",
+                      "line": 25,
+                      "symbol": "implicit:permission-middleware"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "get.api.permissions.any-permission",
         "summary": "List forms.",
@@ -97,6 +119,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           }
         },
         "x-permissions": [
@@ -155,7 +180,29 @@
                 "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
               }
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "403": {
+                "id": "res:v1:pniwkuxrbxgdu2sk",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/FormController.php",
+                      "line": 25,
+                      "symbol": "implicit:permission-middleware"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "get.api.permissions.by-class",
         "summary": "List forms.",
@@ -201,6 +248,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           }
         },
         "x-permissions": [
@@ -258,7 +308,29 @@
                 "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
               }
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "403": {
+                "id": "res:v1:e7sqathcceyfp52e",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/FormController.php",
+                      "line": 25,
+                      "symbol": "implicit:permission-middleware"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "get.api.permissions.edit",
         "summary": "List forms.",
@@ -304,6 +376,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           }
         },
         "x-permissions": [
@@ -361,7 +436,29 @@
                 "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
               }
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "403": {
+                "id": "res:v1:k623wlrdha6aaxgr",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/FormController.php",
+                      "line": 25,
+                      "symbol": "implicit:permission-middleware"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "get.api.permissions.guarded",
         "summary": "List forms.",
@@ -407,6 +504,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           }
         },
         "x-permissions": [
@@ -547,7 +647,29 @@
                 "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
               }
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "403": {
+                "id": "res:v1:2fwrexsyzgmhkdkl",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/FormController.php",
+                      "line": 25,
+                      "symbol": "implicit:permission-middleware"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "get.api.permissions.role",
         "summary": "List forms.",
@@ -593,6 +715,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           }
         },
         "x-permissions": [
@@ -650,7 +775,29 @@
                 "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
               }
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "403": {
+                "id": "res:v1:o76n3zcvg4t6ycig",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/FormController.php",
+                      "line": 25,
+                      "symbol": "implicit:permission-middleware"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "get.api.permissions.role-or-permission",
         "summary": "List forms.",
@@ -696,6 +843,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           }
         },
         "x-permissions": [
@@ -754,7 +904,29 @@
                 "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
               }
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "403": {
+                "id": "res:v1:ucnklzpjhnn6jebq",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/FormController.php",
+                      "line": 25,
+                      "symbol": "implicit:permission-middleware"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "get.api.permissions.signed-in",
         "summary": "List forms.",
@@ -857,6 +1029,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           }
         },
         "x-permissions": [
@@ -872,6 +1047,20 @@
   },
   "components": {
     "schemas": {
+      "Forbidden": {
+        "x-docuccino": {
+          "id": "sch:v1:n5qazsrgxr4czglj"
+        },
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
       "FormData": {
         "x-docuccino": {
           "id": "sch:v1:6iocn62c7ru5zutw"
@@ -896,13 +1085,25 @@
           "title"
         ]
       }
+    },
+    "responses": {
+      "Forbidden": {
+        "description": "Forbidden",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Forbidden"
+            }
+          }
+        }
+      }
     }
   },
   "x-docuccino": {
     "document": {
       "id": "doc:permissions",
       "configHash": "22233f85b61b0e29e24ed2493471ccb1ca755fd37dbf9f80c4112cdf8b1bdb1e",
-      "contentHash": "0406be92c2a2100339bd20023dc39788ee448bd7b26110f74338a82c8759f812"
+      "contentHash": "0580bee3ce664cc4aae4db063099eac02327e51ef8138b50a3eb31d0e178af69"
     },
     "generator": {
       "name": "docuccino/laravel",
