@@ -1,0 +1,259 @@
+{
+  "openapi": "3.2.0",
+  "jsonSchemaDialect": "https://spec.openapis.org/oas/3.2/dialect/base",
+  "info": {
+    "title": "API Documentation",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/zz-rule-objects": {
+      "post": {
+        "x-docuccino": {
+          "id": "op:v1:krv5dw5e6o7t4idm",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "tests/Fixtures/SpatieData/RuleObjectChoicesController.php",
+                "line": 12,
+                "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\SpatieData\\RuleObjectChoicesController::store"
+              }
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            },
+            {
+              "producer": "integration:spatie-data",
+              "layer": "integration",
+              "fields": [
+                "requestBody"
+              ],
+              "source": {
+                "file": "tests/Fixtures/SpatieData/RuleObjectChoicesController.php",
+                "line": 12,
+                "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\SpatieData\\RuleObjectChoicesController::store"
+              }
+            }
+          ]
+        },
+        "operationId": "post.api.zz-rule-objects",
+        "tags": [
+          "RuleObjectChoices"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleObjectChoicesDataRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:oej7ovj3e26i7am4",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "x-docuccino": {
+              "id": "res:v1:3pnc6pdrbb73nbbl",
+              "provenance": [
+                {
+                  "producer": "integration:implicit-response",
+                  "layer": "integration",
+                  "fields": [
+                    "component",
+                    "description"
+                  ],
+                  "source": {
+                    "file": "tests/Fixtures/SpatieData/RuleObjectChoicesController.php",
+                    "line": 12,
+                    "symbol": "implicit:validated-request"
+                  }
+                }
+              ],
+              "facts": {
+                "component": "UnprocessableEntity"
+              }
+            },
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "integration:implicit-response",
+                        "layer": "integration",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "tests/Fixtures/SpatieData/RuleObjectChoicesController.php",
+                          "line": 12,
+                          "symbol": "implicit:validated-request"
+                        }
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "errors": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message",
+                    "errors"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "RuleObjectChoicesDataRequest": {
+        "x-docuccino": {
+          "id": "sch:v1:krp7ahdwehbbi7j7"
+        },
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "colour": {
+            "type": "string"
+          },
+          "mark": {
+            "type": "string"
+          },
+          "note": {
+            "x-docuccino": {
+              "facts": {
+                "blankAsNull": "^[\\x00\\t-\\r  ­͏؜ᅟᅠ ឴឵᠎           ​‌‍‎‏\u2028\u2029  ⁠⁡⁢⁣⁤⁥⁪⁫⁬⁭⁮⁯⠀　ㅤ﻿ﾠ𝅙𝅳𝅴𝅵𝅶𝅷𝅸𝅹𝅺󠀠]*$"
+              }
+            },
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "archived"
+            ],
+            "example": "draft",
+            "x-enum-varnames": [
+              "Draft",
+              "Published",
+              "Archived"
+            ],
+            "x-enumNames": [
+              "Draft",
+              "Published",
+              "Archived"
+            ]
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "size": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "archived"
+            ],
+            "example": "draft",
+            "x-enum-varnames": [
+              "Draft",
+              "Published",
+              "Archived"
+            ],
+            "x-enumNames": [
+              "Draft",
+              "Published",
+              "Archived"
+            ]
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "size",
+          "priority",
+          "code",
+          "stage",
+          "phase",
+          "state",
+          "colour",
+          "mark"
+        ]
+      }
+    }
+  },
+  "x-docuccino": {
+    "document": {
+      "id": "doc:default",
+      "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
+      "contentHash": "7ab62846de63bdd8207a43847dfaf796ee50f1bccd1b911709e4926fbd633d50"
+    },
+    "generator": {
+      "name": "docuccino/laravel",
+      "version": "0.23.4",
+      "specVersion": "2.1.0",
+      "schema": "https://spec.docuccino.app/uir/2.1/schema.json"
+    }
+  }
+}
