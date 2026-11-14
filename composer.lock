@@ -429,7 +429,7 @@
             "dist": {
                 "type": "path",
                 "url": "php/core",
-                "reference": "bfb1269ff53c532299fca170d61e902f7d208704"
+                "reference": "66807e1de05c560f54ffdc13c09bc550b9f30f9c"
             },
             "require": {
                 "composer-runtime-api": "^2",
@@ -445,7 +445,10 @@
             "autoload": {
                 "psr-4": {
                     "Docuccino\\Core\\": "src/"
-                }
+                },
+                "files": [
+                    "src/shutdown.php"
+                ]
             },
             "autoload-dev": {
                 "psr-4": {
