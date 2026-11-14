@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\DType\ArrayShapeField;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
@@ -24,16 +28,18 @@ use Workbench\App\Http\Controllers\ArchiveFacadeController;
  */
 function responseFacadeStatusReturns(): array
 {
-    $json = new ClassT('Illuminate\\Http\\JsonResponse');
-    $plain = new ClassT('Illuminate\\Http\\Response');
+    $sent = static fn (DType $payload, int $status): ClassT => new ClassT('Illuminate\\Http\\JsonResponse', [$payload, new LiteralT($status)]);
+    $error = static fn (string $error): ArrayShapeT => new ArrayShapeT([new ArrayShapeField('error', new LiteralT($error))]);
 
+    // The facade hands each call to the response factory, so each is sent as `response()->…` sends it.
     return [
-        'refuse' => $json,
-        'reset' => $plain,
-        'purge' => $plain,
-        'tombstone' => $plain,
-        'expire' => $json,
-        'status' => $json,
+        'refuse' => $sent($error('locked'), 422),
+        'reset' => $sent(new VoidT, 205),
+        'purge' => $sent(new VoidT, 410),
+        'tombstone' => $sent(new ClassT('Illuminate\\Contracts\\View\\View'), 410),
+        // The status and the body member the helper reads off the case are the call site's.
+        'expire' => $sent($error('Gone'), 410),
+        'status' => $sent(new ArrayShapeT([new ArrayShapeField('ok', new LiteralT(true))]), 200),
     ];
 }
 

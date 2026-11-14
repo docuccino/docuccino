@@ -25,6 +25,7 @@ use Docuccino\Core\Inference\StatusCodes;
 use Docuccino\Inference\PhpStan\Metadata\ClassMetadataFactory;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
 use Docuccino\Inference\PhpStan\Support\ContentTypeHeader;
+use Docuccino\Inference\PhpStan\Support\FacadeCall;
 use Docuccino\Inference\PhpStan\Support\MadeResponseCall;
 use Docuccino\Inference\PhpStan\Support\OmissionSentinel;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
@@ -210,7 +211,7 @@ final class ResponseShapeRefiner
             return true;
         }
 
-        $status = $expr instanceof Node\Expr\MethodCall ? $this->factoryStatus($expr, $scope) : null;
+        $status = $expr instanceof Node\Expr\MethodCall || $expr instanceof Node\Expr\StaticCall ? $this->factoryStatus($expr, $scope) : null;
         if ($status === null) {
             return false;
         }
@@ -277,7 +278,7 @@ final class ResponseShapeRefiner
         if ($type instanceof ClassT && self::isResponseFqcn($type->fqcn) && $type->typeArgs !== []) {
             $refined = $this->fromTypeArgs($type);
 
-            return $expr instanceof Node\Expr\MethodCall ? $this->factoryAccessors($refined, $expr, $scope, $paramNames) : $refined;
+            return $expr instanceof Node\Expr\MethodCall || $expr instanceof Node\Expr\StaticCall ? $this->factoryAccessors($refined, $expr, $scope, $paramNames) : $refined;
         }
 
         // 3. A response built into a local and then returned (`$r = Problem::make(…); …; return $r;`) — the
@@ -853,7 +854,7 @@ final class ResponseShapeRefiner
      *
      * @param  list<string>  $paramNames
      */
-    private function factoryAccessors(RefinedResponse $refined, Node\Expr\MethodCall $call, Scope $scope, array $paramNames): RefinedResponse
+    private function factoryAccessors(RefinedResponse $refined, Node\Expr\MethodCall|Node\Expr\StaticCall $call, Scope $scope, array $paramNames): RefinedResponse
     {
         $arguments = $refined->statusOfPayload ? null : $this->factoryArguments($call, $scope);
         if ($arguments === null) {
@@ -886,18 +887,26 @@ final class ResponseShapeRefiner
     }
 
     /** The status argument of a `response()->json()`/`noContent()` call, or null for any other call. */
-    private function factoryStatus(Node\Expr\MethodCall $call, Scope $scope): ?Node\Expr
+    private function factoryStatus(Node\Expr\MethodCall|Node\Expr\StaticCall $call, Scope $scope): ?Node\Expr
     {
         return $this->factoryArguments($call, $scope)['status'] ?? null;
     }
 
     /**
-     * The body and status arguments of a `response()->json()`/`noContent()` call, or null for any other call.
+     * The body and status arguments of a `response()->json()`/`noContent()` call, made on the factory or through
+     * a facade proxying it ({@see FacadeCall}), or null for any other call.
      *
      * @return array{method: string, body: Node\Expr|null, status: Node\Expr|null, defaultStatus: int|null}|null
      */
-    private function factoryArguments(Node\Expr\MethodCall $call, Scope $scope): ?array
+    private function factoryArguments(Node\Expr\MethodCall|Node\Expr\StaticCall $call, Scope $scope): ?array
     {
+        if ($call instanceof Node\Expr\StaticCall) {
+            $call = FacadeCall::onRoot($call, $scope, $this->reflectionProvider);
+            if ($call === null) {
+                return null;
+            }
+        }
+
         $arguments = ResponseFactoryCall::arguments($call);
         if ($arguments === null || ! (new ObjectType(ResponseFactoryCall::CONTRACT))->isSuperTypeOf($scope->getType($call->var))->yes()) {
             return null;
