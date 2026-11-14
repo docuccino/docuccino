@@ -25,6 +25,7 @@ use Docuccino\Core\Inference\StatusCodes;
 use Docuccino\Inference\PhpStan\Metadata\ClassMetadataFactory;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
 use Docuccino\Inference\PhpStan\Support\ContentTypeHeader;
+use Docuccino\Inference\PhpStan\Support\MadeResponseCall;
 use Docuccino\Inference\PhpStan\Support\OmissionSentinel;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Support\ResponseFactoryCall;
@@ -72,6 +73,9 @@ final class ResponseShapeRefiner
         'Symfony\\Component\\HttpFoundation\\JsonResponse',
         'Symfony\\Component\\HttpFoundation\\Response',
     ];
+
+    /** What `view()` renders, and so the body of a response the factory makes of a view. */
+    private const VIEW = 'Illuminate\\Contracts\\View\\View';
 
     /** The canonical FQCN the recovered shape is emitted under (the shape the pipeline unwraps). */
     public const CANONICAL_RESPONSE = 'Illuminate\\Http\\JsonResponse';
@@ -258,6 +262,12 @@ final class ResponseShapeRefiner
             if (self::isResponseFqcn($class)) {
                 return $this->foldConstructor($expr, $class, $scope, $paramNames);
             }
+        }
+
+        // 1b. A plain response the factory makes (`response('', 410)`, `response()->make(…)`, `->view(…)`).
+        $made = MadeResponseCall::of($expr, $scope, $this->reflectionProvider);
+        if ($made !== null) {
+            return $this->foldMade($made, $scope, $paramNames);
         }
 
         // 2. Type system already carries the shape (`response()->json([...], 422)`, via our extension).
@@ -565,6 +575,43 @@ final class ResponseShapeRefiner
         $members = [...$echoes, ...$fixed];
 
         return $members === [] ? $refined : $refined->withPayloadMembers(new ArrayShapeT($members), []);
+    }
+
+    /**
+     * Fold a plain response the factory makes ({@see MadeResponseCall}), its status read as the constructor's
+     * is. Where that leaves nothing but the framework's 200 and a body nothing read, the bare class already
+     * says it, so null.
+     *
+     * @param  array{body: MadeResponseCall::VIEW|MadeResponseCall::EMPTY|MadeResponseCall::UNREAD, slots: ArgumentSlots, status: int, headers: int}  $made
+     * @param  list<string>  $paramNames
+     */
+    private function foldMade(array $made, Scope $scope, array $paramNames): ?RefinedResponse
+    {
+        $args = $made['slots'];
+        $statusArg = $args->at($made['status']);
+        [$status, $statusSource] = match (true) {
+            $statusArg !== null => $this->resolveStatus($statusArg, $scope, $paramNames),
+            $args->knows($made['status']) => [new LiteralT(200), null],
+            default => [null, null],
+        };
+
+        $headers = $args->at($made['headers']);
+        $contentType = $headers === null ? null : ContentTypeHeader::inArray($headers, $scope);
+
+        $payload = match ($made['body']) {
+            MadeResponseCall::VIEW => new ClassT(self::VIEW),
+            MadeResponseCall::EMPTY => new VoidT,
+            MadeResponseCall::UNREAD => null,
+        };
+
+        if ($payload === null && $statusSource === null && $status instanceof LiteralT && $status->value === 200) {
+            return null;
+        }
+
+        $refined = RefinedResponse::fromConstructor($payload, $status, $statusSource, $contentType, []);
+
+        // A status stated and unread replaced the 200 the bare class would publish.
+        return $status === null && $statusSource === null ? $refined->withUnreadStatus() : $refined;
     }
 
     /**

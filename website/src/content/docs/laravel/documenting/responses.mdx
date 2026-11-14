@@ -427,6 +427,18 @@ the status, and a helper you hand the case to (`$this->refuse(TokenRefusal::Expi
 run time is the status every case it may be maps to. When they map to different statuses, no single code
 is true, so the body is documented as a status Docuccino can't read.
 
+A plain response gets its status the same way, whether you build it with the `response()` helper,
+`response()->make()` or `response()->view()`:
+
+```php
+return response('', 410);                         // → 410, no body
+return response()->view('archived', [], 410);     // → 410 with an HTML body
+return response($csv, Response::HTTP_GONE);       // → 410
+```
+
+An empty content is documented as no body. Laravel sends a string as it is rather than as JSON, so the
+shape of any other content is left open.
+
 A status Docuccino can't read at all, such as `->setStatusCode($upstream->status())`, is not documented
 under a code the endpoint may never send. Its body goes under `default` ("any status") and an
 `inferred-response.status-unread` info diagnostic names the action. Name the codes it sends with
@@ -558,7 +570,7 @@ What gets documented instead is only what the class itself proves:
 | `RedirectResponse` | `3XX` with a `Location` header and no body |
 | `JsonResponse` with no recoverable payload | `200` with an open `application/json` body |
 | `BinaryFileResponse`, `StreamedResponse` | `200` with a binary body — see [file downloads and streams](#file-downloads-and-streams) |
-| `Illuminate\Http\Response` | the status alone — neither media type nor shape is stated anywhere |
+| `Illuminate\Http\Response` | the status alone, the one the call names (`response('', 410)`) or else `200` — neither media type nor shape is stated anywhere |
 
 The redirect gets the OAS `3XX` range key rather than `302`: Laravel's `RedirectResponse` defaults to
 302 but takes any 3xx (`redirect()->to($url, 301)`, `->away($url, 307)`), and nothing at the return

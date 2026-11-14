@@ -6,6 +6,9 @@ use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\UnknownT;
+use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
@@ -24,14 +27,18 @@ use Workbench\App\Http\Controllers\ArchiveController;
  */
 function responseHelperStatusReturns(): array
 {
-    $plain = new ClassT('Illuminate\\Http\\Response');
+    $made = static fn (DType $payload, int $status): ClassT => new ClassT('Illuminate\\Http\\JsonResponse', [$payload, new LiteralT($status)]);
 
     return [
-        'purge' => $plain,
-        'retire' => $plain,
-        'lock' => $plain,
-        'tombstone' => $plain,
-        'ping' => $plain,
+        // Sent with the status the call names, and an empty content is no body.
+        'purge' => $made(new VoidT, 410),
+        // A string is sent as it is rather than as JSON, so its shape is not read; the status still is.
+        'retire' => $made(new UnknownT('payload not folded'), 410),
+        'lock' => $made(new VoidT, 423),
+        // A view is rendered as HTML whatever status carries it.
+        'tombstone' => $made(new ClassT('Illuminate\\Contracts\\View\\View'), 410),
+        // The framework's 200 with a body nothing read is what the bare class already says.
+        'ping' => new ClassT('Illuminate\\Http\\Response'),
     ];
 }
 
