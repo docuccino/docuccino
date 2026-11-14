@@ -12,7 +12,9 @@ use Docuccino\Core\Extensions\Validation\ValidationRule;
 /**
  * `not_in:a,b,c` → `not: {enum: […]}` — the mirror of {@see ChoiceRuleTransformer}'s `in`, excluding a
  * value set instead of restricting to one. Also covers spatie's `#[NotIn]`, which recovers the same rule.
- * Numeric-only sets infer integer, otherwise string; an explicit type is preserved.
+ *
+ * Unlike `in`, it never types the field: every value outside the set passes, whatever its type, so a type
+ * read from the set would refuse requests the server takes. The type is the other rules' to state.
  */
 final class NotInRuleTransformer implements RuleTransformer
 {
@@ -39,10 +41,6 @@ final class NotInRuleTransformer implements RuleTransformer
                 $allNumeric = false;
                 break;
             }
-        }
-
-        if (! $field->has('type')) {
-            $field->setType($allNumeric ? 'integer' : 'string');
         }
 
         $field->set('not', ['enum' => $allNumeric ? array_map('intval', $values) : $values]);
