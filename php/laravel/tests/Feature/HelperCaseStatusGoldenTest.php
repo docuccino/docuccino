@@ -10,6 +10,7 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\UnionT;
+use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
@@ -32,13 +33,15 @@ function helperCaseStatusReturns(): array
         new ArrayShapeT([new ArrayShapeField('error', $error)]),
         $status,
     ]);
-    $either = UnionT::of([new LiteralT(410), new LiteralT(423)]);
     $names = UnionT::of([new LiteralT('Gone'), new LiteralT('Locked')]);
 
     return [
-        'gone' => $json(new LiteralT('Gone'), $either),
-        'locked' => $json($names, $either),
-        'report' => $json($names, $either),
+        // The helper reads whichever case it is handed, and each call hands it one: that case's value is
+        // the status sent, and its name the body.
+        'gone' => $json(new LiteralT('Gone'), new LiteralT(410)),
+        'locked' => $json(new LiteralT('Locked'), new LiteralT(423)),
+        // Gone answers 410 and Locked 423: no one code is true of every request, so none is read.
+        'report' => $json($names, new UnknownT('status not folded')),
     ];
 }
 

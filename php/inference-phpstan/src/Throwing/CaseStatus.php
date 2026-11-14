@@ -78,6 +78,36 @@ final class CaseStatus
     }
 
     /**
+     * Whether `$expr` is a read on a choice of cases that read to different statuses: the case is chosen at
+     * run time, so {@see of()} states no status for it, and nor may a union of the codes the read's own type
+     * holds (`$fault->value` typed `410|423`). Inside a helper the choice is the parameter's type, and the
+     * case a call passes is what decides it.
+     */
+    public function disagrees(Node\Expr $expr, Scope $scope): bool
+    {
+        $call = self::caseRead($expr);
+        if ($call === null) {
+            return false;
+        }
+
+        $type = $scope->getType($call[0]);
+        if (! self::onlyCases($type)) {
+            return false;
+        }
+
+        $statuses = [];
+        foreach ($type->getEnumCases() as $case) {
+            $folded = $this->folder->fold($case->getClassName(), $case->getEnumCaseName(), $call[1])?->value;
+            if (! is_int($folded)) {
+                return false;
+            }
+            $statuses[$folded] = true;
+        }
+
+        return count($statuses) > 1;
+    }
+
+    /**
      * The one status every case `$type` may be reads to through `$read`.
      *
      * @return FoldedStatus
@@ -87,10 +117,7 @@ final class CaseStatus
         $cases = $type->getEnumCases();
         $files = self::enumFiles($type);
 
-        // The cases cover the type only where it is nothing but those enums: an interface or a nullable
-        // beside them may be a value no case names.
-        $enums = array_map(static fn (EnumCaseObjectType $case): ObjectType => new ObjectType($case->getClassName()), $cases);
-        if ($enums === [] || ! TypeCombinator::union(...$enums)->isSuperTypeOf($type)->yes()) {
+        if (! self::onlyCases($type)) {
             return ['status' => null, 'files' => $files];
         }
 
@@ -107,6 +134,17 @@ final class CaseStatus
         }
 
         return ['status' => $status, 'files' => array_values(array_unique([...$files, ...$this->recorded]))];
+    }
+
+    /**
+     * Whether the cases cover the type: only where it is nothing but those enums, since an interface or a
+     * nullable beside them may be a value no case names.
+     */
+    private static function onlyCases(Type $type): bool
+    {
+        $enums = array_map(static fn (EnumCaseObjectType $case): ObjectType => new ObjectType($case->getClassName()), $type->getEnumCases());
+
+        return $enums !== [] && TypeCombinator::union(...$enums)->isSuperTypeOf($type)->yes();
     }
 
     /**

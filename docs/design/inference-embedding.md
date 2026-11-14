@@ -927,8 +927,12 @@ names (`ConstantSource`) — are recorded wherever the response tier reads one. 
 folded over every case its type may be, and states a status only where they all agree — the throw side
 carries one status per exception, so cases mapping to two statuses are no status and the unread notice, as
 `abort($a ? 403 : 404)` is. The response tier holds to the same rule, so one read means one answer in both;
-its `default` for disagreeing cases is vague where `$ok ? 200 : 503` is two responses, but true. A type that
-is not wholly enum cases (an interface, a nullable) states none.
+its `default` for disagreeing cases is vague where `$ok ? 200 : 503` is two responses, but true. That holds
+for `$case->value` too, whose PHPStan type already holds every backing value: where the cases disagree
+(`CaseStatus::disagrees()`) that union is not read as the codes, so inside a helper the read on its
+parameter stays the accessor the call site binds — `$this->fault(Fault::Gone)` is that one case's status,
+and a `response()->json()` there no longer keeps the union its type carries. A type that is not wholly enum
+cases (an interface, a nullable) states none.
 
 **Every file the status was read from is a dependency.** The class's whole hierarchy, the factory's file,
 and two the body itself does not name: the file a callee's body is WRITTEN in — PHP reports a

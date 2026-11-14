@@ -200,8 +200,9 @@ final class ResponseShapeRefiner
      * fold to more than the erased generic the stub's `@template` bounds leave behind, a fluent chain,
      * whose links can restate a status the receiver's own type carries unchanged
      * ({@see FluentResponseChain}), and a `response()->json()` whose status is a read on an enum case, which
-     * its type carries as a bare int ({@see CaseStatus}). A factory call's status is read either way, so
-     * where it was written is recorded when the harvest keeps the type.
+     * its type carries as a bare int, or as every code where the cases disagree ({@see CaseStatus}). A
+     * factory call's status is read either way, so where it was written is recorded when the harvest keeps
+     * the type.
      */
     public function outranksResolvedType(Node\Expr $expr, Scope $scope): bool
     {
@@ -215,8 +216,9 @@ final class ResponseShapeRefiner
         }
 
         $read = $this->statusIn($status, $scope);
+        $typed = ScalarFold::statusOf($scope->getType($status));
 
-        return $read !== null && ScalarFold::statusOf($scope->getType($status)) === null;
+        return ($read !== null && $typed === null) || ($typed !== null && $this->caseStatus->disagrees($status, $scope));
     }
 
     /**
@@ -853,35 +855,55 @@ final class ResponseShapeRefiner
      */
     private function factoryAccessors(RefinedResponse $refined, Node\Expr\MethodCall $call, Scope $scope, array $paramNames): RefinedResponse
     {
-        $status = $refined->statusOfPayload ? null : $this->factoryStatus($call, $scope);
-        if ($status === null) {
+        $arguments = $refined->statusOfPayload ? null : $this->factoryArguments($call, $scope);
+        if ($arguments === null) {
             return $refined;
         }
 
-        // Read even where the type folded it, which records where the status was written.
-        [$codes, $source] = $this->resolveStatus($status, $scope, $paramNames);
-        if ($codes !== null) {
-            return $refined->status === null ? $refined->withBoundStatus($codes) : $refined;
-        }
-        if ($source === null || $refined->status !== null) {
-            return $refined;
-        }
+        // Read even where the type folded it, which records where the status was written. The type's own
+        // status stands only where this reader has nothing to say against it: a status read off a parameter
+        // is the call site's to decide, and a choice of cases that disagree states none.
+        $status = $arguments['status'];
+        [$codes, $source] = $status === null ? [null, null] : $this->resolveStatus($status, $scope, $paramNames);
+        $stated = match (true) {
+            $codes !== null => $refined->status ?? $codes,
+            $source !== null, $status !== null && $this->caseStatus->disagrees($status, $scope) => null,
+            default => $refined->status,
+        };
 
-        $body = ResponseFactoryCall::arguments($call)['body'] ?? null;
+        // A body member read off a parameter binds at the call site whatever the status is.
+        $body = $arguments['body'];
         [$provenance, $statusTexts] = $body === null ? [[], []] : $this->bodyProvenance($body, $scope, $paramNames);
+        if ($source === null && $provenance === [] && $statusTexts === []) {
+            return match (true) {
+                $stated === $refined->status => $refined,
+                $stated === null => $refined->withStatusSource(null),
+                default => $refined->withBoundStatus($stated),
+            };
+        }
 
-        return RefinedResponse::fromConstructor($refined->payload, null, $source, $refined->contentType, $provenance, $statusTexts);
+        return RefinedResponse::fromConstructor($refined->payload, $stated, $source, $refined->contentType, $provenance, $statusTexts);
     }
 
     /** The status argument of a `response()->json()`/`noContent()` call, or null for any other call. */
     private function factoryStatus(Node\Expr\MethodCall $call, Scope $scope): ?Node\Expr
+    {
+        return $this->factoryArguments($call, $scope)['status'] ?? null;
+    }
+
+    /**
+     * The body and status arguments of a `response()->json()`/`noContent()` call, or null for any other call.
+     *
+     * @return array{method: string, body: Node\Expr|null, status: Node\Expr|null, defaultStatus: int|null}|null
+     */
+    private function factoryArguments(Node\Expr\MethodCall $call, Scope $scope): ?array
     {
         $arguments = ResponseFactoryCall::arguments($call);
         if ($arguments === null || ! (new ObjectType(ResponseFactoryCall::CONTRACT))->isSuperTypeOf($scope->getType($call->var))->yes()) {
             return null;
         }
 
-        return $arguments['status'];
+        return $arguments;
     }
 
     /**
@@ -1373,8 +1395,9 @@ final class ResponseShapeRefiner
      * The status an expression states, the one reader of it for every place a response takes one: what a
      * read on an enum case gives ({@see CaseStatus}) — `Reason::Expired->status()`, or with `$read` the
      * accessor a callee applies to the case passed here — or else each constant it can be
-     * ({@see ScalarFold::statusOf()}). Where it was written — the enums the read went through, the class
-     * constants it names ({@see ConstantSource}) — is a dependency whether or not it folded.
+     * ({@see ScalarFold::statusOf()}), except a read on cases that disagree ({@see CaseStatus::disagrees()}).
+     * Where it was written — the enums the read went through, the class constants it names
+     * ({@see ConstantSource}) — is a dependency whether or not it folded.
      */
     private function statusIn(Node\Expr $expr, Scope $scope, ?ParamAccessor $read = null): LiteralT|UnionT|null
     {
@@ -1387,7 +1410,7 @@ final class ResponseShapeRefiner
             return new LiteralT($folded['status']);
         }
 
-        return $read === null ? ScalarFold::statusOf($scope->getType($expr)) : null;
+        return $read === null && ! $this->caseStatus->disagrees($expr, $scope) ? ScalarFold::statusOf($scope->getType($expr)) : null;
     }
 
     /**
