@@ -118,6 +118,8 @@ final class DocumentDecoder
     {
         $this->mark = null;
         $this->twin = null;
+        $this->values = 0;
+        $this->text = 0;
 
         if (str_starts_with($bytes, self::BOM)) {
             $bytes = substr($bytes, strlen(self::BOM));
@@ -188,6 +190,17 @@ final class DocumentDecoder
                 $exception,
             );
         }
+    }
+
+    /**
+     * How many values and bytes of text the last {@see decode()} made in its copy, refused or not: none where
+     * the text was refused before the copy began.
+     *
+     * @return array{int, int}
+     */
+    public function made(): array
+    {
+        return [$this->values, $this->text];
     }
 
     /**
