@@ -1810,7 +1810,7 @@ body matches the document's error style:
 
 | Status | Signal | Synthesized exception |
 |---|---|---|
-| 401 | auth middleware matches `security.auth_middleware`, and the route is not `#[Unauthenticated]` | `AuthenticationException` |
+| 401 | the route runs Laravel's authenticator, resolved by class through the alias map (`RouteAuthentication`), or middleware matching `security.auth_middleware`; and the route is not `#[Unauthenticated]`. The pattern only chooses where `security.default` applies, so the 401 never waits on it | `AuthenticationException`; `UnauthorizedHttpException` for `auth.basic` |
 | 422 | the draft declares it validates its input (`OperationDraft::validatesInput()`, set by `RecoveredRequest::apply()` for body or read-verb query), or an integration producer owns `requestBody` | `ValidationException` |
 
 > **Read verbs:** a validated GET/HEAD applies its rules as query parameters, never a `requestBody`,

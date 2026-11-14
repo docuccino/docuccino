@@ -84,6 +84,7 @@ use Docuccino\Laravel\Support\GateDenial;
 use Docuccino\Laravel\Support\GatePoliciesDigestContributor;
 use Docuccino\Laravel\Support\LeakageDigestContributor;
 use Docuccino\Laravel\Support\MiddlewareClasses;
+use Docuccino\Laravel\Support\RouteAuthentication;
 use Docuccino\Laravel\Versioning\Scaffold\ChangeStub;
 use Docuccino\Laravel\Versioning\VersionChangeCollector;
 use Docuccino\Laravel\Watch\ArtisanBuildRunner;
@@ -182,7 +183,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         $this->app->bind(GateDenial::class, static function (Application $app): GateDenial {
             $vendor = new VendorRoutePolicy($app->basePath('vendor'));
 
-            return new GateDenial(self::gateResolver($app), $vendor->isVendorFile(...));
+            return new GateDenial($app->make(RouteAuthentication::class), self::gateResolver($app), $vendor->isVendorFile(...));
         });
 
         $this->app->bind(

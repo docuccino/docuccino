@@ -648,7 +648,7 @@ errors:
 
 | Status | When it's added | How to opt out |
 | --- | --- | --- |
-| `401` | The route has authentication middleware (matching `security.auth_middleware`). | Mark the route [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) — or `#[IgnoreResponse(401)]`. |
+| `401` | The route runs Laravel's authenticator (`auth`, any guard, your own subclass, or `auth.basic`), or middleware matching `security.auth_middleware`. | Mark the route [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) — or `#[IgnoreResponse(401)]`. |
 | `422` | Validation rules were recovered (Spatie Data, a form request, an inline `validate()`, or an action's `rules()`), whether they document the body or, on a read route, the query parameters. | `#[IgnoreResponse(422)]`. |
 | `404` | The route binds a model to a path parameter (implicit binding). One `404` per operation. | `#[IgnoreResponse(404)]`. |
 | `403` | The route has `can:` / `signed` / `verified` middleware, or a form request `authorize()` gate that isn't a literal `return true`. | `#[IgnoreResponse(403)]`. |
