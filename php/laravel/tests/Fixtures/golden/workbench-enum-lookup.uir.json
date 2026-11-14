@@ -37,29 +37,7 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "500": {
-                "id": "res:v1:7c6wl32cszpk4wg2",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "component",
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/ExportController.php",
-                      "line": 24,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\ExportController::fail"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "post.api.exports.@export.fail.@code",
         "summary": "Fail an export with the fault the caller names.",
@@ -132,7 +110,61 @@
         ],
         "responses": {
           "500": {
-            "$ref": "#/components/responses/InternalServerError"
+            "x-docuccino": {
+              "id": "res:v1:7c6wl32cszpk4wg2",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "component",
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/ExportController.php",
+                    "line": 24,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\ExportController::fail"
+                  }
+                }
+              ],
+              "facts": {
+                "component": "InternalServerError"
+              }
+            },
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "fallback",
+                        "layer": "fallback",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/ExportController.php",
+                          "line": 24,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\ExportController::fail"
+                        }
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -168,29 +200,7 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "500": {
-                "id": "res:v1:vyx4tgwre3f277oz",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "component",
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/ExportController.php",
-                      "line": 18,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\ExportController::lock"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "post.api.exports.@export.lock",
         "summary": "Lock an export.",
@@ -287,39 +297,6 @@
                 }
               }
             }
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          }
-        }
-      }
-    }
-  },
-  "components": {
-    "schemas": {
-      "InternalServerError": {
-        "x-docuccino": {
-          "id": "sch:v1:ymhinvqj233m43e2"
-        },
-        "type": "object",
-        "properties": {
-          "message": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "message"
-        ]
-      }
-    },
-    "responses": {
-      "InternalServerError": {
-        "description": "Internal Server Error",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/InternalServerError"
-            }
           }
         }
       }
@@ -329,7 +306,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "b074c9f8064c80d26f184d5d96b56e981c25f5a31bbf53694bc4e644629d1451"
+      "contentHash": "450bce5d01cff4c46304cbb6cc5a322a00923e82ca529f148ccb50fb2cd0bfd5"
     },
     "generator": {
       "name": "docuccino/laravel",
