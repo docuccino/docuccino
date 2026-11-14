@@ -866,7 +866,9 @@ shaped like a union is read as the value it is.
 
 ```yaml
 diagnostics:
-  accept: [] # e.g. ['eloquent.no-columns']
+  accept: []
+    # - 'eloquent.no-columns'
+    # - { code: 'attribute.body-parameter-narrower', operation: 'POST /api/orders' }
 ```
 
 `accept` is the list of [diagnostic codes](/laravel/reference/diagnostics/) you've read and decided
@@ -883,9 +885,27 @@ diagnostics:
     - 'validation.rule-unrecoverable'
 ```
 
-The unit is a whole code, not a code at one route: a code names a cause, which is the thing you
-decide about, and a list scoped by route would be a second copy of your application's shape that goes
-stale on the next rename.
+An entry written as a code accepts that code everywhere. That's right when the code names a cause
+you've decided about once for the whole application, like a vendor model you can't annotate. Some
+codes are a judgement about one route instead. `attribute.body-parameter-narrower` can be a
+declaration you've checked by hand on one route and a real mistake on the next. Accept those where you
+checked them, by naming the operation:
+
+```yaml
+diagnostics:
+  accept:
+    - 'eloquent.no-columns'
+    - { code: 'attribute.body-parameter-narrower', operation: 'POST /api/orders' }
+```
+
+| Field | Effect |
+| --- | --- |
+| `code` | The diagnostic code. Written alone, as a plain string or a map with no `operation`, it accepts the code everywhere. |
+| `operation` | The route signature the console prints above the finding, copied exactly: `POST /api/orders`, or `POST webhooks.invoice.paid` for a webhook. The same code on any other operation, or on no operation at all, still counts. |
+
+An entry with any other field is ignored rather than read as the whole code, so a misspelled
+`operation` can't quietly accept every report of the code. The build also reports the misspelling as
+`config.unknown-setting`.
 
 **An `error` is never accepted.** An error means the document is wrong or the build lost a whole tier
 of facts, so a code that reaches an error keeps failing the run, and the build says so with
@@ -899,14 +919,14 @@ Nothing accepted is invisible, and the list can't rot:
 | The diagnostic itself | `[info, accepted] eloquent.no-columns: …`, exactly where it always printed. |
 | The end of each document's block | `Accepted, so --fail-on ignores them: eloquent.no-columns (12)` — every entry that fired, with its hit count. |
 | An entry that fired as an error | `config.accept-refused` — acceptance didn't apply, and the run still failed. |
-| An entry nothing reported | `config.accept-unused` — the cause is fixed, or the code is misspelled. Delete the line. |
+| An entry nothing reported | `config.accept-unused` — the cause is fixed, the code is misspelled, or nothing reports the code at that operation any more because the route was renamed. Delete the line, or copy the new signature. |
 
 `config.accept-unused` is checked once a run has built **every** document, so `docuccino:export
 billing` never reports an entry the document it skipped fires on.
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `accept` | `[]` | Diagnostic codes that print but never fail `--fail-on`. Errors are never accepted. |
+| `accept` | `[]` | Diagnostics that print but never fail `--fail-on`: a code, everywhere, or `{code, operation}`, at one operation. Errors are never accepted. |
 
 ## Engine
 
