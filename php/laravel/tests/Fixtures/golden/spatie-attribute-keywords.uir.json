@@ -191,10 +191,14 @@
             "type": "array"
           },
           "v4": {
-            "type": "string"
+            "type": "string",
+            "format": "ipv4",
+            "example": "192.0.2.1"
           },
           "v6": {
-            "type": "string"
+            "type": "string",
+            "format": "ipv6",
+            "example": "2001:db8::1"
           }
         }
       }
@@ -204,7 +208,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "344caa0d610ca6dc5bdcae51e9fe2bb5818389c4ad70df8a58e5ff25ea9405af"
+      "contentHash": "f5748730709f2cd527ac46da686d1a3d523cad45706a150934d5799ffabd02fc"
     },
     "generator": {
       "name": "docuccino/laravel",

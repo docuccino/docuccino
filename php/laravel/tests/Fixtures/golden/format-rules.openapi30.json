@@ -72,14 +72,33 @@
             "format": "ip",
             "example": "192.0.2.1"
           },
-          "colour": {},
-          "gateway": {
+          "colour": {
             "type": "string",
+            "pattern": "^#(?:(?:[0-9a-fA-F]{3}){1,2}|(?:[0-9a-fA-F]{4}){1,2})\\n?$",
+            "example": "#000000",
             "nullable": true
           },
-          "ipv4": {},
-          "ipv6": {},
-          "mac": {}
+          "gateway": {
+            "type": "string",
+            "format": "ipv4",
+            "example": "192.0.2.1",
+            "nullable": true
+          },
+          "ipv4": {
+            "type": "string",
+            "format": "ipv4",
+            "example": "192.0.2.1"
+          },
+          "ipv6": {
+            "type": "string",
+            "format": "ipv6",
+            "example": "2001:db8::1"
+          },
+          "mac": {
+            "type": "string",
+            "pattern": "^(?:[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}|[0-9a-fA-F]{2}(?:-[0-9a-fA-F]{2}){5}|[0-9a-fA-F]{4}(?:\\.[0-9a-fA-F]{4}){2})$",
+            "example": "00:00:5E:00:53:01"
+          }
         },
         "required": [
           "address",

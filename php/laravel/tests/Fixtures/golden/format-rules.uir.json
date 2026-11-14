@@ -168,7 +168,13 @@
               "facts": {
                 "blankAsNull": "^[\\x00\\t-\\r  ­͏؜ᅟᅠ ឴឵᠎           ​‌‍‎‏\u2028\u2029  ⁠⁡⁢⁣⁤⁥⁪⁫⁬⁭⁮⁯⠀　ㅤ﻿ﾠ𝅙𝅳𝅴𝅵𝅶𝅷𝅸𝅹𝅺󠀠]*$"
               }
-            }
+            },
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^#(?:(?:[0-9a-fA-F]{3}){1,2}|(?:[0-9a-fA-F]{4}){1,2})\\n?$",
+            "example": "#000000"
           },
           "gateway": {
             "x-docuccino": {
@@ -179,11 +185,25 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "format": "ipv4",
+            "example": "192.0.2.1"
           },
-          "ipv4": {},
-          "ipv6": {},
-          "mac": {}
+          "ipv4": {
+            "type": "string",
+            "format": "ipv4",
+            "example": "192.0.2.1"
+          },
+          "ipv6": {
+            "type": "string",
+            "format": "ipv6",
+            "example": "2001:db8::1"
+          },
+          "mac": {
+            "type": "string",
+            "pattern": "^(?:[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}|[0-9a-fA-F]{2}(?:-[0-9a-fA-F]{2}){5}|[0-9a-fA-F]{4}(?:\\.[0-9a-fA-F]{4}){2})$",
+            "example": "00:00:5E:00:53:01"
+          }
         },
         "required": [
           "address",
@@ -198,7 +218,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "85c8b310d04bc9b2f450e5d96a637cd0fe4a7b8bb3ec9135fcb223c067298adf"
+      "contentHash": "6c1f76e76a7ead593459d531f51a42590f23dcc416f6d96ecdbc78a0d04ff294"
     },
     "generator": {
       "name": "docuccino/laravel",
