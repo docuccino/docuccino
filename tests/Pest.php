@@ -45,6 +45,7 @@ use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\ClassRef;
+use Docuccino\Core\Inference\ConstValue;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
@@ -128,6 +129,7 @@ use Illuminate\Routing\MiddlewareNameResolver;
 use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\Router;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Validation\ValidationRuleParser;
 use Opis\JsonSchema\Resolvers\SchemaResolver;
 use Opis\JsonSchema\Uri;
 use Opis\JsonSchema\ValidationResult;
@@ -5766,4 +5768,15 @@ function attributeCarrier(string $class, string $arguments): string
     }
 
     return $name;
+}
+
+/**
+ * The rules Laravel's own parser makes of one rule object in a field's list, as the constants a rules array would
+ * spell them, the empty rule the validator skips left out.
+ */
+function laravelParsedRules(object $rule): ConstValue
+{
+    $parsed = (new ValidationRuleParser([]))->explode(['f' => [$rule]])->rules['f'];
+
+    return ConstValue::array(array_map(ConstValue::scalar(...), array_values(array_filter($parsed, static fn (mixed $item): bool => $item !== ''))));
 }

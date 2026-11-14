@@ -192,6 +192,14 @@ Each attribute reads as the rule laravel-data writes for it, named by the attrib
 its class: `#[GreaterThan(5)]` is `gt:5`, `#[ListType]` is `list` and `#[IPv4]` is `ipv4`. Its arguments
 are taken in the order the attribute declares them, so `#[Between(max: 10, min: 1)]` is `between:1,10`.
 
+An attribute that builds one of Laravel's rule objects reads as that object, the way Laravel validates with
+it, whether its arguments are named or not. `#[Dimensions(minWidth: 10)]` is `dimensions:min_width=10`, the
+string Laravel casts it to, and `#[Password(min: 10)]` is the `string|min:10` a password is checked against
+first, so it publishes `minLength: 10`. The letter, case, number, symbol and breach checks a password runs
+after that have no schema equivalent, so they're left out with an info diagnostic. Defaults your
+application registers with `Password::defaults()` are set at boot, outside anything the build reads, so
+`#[Password(default: true)]` stays unconstrained then. `#[Exists]` and `#[Unique]` make the field a string.
+
 On a property typed `array`, laravel-data adds the `array` rule itself, so `#[In]` and `#[NotIn]` check
 each element, as they do [beside `array` in a form request](/laravel/documenting/requests/#nested-and-array-fields).
 `#[In(['news', 'sport'])]` on a `list<string>` publishes its `enum` on `items`, and on an
@@ -207,8 +215,9 @@ The escape hatches work as you'd hope:
 - Laravel's own rule objects document as they do in a form request's rules array:
   `#[Rule(new Enum(Currency::class))]` reads as `Rule::enum(Currency::class)`, and a `new In([...])` or
   `new NotIn([...])` in a `#[Rule([...])]` list as `Rule::in()` or `Rule::notIn()`. So does the object an
-  `#[Enum]`, `#[In]`, `#[NotIn]` or `#[Exclude]` takes in place of its parameters, which is what
-  laravel-data validates with.
+  attribute such as `#[Enum]`, `#[In]` or `#[Exclude]` takes in place of its parameters, which is what
+  laravel-data validates with. A rule object Laravel casts to a string, like `new Dimensions([...])`,
+  reads as that string.
 - An attribute Docuccino doesn't recognize degrades like an unknown string rule — permissive, with an
   info diagnostic — rather than inventing a constraint.
 

@@ -72,8 +72,8 @@ it('emits validation attributes named apart from their rules byte-identical to t
 /*
  * Each row says whether laravel-data takes the body, by the rules it hands Laravel, and whether the document does.
  * laravel-data writes an attribute's rule from the attribute's own keyword, so `#[GreaterThan(5)]` is `gt:5` and
- * `#[ListType]` is `list`, and its parameters in the order the attribute declares them, however they were written.
- * The two answer alike.
+ * `#[ListType]` is `list`, and its parameters in the order the attribute declares them, however they were written;
+ * an attribute that builds a rule object hands Laravel that object. The two answer alike.
  */
 it('takes every value laravel-data takes through an attribute named apart from its rule', function (array $body, bool $accepted): void {
     $document = json_decode((new UirEmitter)->emit(spatieAttributeKeywordsBuild()->document), flags: JSON_THROW_ON_ERROR);
@@ -110,4 +110,8 @@ it('takes every value laravel-data takes through an attribute named apart from i
     // `ipv4` and `ipv6` are JSON Schema formats of their own, so an address of the other family is refused by both.
     'an IPv6 address where IPv4 is asked' => [['v4' => '2001:db8::1'], false],
     'an IPv4 address where IPv6 is asked' => [['v6' => '192.0.2.1'], false],
+    // `#[Password(min: 10)]` hands Laravel a password rule, which validates the value as `string|min:10` first.
+    'a passphrase at its minimum' => [['passphrase' => '0123456789'], true],
+    'a passphrase one short of it' => [['passphrase' => '012345678'], false],
+    'a passphrase that is no string' => [['passphrase' => 1234567890], false],
 ]);
