@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Analysis;
 
+use Closure;
 use Docuccino\Core\Inference\ArgumentSlots;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\LiteralT;
@@ -41,8 +42,8 @@ use PHPStan\Type\StaticType;
  * `->header($name, $v)` this cannot read cannot have touched the STATUS, and a `->setStatusCode($code)` it
  * cannot read cannot have touched the BODY. Refusing the chain over either would leave the receiver's own
  * status standing where the code plainly restated it — the `JsonResponse<…, 200>` of `response()->json()`
- * published for a status the endpoint may never send. A status that folds to several constants
- * (`$ok ? 200 : 503`) is read as all of them ({@see ScalarFold::ints()}).
+ * published for a status the endpoint may never send. The status is read as the refiner reads every other
+ * one, so `$ok ? 200 : 503` is both codes and `Reason::Expired->status()` the one its case maps to.
  *
  * @phpstan-type PeeledChain array{receiver: Node\Expr, status: LiteralT|UnionT|null, statusUnknown: bool, contentType: string|null, contentTypeUnknown: bool}
  * @phpstan-type ChainLink array{status: LiteralT|UnionT|null, statusUnknown: bool, contentType: string|null, contentTypeUnknown: bool}
@@ -60,9 +61,13 @@ final class FluentResponseChain
     /** Sets a map of headers at once. */
     private const HEADERS = 'withHeaders';
 
+    /**
+     * @param  Closure(Node\Expr, Scope): (LiteralT|UnionT|null)  $statusIn  the refiner's status reader
+     */
     public function __construct(
         private readonly ReflectionProvider $reflectionProvider,
         private readonly TypeTranslator $translator,
+        private readonly Closure $statusIn,
     ) {}
 
     /**
@@ -184,16 +189,16 @@ final class FluentResponseChain
     }
 
     /**
-     * `setStatusCode(202)`, or `setStatusCode($ok ? 200 : 503)` as both codes. A status this build cannot
-     * fold is still a status the code states, so it is reported unknown: passing the receiver's through
-     * would publish one the endpoint may never send.
+     * `setStatusCode(202)`, `setStatusCode($ok ? 200 : 503)` as both codes, or a read on an enum case as the
+     * code its case maps to. A status this build cannot fold is still a status the code states, so it is
+     * reported unknown: passing the receiver's through would publish one the endpoint may never send.
      *
      * @return ChainLink
      */
     private function readStatus(ArgumentSlots $args, Scope $scope): array
     {
         $code = $args->at(0);
-        $status = ScalarFold::statusOf($code === null ? null : $scope->getType($code));
+        $status = $code === null ? null : ($this->statusIn)($code, $scope);
 
         return ['status' => $status, 'statusUnknown' => $status === null, 'contentType' => null, 'contentTypeUnknown' => false];
     }

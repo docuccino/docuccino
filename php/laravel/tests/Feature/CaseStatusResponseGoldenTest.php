@@ -11,7 +11,6 @@ use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
-use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
@@ -36,8 +35,10 @@ function caseStatusResponseReturns(): array
     ]);
 
     return [
-        'expire' => $json('expired', ScalarT::int()),
-        'rotate' => $json('rotated', new UnknownT('status not folded')),
+        // Each case maps to one status, so that is the status sent.
+        'expire' => $json('expired', new LiteralT(401)),
+        'rotate' => $json('rotated', new LiteralT(409)),
+        // Expired answers 401 and AlreadyRotated 409: no one code is true of every request, so none is read.
         'refuse' => new ClassT('Illuminate\\Http\\JsonResponse', [
             new ArrayShapeT([new ArrayShapeField('error', UnionT::of([new LiteralT('already_rotated'), new LiteralT('token_expired')]))]),
             ScalarT::int(),

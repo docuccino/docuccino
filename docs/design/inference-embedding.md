@@ -917,10 +917,17 @@ the `$reason` slot together with the read (`HttpExceptionStatus::statusRead()`, 
 (`CaseStatus`, through `EnumAccessorFolder`). A subclass handing that parent a bare `$reason` forwards the
 same read on its own parameter; one handing it `$x->method()` is a read of a read and forwards nothing.
 The same fold answers an argument that is already `Case->status()` (`abort(Reason::Gone->status())`,
-`parent::__construct(Reason::Gone->status())`). A case chosen at run time is folded over every case its
-type may be, and states a status only where they all agree — the throw side carries one status per
-exception, so cases mapping to two statuses are no status and the unread notice, as `abort($a ? 403 : 404)`
-is. A type that is not wholly enum cases (an interface, a nullable) states none.
+`parent::__construct(Reason::Gone->status())`), and so does every status the response tier reads
+(`ResponseShapeRefiner::statusIn()`): `response()->json()`/`noContent()`, `new JsonResponse()`, a chain's
+`->setStatusCode()`, and an argument bound at a helper's call site, whether it is the case or the status read
+off it. A factory call whose type carries the status as a bare int is refined for it
+(`outranksResolvedType()`), and the status's files — the enums the read went through, the class constants it
+names (`ConstantSource`) — are recorded wherever the response tier reads one. A case chosen at run time is
+folded over every case its type may be, and states a status only where they all agree — the throw side
+carries one status per exception, so cases mapping to two statuses are no status and the unread notice, as
+`abort($a ? 403 : 404)` is. The response tier holds to the same rule, so one read means one answer in both;
+its `default` for disagreeing cases is vague where `$ok ? 200 : 503` is two responses, but true. A type that
+is not wholly enum cases (an interface, a nullable) states none.
 
 **Every file the status was read from is a dependency.** The class's whole hierarchy, the factory's file,
 and two the body itself does not name: the file a callee's body is WRITTEN in — PHP reports a

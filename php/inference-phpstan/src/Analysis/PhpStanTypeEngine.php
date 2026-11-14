@@ -946,7 +946,7 @@ final class PhpStanTypeEngine implements TypeEngine
 
     private function makeThrowAnalyzer(): ThrowAnalyzer
     {
-        $cases = $this->caseStatus ??= new CaseStatus($this->fileAnalyzer, $this->appFilter);
+        $cases = $this->caseStatus();
         $bodies = $this->classBodies ??= new AnalyzedBodies($this->fileAnalyzer, $cases);
         // Application scope for the two status READS, descend scope for the analyzer's own walk: how far
         // this build may descend is `project_paths`' question, and whether a declaration is the
@@ -975,6 +975,12 @@ final class PhpStanTypeEngine implements TypeEngine
         return $this->declarations ??= new ComponentDeclarations($this->adapter->reflectionProvider());
     }
 
+    /** One fold for a status read off an enum case, shared by the throw and response tiers. */
+    private function caseStatus(): CaseStatus
+    {
+        return $this->caseStatus ??= new CaseStatus($this->fileAnalyzer, $this->appFilter);
+    }
+
     private function refiner(): ResponseShapeRefiner
     {
         return $this->refiner ??= new ResponseShapeRefiner(
@@ -987,6 +993,7 @@ final class PhpStanTypeEngine implements TypeEngine
             // Vendor still never folds.
             $this->appFilter,
             $this->adapter->reflectionProvider(),
+            $this->caseStatus(),
             $this->classMetadataFactory,
             $this->config->traceDepth,
             $this->config->fileBudget,
