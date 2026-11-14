@@ -38,16 +38,16 @@ const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
     // phpdoc type grammar, the contract checker. The floor sits at the measured integer and 98 is out of
     // reach:
-    // Measured 97.88% (16665/17026): 97% of it is 16515.22 statements, 149.78 of margin (0.88pp).
+    // Measured 97.86% (18340/18741): 97% of it is 18178.77 statements, 161.23 of margin (0.86pp).
     // It was ratcheted 96 → 97 back when
     // the figure was 97.51% over a denominator 1189 statements smaller, dipped to 97.39% as core absorbed
     // work at slightly under its own average, and has come back up without the floor needing to move
     // either time — the ordinary shape for a package this size, and why 97 is where it stays.
-    'core' => ['floor' => 97, 'measured' => 97.88],
+    'core' => ['floor' => 97, 'measured' => 97.86],
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/, the
     // contract-testing assertions. The floor sat at 96 while 97 would have been a hair-trigger, and was to
     // ratchet once the figure cleared 97.20% — about 28 statements. It has:
-    // Measured 97.24% (15957/16410): 97% of it is 15917.70 statements, 39.30 of margin (0.24pp).
+    // Measured 97.24% (16231/16692): 97% of it is 16191.24 statements, 39.76 of margin (0.24pp).
     // The margin is thinner than `core`'s, and the risk it carries is a denominator change rather than a
     // lost proof — deleting about 1,200 fully covered adapter statements would drop the ratio under 97 with
     // no change in test quality. The record check further down fires at ten statements either way, so the
@@ -101,11 +101,15 @@ const FLOORS = [
     // 57 was declined there at 0.22 statements of margin, the hair-trigger the policy names. It RATCHETED
     // 56 → 58 when whether a call keeps the object a value was read off landed in the measurable half —
     // php-parser over the bodies the call reaches (`StateKeepingCalls`), unit-tested over real probes.
-    // Measured 58.63% (2542/4336): 58% of it is 2514.88 statements, 27.12 of margin.
+    // Re-recorded 58.63 → 58.38 when a non-final problem's constructor-pinned values were carried where
+    // the response builds it by its own name: the refiner paths that carry them run only under real
+    // analysis, the fixture group's, while the rule they apply (`FixedPropertyValues` with finality set
+    // aside, `ClassMetadataFactory::exactValues`) is unit-tested in process.
+    // Measured 58.38% (2560/4385): 58% of it is 2543.30 statements, 16.70 of margin.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads 3 statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 58, 'measured' => 58.63],
+    'inference-phpstan' => ['floor' => 58, 'measured' => 58.38],
 ];
 
 /*
