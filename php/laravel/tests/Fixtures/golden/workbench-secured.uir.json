@@ -704,7 +704,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "401": {
+                "id": "res:v1:5wdufcmpez574zip",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/FormController.php",
+                      "line": 25,
+                      "symbol": "implicit:auth-middleware"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "get.api.authenticated-forms",
         "summary": "List forms.",
@@ -750,6 +772,9 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           }
         }
       }
@@ -789,6 +814,24 @@
           ],
           "uses": {
             "responses": {
+              "401": {
+                "id": "res:v1:4mqin5w6mzjgearv",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/FormController.php",
+                      "line": 25,
+                      "symbol": "implicit:auth-middleware"
+                    }
+                  }
+                ]
+              },
               "403": {
                 "id": "res:v1:csy6schtmfd7iz3s",
                 "provenance": [
@@ -854,6 +897,9 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
@@ -1398,6 +1444,24 @@
           ],
           "uses": {
             "responses": {
+              "401": {
+                "id": "res:v1:tfdf4wyiehnwu7h5",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/FormController.php",
+                      "line": 25,
+                      "symbol": "implicit:auth-middleware"
+                    }
+                  }
+                ]
+              },
               "403": {
                 "id": "res:v1:uu2j6vkul665jt5h",
                 "provenance": [
@@ -1463,6 +1527,9 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
@@ -3693,6 +3760,24 @@
           ],
           "uses": {
             "responses": {
+              "401": {
+                "id": "res:v1:joznvczinmf3hzg5",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/FormController.php",
+                      "line": 25,
+                      "symbol": "implicit:auth-middleware"
+                    }
+                  }
+                ]
+              },
               "403": {
                 "id": "res:v1:hctolxrnzahyg3pw",
                 "provenance": [
@@ -3758,6 +3843,9 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
@@ -4779,6 +4867,20 @@
           "keeper"
         ]
       },
+      "Unauthorized": {
+        "x-docuccino": {
+          "id": "sch:v1:qntkok75rrb2gjjq"
+        },
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
       "UnprocessableEntity": {
         "x-docuccino": {
           "id": "sch:v1:f3tcwvg2vhs255gy"
@@ -4931,6 +5033,16 @@
           }
         }
       },
+      "Unauthorized": {
+        "description": "Unauthorized",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Unauthorized"
+            }
+          }
+        }
+      },
       "UnprocessableEntity": {
         "description": "Unprocessable Entity",
         "content": {
@@ -4967,7 +5079,7 @@
     "document": {
       "id": "doc:secured",
       "configHash": "d89a86d522eb398c0a3d894b165ad3d553ea98b9606eab23fb4d7a6a100fb07f",
-      "contentHash": "5ecef6c0b85bb515a30e66464e4bff20309c861eacaf9ffea060bfbb6ae94ec1"
+      "contentHash": "2d51e81f6c7c51a71b9d1ccdb4c99b7577c31ac5644000d389d4c0ad24041580"
     },
     "generator": {
       "name": "docuccino/laravel",
