@@ -18,7 +18,10 @@ use Docuccino\Laravel\Integrations\Support\RuleParsing;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Tests\Fixtures\EnumDescription\UnbuildableCaseStage;
+use Docuccino\Laravel\Tests\Fixtures\TypedChoices\Measure;
+use Docuccino\Laravel\Tests\Fixtures\TypedChoices\Toggle;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Workbench\App\Enums\WidgetStatus;
 
 /**
@@ -155,8 +158,13 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'enum (folded values + note)' => [[['enum', ['a', 'b'], 'App\\Enums\\Kind']], ['enum' => ['a', 'b'], 'type' => 'string', 'example' => 'a', 'x-enum-varnames' => ['A', 'B'], 'x-enumNames' => ['A', 'B']]],
     // Empty value set: the rule is consumed but contributes no enum (a bare typed field remains).
     'in (empty values)' => [[['string'], ['in', []]], ['type' => 'string']],
-    // Already-typed guard: an explicit type is preserved, never overridden by the value-inferred one.
-    'in (preserves an existing type)' => [[['integer'], ['in', ['a', 'b']]], ['enum' => ['a', 'b'], 'type' => 'integer', 'x-enum-varnames' => ['A', 'B'], 'x-enumNames' => ['A', 'B']]],
+    // A type rule beside the list types it: Laravel compares the sent value's string with each entry, so
+    // `string|in:1,2` takes "1" and refuses 1. An entry no value of the type can equal is dropped.
+    'in (string type)' => [[['string'], ['in', ['1', '2']]], ['enum' => ['1', '2'], 'type' => 'string', 'example' => '1', 'x-enum-varnames' => ['_1', '_2'], 'x-enumNames' => ['_1', '_2']]],
+    'in (integer type)' => [[['integer'], ['in', ['1', 'a']]], ['enum' => [1], 'type' => 'integer', 'example' => 1, 'x-enum-varnames' => ['_1'], 'x-enumNames' => ['_1']]],
+    'in (number type)' => [[['numeric'], ['in', ['0.5', '2']]], ['enum' => [0.5, 2], 'type' => 'number', 'example' => 0.5, 'x-enum-varnames' => ['_05', '_2'], 'x-enumNames' => ['_05', '_2']]],
+    // PHP spells true "1" and false "", so `in:1,` is both booleans and `in:0,1` is only true.
+    'in (boolean type)' => [[['boolean'], ['in', ['1', '']]], ['enum' => [true, false], 'type' => 'boolean', 'example' => true, 'x-enum-varnames' => ['True', 'False'], 'x-enumNames' => ['True', 'False']]],
 
     // SizeRuleTransformer — type-aware min/max/between/size.
     'min (string length)' => [[['string'], ['min', ['2']]], ['minLength' => 2, 'type' => 'string', 'example' => 'example']],
@@ -686,12 +694,109 @@ it('publishes an exclusion-only rule no narrower than the server reads it', func
     // A type rule beside it still types the field.
     'a number where string excludes words' => ['string|not_in:admin', 5, false, true],
     'a word where integer excludes numbers' => ['integer|not_in:1,2', 'abc', false, true],
+    // And the list is read in that type, as Laravel compares the sent value's string with it.
+    'an excluded string of a number' => ['string|not_in:1,2', '1', false, true],
+    'another string of a number' => ['string|not_in:1,2', '3', true, true],
+    'a number beside excluded strings of numbers' => ['string|not_in:1,2', 1, false, true],
+    'an excluded boolean' => ['boolean|not_in:1', true, false, true],
+    'the boolean not excluded' => ['boolean|not_in:1', false, true, true],
+    // No integer equals `a`, so it excludes none.
+    'an integer beside an excluded word' => ['integer|not_in:a', 1, true, true],
     // The other exclusion-only rules publish nothing, so they cannot narrow either.
     'a number where different names a field' => ['different:other', 5, true, true],
     'a number beside not_regex' => ['not_regex:/^a$/', 5, true, true],
     'a number beside doesnt_start_with' => ['doesnt_start_with:a', 5, true, true],
     'a number beside doesnt_end_with' => ['doesnt_end_with:a', 5, true, true],
     'a number beside prohibited_unless' => ['prohibited_unless:other,taken', 5, true, true],
+]);
+
+it('lists a whole enum cast to another type inline, with its names and its sentence', function (): void {
+    // The component publishes the cases' integers, so a `$ref` beside `string` would refuse "1", which the
+    // server takes. The set is still the whole enum, so its names and its sentence still describe it.
+    $cast = convertFieldRules([['string'], ['enum', ['0', '1'], Toggle::class]])->schema['properties']['f'];
+    $same = convertFieldRules([['integer'], ['enum', ['0', '1'], Toggle::class]])->schema['properties']['f'];
+
+    expect($cast)->not->toHaveKey('$ref')
+        ->and($cast['enum'])->toBe(['0', '1'])
+        ->and($cast['x-enum-varnames'])->toBe(['Off', 'On'])
+        ->and($cast['description'])->toBe('Whether the switch is on.')
+        ->and($same)->toBe(['$ref' => '#/components/schemas/Toggle']);
+});
+
+it('refuses every value where a choice list holds no value of the declared type', function (): void {
+    // `integer|in:a,b`: no integer is `a` or `b`, so the server refuses every value, and so does the document.
+    $property = convertFieldRules([['integer'], ['in', ['a', 'b']]])->schema['properties']['f'];
+
+    expect(json_encode($property))->toBe('{"type":"integer","not":{}}');
+});
+
+/*
+ * A choice list beside a type rule. Laravel compares the sent value's string with each entry, so the type
+ * decides which JSON values can match it. The document takes a value only where its own string is listed —
+ * how Laravel 13 compares — and never one the server refuses. A row marked `loose` is one the server may take
+ * where the document does not: in another type's spelling, as a bare `integer` takes `"3"`, or through
+ * Laravel 12's loose comparison (`"01"` for `"1"`). Every other row the server answers as the document does.
+ */
+it('publishes a choice list in the type its field declares', function (string $rules, mixed $value, bool $published, bool $loose): void {
+    $accepted = Validator::make(['f' => $value], ['f' => $rules])->passes();
+
+    $schema = json_decode((string) json_encode(convertLaravelRules(['f' => $rules])->schema['properties']['f']), flags: JSON_THROW_ON_ERROR);
+
+    expect((new Opis\JsonSchema\Validator)->validate(json_decode((string) json_encode($value), flags: JSON_THROW_ON_ERROR), $schema)->isValid())->toBe($published);
+
+    if ($published || ! $loose) {
+        expect($accepted)->toBe($published);
+    }
+})->with([
+    'a listed string' => ['string|in:1,2', '1', true, false],
+    'a listed number, sent as one' => ['string|in:1,2', 1, false, false],
+    'a listed string, spelled another way' => ['string|in:1,2', '01', false, true],
+    'a listed integer' => ['integer|in:1,2,many', 1, true, false],
+    'the entry no integer is' => ['integer|in:1,2,many', 'many', false, false],
+    'a listed integer, sent as a string' => ['integer|in:1,2,many', '1', false, true],
+    // No integer's string is `01` or `1.0`; Laravel 12 compares them with "1" as numbers.
+    'an integer listed with a leading zero' => ['integer|in:01', 1, false, true],
+    'an integer listed with a decimal point' => ['integer|in:1.0', 1, false, true],
+    'an integer beside a fraction' => ['integer|in:1.5', 1, false, false],
+    'an integer where no entry is one' => ['integer|in:a,b', 1, false, false],
+    'a listed number' => ['numeric|in:0.5,2', 0.5, true, false],
+    'a listed whole number' => ['numeric|in:0.5,2', 2, true, false],
+    'a number not listed' => ['numeric|in:0.5,2', 1, false, false],
+    'a listed number, sent as a string' => ['numeric|in:0.5,2', '0.5', false, true],
+    // Laravel compares true as "1" and false as "", so `in:0,1` refuses false.
+    'true beside 0 and 1' => ['boolean|in:0,1', true, true, false],
+    'false beside 0 and 1' => ['boolean|in:0,1', false, false, false],
+    'one beside 0 and 1' => ['boolean|in:0,1', 1, false, true],
+    'true beside true and false' => ['boolean|in:true,false', true, false, false],
+    'false beside true and false' => ['boolean|in:true,false', false, false, false],
+    'a listed word' => ['string|in:a,b', 'a', true, false],
+    // With no type rule, an all-integer list still reads as integers.
+    'a listed integer, untyped' => ['in:1,2', 1, true, false],
+    'a listed integer as a string, untyped' => ['in:1,2', '1', false, true],
+]);
+
+/*
+ * `Rule::enum` asks the enum's `tryFrom()`, which takes a case's own spelling and no other, reads a number as
+ * an integer first, and reads false as 0 for an int-backed enum.
+ */
+it('publishes an enum rule\'s cases in the type its field declares', function (string $type, string $enum, mixed $value, bool $accepted, bool $published): void {
+    expect(Validator::make(['f' => $value], ['f' => [$type, Rule::enum($enum)]])->passes())->toBe($accepted);
+
+    $values = array_map(strval(...), array_map(static fn (BackedEnum $case): int|string => $case->value, $enum::cases()));
+    $property = convertFieldRules([[$type], ['enum', $values, $enum]])->schema['properties']['f'];
+    $schema = json_decode((string) json_encode($property), flags: JSON_THROW_ON_ERROR);
+
+    expect((new Opis\JsonSchema\Validator)->validate(json_decode((string) json_encode($value), flags: JSON_THROW_ON_ERROR), $schema)->isValid())->toBe($published);
+})->with([
+    'true, as the case 1' => ['boolean', Toggle::class, true, true, true],
+    'false, as the case 0' => ['boolean', Toggle::class, false, true, true],
+    'an integer a case spells' => ['integer', Measure::class, 2, true, true],
+    'a number a case spells' => ['numeric', Measure::class, 2, true, true],
+    // 1 is "1" to `tryFrom()`, and the case is "1.0".
+    'an integer a case spells another way' => ['integer', Measure::class, 1, false, false],
+    'a number a case spells another way' => ['numeric', Measure::class, 1, false, false],
+    // 0.5 is 0 to `tryFrom()`, so no fraction matches a case.
+    'a fraction a case spells' => ['numeric', Measure::class, 0.5, false, false],
 ]);
 
 it('states no uniqueness where no keyword says what distinct does', function (array $rules, string $field, array $expected): void {
