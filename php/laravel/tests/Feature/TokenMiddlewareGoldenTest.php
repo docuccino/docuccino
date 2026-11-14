@@ -70,3 +70,44 @@ function tokenMiddlewareDocument(): array
 it('emits the token-middleware routes byte-identical to the golden', function (): void {
     assertGolden('workbench-token-middleware.uir.json', (new UirEmitter)->emit(UirDocument::fromArray(tokenMiddlewareDocument())));
 });
+
+/** @return list<string> */
+function tokenMiddlewareStatuses(string $path): array
+{
+    return array_map(strval(...), array_keys(tokenMiddlewareDocument()['paths'][$path]['get']['responses']));
+}
+
+/**
+ * Each of these middleware reads the token itself and throws `AuthenticationException` at a request
+ * without one, so the route answers 401 though it runs no `auth:*`.
+ */
+it('publishes the 401 on a route behind token middleware alone', function (string $path): void {
+    expect(tokenMiddlewareStatuses($path))->toContain('401');
+})->with([
+    'abilities:' => '/api/tokens/reports',
+    'ability:' => '/api/tokens/any-report',
+    'scopes:' => '/api/tokens/orders',
+    'scope:' => '/api/tokens/any-order',
+    'client:' => '/api/tokens/machine',
+    'bare client' => '/api/tokens/any-machine',
+]);
+
+/**
+ * A token lacking a scope or ability the entry names is refused with the package's `AuthorizationException`
+ * subclass, which Laravel renders as a 403. An entry naming none checks the token and nothing past it.
+ */
+it('publishes the 403 on a route whose token middleware names a scope or ability', function (string $path): void {
+    expect(tokenMiddlewareStatuses($path))->toContain('403');
+})->with([
+    'abilities:' => '/api/tokens/reports',
+    'ability:' => '/api/tokens/any-report',
+    'abilities: beside auth:sanctum' => '/api/tokens/signed-in-reports',
+    'scopes:' => '/api/tokens/orders',
+    'scope:' => '/api/tokens/any-order',
+    'client:' => '/api/tokens/machine',
+]);
+
+it('publishes neither where nothing checks a scope or a token', function (): void {
+    expect(tokenMiddlewareStatuses('/api/tokens/any-machine'))->not->toContain('403')
+        ->and(tokenMiddlewareStatuses('/api/tokens/public'))->toBe(['200']);
+});

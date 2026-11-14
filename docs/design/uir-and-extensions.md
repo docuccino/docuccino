@@ -1841,7 +1841,7 @@ body matches the document's error style:
 
 | Status | Signal | Synthesized exception |
 |---|---|---|
-| 401 | the route runs Laravel's authenticator, resolved by class through the alias map (`RouteAuthentication`), or middleware matching `security.auth_middleware`; and the route is not `#[Unauthenticated]`. The pattern only chooses where `security.default` applies, so the 401 never waits on it | `AuthenticationException`; `UnauthorizedHttpException` for `auth.basic` |
+| 401 | the route runs Laravel's authenticator or an enabled auth integration's token middleware (Sanctum abilities, Passport scopes and client credentials), resolved by class through the alias map (`RouteAuthentication`; the integration names its classes for the installed major), or middleware matching `security.auth_middleware`; and the route is not `#[Unauthenticated]`. The pattern only chooses where `security.default` applies, so the 401 never waits on it | `AuthenticationException`; `UnauthorizedHttpException` for `auth.basic`; the package's own for its middleware |
 | 422 | the draft declares it validates its input (`OperationDraft::validatesInput()`, set by `RecoveredRequest::apply()` for body or read-verb query), or an integration producer owns `requestBody` | `ValidationException` |
 
 > **Read verbs:** a validated GET/HEAD applies its rules as query parameters, never a `requestBody`,
@@ -1853,7 +1853,7 @@ body matches the document's error style:
 > paginator's `page` and a Query Builder allow-list are integration-written without being validated.
 
 | 404 | the route has ≥1 model-bound path parameter — ONE 404 per operation, not per param | `ModelNotFoundException` |
-| 403 | `can:` / `signed` / `verified` middleware, or a FormRequest `authorize()` the engine proves is not a literal `return true` | `AuthorizationException` |
+| 403 | `can:` / `signed` / `verified` middleware, token middleware naming a scope or ability (`RouteAuthentication::denial()`), or a FormRequest `authorize()` the engine proves is not a literal `return true` | `AuthorizationException`; the package's `MissingScopeException`/`MissingAbilityException` for token middleware |
 
 Precedence & dedup: it writes at the integration layer and runs LATE, so a status the action ALSO
 throws explicitly (already applied by `ErrorResponsesExtension`) owns its status-keyed response and the

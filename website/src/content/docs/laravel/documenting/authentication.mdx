@@ -347,6 +347,13 @@ you gave it. It counts wherever the middleware comes from: the route, a group, o
 `middleware()`. `auth.basic` documents its `401` too. `auth.session` doesn't, because it lets a guest
 through.
 
+Sanctum's and Passport's own token middleware count as well, with no `auth:*` beside them, because each
+checks the token itself: Sanctum's `abilities:` and `ability:`, and Passport's `scopes:`, `scope:` and
+`client`, under whatever alias you registered them as or by class name, in either Passport major. One
+that names a scope or ability also documents the `403` a token without it receives. Sanctum's
+`EnsureFrontendRequestsAreStateful` and `AuthenticateSession` don't, because they let a guest through.
+Turning the integration off for a document turns this off with it.
+
 The `401` doesn't depend on `security.auth_middleware`, because Laravel refuses the request whatever
 that pattern says. The pattern still adds to it: a route whose middleware matches it gets the `401`
 too, which is how you tell Docuccino about an authenticator of your own that doesn't extend
