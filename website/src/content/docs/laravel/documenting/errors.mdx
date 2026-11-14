@@ -604,6 +604,11 @@ The case is read where it's chosen: at the `throw`, in a named constructor that 
 that hands its parent one. An enum whose backing value *is* the status works the same through `->value`,
 and so does `abort(TokenRefusal::Expired->status())`.
 
+A case looked up by its value is read the same way: `ExportFault::from(423)` is the case `423` backs. A
+value written in your code is checked against the cases, so a lookup that can't fail adds no `500` for the
+`ValueError` that `from()` throws when no case matches, or the `TypeError` it throws for a value of the
+wrong type. A value chosen at run time may match none, so that `500` stays.
+
 A reason chosen at run time — `new Refused($reason)` — is whichever status that case maps to. When every
 case maps to the same status, that's the status; otherwise no single number is true, so the error is filed
 under the [stand-in status](#when-a-500-is-a-stand-in) with an

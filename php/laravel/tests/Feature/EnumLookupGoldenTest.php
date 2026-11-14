@@ -27,11 +27,11 @@ function enumLookupThrows(): array
     $thrown = static fn (string $class, ?int $status, ThrowConfidence $confidence): ThrownException => new ThrownException($class, $status, [], $confidence, ThrowDisposition::Signal);
 
     return [
+        // 423 backs a case, so `from()` cannot throw the TypeError or the ValueError it declares.
         'lock' => [
             $thrown(ExportFaultException::class, 423, ThrowConfidence::Certain),
-            $thrown(TypeError::class, 500, ThrowConfidence::Declared),
-            $thrown(ValueError::class, 500, ThrowConfidence::Declared),
         ],
+        // A value the request chooses is not matched, so both stand as declared.
         'fail' => [
             $thrown(ExportFaultException::class, null, ThrowConfidence::Certain),
             $thrown(TypeError::class, 500, ThrowConfidence::Declared),

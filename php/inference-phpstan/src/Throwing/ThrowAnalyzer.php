@@ -6,6 +6,7 @@ namespace Docuccino\Inference\PhpStan\Throwing;
 
 use Closure;
 use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Extensions\Schema\DeclarationFiles;
 use Docuccino\Core\Inference\Frame;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\ThrowConfidence;
@@ -28,6 +29,7 @@ use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\Type\NeverType;
 use PHPStan\Type\ObjectType;
 use PHPStan\Type\Type;
+use PHPStan\Type\TypeCombinator;
 use Throwable;
 
 /**
@@ -43,7 +45,8 @@ use Throwable;
  *      gate, not depth, does the real containment.
  *
  * Every layer drops what a `catch` on the path takes, read off the source ({@see EnclosingCatches}) rather
- * than off a point's type, which for an undeclared call differs by PHPStan minor.
+ * than off a point's type, which for an undeclared call differs by PHPStan minor. A backed enum's `from()`
+ * handed a constant keeps only what that value can throw ({@see EnumLookup}).
  *
  * A status comes from {@see KnownThrowers} where a name-keyed entry has one, and otherwise from what an
  * `HttpException` subclass sets on itself ({@see HttpExceptionStatus}) or, for a class that sets none, from
@@ -406,6 +409,23 @@ final class ThrowAnalyzer
             $type = $declared ?? new ObjectType(Throwable::class);
         }
 
+        // `from()` on a backed enum handed a constant throws only what that value can. The enum's cases
+        // decide it, so its files are dependencies even where nothing is left to publish.
+        $certain = [];
+        $lookup = $explicit ? EnumLookup::of($node, $scope, $this->calleeResolver->reached($node, $scope)) : null;
+        if ($lookup !== null) {
+            [$enum, $outcomes] = $lookup;
+            $this->dependOn(DeclarationFiles::of($enum));
+
+            $kept = array_values(array_filter($type->getObjectClassNames(), static fn (string $class): bool => isset($outcomes[$class])));
+            if ($kept === []) {
+                return [];
+            }
+
+            $type = TypeCombinator::union(...array_map(static fn (string $class): Type => new ObjectType($class), $kept));
+            $certain = array_keys(array_filter($outcomes));
+        }
+
         // Layer 2: KnownThrowers registry, keyed on the callee name — for callees we cannot read.
         $registryResults = $this->applyRegistry($calleeName, $callee, $node, $scope, $type, $explicit, $priorChain, $frame, $caught);
         if ($registryResults !== null) {
@@ -414,7 +434,7 @@ final class ThrowAnalyzer
 
         // Layer 1: explicit concrete type (literal throw, @throws, stub).
         if ($explicit && ! $this->isBareThrowable($type)) {
-            return $this->applyExplicit($callee, $node, $scope, $type, $priorChain, $frame, $caught);
+            return $this->applyExplicit($callee, $node, $scope, $type, $priorChain, $frame, $caught, $certain);
         }
 
         // Layer 3: implicit bare Throwable — descend, or drop it as noise.
@@ -533,6 +553,7 @@ final class ThrowAnalyzer
     /**
      * @param  list<Frame>  $priorChain
      * @param  list<string>  $caught
+     * @param  list<string>  $certain  classes a call is known to throw, not only declared to
      * @return list<ThrownException>
      */
     private function applyExplicit(
@@ -543,6 +564,7 @@ final class ThrowAnalyzer
         array $priorChain,
         Frame $frame,
         array $caught,
+        array $certain,
     ): array {
         // php-parser v5 models `throw` only as an expression.
         $isLiteral = $node instanceof Node\Expr\Throw_;
@@ -573,7 +595,7 @@ final class ThrowAnalyzer
                 $class,
                 $resolution['status'],
                 [...$priorChain, $frame],
-                $isLiteral ? ThrowConfidence::Certain : ThrowConfidence::Declared,
+                $isLiteral || in_array($class, $certain, true) ? ThrowConfidence::Certain : ThrowConfidence::Declared,
                 ThrowSignal::disposition($isLiteral, $calleeIsApplication, $resolution['fellBack']),
             );
         }

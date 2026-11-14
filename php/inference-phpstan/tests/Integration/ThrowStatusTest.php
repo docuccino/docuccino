@@ -146,7 +146,35 @@ it('publishes the status each construction shape writes', function (string $meth
 ])->group('fixture');
 
 it('reads a case looked up by its value as that case', function (): void {
-    // `ExportFault::from(423)` is the case whose value is 423, so the refusal is a 423 — beside whatever
-    // `from()` itself is declared to throw, which is not this read's to judge.
+    // `ExportFault::from(423)` is the case whose value is 423, so the refusal is a 423.
     expect(signalThrows('enumFromStatus'))->toContain('ExportFaultException@423');
 })->group('fixture');
+
+it('publishes what a case lookup can throw for the value it is handed', function (string $method, array $expected): void {
+    $throws = [];
+    /** @var list<array<string, mixed>> $raw */
+    $raw = throwsAnalysis($method)['throws'];
+    foreach ($raw as $throw) {
+        if (in_array($throw['exceptionFqcn'], ['TypeError', 'ValueError'], true)) {
+            $throws[] = $throw['exceptionFqcn'].' '.$throw['confidence'].' '.$throw['disposition'];
+        }
+    }
+    sort($throws);
+
+    expect($throws)->toBe($expected);
+})->with([
+    // `from()` throws ValueError for a value no case is backed by and TypeError for one PHP refuses as the
+    // backing type. 423 is an int and backs `Locked`, so the lookup cannot fail and its 500s would be a
+    // failure the server does not have.
+    'a value a case is backed by' => ['enumFromStatus', []],
+    // The same where the case's status is not what the route answers: the lookup still cannot fail.
+    'a value a case is backed by, its status unread' => ['enumLookedUp', []],
+    // An int no case is backed by always throws ValueError, and is an int, so never a TypeError.
+    'a value no case is backed by' => ['enumFromNoCase', ['ValueError certain signal']],
+    // `strict_types` refuses a string for an int-backed enum before any case is looked up.
+    'a string for an int-backed enum, under strict_types' => ['enumFromString', ['TypeError certain signal']],
+    // A value the request chooses may be any int, so either may happen and both stay as declared.
+    'a value the request chooses' => ['enumFromRuntime', ['TypeError declared signal', 'ValueError declared signal']],
+    // `tryFrom()` answers null where `from()` would throw, and declares nothing.
+    'tryFrom()' => ['enumTryFrom', []],
+])->group('fixture');

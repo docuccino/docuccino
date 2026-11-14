@@ -815,6 +815,14 @@ constructor whose helper the class being built overrides is not the body PHP run
    it would have made outside the try is re-read (`ThrowAnalyzer::pointOutsideTry()`): the callee's
    `@throws`, or a bare `Throwable` to descend into. Every class whose ancestry the test read — thrown and
    caught — joins the dependency set, dropped or kept, since re-parenting either changes the answer.
+   **A backed enum's `from()` is the one declaration read against its argument** (`EnumLookup`). PHP
+   declares it on the application's own enum, so its `@throws ValueError` and `@throws TypeError` would
+   otherwise publish as the application's 500s at every lookup. Where PHPStan pins the argument to
+   constants, each is matched strictly to the cases, as PHPStan's own `from()` return type matches it: a
+   value of the backing type finds its case or throws `ValueError`, any other throws `TypeError` under
+   `strict_types` and is left as declared without it, since coercion decides. A class no value throws is
+   dropped and one every value throws is `certain`; the enum's files join the dependency set either way.
+   A runtime argument keeps both declarations, and `tryFrom()` declares neither.
 2. `KnownThrowers` registry (engine-owned and `@internal` — NOT a user surface; §7 is the
    sanctioned escape hatch), keyed on the callee NAME and gated on the
    RESOLVED callee — **dual role**: (a) *enrich* explicit stubbed points with a status
