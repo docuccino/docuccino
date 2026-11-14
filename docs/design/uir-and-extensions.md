@@ -1853,7 +1853,7 @@ body matches the document's error style:
 > paginator's `page` and a Query Builder allow-list are integration-written without being validated.
 
 | 404 | the route has ≥1 model-bound path parameter — ONE 404 per operation, not per param | `ModelNotFoundException` |
-| 403 | `can:` / `signed` / `verified` middleware, token middleware naming a scope or ability (`RouteAuthentication::denial()`), or a FormRequest `authorize()` the engine proves is not a literal `return true` | `AuthorizationException`; the package's `MissingScopeException`/`MissingAbilityException` for token middleware |
+| 403 | `can:` / `signed` / `verified` middleware, token middleware naming a scope or ability or spatie/laravel-permission's middleware (`RouteAuthentication::denial()`; spatie's refuses a guest with this 403, not a 401), or a FormRequest `authorize()` the engine proves is not a literal `return true` | `AuthorizationException`; the package's `MissingScopeException`/`MissingAbilityException` for token middleware, spatie's `UnauthorizedException` |
 
 Precedence & dedup: it writes at the integration layer and runs LATE, so a status the action ALSO
 throws explicitly (already applied by `ErrorResponsesExtension`) owns its status-keyed response and the

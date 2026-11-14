@@ -44,13 +44,13 @@ final class SanctumIntegration
      * Sanctum's ability middleware, which reads the request's user itself and so refuses a request without
      * a token with `AuthenticationException`, `auth:sanctum` or not.
      *
-     * @return array<class-string, array{refusal: class-string, denial: class-string}>
+     * @return array<class-string, array{refusal: class-string, denial: class-string, signal: string}>
      */
     public static function authenticators(): array
     {
         $authenticators = [];
         foreach (self::DENIALS as $class => $denial) {
-            $authenticators[$class] = ['refusal' => self::AUTHENTICATION, 'denial' => $denial];
+            $authenticators[$class] = ['refusal' => self::AUTHENTICATION, 'denial' => $denial, 'signal' => 'token-middleware'];
         }
 
         return $authenticators;

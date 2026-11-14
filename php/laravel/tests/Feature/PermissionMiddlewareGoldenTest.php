@@ -66,3 +66,46 @@ function permissionMiddlewareDocument(): array
 it('emits the permission-middleware routes byte-identical to the golden', function (): void {
     assertGolden('workbench-permission-middleware.uir.json', (new UirEmitter)->emit(UirDocument::fromArray(permissionMiddlewareDocument())));
 });
+
+/** @return list<string> */
+function permissionMiddlewareStatuses(string $path): array
+{
+    return array_map(strval(...), array_keys(permissionMiddlewareDocument()['paths'][$path]['get']['responses']));
+}
+
+/**
+ * Spatie's middleware reads the user itself and throws its `UnauthorizedException`, a 403, both at a guest
+ * and at a member lacking every role or permission the entry names. So the route answers 403 to both, and
+ * a 401 only where an authenticator runs before it: the document owes each status the server answers.
+ */
+it('publishes every status the route answers a guest and a member lacking what it names', function (string $path, array $answers): void {
+    $member = bootPermissionTables();
+
+    $guest = $this->getJson($path)->status();
+    $signedIn = $this->actingAs($member)->getJson($path)->status();
+
+    expect([$guest, $signedIn])->toBe($answers)
+        ->and(permissionMiddlewareStatuses($path))->toContain(...array_map(strval(...), $answers));
+})->with([
+    'permission:' => ['/api/permissions/edit', [403, 403]],
+    'an any-of list' => ['/api/permissions/any-permission', [403, 403]],
+    'a guard suffix' => ['/api/permissions/guarded', [403, 403]],
+    'role:' => ['/api/permissions/role', [403, 403]],
+    'role_or_permission:' => ['/api/permissions/role-or-permission', [403, 403]],
+    'the class name ::using() renders' => ['/api/permissions/by-class', [403, 403]],
+    'beside auth' => ['/api/permissions/signed-in', [401, 403]],
+]);
+
+/** A guest is refused with the 403, never a 401, where nothing but spatie's middleware stands in front. */
+it('publishes no 401 where only the middleware refuses a guest', function (string $path): void {
+    expect(permissionMiddlewareStatuses($path))->not->toContain('401');
+})->with([
+    '/api/permissions/edit',
+    '/api/permissions/role',
+    '/api/permissions/role-or-permission',
+    '/api/permissions/by-class',
+]);
+
+it('publishes neither where nothing checks a role or a permission', function (): void {
+    expect(permissionMiddlewareStatuses('/api/permissions/public'))->toBe(['200']);
+});

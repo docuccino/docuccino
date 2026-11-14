@@ -97,6 +97,7 @@ use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
 use Docuccino\Laravel\Testing\ApiContract;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\Member;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Almanac;
 use Docuccino\Laravel\Tests\Fixtures\ExcludedFields\StorePaymentRequest;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\AuthorData;
@@ -114,6 +115,7 @@ use Docuccino\Laravel\Tests\TestCase;
 use Docuccino\Laravel\Watch\BuildRunner;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Http\Kernel as HttpKernelContract;
+use Illuminate\Database\Migrations\Migration;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\ApplicationBuilder;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -136,6 +138,9 @@ use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\FindingVisitor;
 use PhpParser\NodeVisitor\NameResolver;
 use PhpParser\ParserFactory;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionServiceProvider;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 use Workbench\App\Http\Requests\SearchFormsRequest;
@@ -681,6 +686,33 @@ function registerAppMiddlewareAliases(array $aliases): void
             $kernel->setMiddlewareAliases($configuration->getMiddlewareAliases());
         },
     );
+}
+
+/**
+ * spatie/laravel-permission booted as an application boots it, its tables created by the package's own
+ * migration in an in-memory database, and a signed-in member holding the `writer` role and the `archive`
+ * permission. Every test that asks spatie's middleware about this member names something else, so the
+ * member is one who lacks what the route names: not a guest, and not a user the check cannot read.
+ */
+function bootPermissionTables(): Member
+{
+    config()->set('database.default', 'permission');
+    config()->set('database.connections.permission', ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']);
+    // The application's user provider names its model, which is how spatie finds the guard a role is for.
+    config()->set('auth.providers.users.model', Member::class);
+    app()->register(PermissionServiceProvider::class);
+
+    $package = dirname((string) (new ReflectionClass(PermissionServiceProvider::class))->getFileName(), 2);
+    /** @var Migration $migration */
+    $migration = require $package.'/database/migrations/create_permission_tables.php.stub';
+    $migration->up();
+
+    $member = (new Member)->forceFill(['id' => 1]);
+    $member->exists = true;
+    $member->assignRole(Role::create(['name' => 'writer', 'guard_name' => 'web']));
+    $member->givePermissionTo(Permission::create(['name' => 'archive', 'guard_name' => 'web']));
+
+    return $member;
 }
 
 /**

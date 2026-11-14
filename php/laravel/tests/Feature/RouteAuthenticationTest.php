@@ -9,6 +9,7 @@ use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Laravel\Integrations\Passport\PassportIntegration;
+use Docuccino\Laravel\Integrations\Permission\PermissionIntegration;
 use Docuccino\Laravel\Integrations\Sanctum\SanctumIntegration;
 use Docuccino\Laravel\Registry\IntegrationToggles;
 use Docuccino\Laravel\Support\RouteAuthentication;
@@ -26,7 +27,10 @@ use Laravel\Passport\Token;
 use Laravel\Sanctum\HasApiTokens;
 use Laravel\Sanctum\Http\Middleware\CheckAbilities;
 use Laravel\Sanctum\PersonalAccessToken;
+use Spatie\Permission\Exceptions\UnauthorizedException;
+use Spatie\Permission\Middleware\PermissionMiddleware;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 /**
  * {@see RouteAuthentication}'s table, row by row, and the reason each row is right: the middleware is run
@@ -71,7 +75,7 @@ function middlewareThrows(object $middleware, Request $request, array $arguments
     return null;
 }
 
-/** @return array<class-string, array{refusal: class-string, denial: class-string}> */
+/** @return array<class-string, array{refusal: class-string, denial: class-string, signal: string}> */
 function packageAuthenticators(): array
 {
     return [...PassportIntegration::authenticators(), ...SanctumIntegration::authenticators()];
@@ -199,7 +203,8 @@ it("answers an auth package's middleware under any alias the application gives i
     app('router')->aliasMiddleware('token-can', CheckAbilities::class);
 
     expect($authentication->refusal(routeAuthenticationContext(['token-can:read'])))->toBe('Illuminate\\Auth\\AuthenticationException')
-        ->and($authentication->denial(routeAuthenticationContext(['token-can:read']), 'token-can:read'))->toBe('Laravel\\Sanctum\\Exceptions\\MissingAbilityException')
+        ->and($authentication->denial(routeAuthenticationContext(['token-can:read']), 'token-can:read'))
+        ->toBe(['signal' => 'token-middleware', 'exception' => 'Laravel\\Sanctum\\Exceptions\\MissingAbilityException'])
         ->and($authentication->refusal(routeAuthenticationContext([CheckAbilities::class.':read'])))->toBe('Illuminate\\Auth\\AuthenticationException')
         // Anti-vacuity: the alias names nothing until the application registers it.
         ->and($authentication->refusal(routeAuthenticationContext(['other-alias:read'])))->toBeNull();
@@ -213,6 +218,66 @@ it('finds no denial on an entry that names no scope, or on middleware that is no
     'the framework authenticator' => 'auth:sanctum',
     'a gate' => 'can:view,post',
 ]);
+
+/**
+ * spatie/laravel-permission's middleware reads the user itself, and throws the same 403 at a guest as at a
+ * member lacking every role or permission the entry names. So it names no refusal, which is the 401's, and
+ * its denial is what both get.
+ */
+it("names what spatie's middleware throws at a guest and at a member lacking what it names", function (string $class): void {
+    $member = bootPermissionTables();
+    $thrown = PermissionIntegration::authenticators()[$class];
+    $answers = static function (object $middleware): array {
+        $request = Request::create('/api/things', 'GET', server: ['HTTP_ACCEPT' => 'application/json']);
+        try {
+            $middleware->handle($request, static fn (): Response => new Response, 'edit');
+        } catch (HttpExceptionInterface $e) {
+            return [$e::class, $e->getStatusCode()];
+        }
+
+        return [null, 200];
+    };
+
+    $guest = $answers(app($class));
+    $this->actingAs($member);
+
+    expect($thrown['refusal'])->toBeNull()
+        ->and($guest)->toBe([$thrown['denial'], 403])
+        ->and($answers(app($class)))->toBe([$thrown['denial'], 403]);
+})->with(array_keys(PermissionIntegration::authenticators()));
+
+it('accounts for every middleware class spatie/laravel-permission ships', function (): void {
+    $directory = dirname((string) (new ReflectionClass(PermissionMiddleware::class))->getFileName());
+    $shipped = array_map(static fn (string $file): string => 'Spatie\\Permission\\Middleware\\'.basename($file, '.php'), (array) glob($directory.'/*.php'));
+    $listed = array_keys(PermissionIntegration::authenticators());
+    sort($shipped);
+    sort($listed);
+
+    expect($listed)->toBe($shipped)
+        ->and(count($shipped))->toBeGreaterThanOrEqual(3);
+});
+
+/**
+ * A guest meets spatie's 403 rather than a 401, so the route is refused to a guest without answering 401;
+ * an authenticator in front of it still answers its own. Read by class under the application's alias, and
+ * only where the document enables the integration, which is off unless asked for.
+ */
+it("reads spatie's middleware as refusing a guest with its 403 and no 401", function (): void {
+    $authentication = app(RouteAuthentication::class);
+    app('router')->aliasMiddleware('permission', PermissionMiddleware::class);
+    $enabled = ['permission' => ['enabled' => true]];
+    $alone = routeAuthenticationContext(['permission:edit'], integrations: $enabled);
+
+    expect($authentication->refusal($alone))->toBeNull()
+        ->and($authentication->refusesGuests($alone))->toBeTrue()
+        ->and($authentication->denial($alone, 'permission:edit'))
+        ->toBe(['signal' => 'permission-middleware', 'exception' => UnauthorizedException::class])
+        ->and($authentication->refusal(routeAuthenticationContext(['permission:edit', 'auth'], integrations: $enabled)))
+        ->toBe('Illuminate\\Auth\\AuthenticationException')
+        // Anti-vacuity: the same route in a document that leaves the integration off.
+        ->and($authentication->refusesGuests(routeAuthenticationContext(['permission:edit'])))->toBeFalse()
+        ->and($authentication->denial(routeAuthenticationContext(['permission:edit']), 'permission:edit'))->toBeNull();
+});
 
 /** A disabled integration contributes nothing to the document, and that includes what its middleware throws. */
 it("drops an auth package's middleware from a document that disables its integration", function (): void {
