@@ -45,9 +45,9 @@
           "ArchiveFacade"
         ],
         "responses": {
-          "200": {
+          "410": {
             "x-docuccino": {
-              "id": "res:v1:qzqvgmoobhe3rcod",
+              "id": "res:v1:agr5ofy22aygiwuz",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -58,10 +58,35 @@
                 }
               ]
             },
-            "description": "OK",
+            "description": "Gone",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "Gone"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
               }
             }
           }
@@ -107,7 +132,7 @@
           "ArchiveFacade"
         ],
         "responses": {
-          "200": {
+          "410": {
             "x-docuccino": {
               "provenance": [
                 {
@@ -119,7 +144,7 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "Gone"
           }
         }
       }
@@ -163,9 +188,9 @@
           "ArchiveFacade"
         ],
         "responses": {
-          "200": {
+          "422": {
             "x-docuccino": {
-              "id": "res:v1:wf3v56gcrgfwjppy",
+              "id": "res:v1:kwrlqxpinq2vg2eu",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -176,10 +201,35 @@
                 }
               ]
             },
-            "description": "OK",
+            "description": "Unprocessable Entity",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "locked"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
               }
             }
           }
@@ -225,7 +275,7 @@
           "ArchiveFacade"
         ],
         "responses": {
-          "200": {
+          "205": {
             "x-docuccino": {
               "provenance": [
                 {
@@ -237,7 +287,7 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "Reset Content"
           }
         }
       }
@@ -297,7 +347,32 @@
             "description": "OK",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
               }
             }
           }
@@ -343,8 +418,9 @@
           "ArchiveFacade"
         ],
         "responses": {
-          "200": {
+          "410": {
             "x-docuccino": {
+              "id": "res:v1:iq6mje7yfhez64ce",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -355,7 +431,26 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "Gone",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -365,7 +460,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "312df6c77750b9e9be2ebe5eab5d5f5c51927a99ae9121521c8970c5061d2098"
+      "contentHash": "629ff2fc4d3d431d4374b4c7bf006f55c43aef0372d4a74fcf91a7de19d053c8"
     },
     "generator": {
       "name": "docuccino/laravel",
