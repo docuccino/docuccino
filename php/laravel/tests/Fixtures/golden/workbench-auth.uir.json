@@ -189,13 +189,6 @@
               "fields": [
                 "description",
                 "summary"
-              ],
-              "overrode": [
-                {
-                  "field": "description",
-                  "value": "Requires permission: moderate forms",
-                  "producer": "integration:permission"
-                }
               ]
             },
             {
@@ -209,6 +202,7 @@
               "producer": "integration:permission",
               "layer": "integration",
               "fields": [
+                "description",
                 "x-permissions"
               ],
               "source": {
@@ -221,7 +215,7 @@
         },
         "operationId": "get.api.wave-d.moderated",
         "summary": "List forms.",
-        "description": "Returns the collection of forms visible to the caller.",
+        "description": "Returns the collection of forms visible to the caller.\n\nRequires permission: moderate forms",
         "tags": [
           "Forms"
         ],
@@ -299,18 +293,6 @@
               "fields": [
                 "description",
                 "summary"
-              ],
-              "overrode": [
-                {
-                  "field": "description",
-                  "value": "Requires permission: moderate forms\n\nRequires token ability: read",
-                  "producer": "integration:sanctum-abilities"
-                },
-                {
-                  "field": "description",
-                  "value": "Requires permission: moderate forms",
-                  "producer": "integration:permission"
-                }
               ]
             },
             {
@@ -324,6 +306,7 @@
               "producer": "integration:permission",
               "layer": "integration",
               "fields": [
+                "description",
                 "x-permissions"
               ],
               "source": {
@@ -348,6 +331,7 @@
               "producer": "integration:sanctum-abilities",
               "layer": "integration",
               "fields": [
+                "description",
                 "x-abilities"
               ],
               "source": {
@@ -360,7 +344,7 @@
         },
         "operationId": "get.api.wave-d.moderated-reports",
         "summary": "List forms.",
-        "description": "Returns the collection of forms visible to the caller.",
+        "description": "Returns the collection of forms visible to the caller.\n\nRequires permission: moderate forms\n\nRequires token ability: read",
         "tags": [
           "Forms"
         ],
@@ -807,13 +791,6 @@
               "fields": [
                 "description",
                 "summary"
-              ],
-              "overrode": [
-                {
-                  "field": "description",
-                  "value": "Requires token abilities: read, write",
-                  "producer": "integration:sanctum-abilities"
-                }
               ]
             },
             {
@@ -839,6 +816,7 @@
               "producer": "integration:sanctum-abilities",
               "layer": "integration",
               "fields": [
+                "description",
                 "x-abilities"
               ],
               "source": {
@@ -851,7 +829,7 @@
         },
         "operationId": "get.api.wave-d.reports",
         "summary": "List forms.",
-        "description": "Returns the collection of forms visible to the caller.",
+        "description": "Returns the collection of forms visible to the caller.\n\nRequires token abilities: read, write",
         "tags": [
           "Forms"
         ],
@@ -973,7 +951,7 @@
     "document": {
       "id": "doc:wave-d-auth",
       "configHash": "8547b39dbe461c3bd22293a7d4d22e89f6281fe06c7f02efb8f7fd1ef40c8c60",
-      "contentHash": "fc176693f9adceb67cf6c2ea36bc44b3db2698aebd94b65546e7b1bd60ed001a"
+      "contentHash": "a31218475337187ea270be419d40e65261d2ba0c7ded1c06eaaae721b57d352c"
     },
     "generator": {
       "name": "docuccino/laravel",
