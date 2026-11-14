@@ -6,6 +6,7 @@ namespace App\Exceptions;
 
 use App\Http\Responses\ApiResponse;
 use App\Problems\DebugProblem;
+use App\Problems\ErrorProblem;
 use App\Problems\FieldProblem;
 use App\Problems\HttpProblem;
 use App\Problems\InstanceProblem;
@@ -247,6 +248,31 @@ class RespondCallbacks
 
             return DebugProblem::reported($response);
         };
+    }
+
+    /** The problem built by the name of a class other problems extend, from the rendered response. */
+    public function problemByName(): callable
+    {
+        return function (Response $response): Response {
+            if (! $response instanceof JsonResponse) {
+                return $response;
+            }
+
+            return (new JsonResponse(new ErrorProblem($response), $response->getStatusCode(), $response->headers->all()))
+                ->header('Content-Type', 'application/problem+json');
+        };
+    }
+
+    /** The same problem through a factory on it that builds `self`. */
+    public function problemFromSelf(): callable
+    {
+        return fn (Response $response): Response => $response instanceof JsonResponse ? ErrorProblem::from($response) : $response;
+    }
+
+    /** The same problem through a factory on it that builds whichever class it is called on. */
+    public function problemFromStatic(): callable
+    {
+        return fn (Response $response): Response => $response instanceof JsonResponse ? ErrorProblem::make($response) : $response;
     }
 
     /** The reason phrase read inline off the status it is sent with, through the subclass the table is inherited by. */

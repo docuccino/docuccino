@@ -47,6 +47,63 @@
           "Forms"
         ],
         "responses": {
+          "409": {
+            "x-docuccino": {
+              "id": "res:v1:x3sawirf3fr7kgy4",
+              "provenance": [
+                {
+                  "producer": "integration:inferred-handler",
+                  "layer": "integration",
+                  "fields": [
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/FormController.php",
+                    "line": 25,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
+                  }
+                }
+              ],
+              "facts": {
+                "examplePlaceholders": {
+                  "application/problem+json": [
+                    "detail",
+                    "type"
+                  ]
+                }
+              }
+            },
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "integration:inferred-handler",
+                        "layer": "integration",
+                        "fields": [
+                          "$ref"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/FormController.php",
+                          "line": 25,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
+                        }
+                      }
+                    ]
+                  },
+                  "$ref": "#/components/schemas/ErrorProblem"
+                },
+                "example": {
+                  "type": "string",
+                  "title": "Conflict",
+                  "status": 409,
+                  "detail": "string"
+                }
+              }
+            }
+          },
           "599": {
             "x-docuccino": {
               "id": "res:v1:rj3t4zqjrbvbnjqz",
@@ -534,6 +591,32 @@
           "status"
         ]
       },
+      "ErrorProblem": {
+        "x-docuccino": {
+          "id": "sch:v1:d2kqc25wjlvaugmq"
+        },
+        "type": "object",
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail"
+        ]
+      },
       "FieldProblem": {
         "x-docuccino": {
           "id": "sch:v1:5gjlukqpnalrvihp"
@@ -728,7 +811,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "d2e3671d19fef71901b2a7b67b284fd0c6b1ad184cd4d68ca6d7789d34c47dbd"
+      "contentHash": "88cc13d0cc09105d2d95e14b6221f7c3ee7d5a5ef3ff5b72f455e20d8d03420e"
     },
     "generator": {
       "name": "docuccino/laravel",
