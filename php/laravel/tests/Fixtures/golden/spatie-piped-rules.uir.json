@@ -159,19 +159,27 @@
         "properties": {
           "listed": {
             "type": "string",
+            "maxLength": 3,
             "minLength": 2,
-            "example": "example"
+            "example": "exa"
           },
-          "overridden": {},
+          "overridden": {
+            "type": "string",
+            "maxLength": 3,
+            "example": "exa"
+          },
           "overriddenPattern": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^(ab|cd)\\n?$"
           },
           "pattern": {
             "type": "string",
             "pattern": "^(ab|cd)\\n?$"
           },
           "piped": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 3,
+            "example": "exa"
           }
         }
       }
@@ -181,7 +189,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "7f8038352d9d729b3d8ca3143227c321073bd5446160da2f79c15b131151839c"
+      "contentHash": "769dcde7ebafb3c414c3c471982209c3d72c7ee516e62c297b72f765dd2be8c1"
     },
     "generator": {
       "name": "docuccino/laravel",
