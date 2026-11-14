@@ -49,12 +49,16 @@ use Workbench\App\Http\Controllers\ValidationController;
  * and one sending itself (`SentProblem`), say what their own constructors write. Byte-locked, warm as well as cold; the scripted analyses are what the real engine
  * recovers from the fixture app's own callbacks, which the last tests hold them to.
  */
-/** The members a problem's constructor reads off the rendered response it is sent with: its status, and the phrase of it. */
+/**
+ * The members a problem's constructor reads off the rendered response it is sent with: its status, and the
+ * phrase of it. Built by its class's own name, the problem also holds the `type` that constructor writes.
+ */
 function statusTextEchoes(): ArrayShapeT
 {
     return new ArrayShapeT([
         new ArrayShapeField('status', new StatusMarkerT),
         new ArrayShapeField('title', new StatusTextMarkerT(ScalarT::string(), new LiteralT('Error'))),
+        new ArrayShapeField('type', new LiteralT('about:blank')),
     ]);
 }
 
@@ -121,6 +125,7 @@ function statusTextSentProblem(): ClassT
         new ArrayShapeT([
             new ArrayShapeField('status', new LiteralT(410)),
             new ArrayShapeField('title', new LiteralT('Gone')),
+            new ArrayShapeField('type', new LiteralT('about:blank')),
         ]),
     ]);
 }
@@ -214,8 +219,12 @@ it('illustrates each error with the reason phrase of its own status, byte-identi
         // leaves the status it was sent with as it was: each still says what the server sends.
         ->and($example('/api/probe-tickets', '422', 'post'))->toBe(['errors' => [], 'type' => 'about:blank', 'title' => 'Unprocessable Content', 'status' => 422, 'detail' => 'string'])
         ->and($example('/api/probe-tickets', '403', 'post'))->toBe(['type' => 'about:blank', 'title' => 'Forbidden', 'status' => 403])
-        ->and($example('/api/probe-forms', '409'))->toBe(['type' => 'string', 'title' => 'Conflict', 'status' => 409, 'detail' => 'string'])
-        ->and($example('/api/probe-forms', '410'))->toBe(['type' => 'string', 'status' => 410, 'title' => 'Gone'])
+        // A problem built by its class's own name is exactly that class, so it holds the `type` that class's
+        // constructor writes, final or not; the schema every subclass shares pins none.
+        ->and($example('/api/probe-forms', '409'))->toBe(['type' => 'about:blank', 'title' => 'Conflict', 'status' => 409, 'detail' => 'string'])
+        ->and($example('/api/probe-forms', '410'))->toBe(['type' => 'about:blank', 'status' => 410, 'title' => 'Gone'])
+        ->and($document['components']['schemas']['ErrorProblem']['properties']['type'] ?? null)->toBe(['type' => 'string'])
+        ->and($document['components']['schemas']['SentProblem']['properties']['type'] ?? null)->toBe(['type' => 'string'])
         ->and($document['components']['schemas']['HttpProblem']['properties']['title'] ?? null)->toBe(['type' => 'string']);
 });
 
