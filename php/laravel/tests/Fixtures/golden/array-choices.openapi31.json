@@ -87,28 +87,28 @@
         "properties": {
           "codes": {
             "type": "array",
-            "enum": [
-              1,
-              2
-            ],
             "items": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "1",
+                "2"
+              ],
+              "example": "1",
+              "x-enum-varnames": [
+                "_1",
+                "_2"
+              ],
+              "x-enumNames": [
+                "_1",
+                "_2"
+              ]
             },
-            "uniqueItems": true,
-            "x-enum-varnames": [
-              "_1",
-              "_2"
-            ],
-            "x-enumNames": [
-              "_1",
-              "_2"
-            ]
+            "uniqueItems": true
           },
           "grades": {
-            "$ref": "#/components/schemas/Grade",
             "type": "array",
             "items": {
-              "type": "integer"
+              "$ref": "#/components/schemas/Grade"
             }
           },
           "ids": {
@@ -117,10 +117,16 @@
               "type": "integer"
             },
             "not": {
-              "enum": [
-                1,
-                2
-              ]
+              "type": "array",
+              "items": {
+                "enum": [
+                  "1",
+                  "2",
+                  1,
+                  2,
+                  true
+                ]
+              }
             }
           },
           "listed": {
@@ -145,10 +151,22 @@
               "null"
             ],
             "not": {
-              "enum": [
-                "spam",
-                "ads"
-              ]
+              "type": [
+                "array",
+                "object"
+              ],
+              "items": {
+                "enum": [
+                  "spam",
+                  "ads"
+                ]
+              },
+              "additionalProperties": {
+                "enum": [
+                  "spam",
+                  "ads"
+                ]
+              }
             }
           },
           "tags": {
@@ -156,18 +174,22 @@
               "array",
               "object"
             ],
-            "enum": [
-              "news",
-              "sport"
-            ],
-            "x-enum-varnames": [
-              "News",
-              "Sport"
-            ],
-            "x-enumNames": [
-              "News",
-              "Sport"
-            ]
+            "items": {
+              "type": "string",
+              "enum": [
+                "news",
+                "sport"
+              ],
+              "example": "news",
+              "x-enum-varnames": [
+                "News",
+                "Sport"
+              ],
+              "x-enumNames": [
+                "News",
+                "Sport"
+              ]
+            }
           }
         }
       }
