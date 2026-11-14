@@ -37,35 +37,7 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "410": {
-                "id": "res:v1:p5qyh52ytumfib2q",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "description"
-                    ]
-                  }
-                ]
-              },
-              "423": {
-                "id": "res:v1:j5q6fkbg2c426hti",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "description"
-                    ]
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "get.api.exports.@export.fault",
         "summary": "Report the fault the request names.",
@@ -106,11 +78,61 @@
           }
         ],
         "responses": {
-          "410": {
-            "$ref": "#/components/responses/Error410"
-          },
-          "423": {
-            "$ref": "#/components/responses/Error423"
+          "default": {
+            "x-docuccino": {
+              "id": "res:v1:nkpkek2alc3prcuz",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ],
+              "facts": {
+                "statusUnplaced": true
+              }
+            },
+            "description": "Any status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "Gone"
+                        },
+                        {
+                          "type": "string",
+                          "const": "Locked"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -231,51 +253,6 @@
                 }
               }
             }
-          },
-          "423": {
-            "x-docuccino": {
-              "id": "res:v1:jlyutmmgmh3wnqzx",
-              "provenance": [
-                {
-                  "producer": "fallback",
-                  "layer": "fallback",
-                  "fields": [
-                    "description"
-                  ]
-                }
-              ]
-            },
-            "description": "Locked",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "x-docuccino": {
-                    "provenance": [
-                      {
-                        "producer": "inference",
-                        "layer": "inference",
-                        "fields": [
-                          "properties",
-                          "required",
-                          "type"
-                        ],
-                        "confidence": 1
-                      }
-                    ]
-                  },
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string",
-                      "const": "Gone"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ]
-                }
-              }
-            }
           }
         }
       }
@@ -311,35 +288,7 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "410": {
-                "id": "res:v1:fx7zau2di2653lbf",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "description"
-                    ]
-                  }
-                ]
-              },
-              "423": {
-                "id": "res:v1:u4xq3ocfr34xtnae",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "description"
-                    ]
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "get.api.exports.@export.locked",
         "summary": "Report an export that is locked.",
@@ -380,82 +329,49 @@
           }
         ],
         "responses": {
-          "410": {
-            "$ref": "#/components/responses/Error410"
-          },
           "423": {
-            "$ref": "#/components/responses/Error423"
-          }
-        }
-      }
-    }
-  },
-  "components": {
-    "schemas": {
-      "Error410": {
-        "x-docuccino": {
-          "id": "sch:v1:3y2ir5hdscldh3mw"
-        },
-        "type": "object",
-        "properties": {
-          "error": {
-            "anyOf": [
-              {
-                "type": "string",
-                "const": "Gone"
-              },
-              {
-                "type": "string",
-                "const": "Locked"
+            "x-docuccino": {
+              "id": "res:v1:u4xq3ocfr34xtnae",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Locked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "Locked"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
               }
-            ]
-          }
-        },
-        "required": [
-          "error"
-        ]
-      },
-      "Error423": {
-        "x-docuccino": {
-          "id": "sch:v1:26rw3efyri6e2tkb"
-        },
-        "type": "object",
-        "properties": {
-          "error": {
-            "anyOf": [
-              {
-                "type": "string",
-                "const": "Gone"
-              },
-              {
-                "type": "string",
-                "const": "Locked"
-              }
-            ]
-          }
-        },
-        "required": [
-          "error"
-        ]
-      }
-    },
-    "responses": {
-      "Error410": {
-        "description": "Gone",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/Error410"
-            }
-          }
-        }
-      },
-      "Error423": {
-        "description": "Locked",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/Error423"
             }
           }
         }
@@ -466,7 +382,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "3cc9e484a0a4c14a680c306673cdf3ee46d323201677ede4c851b30a4ca10e34"
+      "contentHash": "57ca12e39c6a85d834158a5e167615ddd0bc90fb2c9235724e4dbbc625381de6"
     },
     "generator": {
       "name": "docuccino/laravel",
