@@ -108,4 +108,11 @@ it('takes every value the server takes in the declared type, and refuses the res
     // No integer is `a` or `b`, so every value is refused.
     'an integer where none is listed' => [['none' => 1], false, false],
     'a word where no integer is listed' => [['none' => 'a'], false, false],
+    // Laravel keeps the empty entry `in:1,` ends with, which is how it compares `false`.
+    'either, true' => [['either' => true], true, false],
+    'either, false' => [['either' => false], true, false],
+    // Laravel reads the list as CSV, so a quoted entry keeps its comma and loses its quotes.
+    'a quoted entry' => [['quoted' => 'x,y'], true, false],
+    'half of that entry' => [['quoted' => 'x'], false, false],
+    'that entry with its quotes' => [['quoted' => '"x'], false, false],
 ]);

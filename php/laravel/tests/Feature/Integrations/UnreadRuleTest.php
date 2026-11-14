@@ -332,6 +332,7 @@ it('names a spatie rule object whose choices it cannot read, and keeps the rules
     $set = $rules->build(UnreadChoiceObjectData::class, new ClassMetadata(UnreadChoiceObjectData::class, [
         new PropertyMetadata('shade', ScalarT::string()),
         new PropertyMetadata('kind', ScalarT::string()),
+        new PropertyMetadata('tint', ScalarT::string()),
     ]), new NullTypeEngine, null, schemaConverter());
 
     // A choice list missing a value would refuse what the server takes, so none of it is published; the
@@ -339,10 +340,13 @@ it('names a spatie rule object whose choices it cannot read, and keeps the rules
     expect(array_map(static fn (ValidationRule $rule): string => $rule->name, $set->fields['shade']))->toBe(['required', 'string', 'max'])
         ->and($rules->unreadRuleObjects())->toBe([
             ['key' => 'shade', 'class' => UnreadChoiceObjectData::class, 'property' => 'shade', 'rule' => 'new Illuminate\\Validation\\Rules\\In', 'narrows' => true],
+            ['key' => 'tint', 'class' => UnreadChoiceObjectData::class, 'property' => 'tint', 'rule' => 'new Illuminate\\Validation\\Rules\\In', 'narrows' => true],
         ])
         // laravel-data cannot build this `#[Enum]` either, so it fails every request and the field says no more
         // than its type.
-        ->and(array_map(static fn (ValidationRule $rule): string => $rule->name, $set->fields['kind']))->toBe(['required', 'string']);
+        ->and(array_map(static fn (ValidationRule $rule): string => $rule->name, $set->fields['kind']))->toBe(['required', 'string'])
+        // The `#[In]` takes the route's `palette` as well as `red`, so publishing `red` alone would refuse it.
+        ->and(array_map(static fn (ValidationRule $rule): string => $rule->name, $set->fields['tint']))->toBe(['required', 'string']);
 });
 
 it('is right to read a Rule static that returns a rule string as that string, by Laravel', function (string $static, array $written, array $body, Closure $admits): void {

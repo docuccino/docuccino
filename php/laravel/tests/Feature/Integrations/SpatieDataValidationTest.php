@@ -26,9 +26,11 @@ use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
+use Docuccino\Laravel\Integrations\FormRequest\ConstValueToRules;
 use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
 use Docuccino\Laravel\Integrations\SpatieData\DataRequestExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
+use Docuccino\Laravel\Integrations\Validation\LiveRuleValue;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
@@ -42,6 +44,7 @@ use Docuccino\Laravel\Tests\Fixtures\SpatieData\InheritedMergeRulesData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\MergedRulesController;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\MergedRulesData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\ReversedNameMapper;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\RuleObjectChoicesData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\ValidatedData;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationRuleParser;
@@ -84,8 +87,6 @@ it('recovers the right Laravel rule token from every supported spatie validation
     'Min' => ['min', 'min:1'],
     'Size' => ['size', 'size:10'],
     'Between' => ['between', 'between:1,10'],
-    'In' => ['in', 'in:draft,published'],
-    'NotIn' => ['notIn', 'not_in:x,y'],
     'Regex' => ['regex', 'regex:/^[a-z]+$/'],
     'DateFormat' => ['dateFormat', 'date_format:Y-m-d'],
     'MaxDigits' => ['maxDigits', 'max_digits:5'],
@@ -99,30 +100,42 @@ it('recovers the right Laravel rule token from every supported spatie validation
     'Accepted (not in the reflector map)' => ['accepted', 'accepted'],
 ]);
 
-it('reads an enum case in #[In] and #[NotIn] as the value Laravel compares, never dropping it', function (string $property, string $expected): void {
-    $reflected = (new ReflectionProperty(EnumCaseChoicesData::class, $property))->getAttributes()[0];
+it('reads an #[In] or #[NotIn] as the rule laravel-data builds from it, as Laravel parses that rule', function (string $fqcn, string $property, string $name, array $parameters, bool $case): void {
+    $reflected = (new ReflectionProperty($fqcn, $property))->getAttributes()[0];
 
     // spatie/laravel-data takes a case in these attributes from 4.21; before it, PHP refuses one, so no
     // application on that version can write what this reads.
     $takes = (new ReflectionParameter([$reflected->getName(), '__construct'], 0))->getType();
     $types = $takes instanceof ReflectionUnionType ? $takes->getTypes() : [$takes];
 
-    if (! in_array(UnitEnum::class, array_map(static fn ($type): string => $type instanceof ReflectionNamedType ? $type->getName() : '', $types), true)) {
+    if ($case && ! in_array(UnitEnum::class, array_map(static fn ($type): string => $type instanceof ReflectionNamedType ? $type->getName() : '', $types), true)) {
         $this->markTestSkipped('The installed spatie/laravel-data takes no enum case in #['.class_basename($reflected->getName()).'].');
     }
 
-    // Spatie hands the cases to Laravel's In/NotIn, which cast a backed case to its backing value and a pure
-    // one to its name. The rule Laravel's parser reads off the rule Spatie builds is the one owed.
+    // Spatie hands the values to Laravel's In/NotIn, which writes each as PHP makes it a string: a backed case
+    // as its backing value, a pure one as its name, `true` as "1" and `false` as "". Laravel's parser then reads
+    // the list as CSV, so a quoted value keeps its comma. What it reads off the rule Spatie builds is owed.
     $attribute = $reflected->newInstance();
-    [$name, $parameters] = ValidationRuleParser::parse((string) $attribute->getRule(ValidationPath::create()));
+    [$parsed, $owed] = ValidationRuleParser::parse((string) $attribute->getRule(ValidationPath::create()));
 
-    expect((new DataClassReflector)->validationTokens(EnumCaseChoicesData::class, $property))->toBe([$expected])
-        ->and(Str::snake($name).':'.implode(',', $parameters))->toBe($expected);
+    $read = [];
+    foreach ((new DataClassReflector)->ruleObjects($fqcn, $property) as $object) {
+        $read = [...$read, ...(new ConstValueToRules)->fold(LiveRuleValue::of($object))];
+    }
+
+    expect((new DataClassReflector)->validationTokens($fqcn, $property))->toBe([])
+        ->and(array_map(static fn (ValidationRule $rule): array => [$rule->name, $rule->parameters], $read))->toBe([[$name, $parameters]])
+        ->and([Str::snake($parsed), $owed])->toBe([$name, $parameters]);
 })->with([
-    'a case beside a value' => ['schedule', 'in:draft,scheduled'],
-    'int-backed cases' => ['priority', 'in:1,10'],
-    'a pure case' => ['channel', 'in:Email'],
-    'an excluded case' => ['phase', 'not_in:archived'],
+    'values' => [ValidatedData::class, 'in', 'in', ['draft', 'published'], false],
+    'excluded values' => [ValidatedData::class, 'notIn', 'not_in', ['x', 'y'], false],
+    'a case beside a value' => [EnumCaseChoicesData::class, 'schedule', 'in', ['draft', 'scheduled'], true],
+    'int-backed cases' => [EnumCaseChoicesData::class, 'priority', 'in', ['1', '10'], true],
+    'a pure case' => [EnumCaseChoicesData::class, 'channel', 'in', ['Email'], true],
+    'an excluded case' => [EnumCaseChoicesData::class, 'phase', 'not_in', ['archived'], true],
+    'both booleans' => [RuleObjectChoicesData::class, 'consent', 'in', ['1', ''], false],
+    'false excluded' => [RuleObjectChoicesData::class, 'agreed', 'not_in', [''], false],
+    'a value holding a comma' => [RuleObjectChoicesData::class, 'pair', 'in', ['a,b', 'c'], false],
 ]);
 
 it('records the enum a validation attribute quotes values from, so editing it re-documents the rule', function (): void {

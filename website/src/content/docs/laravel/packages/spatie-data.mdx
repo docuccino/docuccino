@@ -177,7 +177,9 @@ class CreateInvoiceData extends Data
 `#[Required]` marks the property required, `#[Max]` / `#[Min]` become length or range keywords (by the
 property's type), `#[Email]` a `format: email`, and `#[In]` / `#[Enum]` an `enum` — `#[Enum(Currency::class)]`
 documents exactly as `Rule::enum(Currency::class)` does on a form request, so its `only:` and `except:`
-narrow the cases it lists, and an enum case in `#[In]` or `#[NotIn]` is its backing value. Presence,
+narrow the cases it lists, and an enum case in `#[In]` or `#[NotIn]` is its backing value. Each value
+`#[In]` and `#[NotIn]` are given is one entry, as Laravel compares it: a value holding a comma stays whole,
+and `#[In([true, false])]` beside a `bool` takes both. Presence,
 type, size, format, and pattern attributes are all covered, and a property's own type contributes the
 base type where no attribute states one.
 
