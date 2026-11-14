@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Inference\PhpStan\Analysis;
 
 use Docuccino\Core\Inference\CallCondition;
+use Docuccino\Core\Inference\ConditionTree;
 use Docuccino\Core\Inference\LocalWrites;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\TypeCondition;
@@ -170,6 +171,203 @@ final class ParameterUse
         }
 
         return $conditions;
+    }
+
+    /**
+     * What the guards on the way to `$at` require of the parameters, read off the source where a scope proves
+     * only the whole: the condition of each `if` branch and ternary arm around it, and the negated condition of
+     * each `if` before it whose every branch leaves the function. Joined by `&&`, `||` and `!` as written; a
+     * condition other than a literal-argument call or an `instanceof` test of a parameter still holding what
+     * it was handed there is unknown. Null where nothing is required.
+     *
+     * @param  list<string>  $parameters
+     * @param  list<Node>  $body
+     */
+    public static function reachedWhen(Node $at, Scope $scope, array $parameters, array $body): ?ConditionTree
+    {
+        $root = new Node\Stmt\Block([]);
+        $parents = [];
+        foreach ($body as $node) {
+            $parents[spl_object_id($node)] = [$root, 'stmts'];
+            self::connect($node, $parents);
+        }
+
+        /** @var list<array{Node\Expr, bool}> $guards */
+        $guards = [];
+        $node = $at;
+        while (isset($parents[spl_object_id($node)])) {
+            [$parent, $slot] = $parents[spl_object_id($node)];
+
+            array_push($guards, ...match (true) {
+                $parent instanceof Node\Stmt\If_ && $slot === 'stmts', $parent instanceof Node\Stmt\ElseIf_ && $slot === 'stmts' => [[$parent->cond, true]],
+                $parent instanceof Node\Stmt\If_ && ($slot === 'elseifs' || $slot === 'else') => self::passedOver($parent, $node),
+                $parent instanceof Node\Expr\Ternary && $slot === 'if' => [[$parent->cond, true]],
+                $parent instanceof Node\Expr\Ternary && $slot === 'else' => [[$parent->cond, false]],
+                default => [],
+            });
+
+            $siblings = $parent === $root ? $body : ($node instanceof Node\Stmt ? $parent->{$slot} : null);
+            if (is_array($siblings)) {
+                foreach (array_slice($siblings, 0, (int) array_search($node, $siblings, true)) as $before) {
+                    if ($before instanceof Node\Stmt\If_ && self::leavesWhenTaken($before)) {
+                        array_push($guards, ...self::passedOver($before, null));
+                    }
+                }
+            }
+
+            $node = $parent;
+        }
+
+        $tree = ConditionTree::all(array_map(
+            static function (array $guard) use ($scope, $parameters, $body): ConditionTree {
+                $condition = self::condition($guard[0], $scope, $parameters, $body);
+
+                return $guard[1] ? $condition : ConditionTree::not($condition);
+            },
+            $guards,
+        ));
+
+        return $tree->constrains() ? $tree : null;
+    }
+
+    /**
+     * The conditions an `if` chain has tested false by the time control passes into `$branch` — an `elseif` or
+     * its `else` — or, where `$branch` is null, past the whole chain.
+     *
+     * @return list<array{Node\Expr, bool}>
+     */
+    private static function passedOver(Node\Stmt\If_ $if, ?Node $branch): array
+    {
+        $passed = [[$if->cond, false]];
+        foreach ($if->elseifs as $elseif) {
+            if ($elseif === $branch) {
+                break;
+            }
+            $passed[] = [$elseif->cond, false];
+        }
+
+        return $passed;
+    }
+
+    /** Whether every branch of an `if` with no `else` ends by leaving the function. */
+    private static function leavesWhenTaken(Node\Stmt\If_ $if): bool
+    {
+        if ($if->else !== null) {
+            return false;
+        }
+
+        foreach ([$if->stmts, ...array_map(static fn (Node\Stmt\ElseIf_ $e): array => $e->stmts, $if->elseifs)] as $stmts) {
+            $last = $stmts === [] ? null : $stmts[array_key_last($stmts)];
+            if (! $last instanceof Node\Stmt\Return_
+                && ! ($last instanceof Node\Stmt\Expression && ($last->expr instanceof Node\Expr\Throw_ || $last->expr instanceof Node\Expr\Exit_))
+            ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * One condition as a {@see ConditionTree}: `&&`, `||` and `!` kept, and each operand a literal-argument call
+     * on a parameter — on its own, or compared with a literal — or an `instanceof` test of one. A call counts
+     * only where nothing before it could have changed the value it is called on, a test where nothing could
+     * have rebound the name: what the host answers is the value as it was handed.
+     *
+     * @param  list<string>  $parameters
+     * @param  list<Node>  $body
+     */
+    private static function condition(Node\Expr $expr, Scope $scope, array $parameters, array $body): ConditionTree
+    {
+        if ($expr instanceof Node\Expr\BooleanNot) {
+            return ConditionTree::not(self::condition($expr->expr, $scope, $parameters, $body));
+        }
+        if ($expr instanceof Node\Expr\BinaryOp\BooleanAnd || $expr instanceof Node\Expr\BinaryOp\LogicalAnd) {
+            return ConditionTree::all([self::condition($expr->left, $scope, $parameters, $body), self::condition($expr->right, $scope, $parameters, $body)]);
+        }
+        if ($expr instanceof Node\Expr\BinaryOp\BooleanOr || $expr instanceof Node\Expr\BinaryOp\LogicalOr) {
+            return ConditionTree::any([self::condition($expr->left, $scope, $parameters, $body), self::condition($expr->right, $scope, $parameters, $body)]);
+        }
+
+        if ($expr instanceof Node\Expr\Instanceof_) {
+            $parameter = self::tested($expr);
+
+            return $parameter !== null && in_array($parameter, $parameters, true) && $expr->class instanceof Node\Name
+                && self::untouched($expr, $parameter, $body, rebindsOnly: true)
+                ? ConditionTree::leaf(new TypeCondition($parameter, $scope->resolveName($expr->class), true))
+                : ConditionTree::known(null);
+        }
+
+        $negated = $expr instanceof Node\Expr\BinaryOp\NotIdentical || $expr instanceof Node\Expr\BinaryOp\NotEqual;
+        [$call, $value] = $expr instanceof Node\Expr\MethodCall ? [$expr, true] : [null, null];
+        if ($negated || $expr instanceof Node\Expr\BinaryOp\Identical || $expr instanceof Node\Expr\BinaryOp\Equal) {
+            [$call, $value] = match (true) {
+                $expr->left instanceof Node\Expr\MethodCall => [$expr->left, self::literal($expr->right, $expr)],
+                $expr->right instanceof Node\Expr\MethodCall => [$expr->right, self::literal($expr->left, $expr)],
+                default => [null, null],
+            };
+        }
+
+        $parameter = $call === null ? null : self::receiver($call);
+        $arguments = $call === null ? null : self::literalArguments($call);
+        if ($call === null || $value === null || $parameter === null || $arguments === null
+            || ! $call->name instanceof Node\Identifier || ! in_array($parameter, $parameters, true)
+            || ! self::unchangedBefore($call, $parameter, $body)
+        ) {
+            return ConditionTree::known(null);
+        }
+
+        $leaf = ConditionTree::leaf(new CallCondition($parameter, $call->name->toString(), $arguments, $value));
+
+        return $negated ? ConditionTree::not($leaf) : $leaf;
+    }
+
+    /**
+     * Whether nothing that can run before `$at` could have changed the value `$name` holds, reading a
+     * literal-argument call on it inside another guard's condition as the question it is read as here.
+     *
+     * @param  list<Node>  $body
+     */
+    private static function unchangedBefore(Node $at, string $name, array $body): bool
+    {
+        return self::nonePrecedes($at, $body, static fn (array $parents, Node $root): array => array_values(array_filter(
+            self::touches($name, $body, $parents, $root, rebindsOnly: false),
+            static fn (Node $touch): bool => ! ($touch instanceof Node\Expr\MethodCall && self::literalArguments($touch) !== null && self::inCondition($touch, $parents)),
+        )));
+    }
+
+    /**
+     * Whether the node is part of an `if`, `elseif` or ternary condition, below any statement.
+     *
+     * @param  array<int, array{Node, string}>  $parents
+     */
+    private static function inCondition(Node $node, array $parents): bool
+    {
+        while (isset($parents[spl_object_id($node)])) {
+            [$parent, $slot] = $parents[spl_object_id($node)];
+            if ($slot === 'cond' && ($parent instanceof Node\Stmt\If_ || $parent instanceof Node\Stmt\ElseIf_ || $parent instanceof Node\Expr\Ternary)) {
+                return true;
+            }
+            if ($parent instanceof Node\Stmt) {
+                return false;
+            }
+            $node = $parent;
+        }
+
+        return false;
+    }
+
+    /** The literal one side of a comparison names: an integer, or under `===` / `!==` a string or a boolean too. */
+    private static function literal(Node\Expr $side, Node\Expr\BinaryOp $comparison): int|string|bool|null
+    {
+        $strict = $comparison instanceof Node\Expr\BinaryOp\Identical || $comparison instanceof Node\Expr\BinaryOp\NotIdentical;
+
+        return match (true) {
+            $side instanceof Node\Scalar\Int_ => $side->value,
+            $strict && $side instanceof Node\Scalar\String_ => $side->value,
+            $strict && $side instanceof Node\Expr\ConstFetch && in_array($side->name->toLowerString(), ['true', 'false'], true) => $side->name->toLowerString() === 'true',
+            default => null,
+        };
     }
 
     /**

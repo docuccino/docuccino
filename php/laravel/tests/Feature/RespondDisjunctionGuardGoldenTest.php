@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\CallCondition;
+use Docuccino\Core\Inference\ConditionTree;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
@@ -58,18 +59,23 @@ function respondDisjunctionGuardAnalyses(): array
     ]);
 
     $api = static fn (bool $holds): CallCondition => new CallCondition('request', 'is', ['api/*'], $holds);
-    $offApi = new ReturnSite(new ClassT(Response::class), new SourceLocation(''), returnsParameter: 'response', conditions: [$api(false)]);
-    $passed = new ReturnSite(new ClassT(Response::class), new SourceLocation(''), returnsParameter: 'response', conditions: [$api(true)]);
+    $onApi = ConditionTree::leaf($api(true));
+    $json = ConditionTree::leaf(new TypeCondition('response', JsonResponse::class, true));
+
+    $offApi = new ReturnSite(new ClassT(Response::class), new SourceLocation(''), returnsParameter: 'response', conditions: [$api(false)], reachedWhen: ConditionTree::not($onApi));
+    // The scope proves neither half of the guard around the pass-through, so only the guard as written says
+    // what reaches it: for an exception that is not an HttpResponseException, a response that is not JSON.
+    $passed = new ReturnSite(new ClassT(Response::class), new SourceLocation(''), returnsParameter: 'response', conditions: [$api(true)], reachedWhen: ConditionTree::all([ConditionTree::not($json), $onApi]));
     $rewritten = new ReturnSite($problem, new SourceLocation(''), conditions: [$api(true)], typeConditions: [
         new TypeCondition('response', JsonResponse::class, true),
         new TypeCondition('e', HttpResponseException::class, false),
-    ]);
+    ], reachedWhen: ConditionTree::all([$onApi, $json]));
 
     return [
         ModelNotFoundException::class => new ActionAnalysis(returns: [$offApi, $passed, $rewritten]),
         ValidationException::class => new ActionAnalysis(returns: [$offApi, $passed, $rewritten]),
-        // Past the guard the exception is anything but an HttpResponseException, so the rewrite is not reached.
-        HttpResponseException::class => new ActionAnalysis(returns: [$offApi, $passed]),
+        // An HttpResponseException passes the guard whatever it carries, and the rewrite past it is not reached.
+        HttpResponseException::class => new ActionAnalysis(returns: [$offApi, new ReturnSite(new ClassT(Response::class), new SourceLocation(''), returnsParameter: 'response', conditions: [$api(true)], reachedWhen: $onApi)]),
     ];
 }
 
