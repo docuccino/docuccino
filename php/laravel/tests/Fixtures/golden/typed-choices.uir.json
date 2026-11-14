@@ -182,17 +182,18 @@
             "type": "string",
             "not": {
               "enum": [
-                1,
-                2
+                "1",
+                "2"
               ]
             }
           },
           "code": {
             "type": "string",
             "enum": [
-              1,
-              2
+              "1",
+              "2"
             ],
+            "example": "1",
             "x-enum-varnames": [
               "_1",
               "_2"
@@ -205,67 +206,69 @@
           "consent": {
             "type": "boolean",
             "enum": [
-              1,
-              0
+              true,
+              false
             ],
+            "example": true,
             "x-enum-varnames": [
-              "_1",
-              "_0"
+              "True",
+              "False"
             ],
             "x-enumNames": [
-              "_1",
-              "_0"
+              "True",
+              "False"
             ]
           },
           "count": {
             "type": "integer",
             "enum": [
-              "1",
-              "2",
-              "many"
+              1,
+              2
             ],
+            "example": 1,
             "x-enum-varnames": [
               "_1",
-              "_2",
-              "Many"
+              "_2"
             ],
             "x-enumNames": [
               "_1",
-              "_2",
-              "Many"
+              "_2"
             ]
           },
           "grade": {
-            "$ref": "#/components/schemas/Grade"
+            "type": "string",
+            "enum": [
+              "1",
+              "2",
+              "3"
+            ],
+            "example": "1",
+            "x-enum-varnames": [
+              "Pass",
+              "Merit",
+              "Distinction"
+            ],
+            "x-enumNames": [
+              "Pass",
+              "Merit",
+              "Distinction"
+            ]
           },
           "none": {
             "type": "integer",
-            "enum": [
-              "a",
-              "b"
-            ],
-            "x-enum-varnames": [
-              "A",
-              "B"
-            ],
-            "x-enumNames": [
-              "A",
-              "B"
-            ]
+            "not": {}
           },
           "opt_in": {
             "type": "boolean",
             "enum": [
-              0,
-              1
+              true
             ],
+            "example": true,
             "x-enum-varnames": [
-              "_0",
-              "_1"
+              "True"
             ],
             "x-enumNames": [
-              "_0",
-              "_1"
+              "True"
             ]
           },
           "rank": {
@@ -274,9 +277,10 @@
           "ratio": {
             "type": "number",
             "enum": [
-              "0.5",
-              "1"
+              0.5,
+              1
             ],
+            "example": 0.5,
             "x-enum-varnames": [
               "_05",
               "_1"
@@ -310,7 +314,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "a00cbce4ff37b2814d704ef9b9722949d2cfef2c610f4e1993328cfe02bc7244"
+      "contentHash": "9376b19a92899f3e95329c7b433bf0bf5e05e102cda167aa8fe6bb2730b9d382"
     },
     "generator": {
       "name": "docuccino/laravel",
