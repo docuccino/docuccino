@@ -145,14 +145,17 @@
           "either": {
             "type": "boolean",
             "enum": [
-              true
+              true,
+              false
             ],
             "example": true,
             "x-enum-varnames": [
-              "True"
+              "True",
+              "False"
             ],
             "x-enumNames": [
-              "True"
+              "True",
+              "False"
             ]
           },
           "grade": {
@@ -194,19 +197,16 @@
           "quoted": {
             "type": "string",
             "enum": [
-              "\"x",
-              "y\"",
+              "x,y",
               "z"
             ],
-            "example": "\"x",
+            "example": "x,y",
             "x-enum-varnames": [
-              "X",
-              "Y",
+              "XY",
               "Z"
             ],
             "x-enumNames": [
-              "X",
-              "Y",
+              "XY",
               "Z"
             ]
           },

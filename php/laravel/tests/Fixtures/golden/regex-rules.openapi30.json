@@ -82,7 +82,7 @@
           },
           "pair": {
             "type": "string",
-            "pattern": "^\"[a-z]+\",\"[a-z]+\"$"
+            "pattern": "^\"[a-z]+\", \"[a-z]+\"$"
           },
           "postcode": {
             "type": "string",

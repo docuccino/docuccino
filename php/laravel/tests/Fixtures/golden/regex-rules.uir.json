@@ -180,7 +180,7 @@
           },
           "pair": {
             "type": "string",
-            "pattern": "^\"[a-z]+\",\"[a-z]+\"$"
+            "pattern": "^\"[a-z]+\", \"[a-z]+\"$"
           },
           "postcode": {
             "type": "string",
@@ -212,7 +212,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "6c2bf7ebe14b53142a213a35912ec01a3b75be2b415465d666dcf89727fd736c"
+      "contentHash": "d61429ff0ef0aab7efb9f6892a9cee1f750a2937c092d6c95c1e05f95395b12b"
     },
     "generator": {
       "name": "docuccino/laravel",

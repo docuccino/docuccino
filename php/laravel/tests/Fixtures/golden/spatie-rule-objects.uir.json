@@ -160,6 +160,11 @@
         "properties": {
           "agreed": {
             "type": "boolean",
+            "not": {
+              "enum": [
+                false
+              ]
+            },
             "example": true
           },
           "code": {
@@ -188,7 +193,19 @@
           },
           "consent": {
             "type": "boolean",
-            "not": {}
+            "enum": [
+              true,
+              false
+            ],
+            "example": true,
+            "x-enum-varnames": [
+              "True",
+              "False"
+            ],
+            "x-enumNames": [
+              "True",
+              "False"
+            ]
           },
           "mark": {
             "type": "string",
@@ -214,19 +231,16 @@
           "pair": {
             "type": "string",
             "enum": [
-              "a",
-              "b",
+              "a,b",
               "c"
             ],
-            "example": "a",
+            "example": "a,b",
             "x-enum-varnames": [
-              "A",
-              "B",
+              "AB",
               "C"
             ],
             "x-enumNames": [
-              "A",
-              "B",
+              "AB",
               "C"
             ]
           },
@@ -260,19 +274,16 @@
           "quoted": {
             "type": "string",
             "enum": [
-              "\"x",
-              "y\"",
+              "x,y",
               "z"
             ],
-            "example": "\"x",
+            "example": "x,y",
             "x-enum-varnames": [
-              "X",
-              "Y",
+              "XY",
               "Z"
             ],
             "x-enumNames": [
-              "X",
-              "Y",
+              "XY",
               "Z"
             ]
           },
@@ -394,7 +405,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "5597b92e2e336e1baac6d028d6ccea765bb1ca704a49f67029a4ce27ebd8a3f3"
+      "contentHash": "114ce2dfa542dd3dd146b6cd1d2b45f3ef3a60b32f874a5043f349522c3bd0ba"
     },
     "generator": {
       "name": "docuccino/laravel",

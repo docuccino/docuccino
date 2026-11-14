@@ -186,13 +186,21 @@
               10
             ],
             "example": 1,
-            "x-enum-varnames": [
-              "_1",
-              "_10"
+            "x-enum-descriptions": [
+              "Handled when idle.",
+              "Jumps the queue."
             ],
+            "x-enum-varnames": [
+              "Low",
+              "High"
+            ],
+            "x-enumDescriptions": {
+              "1": "Handled when idle.",
+              "10": "Jumps the queue."
+            },
             "x-enumNames": [
-              "_1",
-              "_10"
+              "Low",
+              "High"
             ]
           },
           "schedule": {
@@ -256,7 +264,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "0cb9932df666952f6e2e2f4842584983a4ca3ea825bf3edb3efc1accbf575a90"
+      "contentHash": "75c101b422e75417dc7c6c229b4f6f3e929c6e12f62ec4de8d39026e00312fa5"
     },
     "generator": {
       "name": "docuccino/laravel",
