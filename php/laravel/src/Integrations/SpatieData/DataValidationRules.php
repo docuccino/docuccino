@@ -22,12 +22,14 @@ use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Laravel\Integrations\FormRequest\ConstValueToRules;
 use Docuccino\Laravel\Integrations\FormRequest\RulesFromClass;
 use Docuccino\Laravel\Integrations\Support\DateWireFormat;
 use Docuccino\Laravel\Integrations\Support\DependencyFileSet;
 use Docuccino\Laravel\Integrations\Support\FieldPaths;
 use Docuccino\Laravel\Integrations\Support\RuleParsing;
 use Docuccino\Laravel\Integrations\Validation\CustomRuleReader;
+use Docuccino\Laravel\Integrations\Validation\LiveRuleValue;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\Transformers\AdditionalPropertiesRuleTransformer;
@@ -83,7 +85,7 @@ final class DataValidationRules
     private readonly DependencyFileSet $dependencyFiles;
 
     /**
-     * The `#[Rule(new X)]` objects the last rule set could not read ({@see unreadRuleObjects()}).
+     * The rule objects the last rule set could not read ({@see unreadRuleObjects()}).
      *
      * @var list<array{key: ?string, class: string, property: string, rule: string, narrows: bool}>
      */
@@ -128,7 +130,7 @@ final class DataValidationRules
     }
 
     /**
-     * The `#[Rule(new X)]` objects the last {@see build()} saw and could not read, each with the request
+     * The rule objects the last {@see build()} saw and could not read, each with the request
      * key it was found at — null inside a map's value, which has no key of its own — the Data class and
      * property that carry it, and whether it can only refuse values. One that can is left out and the
      * property's other rules stand; one that cannot ({@see UnreadRule}) takes the property's stated rules
@@ -652,9 +654,11 @@ final class DataValidationRules
     }
 
     /**
-     * Rules from a `#[Rule(new Iban)]` object's `#[RuleSchema]`, alongside the string tokens, and whether
-     * one of the objects has content nothing can read that could loosen the rules beside it. An
-     * unannotated rule object contributes nothing and is recorded ({@see unreadRuleObjects()}).
+     * Rules from the rule objects a property's attributes hand Laravel ({@see DataClassReflector::ruleObjects()}),
+     * read as the same `new` in a rules array reads ({@see ConstValueToRules}): a framework object as the
+     * `Rule::` factory that builds it, an annotated one by its `#[RuleSchema]`. Also whether one of them has
+     * content nothing can read that could loosen the rules beside it. One that does not read is recorded
+     * ({@see unreadRuleObjects()}).
      *
      * @return array{0: list<ValidationRule>, 1: bool}
      */
@@ -662,17 +666,27 @@ final class DataValidationRules
     {
         $rules = [];
         $opaque = false;
-        foreach ($this->reflector->ruleObjectClasses($fqcn, $property) as $ruleClass) {
-            $facts = $this->customRules->read($ruleClass);
-            $this->dependencyFiles->add($facts->file);
+        foreach ($this->reflector->ruleObjects($fqcn, $property) as $object) {
+            $folder = new ConstValueToRules($this->customRules);
+            $read = $folder->fold(LiveRuleValue::of($object));
+            $this->dependencyFiles->add(...$folder->dependencyFiles());
 
-            if (! $facts->annotated) {
-                $unread = UnreadRule::classify($ruleClass);
-                $opaque = $opaque || ! $unread['narrows'];
-                $this->unread[] = ['key' => $key, 'class' => $fqcn, 'property' => $property, 'rule' => $unread['label'], 'narrows' => $unread['narrows']];
+            $losses = array_map(static fn (string $label): array => [$label, true], $folder->unread());
+            if ($folder->opaque() !== null) {
+                $losses[] = [$folder->opaque(), false];
             }
 
-            $rules = [...$rules, ...$facts->rules];
+            // A choice whose values did not all read publishes none of them, which the reader owes a word too.
+            if ($folder->widened()) {
+                $losses[] = [UnreadRule::classify($object::class)['label'], true];
+            }
+
+            foreach ($losses as [$label, $narrows]) {
+                $opaque = $opaque || ! $narrows;
+                $this->unread[] = ['key' => $key, 'class' => $fqcn, 'property' => $property, 'rule' => $label, 'narrows' => $narrows];
+            }
+
+            $rules = [...$rules, ...$read];
         }
 
         return [$rules, $opaque];

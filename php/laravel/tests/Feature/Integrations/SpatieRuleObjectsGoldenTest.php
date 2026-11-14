@@ -18,7 +18,11 @@ use Docuccino\Laravel\Tests\Fixtures\SpatieData\RuleObjectChoicesController;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\RuleObjectChoicesData;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
+use Illuminate\Support\Facades\Validator;
+use Opis\JsonSchema\Validator as SchemaValidator;
 use Spatie\LaravelData\Attributes\Validation\Enum;
+use Spatie\LaravelData\LaravelDataServiceProvider;
+use Spatie\LaravelData\Support\DataConfig;
 
 /*
  * Framework rule objects handed to Spatie Data's validation attributes, locked in emitted bytes. No golden
@@ -69,3 +73,56 @@ function spatieRuleObjectsBuild(): GenerationResult
 it('emits Spatie attributes handing over rule objects byte-identical to their committed golden', function (): void {
     assertGolden('spatie-rule-objects.uir.json', (new UirEmitter)->emit(spatieRuleObjectsBuild()->document));
 });
+
+/*
+ * Each row says whether the document takes the body. It never takes one laravel-data refuses; a row marked
+ * `loose` is one the server may take where the document does not, in another type's spelling. Every other
+ * row the two answer alike.
+ */
+it('takes every value laravel-data takes through a rule object, and refuses the rest', function (array $fields, bool $published, bool $loose): void {
+    $document = json_decode((new UirEmitter)->emit(spatieRuleObjectsBuild()->document), flags: JSON_THROW_ON_ERROR);
+    $document->{'$ref'} = '#/components/schemas/RuleObjectChoicesDataRequest';
+
+    $body = [
+        'status' => 'draft', 'size' => 'small', 'priority' => 1, 'code' => 'new', 'stage' => 'draft',
+        'phase' => 'draft', 'state' => 'published', 'colour' => 'red', 'mark' => 'ok', ...$fields,
+    ];
+
+    // The server's answer, by the rules laravel-data itself hands Laravel.
+    app()->register(LaravelDataServiceProvider::class);
+    app()->forgetInstance(DataConfig::class);
+    $accepted = Validator::make($body, RuleObjectChoicesData::getValidationRules($body))->passes();
+
+    expect((new SchemaValidator)->validate(json_decode((string) json_encode($body), flags: JSON_THROW_ON_ERROR), $document)->isValid())->toBe($published);
+
+    if ($published || ! $loose) {
+        expect($accepted)->toBe($published);
+    }
+})->with([
+    'every field as listed' => [[], true, false],
+    // `#[Rule(new Enum(…))]` takes the enum's cases and nothing else.
+    'a status the enum has' => [['status' => 'archived'], true, false],
+    'a status it has not' => [['status' => 'retired'], false, false],
+    // `new In`/`new NotIn` inside a `#[Rule]` list hold the values they were built with.
+    'a listed size' => [['size' => 'large'], true, false],
+    'a size not listed' => [['size' => 'medium'], false, false],
+    'an excluded code' => [['code' => 'legacy'], false, false],
+    // An int-backed enum beside the integer the property declares.
+    'a priority the enum has' => [['priority' => 10], true, false],
+    'a priority it has not' => [['priority' => 2], false, false],
+    'a priority sent as a string' => [['priority' => '5'], false, true],
+    // An `#[Enum]` given the rule object validates with that object.
+    'a stage the enum has' => [['stage' => 'archived'], true, false],
+    'a stage it has not' => [['stage' => 'retired'], false, false],
+    // `only` and `except` narrow the cases an `#[Enum]` takes, so a case left out is refused.
+    'a phase only allows' => [['phase' => 'published'], true, false],
+    'a phase only leaves out' => [['phase' => 'archived'], false, false],
+    'a state except leaves out' => [['state' => 'archived'], false, false],
+    // An `#[In]`/`#[NotIn]` given the rule object validates with that object.
+    'a listed colour' => [['colour' => 'blue'], true, false],
+    'a colour not listed' => [['colour' => 'green'], false, false],
+    'an excluded mark' => [['mark' => 'void'], false, false],
+    // `new ExcludeIf(false)` excludes nothing, so the field's other rules still hold.
+    'a short note' => [['note' => 'abc'], true, false],
+    'a note past its maximum' => [['note' => 'abcd'], false, false],
+]);

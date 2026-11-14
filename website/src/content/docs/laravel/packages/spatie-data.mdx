@@ -176,10 +176,10 @@ class CreateInvoiceData extends Data
 
 `#[Required]` marks the property required, `#[Max]` / `#[Min]` become length or range keywords (by the
 property's type), `#[Email]` a `format: email`, and `#[In]` / `#[Enum]` an `enum` — `#[Enum(Currency::class)]`
-expands to the enum's backing values, never the class name, and an enum case in `#[In]` or `#[NotIn]` is
-its backing value. Presence, type, size, format, and pattern
-attributes are all covered, and a property's own type contributes the base type where no attribute
-states one.
+documents exactly as `Rule::enum(Currency::class)` does on a form request, so its `only:` and `except:`
+narrow the cases it lists, and an enum case in `#[In]` or `#[NotIn]` is its backing value. Presence,
+type, size, format, and pattern attributes are all covered, and a property's own type contributes the
+base type where no attribute states one.
 
 The escape hatches work as you'd hope:
 
@@ -187,6 +187,11 @@ The escape hatches work as you'd hope:
 - `#[Rule(new SortCode)]` documents from the rule class's own
   [`#[RuleSchema]`](/laravel/documenting/requests/#documenting-a-custom-rule) — describe a custom rule
   once at the class and every property using it picks it up.
+- Laravel's own rule objects document as they do in a form request's rules array:
+  `#[Rule(new Enum(Currency::class))]` reads as `Rule::enum(Currency::class)`, and a `new In([...])` or
+  `new NotIn([...])` in a `#[Rule([...])]` list as `Rule::in()` or `Rule::notIn()`. So does the object an
+  `#[Enum]`, `#[In]`, `#[NotIn]` or `#[Exclude]` takes in place of its parameters, which is what
+  laravel-data validates with.
 - An attribute Docuccino doesn't recognize degrades like an unknown string rule — permissive, with an
   info diagnostic — rather than inventing a constraint.
 
