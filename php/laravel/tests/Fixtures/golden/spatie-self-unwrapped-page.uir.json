@@ -60,9 +60,7 @@
                         "producer": "attribute",
                         "layer": "attribute",
                         "fields": [
-                          "properties",
-                          "required",
-                          "type"
+                          "$ref"
                         ],
                         "source": {
                           "file": "tests/Fixtures/SpatieData/PageController.php",
@@ -72,15 +70,7 @@
                       }
                     ]
                   },
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/AuthorPageData"
-                    }
-                  },
-                  "required": [
-                    "data"
-                  ]
+                  "$ref": "#/components/schemas/AuthorPageData"
                 }
               }
             }
@@ -142,23 +132,13 @@
                         "producer": "inference",
                         "layer": "inference",
                         "fields": [
-                          "properties",
-                          "required",
-                          "type"
+                          "$ref"
                         ],
                         "confidence": 0.9
                       }
                     ]
                   },
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/AuthorPageData"
-                    }
-                  },
-                  "required": [
-                    "data"
-                  ]
+                  "$ref": "#/components/schemas/AuthorPageData"
                 }
               }
             }
@@ -236,7 +216,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "d08163f59af4483db02071d2d6e77761ee647b3db62caa27f5db815de7c1fa7b"
+      "contentHash": "7fc1ce67d2420dc1a11900841efc566c056ab8f18a0ad30c800d798098cfb7cc"
     },
     "generator": {
       "name": "docuccino/laravel",
