@@ -25,8 +25,8 @@ use Spatie\LaravelData\LaravelDataServiceProvider;
 use Spatie\LaravelData\Support\DataConfig;
 
 /*
- * Validation attributes whose rule is not their class name snake-cased, and one whose arguments are named out of
- * order, locked in emitted bytes. No golden held one.
+ * Validation attributes whose rule is not their class name snake-cased, ones whose arguments are named out of
+ * order, and ones that build a rule object, locked in emitted bytes. No golden held one.
  */
 function spatieAttributeKeywordsBuild(): GenerationResult
 {
@@ -46,6 +46,10 @@ function spatieAttributeKeywordsBuild(): GenerationResult
                 new PropertyMetadata('v6', $of(ScalarT::string())),
                 new PropertyMetadata('count', $of(ScalarT::int())),
                 new PropertyMetadata('avatar', $of(new ClassT('Illuminate\\Http\\UploadedFile'))),
+                new PropertyMetadata('banner', $of(new ClassT('Illuminate\\Http\\UploadedFile'))),
+                new PropertyMetadata('passphrase', $of(ScalarT::string())),
+                new PropertyMetadata('owner', $of(ScalarT::string())),
+                new PropertyMetadata('handle', $of(ScalarT::string())),
             ]),
         ],
         analysisOverrides: [
