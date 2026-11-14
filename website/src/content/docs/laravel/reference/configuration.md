@@ -745,6 +745,18 @@ into your build log. Shapes only: there is deliberately no entropy scoring (UUID
 payloads are what good examples look like) and no internal-hostname heuristic (a private domain is a
 legitimate server URL).
 
+The pointer is the one to safelist, so it's spelled to stay put. It's escaped the way
+[RFC 6901](https://www.rfc-editor.org/rfc/rfc6901) says, `~1` for `/` and `~0` for `~`, so a path
+template is a single token. A parameter is named by `in:name`, which is how OpenAPI tells two parameters
+apart, rather than by its position in the list. Reordering an operation's parameters moves no pointer,
+and an entry never comes to match a different parameter:
+
+```
+[warning] lint.data-leakage: The query parameter "api_key"
+          (/paths/~1api~1v1~1users/get/parameters/query:api_key/name) looks like an API key and may
+          leak sensitive data.
+```
+
 | Key | Default | Effect |
 | --- | --- | --- |
 | `enabled` | `true` | Turn the pass on/off. |
