@@ -431,6 +431,11 @@ in the file being walked, and an array return is no type the trace follows:
   disposition really come from. `download()` wraps its path in `storage_path(...)`, which PHPStan does not
   fold, so the extension has to survive that; `eventStream()` is not on the response-factory contract the
   `response()` helper is typed as, so its recovery is a fact about the analyser rather than an assumption.
+- `app/Http/Controllers/StreamStatusController.php` and `RedirectStatusController.php` — streams, files
+  and redirects sent with a status of their own: through the factory, the redirector, the helpers, the
+  `Response` and `Redirect` facades and `new`, the status a literal, a constant, an enum case's read, a
+  named argument, a choice, a chain, a local or a helper's parameter; beside the calls that take no status,
+  one sent with the framework's default, and one whose status nothing can read.
 - `app/Http/Controllers/DashboardPageController.php` — a Blade page: `view('…')` behind a declared
   `: View` (the contract) and behind no return type at all. Proof that the engine hands back the CONCRETE
   `Illuminate\View\View` either way, so recognising only the contract would miss every real app.
