@@ -540,7 +540,7 @@ final class ResponseShapeRefiner
             return $refined;
         }
 
-        $echoes = $this->constructedEchoes($body, $payload, $statusSource, $scope, $paramNames)?->fields ?? [];
+        $echoes = $this->constructedEchoes($body, $payload, $statusSource, $scope, $paramNames)->fields ?? [];
         $echoed = array_map(static fn (ArrayShapeField $field): string => (string) $field->key, $echoes);
         $fixed = array_values(array_filter(
             $this->constructedValues($body, $payload, $scope),
