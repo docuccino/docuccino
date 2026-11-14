@@ -177,7 +177,7 @@
             "format": "binary"
           },
           "banner": {
-            "description": "Image dimensions: 50, 10.",
+            "description": "Image dimensions: min_width=10, max_height=50.",
             "type": "string",
             "format": "binary"
           },
@@ -202,7 +202,9 @@
             "type": "string"
           },
           "passphrase": {
-            "type": "string"
+            "type": "string",
+            "minLength": 10,
+            "example": "example-va"
           },
           "v4": {
             "type": "string",
@@ -222,7 +224,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "a139e8921e0afef90e530d482c8cfbf9a470795e74b897ab3f72394d57262720"
+      "contentHash": "584bac49c45b9d32077c1dc7da515e9e16fe24477b74f1a5d4479049402b1c64"
     },
     "generator": {
       "name": "docuccino/laravel",
