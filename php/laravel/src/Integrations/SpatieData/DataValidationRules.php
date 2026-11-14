@@ -47,9 +47,10 @@ use Docuccino\Laravel\Integrations\Validation\UnreadRule;
  * no field and no subtree.
  *
  * The rule vocabulary has one word — `array` — for every array shape, so a recovered container states its
- * own structure instead: a `list<V>` synthesises the `key.*` item field Laravel itself uses, an `array{…}`
+ * own structure too: a `list<V>` synthesises the `key.*` item field Laravel itself uses, an `array{…}`
  * shape a `key.<member>` field per key, and an `array<string, V>` carries its value schema on an
- * `additional_properties` rule ({@see AdditionalPropertiesRuleTransformer}).
+ * `additional_properties` rule ({@see AdditionalPropertiesRuleTransformer}). The `array` word itself stays,
+ * as laravel-data adds it, because Laravel reads an `in` or `not_in` beside it differently.
  *
  * A date is the same shape of gap: `date` is one word for everything non-relative `strtotime` parses, so a
  * `DateTimeInterface`-typed property states its own wire format on a `date_wire` rule
@@ -804,6 +805,11 @@ final class DataValidationRules
             return $out;
         }
 
+        // laravel-data adds `array` to every array-typed property, and `in`/`not_in` read the elements beside it.
+        if (self::isContainer($stripped) && ! in_array('array', $named, true)) {
+            $out[] = ValidationRule::of('array');
+        }
+
         $enum = $this->enumRule($stripped);
         if ($enum !== null && array_intersect(self::TYPE_RULES, $named) === []) {
             $out[] = $enum;
@@ -811,8 +817,9 @@ final class DataValidationRules
             return $out;
         }
 
+        // A keyed shape's word is the `array` already carried.
         $typeRule = self::typeRule($stripped);
-        if ($typeRule !== null && array_intersect(self::TYPE_RULES, $named) === []) {
+        if ($typeRule !== null && $typeRule !== 'array' && array_intersect(self::TYPE_RULES, $named) === []) {
             $out[] = ValidationRule::of($typeRule);
         }
 
@@ -839,11 +846,11 @@ final class DataValidationRules
 
     /**
      * The rule word for a recovered type. A container type says which container it is — `list` for proven
-     * sequential keys, `object` for a string-keyed map — rather than the `array` the vocabulary uses for
-     * both: stating `array` here would hand the rule chain an open question this recovery had already
-     * answered, and a shape contributing no child path to answer it with (a positional tuple, a map whose
-     * values nothing could describe) would be widened to "array or object" on the way out. Only a keyed
-     * array SHAPE stays `array`, because the child paths it contributes settle it.
+     * sequential keys, `object` for a string-keyed map — beyond the `array` the vocabulary uses for both:
+     * `array` alone would hand the rule chain an open question this recovery had already answered, and a
+     * shape contributing no child path to answer it with (a positional tuple, a map whose values nothing
+     * could describe) would be widened to "array or object" on the way out. Only a keyed array SHAPE says
+     * `array`, because the child paths it contributes settle it.
      */
     private static function typeRule(DType $type): ?string
     {
@@ -867,6 +874,14 @@ final class DataValidationRules
         }
 
         return $type instanceof MapT ? 'object' : null;
+    }
+
+    /** Whether a type is a PHP array, whatever shape it was recovered as. */
+    private static function isContainer(DType $type): bool
+    {
+        $type = self::unwrapNull($type);
+
+        return $type instanceof ListT || $type instanceof MapT || $type instanceof ArrayShapeT;
     }
 
     /** The sole non-null member of a nullable union, else the type itself. */

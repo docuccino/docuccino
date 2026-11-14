@@ -188,6 +188,11 @@ and `#[In([true, false])]` beside a `bool` takes both. Presence,
 type, size, format, and pattern attributes are all covered, and a property's own type contributes the
 base type where no attribute states one.
 
+On a property typed `array`, laravel-data adds the `array` rule itself, so `#[In]` and `#[NotIn]` check
+each element, as they do [beside `array` in a form request](/laravel/documenting/requests/#nested-and-array-fields).
+`#[In(['news', 'sport'])]` on a `list<string>` publishes its `enum` on `items`, and on an
+`array<string, string>` on `additionalProperties`, since a map's values are its elements.
+
 The escape hatches work as you'd hope:
 
 - `#[Rule('max:10|min:1')]` passes its strings through as Laravel rules, split at their pipes as
