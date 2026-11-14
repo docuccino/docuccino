@@ -59,10 +59,8 @@ final class ConstructorEchoes
         }
 
         $class = new ReflectionClass($fqcn);
-        foreach (self::OWN_JSON as $interface) {
-            if (is_a($fqcn, $interface, true)) {
-                return [];
-            }
+        if (self::ownJson($fqcn)) {
+            return [];
         }
 
         $constructor = $class->getConstructor();
@@ -76,6 +74,18 @@ final class ConstructorEchoes
         }
 
         return $this->written($class, $constructor);
+    }
+
+    /** Whether a response serialises the class as something other than its public properties. */
+    public static function ownJson(string $fqcn): bool
+    {
+        foreach (self::OWN_JSON as $interface) {
+            if (is_a($fqcn, $interface, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

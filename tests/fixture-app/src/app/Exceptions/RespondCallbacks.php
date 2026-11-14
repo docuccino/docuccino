@@ -10,6 +10,7 @@ use App\Problems\ErrorProblem;
 use App\Problems\FieldProblem;
 use App\Problems\HttpProblem;
 use App\Problems\InstanceProblem;
+use App\Problems\LinkedProblem;
 use App\Problems\SentProblem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -283,6 +284,18 @@ class RespondCallbacks
         return function (Response $response, Throwable $e, Request $request): Response {
             if ($e instanceof GoneHttpException) {
                 return (new SentProblem(410, 'Gone'))->toResponse($request);
+            }
+
+            return $response;
+        };
+    }
+
+    /** A retired resource answered with a problem that serialises itself as something other than its properties. */
+    public function problemSerialisingItself(): callable
+    {
+        return function (Response $response, Throwable $e): Response {
+            if ($e instanceof GoneHttpException) {
+                return new JsonResponse(new LinkedProblem(410, 'Gone'), 410, ['Content-Type' => 'application/problem+json']);
             }
 
             return $response;

@@ -301,12 +301,13 @@ it('reads the members an object body built in place echoes of the status it is s
     expect($sites)->toHaveCount(1);
 
     // The constructor reads both off the response it is handed, which is the one sent: its status, and the
-    // phrase of that status, whichever constructor of the hierarchy writes them.
+    // phrase of that status, whichever constructor of the hierarchy writes them. Built by its name, the body
+    // also holds the `type` that constructor writes once from a literal.
     $type = $sites[0]->type;
     expect($type)->toBeInstanceOf(ClassT::class)
         ->and($type->typeArgs[0] ?? null)->toEqual(new ClassT($problem))
         ->and($type->typeArgs[2] ?? null)->toEqual(new LiteralT('application/problem+json'))
-        ->and(echoedMembers($type->typeArgs[3] ?? new ArrayShapeT([])))->toBe(['status' => 'statusMarker', 'title' => ['statusText', 'scalar', 'Error']])
+        ->and(echoedMembers($type->typeArgs[3] ?? new ArrayShapeT([])))->toBe(['status' => 'statusMarker', 'title' => ['statusText', 'scalar', 'Error'], 'type' => 'literal'])
         // What the members were read out of keys the fragment: every constructor that wrote one.
         ->and(array_map(basename(...), $analysis->dependencyFiles))->toContain(...$read);
 })->with([
@@ -319,7 +320,7 @@ it('reads the members an object body built in place echoes of the status it is s
 ])->group('fixture');
 
 // A value named before the response's status is replaced is the old status, not the one sent: no member of
-// the body may echo the status it goes out with, however it was named.
+// the body may echo the status it goes out with, however it was named. A member no status decides keeps its value.
 it('reads no echo of the status sent off a value named before that status was replaced', function (string $method, int $slot, array $expected): void {
     $sites = array_values(array_filter(
         respondReturns($method),
@@ -333,8 +334,8 @@ it('reads no echo of the status sent off a value named before that status was re
 })->with([
     'a local the body reads' => ['statusTextStale', 0, ['title' => 'scalar', 'status' => 'scalar']],
     'a body built in a local' => ['statusStaleBody', 0, ['status' => 'scalar']],
-    'an object built in a local' => ['problemStale', 3, []],
-    'an object built in a local, the response then handed to a helper replacing its status' => ['problemRestatedByHelper', 3, []],
+    'an object built in a local' => ['problemStale', 3, ['type' => 'literal']],
+    'an object built in a local, the response then handed to a helper replacing its status' => ['problemRestatedByHelper', 3, ['type' => 'literal']],
 ])->group('fixture');
 
 it('keys a phrase read through an application class by that class, whose hierarchy decides it is the table', function (): void {
@@ -357,3 +358,46 @@ it('keys a phrase read through an application class by that class, whose hierarc
         // Redeclaring `$statusTexts` there would make it another table: a warm build must notice.
         ->and(array_map(basename(...), $analysis->dependencyFiles))->toContain('ApiResponse.php');
 })->group('fixture');
+
+// Built by its own name, the problem is exactly that class and runs exactly that constructor, which writes
+// `type` once from a literal: the value is the body's, though the class is not final and so its schema,
+// which every subclass's instance shares, pins nothing. `new static` may build a subclass, so it says nothing.
+it('reads the members a class built by its own name writes once from a literal, final or not', function (string $method, string $thrown, string $problem, array $expected, array $read): void {
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
+        'app/Exceptions/RespondCallbacks.php',
+        '',
+        '',
+        line: exceptionsFixtureLine('RespondCallbacks.php', 'public function '.$method.'(') + 2,
+        param: 'e',
+        narrowType: $thrown,
+        every: true,
+    ));
+    $sites = array_values(array_filter(
+        $analysis->returns,
+        static fn (ReturnSite $site): bool => $site->type instanceof ClassT && $site->type->fqcn === 'Illuminate\\Http\\JsonResponse',
+    ));
+    expect($sites)->toHaveCount(1);
+
+    $type = $sites[0]->type;
+    $members = $type instanceof ClassT && ($type->typeArgs[3] ?? null) instanceof ArrayShapeT ? $type->typeArgs[3] : new ArrayShapeT([]);
+    $literals = [];
+    foreach ($members->fields as $field) {
+        if ($field->type instanceof LiteralT) {
+            $literals[(string) $field->key] = $field->type->value;
+        }
+    }
+
+    expect($type)->toBeInstanceOf(ClassT::class)
+        ->and($type->typeArgs[0] ?? null)->toEqual(new ClassT($problem))
+        ->and($literals)->toBe($expected)
+        // What the value was read out of keys the fragment: the constructor that wrote it, and the class.
+        ->and(array_map(basename(...), $analysis->dependencyFiles))->toContain(...$read);
+})->with([
+    'built inline by its name' => ['problemByName', 'Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException', 'App\\Problems\\ErrorProblem', ['type' => 'about:blank'], ['ErrorProblem.php', 'RenderedProblem.php']],
+    'built as `self` in a factory on it' => ['problemFromSelf', 'Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException', 'App\\Problems\\ErrorProblem', ['type' => 'about:blank'], ['ErrorProblem.php', 'RenderedProblem.php']],
+    'built as `static`, which a subclass may be' => ['problemFromStatic', 'Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException', 'App\\Problems\\ErrorProblem', [], ['ErrorProblem.php']],
+    // Beside the arguments it was handed, which the members already carried.
+    'built by its name and sending itself' => ['problemSendingItself', 'Symfony\\Component\\HttpKernel\\Exception\\GoneHttpException', 'App\\Problems\\SentProblem', ['status' => 410, 'title' => 'Gone', 'type' => 'about:blank'], ['SentProblem.php']],
+    // `jsonSerialize()` decides what is sent, and here it sends the property as something else.
+    'built by its name and serialised as something other than its properties' => ['problemSerialisingItself', 'Symfony\\Component\\HttpKernel\\Exception\\GoneHttpException', 'App\\Problems\\LinkedProblem', [], []],
+])->group('fixture');

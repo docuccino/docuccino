@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Inference\PhpStan\Analysis;
 
 use Closure;
+use Docuccino\Core\Extensions\Schema\DeclarationFiles;
 use Docuccino\Core\Inference\ArgumentSlots;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
@@ -21,6 +22,7 @@ use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\StatusCodes;
+use Docuccino\Inference\PhpStan\Metadata\ClassMetadataFactory;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
 use Docuccino\Inference\PhpStan\Support\ContentTypeHeader;
 use Docuccino\Inference\PhpStan\Support\OmissionSentinel;
@@ -102,6 +104,7 @@ final class ResponseShapeRefiner
         private readonly CalleeResolver $calleeResolver,
         private readonly ProjectFilter $appFilter,
         private readonly ReflectionProvider $reflectionProvider,
+        private readonly ClassMetadataFactory $classes = new ClassMetadataFactory,
         int $maxDepth = 4,
         int $fileBudget = 40,
     ) {
@@ -533,9 +536,70 @@ final class ResponseShapeRefiner
         // call site folding the status folds the member too, and an unfolded one still fills at doc time.
         $refined = RefinedResponse::fromConstructor($payload, $status, $statusSource, $contentType, $provenance, $statusTexts);
 
-        $echoes = $body === null || ! $payload instanceof ClassT ? null : $this->constructedEchoes($body, $payload, $statusSource, $scope, $paramNames);
+        if ($body === null || ! $payload instanceof ClassT) {
+            return $refined;
+        }
 
-        return $echoes === null ? $refined : $refined->withPayloadMembers($echoes, []);
+        $echoes = $this->constructedEchoes($body, $payload, $statusSource, $scope, $paramNames)?->fields ?? [];
+        $echoed = array_map(static fn (ArrayShapeField $field): string => (string) $field->key, $echoes);
+        $fixed = array_values(array_filter(
+            $this->constructedValues($body, $payload, $scope),
+            static fn (ArrayShapeField $field): bool => ! in_array((string) $field->key, $echoed, true),
+        ));
+        $members = [...$echoes, ...$fixed];
+
+        return $members === [] ? $refined : $refined->withPayloadMembers(new ArrayShapeT($members), []);
+    }
+
+    /**
+     * {@see exactValues()} of an object body built right here, or in a local, since a readonly value no later
+     * statement can change.
+     *
+     * @return list<ArrayShapeField>
+     */
+    private function constructedValues(Node\Expr $body, ClassT $payload, Scope $scope): array
+    {
+        if ($body instanceof Node\Expr\Variable && is_string($body->name)) {
+            $body = ($this->locals($scope))($body->name) ?? $body;
+        }
+
+        return $body instanceof Node\Expr\New_ ? $this->exactValues($body, $payload->fqcn, $scope) : [];
+    }
+
+    /**
+     * The members an object built as exactly `$fqcn` holds one value in ({@see ClassMetadataFactory::exactValues()}):
+     * built by its name, `self` or `parent`, so no subclass's constructor ran, whether or not the class is
+     * final. `new static` may be a subclass, and says nothing; nor does a class sent as anything but its
+     * public properties.
+     *
+     * @return list<ArrayShapeField>
+     */
+    private function exactValues(Node\Expr\New_ $new, string $fqcn, Scope $scope): array
+    {
+        if (! $new->class instanceof Node\Name
+            || $new->class->toLowerString() === 'static'
+            || $scope->resolveName($new->class) !== $fqcn
+            || ConstructorEchoes::ownJson($fqcn)
+        ) {
+            return [];
+        }
+
+        $exact = $this->classes->exactValues($fqcn);
+        if ($exact['values'] === []) {
+            return [];
+        }
+
+        // Read off the constructors and the properties the hierarchy declares, and any constant copied.
+        foreach ([...DeclarationFiles::of($fqcn), ...$exact['files']] as $read) {
+            $this->touchProject($read);
+        }
+
+        $fields = [];
+        foreach ($exact['values'] as $member => $value) {
+            $fields[] = new ArrayShapeField($member, $value);
+        }
+
+        return $fields;
     }
 
     /**
@@ -997,6 +1061,8 @@ final class ResponseShapeRefiner
      * such a field is marked OPTIONAL rather than asserted, so nothing downstream tells a client the body
      * always carries it. {@see bindPayload()} settles it one hop out when the call site passes a value.
      *
+     * Beside them, the members an object built as exactly its class holds one value in ({@see exactValues()}).
+     *
      * @param  list<string>  $paramNames  the parameter names visible where the `new` is written
      * @return array{?ArrayShapeT, array<string, ParamAccessor>}
      */
@@ -1007,7 +1073,11 @@ final class ResponseShapeRefiner
         }
 
         $args = ConstructorArgs::named($new, $this->constructorParameterNames($fqcn));
-        if ($args === []) {
+        $fixed = array_values(array_filter(
+            $this->exactValues($new, $fqcn, $scope),
+            static fn (ArrayShapeField $field): bool => ! array_key_exists((string) $field->key, $args),
+        ));
+        if ($args === [] && $fixed === []) {
             return [null, []];
         }
 
@@ -1031,7 +1101,7 @@ final class ResponseShapeRefiner
             );
         }
 
-        return [new ArrayShapeT($fields), $provenance];
+        return [new ArrayShapeT([...$fields, ...$fixed]), $provenance];
     }
 
     /**
