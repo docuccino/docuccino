@@ -45,9 +45,9 @@
           "Token"
         ],
         "responses": {
-          "default": {
+          "401": {
             "x-docuccino": {
-              "id": "res:v1:5s7kfdp3su7zjca3",
+              "id": "res:v1:fgiopmybyr6gjdn6",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -56,12 +56,9 @@
                     "description"
                   ]
                 }
-              ],
-              "facts": {
-                "statusUnplaced": true
-              }
+              ]
             },
-            "description": "Any status",
+            "description": "Unauthorized",
             "content": {
               "application/json": {
                 "schema": {
@@ -233,9 +230,9 @@
           "Token"
         ],
         "responses": {
-          "default": {
+          "409": {
             "x-docuccino": {
-              "id": "res:v1:h7cnp7tijlwfxdas",
+              "id": "res:v1:yv33ckargd3tsixv",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -244,12 +241,9 @@
                     "description"
                   ]
                 }
-              ],
-              "facts": {
-                "statusUnplaced": true
-              }
+              ]
             },
-            "description": "Any status",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -289,7 +283,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "111666ecc8441d28dcfe154bd6883dfe40b7624a9ca2035f4f7cf0bde8919056"
+      "contentHash": "cc43c62083ec8a610bb7a260c44c7862bb85d2638cd3d118bf5b8b90d31322a4"
     },
     "generator": {
       "name": "docuccino/laravel",
