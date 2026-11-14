@@ -92,7 +92,6 @@
             "description": "Must not be sent when role is guest."
           },
           "role": {
-            "type": "string",
             "not": {
               "enum": [
                 "admin",
@@ -102,7 +101,6 @@
           },
           "suffix": {},
           "tier": {
-            "type": "integer",
             "not": {
               "enum": [
                 1,
