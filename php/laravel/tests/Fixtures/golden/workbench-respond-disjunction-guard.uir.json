@@ -131,13 +131,12 @@
           },
           "404": {
             "x-docuccino": {
-              "id": "res:v1:6chq334aazucewmk",
+              "id": "res:v1:tp5xhsffnq7vzc4w",
               "provenance": [
                 {
                   "producer": "integration:inferred-handler",
                   "layer": "integration",
                   "fields": [
-                    "component",
                     "description"
                   ],
                   "source": {
@@ -146,44 +145,10 @@
                     "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
                   }
                 }
-              ],
-              "facts": {
-                "component": "NotFound"
-              }
+              ]
             },
             "description": "Not Found",
             "content": {
-              "application/json": {
-                "schema": {
-                  "x-docuccino": {
-                    "provenance": [
-                      {
-                        "producer": "integration:inferred-handler",
-                        "layer": "integration",
-                        "fields": [
-                          "properties",
-                          "required",
-                          "type"
-                        ],
-                        "source": {
-                          "file": "workbench/app/Http/Controllers/FormController.php",
-                          "line": 35,
-                          "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
-                        }
-                      }
-                    ]
-                  },
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "message"
-                  ]
-                }
-              },
               "application/problem+json": {
                 "schema": {
                   "x-docuccino": {
@@ -483,13 +448,12 @@
           },
           "422": {
             "x-docuccino": {
-              "id": "res:v1:ffbkum4g4opvazez",
+              "id": "res:v1:pawqxx775vuhuty2",
               "provenance": [
                 {
                   "producer": "integration:implicit-response",
                   "layer": "integration",
                   "fields": [
-                    "component",
                     "description"
                   ],
                   "source": {
@@ -498,54 +462,10 @@
                     "symbol": "implicit:validated-request"
                   }
                 }
-              ],
-              "facts": {
-                "component": "UnprocessableEntity"
-              }
+              ]
             },
             "description": "Unprocessable Entity",
             "content": {
-              "application/json": {
-                "schema": {
-                  "x-docuccino": {
-                    "provenance": [
-                      {
-                        "producer": "integration:implicit-response",
-                        "layer": "integration",
-                        "fields": [
-                          "properties",
-                          "required",
-                          "type"
-                        ],
-                        "source": {
-                          "file": "workbench/app/Http/Controllers/ValidationController.php",
-                          "line": 21,
-                          "symbol": "implicit:validated-request"
-                        }
-                      }
-                    ]
-                  },
-                  "type": "object",
-                  "properties": {
-                    "errors": {
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      }
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "message",
-                    "errors"
-                  ]
-                }
-              },
               "application/problem+json": {
                 "schema": {
                   "x-docuccino": {
@@ -738,7 +658,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "d6b7c75f153feafc2ccc2c3d8b03688fa6ebf9b167035ead0aa48148b735a8d6"
+      "contentHash": "1d93665ccd3858e31dc8098b12fbd7e0c6e39ea29dc44f6d90d0a453db06abc0"
     },
     "generator": {
       "name": "docuccino/laravel",
