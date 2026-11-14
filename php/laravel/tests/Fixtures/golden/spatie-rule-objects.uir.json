@@ -158,6 +158,10 @@
         },
         "type": "object",
         "properties": {
+          "agreed": {
+            "type": "boolean",
+            "example": true
+          },
           "code": {
             "type": "string",
             "not": {
@@ -182,6 +186,10 @@
               "Blue"
             ]
           },
+          "consent": {
+            "type": "boolean",
+            "not": {}
+          },
           "mark": {
             "type": "string",
             "not": {
@@ -202,6 +210,25 @@
             ],
             "maxLength": 3,
             "example": "exa"
+          },
+          "pair": {
+            "type": "string",
+            "enum": [
+              "a",
+              "b",
+              "c"
+            ],
+            "example": "a",
+            "x-enum-varnames": [
+              "A",
+              "B",
+              "C"
+            ],
+            "x-enumNames": [
+              "A",
+              "B",
+              "C"
+            ]
           },
           "phase": {
             "type": "string",
@@ -229,6 +256,25 @@
           },
           "priority": {
             "$ref": "#/components/schemas/WidgetPriority"
+          },
+          "quoted": {
+            "type": "string",
+            "enum": [
+              "\"x",
+              "y\"",
+              "z"
+            ],
+            "example": "\"x",
+            "x-enum-varnames": [
+              "X",
+              "Y",
+              "Z"
+            ],
+            "x-enumNames": [
+              "X",
+              "Y",
+              "Z"
+            ]
           },
           "size": {
             "type": "string",
@@ -348,7 +394,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "8ae963cab2710a71207c1129553542f6196dfb75af30d539a526b7c7261e5c8f"
+      "contentHash": "5597b92e2e336e1baac6d028d6ccea765bb1ca704a49f67029a4ce27ebd8a3f3"
     },
     "generator": {
       "name": "docuccino/laravel",

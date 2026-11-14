@@ -14,6 +14,7 @@ use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Pipeline\GenerationResult;
+use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\RuleObjectChoicesController;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\RuleObjectChoicesData;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
@@ -42,6 +43,7 @@ function spatieRuleObjectsBuild(): GenerationResult
     bootLaravelData(null);
 
     $string = ScalarT::string();
+    $optional = new ClassT(DataClassReflector::OPTIONAL);
     $engine = static fn (): TypeEngine => WorkbenchEngine::make(
         classOverrides: [
             RuleObjectChoicesData::class => new ClassMetadata(RuleObjectChoicesData::class, [
@@ -55,6 +57,10 @@ function spatieRuleObjectsBuild(): GenerationResult
                 new PropertyMetadata('colour', $string),
                 new PropertyMetadata('mark', $string),
                 new PropertyMetadata('note', UnionT::of([$string, new NullT])),
+                new PropertyMetadata('consent', UnionT::of([ScalarT::bool(), $optional])),
+                new PropertyMetadata('agreed', UnionT::of([ScalarT::bool(), $optional])),
+                new PropertyMetadata('pair', UnionT::of([$string, $optional])),
+                new PropertyMetadata('quoted', UnionT::of([$string, $optional])),
             ]),
         ],
         analysisOverrides: [

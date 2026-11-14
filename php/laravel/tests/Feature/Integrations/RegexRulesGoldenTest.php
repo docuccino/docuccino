@@ -60,6 +60,7 @@ beforeEach(function (): void {
         'recipient' => ['Anne-Marie', 'Zoë Smith', 'Ωμέγα', "名前\u{3000}名前", "Jo\u{85}Ann", "Jo\tAnn"],
         'initials' => ['JFK', 'jfk', 'ÉA', 'Éé'],
         'full_name' => ["Anne-Marie O'Neil", 'Zoë Smith', "名前\u{3000}名前"],
+        'pair' => [],
     ];
 
     // Where the document agrees with the server exactly over ASCII. A caseless `\p{Lu}` takes lowercase
