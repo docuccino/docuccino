@@ -1762,7 +1762,10 @@ list became a map keyed `0`, `1`; a merged map whose first key is `0` was read a
 7.4.22 and 8.1.10; and `<<: &m {a: 1}` became a key named `<<` holding null. `tRUE` and `nULL` became
 `true` and `null`, which no YAML version reads them as, and `! 12`, a string under YAML's non-specific tag,
 became 12. A key written twice after a merge kept the second silently, as did one whose first value was
-null, on 7.4.
+null, on 7.4. Before 7.4.23 and 8.1.11, an empty list item before a blank or comment line took the next
+item in as a list of its own, a quoted value in a map inside a flow list lost the space after each comma,
+and an alias to an anchor named `0` was refused as circular. The reader holds the parser to none of those,
+so the constraint's floor is what reads them right.
 
 *The tell.* A value type the source format has no literal for, or a normalising constructor between the
 text and the value: `new DateTimeImmutable($text)`, `(float) $text`, `$data += $refValue`. Ask what the
