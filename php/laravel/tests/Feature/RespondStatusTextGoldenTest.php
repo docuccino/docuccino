@@ -46,16 +46,22 @@ use Workbench\App\Http\Controllers\ValidationController;
  * (`DebugProblem`). Byte-locked, warm as well as cold; the scripted analyses are what the real engine
  * recovers from the fixture app's own callbacks, which the last tests hold them to.
  */
+/** The members a problem's constructor reads off the rendered response it is sent with: its status, and the phrase of it. */
+function statusTextEchoes(): ArrayShapeT
+{
+    return new ArrayShapeT([
+        new ArrayShapeField('status', new StatusMarkerT),
+        new ArrayShapeField('title', new StatusTextMarkerT(ScalarT::string(), new LiteralT('Error'))),
+    ]);
+}
+
 function statusTextProblemObject(): ClassT
 {
     return new ClassT('Illuminate\\Http\\JsonResponse', [
         new ClassT('App\\Problems\\HttpProblem'),
         new UnknownT('status not folded'),
         new LiteralT('application/problem+json'),
-        new ArrayShapeT([
-            new ArrayShapeField('status', new StatusMarkerT),
-            new ArrayShapeField('title', new StatusTextMarkerT(ScalarT::string(), new LiteralT('Error'))),
-        ]),
+        statusTextEchoes(),
     ]);
 }
 
@@ -79,6 +85,7 @@ function statusTextFieldProblem(): ClassT
         new ClassT('App\\Problems\\FieldProblem'),
         new UnknownT('status not folded'),
         new LiteralT('application/problem+json'),
+        statusTextEchoes(),
     ]);
 }
 
@@ -88,6 +95,7 @@ function statusTextDebugProblem(): ClassT
         new ClassT('App\\Problems\\DebugProblem'),
         new UnknownT('status not folded'),
         new LiteralT('application/problem+json'),
+        statusTextEchoes(),
     ]);
 }
 
@@ -160,8 +168,10 @@ it('illustrates each error with the reason phrase of its own status, byte-identi
 
     expect($example('/api/probe-forms/{form}', '404'))->toBe(['type' => 'about:blank', 'title' => 'Not Found', 'status' => 404])
         ->and($example('/api/probe-forms', '599'))->toBe(['type' => 'about:blank', 'title' => 'Error', 'status' => 599])
-        ->and($example('/api/probe-tickets', '422', 'post'))->toBe(['errors' => [], 'type' => 'about:blank', 'title' => 'string', 'status' => 422, 'detail' => 'string'])
-        ->and($example('/api/probe-tickets', '403', 'post'))->toBe(['type' => 'about:blank', 'title' => 'string', 'status' => 403])
+        // The parent constructor writes the title, and reading the rendered body after the problem is built
+        // leaves the status it was sent with as it was: each still says what the server sends.
+        ->and($example('/api/probe-tickets', '422', 'post'))->toBe(['errors' => [], 'type' => 'about:blank', 'title' => 'Unprocessable Content', 'status' => 422, 'detail' => 'string'])
+        ->and($example('/api/probe-tickets', '403', 'post'))->toBe(['type' => 'about:blank', 'title' => 'Forbidden', 'status' => 403])
         ->and($document['components']['schemas']['HttpProblem']['properties']['title'] ?? null)->toBe(['type' => 'string']);
 });
 

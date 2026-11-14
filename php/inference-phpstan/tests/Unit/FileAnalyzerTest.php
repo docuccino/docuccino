@@ -218,6 +218,9 @@ it('holds a read only while nothing after it may have changed what it gives', fu
     'a call with arguments after it' => ['$s = $r->getStatusCode(); $r->setStatusCode(503)', '$r->getStatusCode()', 'r', true, false],
     'a nullsafe call with arguments after it' => ['$s = $r->getStatusCode(); $r?->setStatusCode(503)', '$r->getStatusCode()', 'r', true, false],
     'the object handed on after it' => ['$s = $r->getStatusCode(); handle($r)', '$r->getStatusCode()', 'r', true, false],
+    // A scope that types nothing names no method these calls run, so nothing says they kept the object.
+    'a call with arguments no type resolves' => ['$s = $r->getStatusCode(); $r->getData(true)', '$r->getStatusCode()', 'r', true, false],
+    'its class tested after it' => ['$s = $r->getStatusCode(); $j = $r instanceof JsonResponse', '$r->getStatusCode()', 'r', true, true],
     'the property written after it' => ['$s = $r->status; $r->status = 503', '$r->status', 'r', true, false],
     'the property incremented after it' => ['$s = $r->status; $r->status++', '$r->status', 'r', true, false],
     'unset after it' => ['$s = $r->status; unset($r->status)', '$r->status', 'r', true, false],
