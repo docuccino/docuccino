@@ -71,6 +71,14 @@ final class OperationDraft
      */
     private ?string $requestDescription = null;
 
+    /**
+     * Sentences a producer adds to the description ({@see declareDescriptionNote()}), each with whoever
+     * stated it.
+     *
+     * @var list<array{0: string, 1: Contribution}>
+     */
+    private array $descriptionNotes = [];
+
     private ?string $id = null;
 
     private bool $validatesInput = false;
@@ -290,6 +298,17 @@ final class OperationDraft
     }
 
     /**
+     * Add a sentence to whatever description wins, rather than contesting the description itself. For a
+     * fact the build proved, such as a requirement the route enforces: it is true under any description
+     * the author writes, so a higher layer's prose must not erase it, and it must not displace that
+     * prose either. Joined after the winning description at {@see freeze()}, in the order declared.
+     */
+    public function declareDescriptionNote(string $note, Contribution $by): void
+    {
+        $this->descriptionNotes[] = [$note, $by];
+    }
+
+    /**
      * Record that the server validates this operation's input against rules, so it can refuse a request
      * with a 422 — whether the rules were documented as a body or as query parameters, or not at all.
      * Written by whoever applied the rules and read by a later phase; it is a fact about the draft, not a
@@ -439,7 +458,16 @@ final class OperationDraft
             $responses[$status] = $draft->freeze();
         }
 
-        $docuccino = new NodeExtension(id: $this->id, provenance: $this->guard->provenance());
+        $noted = [];
+        foreach ($this->descriptionNotes as [$note, $by]) {
+            $description = DescriptionAppender::joined($description, $note);
+            $noted[$by->recordKey()] = $by;
+        }
+
+        $docuccino = new NodeExtension(
+            id: $this->id,
+            provenance: $this->guard->provenance($noted === [] ? [] : ['description' => array_values($noted)]),
+        );
 
         return new Operation(
             operationId: $operationId,

@@ -516,6 +516,7 @@ it('freezes the drafts an extension writes through at the methods they mean to p
         DeprecationNote::class => ['marks', 'paragraph'],
         DescriptionAppender::class => ['append', 'joined'],
         OperationDraft::class => [
+            'declareDescriptionNote',
             'declareRequestBodyDescription',
             'declareRequestBodyExamples',
             'declareValidatesInput',

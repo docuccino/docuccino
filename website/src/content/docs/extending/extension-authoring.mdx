@@ -394,6 +394,7 @@ own their own guarded writes:
 | Method | Writes |
 | --- | --- |
 | `setSummary(?string, $by)` / `setDescription(?string, $by)` | The operation summary / description. |
+| `declareDescriptionNote(string, $by)` | A sentence added beneath whichever description wins, rather than one competing for it. Use it for a fact your extension proved, such as a requirement the route enforces, that a docblock shouldn't erase. |
 | `setTags(?array, $by)` / `setSecurity(?array, $by)` | Tags, or the `security` requirement list. |
 | `setDeprecated(?bool, $by)` / `setOperationId(?string, $by)` | Deprecation flag, `operationId`. |
 | `set(string $field, mixed $value, $by)` | Any other top-level operation field. |

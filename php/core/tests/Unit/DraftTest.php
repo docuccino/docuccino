@@ -65,6 +65,47 @@ it('carries a shadowed value onto the frozen node so the emitted trail can answe
         ]);
 });
 
+/**
+ * A requirement the route enforces is true under whatever description the author writes, so it is a
+ * sentence added beneath the winning description and not a contender for the field: a docblock must not
+ * erase it, and it must not displace the docblock.
+ */
+it('joins a declared description note after the winning description, whichever layer wrote it', function (): void {
+    $draft = new OperationDraft;
+    $sanctum = Contribution::integration('sanctum-abilities');
+
+    $draft->declareDescriptionNote('Requires token ability: read', $sanctum);
+    $draft->setDescription('Docblock prose.', Contribution::docblock());
+
+    $operation = $draft->freeze();
+    $records = $operation->docuccino?->provenance?->toArray() ?? [];
+    $byProducer = array_column($records, null, 'producer');
+
+    expect($operation->description)->toBe("Docblock prose.\n\nRequires token ability: read")
+        // Each wrote part of the description, so both records say so, and neither displaced the other.
+        ->and($byProducer['docblock']['fields'])->toBe(['description'])
+        ->and($byProducer['docblock'])->not->toHaveKey('overrode')
+        ->and($byProducer['integration:sanctum-abilities']['fields'])->toBe(['description']);
+});
+
+it('publishes the notes alone, in the order declared, when nothing writes a description', function (): void {
+    // Two producers at ONE layer: as a contested field the second would be shadowed by the first and its
+    // requirement lost. Notes are added, so both requirements stand.
+    $draft = new OperationDraft;
+
+    $draft->declareDescriptionNote('Requires permission: moderate', Contribution::integration('permission'));
+    $draft->declareDescriptionNote('Requires token ability: read', Contribution::integration('sanctum-abilities'));
+
+    $operation = $draft->freeze();
+    $producers = array_column($operation->docuccino?->provenance?->toArray() ?? [], 'fields', 'producer');
+
+    expect($operation->description)->toBe("Requires permission: moderate\n\nRequires token ability: read")
+        ->and($producers)->toBe([
+            'integration:permission' => ['description'],
+            'integration:sanctum-abilities' => ['description'],
+        ]);
+});
+
 it('merges parameters by (in, name) rather than replacing the collection', function (): void {
     $draft = new OperationDraft;
 
