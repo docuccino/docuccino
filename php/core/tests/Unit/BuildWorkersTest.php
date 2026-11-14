@@ -209,7 +209,9 @@ it('keeps a worker to its drain while its build is there, whatever the host hook
         ->and(is_dir($claims))->toBeTrue();
 });
 
-it('stops every worker soon after its build is killed, and leaves nothing of that build behind', function (): void {
+it('stops every worker at its next job once its build is killed, and leaves nothing of that build behind', function (): void {
+    // Each job holds its worker until the build has gone, so when the build is killed each worker is in the
+    // middle of its first job, and every job built after that is one a worker took on for nobody.
     $build = null;
     $jobs = 60;
 
@@ -218,12 +220,15 @@ it('stops every worker soon after its build is killed, and leaves nothing of tha
         $scratch = $out.'/scratch';
         mkdir($scratch);
         file_put_contents($scratch.'/.gitignore', '*');
+        $build = getmypid();
 
         $units = array_map(static fn (int $job): array => [(string) $job], range(0, (int) $jobs - 1));
 
-        (new Docuccino\Core\Pipeline\BuildWorkers(static fn (): int => 2))->run(2, $units, static function (string $job) use ($out): void {
-            usleep(100000);
+        (new Docuccino\Core\Pipeline\BuildWorkers(static fn (): int => 2))->run(2, $units, static function (string $job) use ($out, $build): void {
             file_put_contents($out.'/job-'.$job, '');
+            while (posix_getppid() === $build) {
+                usleep(5000);
+            }
         }, $scratch);
         PHP, [$this->out, (string) $jobs], timeout: 20.0, meanwhile: function (int $pid) use (&$build): bool {
         if (count(glob($this->out.'/job-*') ?: []) < 2) {
@@ -235,12 +240,12 @@ it('stops every worker soon after its build is killed, and leaves nothing of tha
         posix_kill($pid, SIGKILL);
 
         return true;
-    }, settle: 10.0);
+    }, settle: 30.0);
 
     expect($build)->not->toBeNull()
-        // Every worker ended by itself, well before the work the build was killed in the middle of was done.
+        // Every worker ended by itself, having finished the job it held and started no other.
         ->and($run['settled'])->toBeTrue()
-        ->and(count(glob($this->out.'/job-*') ?: []))->toBeLessThan($jobs)
+        ->and(glob($this->out.'/job-*') ?: [])->toHaveCount(2)
         ->and(glob(sys_get_temp_dir().'/docuccino-claims-'.$build.'-*'))->toBe([])
         ->and(is_dir($this->out.'/scratch'))->toBeFalse();
 });
