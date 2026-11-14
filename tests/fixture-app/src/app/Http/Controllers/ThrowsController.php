@@ -1235,4 +1235,96 @@ class ThrowsController extends Controller
 
         return response()->json(['ok' => true]);
     }
+
+    /**
+     * Case 10s: a refusal whose status is the one its REASON maps to — the
+     * constructor hands the parent `$reason->status()`, and the enum case
+     * passed here decides it through a `match ($this)`.
+     */
+    public function enumReasonStatus(): void
+    {
+        throw new \App\Exceptions\Refused(\App\Enums\TokenRefusal::Expired, 'The token has expired.');
+    }
+
+    /**
+     * Case 10s': the same class with another case, which maps to another status.
+     */
+    public function otherEnumReasonStatus(): void
+    {
+        throw new \App\Exceptions\Refused(\App\Enums\TokenRefusal::AlreadyRotated, 'Rotate its replacement.');
+    }
+
+    /**
+     * Case 10s'': the reason is only known at run time, and its cases map to
+     * two statuses.
+     */
+    public function runtimeEnumReasonStatus(\App\Enums\TokenRefusal $reason): void
+    {
+        throw new \App\Exceptions\Refused($reason, 'Refused.');
+    }
+
+    /**
+     * Case 10s''': a reason chosen at run time, narrowed to the cases that
+     * map to one status before it is thrown.
+     */
+    public function narrowedEnumReasonStatus(\App\Enums\TokenRefusal $reason): void
+    {
+        if ($reason === \App\Enums\TokenRefusal::AlreadyRotated) {
+            return;
+        }
+
+        throw new \App\Exceptions\Refused($reason, 'Refused.');
+    }
+
+    /**
+     * Case 10t: an exception whose status is its enum's BACKING value.
+     */
+    public function enumValueStatus(): void
+    {
+        throw new \App\Exceptions\ExportFaultException(\App\Enums\ExportFault::Gone);
+    }
+
+    /**
+     * Case 10t': the same, with the case looked up from its value.
+     */
+    public function enumFromStatus(): void
+    {
+        throw new \App\Exceptions\ExportFaultException(\App\Enums\ExportFault::from(423));
+    }
+
+    /** Case 10u: abort() with a case's backing value. */
+    public function abortEnumValue(): void
+    {
+        abort(\App\Enums\ExportFault::Locked->value);
+    }
+
+    /** Case 10u': abort() with the status a case's method maps it to. */
+    public function abortEnumStatus(): void
+    {
+        abort(\App\Enums\TokenRefusal::AlreadyRotated->status());
+    }
+
+    /** Case 10u'': abort() through a method returning the case's own value. */
+    public function abortEnumStatusCode(): void
+    {
+        abort(\App\Enums\ExportFault::Gone->statusCode());
+    }
+
+    /** Case 10u-early: abort() through a method that chooses by early return. */
+    public function abortEnumEarlyReturn(): void
+    {
+        abort(\App\Enums\TokenRefusal::Expired->httpStatus());
+    }
+
+    /** Case 10v: a named constructor choosing the case itself. */
+    public function enumReasonInFactory(): void
+    {
+        throw \App\Exceptions\RotationRefused::expired();
+    }
+
+    /** Case 10v': a named constructor handed the case. */
+    public function enumReasonThroughFactory(): void
+    {
+        throw \App\Exceptions\RotationRefused::because(\App\Enums\TokenRefusal::AlreadyRotated);
+    }
 }

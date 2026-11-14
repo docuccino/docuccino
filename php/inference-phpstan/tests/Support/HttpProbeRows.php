@@ -29,9 +29,10 @@ final class HttpProbeRows
 
     /**
      * Every probe, as `[fqcn, the status it pins on all its instances, the slot it forwards, the status
-     * every construction it writes of itself agrees on]`.
+     * every construction it writes of itself agrees on, and — where the slot holds an enum case rather than
+     * the status — the read that turns the case into one]`.
      *
-     * @return array<string, array{string, int|null, int|null, int|null}>
+     * @return array<string, array{0: string, 1: int|null, 2: int|null, 3: int|null, 4?: string}>
      */
     public static function statuses(): array
     {
@@ -103,7 +104,21 @@ final class HttpProbeRows
             'a class whose factory builds then decorates' => [self::NAMESPACE.'ProbeScanFactory', null, 0, 422],
             'a class whose factory spreads its arguments' => [self::NAMESPACE.'ProbeSpreadFactory', null, 0, null],
 
+            // A slot read THROUGH the enum case it holds: the parent takes `$reason->status()`, so a construction
+            // passing a case states the status that case maps to, and one passing a constant reads exactly like
+            // a literal. Two cases mapping to one status agree, which is one status the class has.
+            'a constructor handing its parent a reason\'s status' => [self::NAMESPACE.'ProbeReasonForwarded', null, 0, null, 'status()'],
+            'one reason written into the parent call' => [self::NAMESPACE.'ProbeReasonPinned', 410, null, null],
+            'a subclass handing the base one case' => [self::NAMESPACE.'ProbeReasonSubclass', 410, null, null],
+            'factories passing two reasons that map to one status' => [self::NAMESPACE.'ProbeReasonFactories', 409, 0, 409, 'status()'],
+            'a case\'s backing value as the status' => [self::NAMESPACE.'ProbeValueForwarded', null, 0, 423, '->value'],
+            // A read of a read is not followed: what reaches the parent is another case's status, chosen in a
+            // method this read does not fold, so the class forwards nothing.
+            'a subclass handing the base a read of its argument' => [self::NAMESPACE.'ProbeReasonReread', null, null, null],
+
             // Members that owe no answer, carrying a row saying so rather than falling in the gap.
+            'an enum the probes read statuses off' => [self::NAMESPACE.'ProbeReason', null, null, null],
+            'an enum whose values are statuses' => [self::NAMESPACE.'ProbeStatusValue', null, null, null],
             'a trait, which is not a class at all' => [self::NAMESPACE.'ProbeMakesItself', null, null, null],
             'a class that is not an HttpException' => [self::NAMESPACE.'ProbePlain', null, null, null],
             'a plain object the probes use as an observable' => [self::NAMESPACE.'ProbeSideEffect', null, null, null],

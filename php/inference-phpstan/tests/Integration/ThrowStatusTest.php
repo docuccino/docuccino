@@ -118,4 +118,35 @@ it('publishes the status each construction shape writes', function (string $meth
     // analyser's walk of that file holds no bodies at all because PHPStan reads a trait in the using
     // class's context. So the honest answer is no status, with the notice beside it.
     'a factory the class gets from a trait' => ['traitFactoryStatus', ['ExportThrottledException@null']],
+    // A refusal whose constructor hands its parent `$reason->status()`: the status is whatever the case
+    // passed at the throw maps to in the enum's `match ($this)`, so one class answers each case's own.
+    // Read through an inherited constructor typed to the enum's INTERFACE, which names no case at all.
+    'a reason enum\'s status, read through the constructor' => ['enumReasonStatus', ['Refused@401']],
+    'the same class with a case mapping to another status' => ['otherEnumReasonStatus', ['Refused@409']],
+    // …and a reason only chosen at run time, whose cases map to 401 and 409. A throw carries one status,
+    // so naming either would be a guess: no status, with the notice, as `abort($a ? 403 : 404)` answers.
+    'a reason chosen at run time, whose cases disagree' => ['runtimeEnumReasonStatus', ['Refused@null']],
+    // …and one narrowed before the throw to the two cases that both map to 401: every value it can be
+    // answers 401, so that is the status, chosen at run time or not.
+    'a reason narrowed to cases that agree' => ['narrowedEnumReasonStatus', ['Refused@401']],
+    // The same read through `->value`, where the enum's backing value IS the status.
+    'a case\'s backing value, read through the constructor' => ['enumValueStatus', ['ExportFaultException@410']],
+    // The same reads where nothing forwards anything: the argument to abort() is the case's status itself.
+    'abort() with a case\'s backing value' => ['abortEnumValue', ['HttpException@423']],
+    'abort() with a case\'s mapped status' => ['abortEnumStatus', ['HttpException@409']],
+    'abort() through a method returning the case\'s own value' => ['abortEnumStatusCode', ['HttpException@410']],
+    // A method choosing by early return: `Expired` never reaches the `return 409` guarded for another
+    // case, so reading the first return in the body would publish another case's status.
+    'abort() through a method that chooses by early return' => ['abortEnumEarlyReturn', ['HttpException@401']],
+    // A named constructor choosing the case is the factory idiom, folded in the factory.
+    'a named constructor choosing the reason' => ['enumReasonInFactory', ['RotationRefused@401']],
+    // One handed the case reads it as the factory's own parameter, where it may be any case: the throw's
+    // argument is not carried into the factory, for a reason as for a number.
+    'a named constructor handed the reason' => ['enumReasonThroughFactory', ['RotationRefused@null']],
 ])->group('fixture');
+
+it('reads a case looked up by its value as that case', function (): void {
+    // `ExportFault::from(423)` is the case whose value is 423, so the refusal is a 423 — beside whatever
+    // `from()` itself is declared to throw, which is not this read's to judge.
+    expect(signalThrows('enumFromStatus'))->toContain('ExportFaultException@423');
+})->group('fixture');

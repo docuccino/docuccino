@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Docuccino\Inference\PhpStan\Analysis\AccessorKind;
+use Docuccino\Inference\PhpStan\Analysis\ParamAccessor;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeBranchingFactory;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeConstructedDefault;
@@ -39,14 +41,21 @@ function httpProjectFilter(bool $sees): ProjectFilter
     return new ProjectFilter($sees ? ['/'] : [], static fn (string $file): string => $file);
 }
 
-it('reads what a class states about its status', function (string $fqcn, ?int $pinned, ?int $parameter, ?int $agreed): void {
-    // One row per class, all three answers on it: they divide the same domain, and two datasets covered
-    // their own halves and left seven probes with nothing saying which slot they forward.
+it('reads what a class states about its status', function (string $fqcn, ?int $pinned, ?int $parameter, ?int $agreed, ?string $read = null): void {
+    // One row per class, all four answers on it: they divide the same domain, and two datasets covered
+    // their own halves and left seven probes with nothing saying which slot they forward. A row naming no
+    // read says the slot's argument IS the status, which is every class whose parent is handed a number.
     $statuses = httpStatuses();
+    $through = $statuses->statusRead($fqcn);
 
     expect($statuses->pinned($fqcn))->toBe($pinned)
         ->and($statuses->statusParameter($fqcn))->toBe($parameter)
-        ->and($statuses->agreed($fqcn)['status'])->toBe($agreed);
+        ->and($statuses->agreed($fqcn)['status'])->toBe($agreed)
+        ->and(match ($through?->kind) {
+            null => null,
+            AccessorKind::Method => $through->method.'()',
+            default => '->'.strtolower($through->kind->name),
+        })->toBe($read);
 })->with([
     ...HttpProbeRows::statuses(),
     // No class below `HttpException` adds a constructor, so its own runs and argument 0 IS the status.
@@ -197,9 +206,9 @@ it('states nothing about a class whose body it cannot read', function (): void {
             return [];
         }
 
-        public function foldInt(string $file, Node\Expr $expr, Node\Expr\New_|Node\Expr\StaticCall $at): ?int
+        public function foldStatus(string $file, Node\Expr $expr, Node\Expr\New_|Node\Expr\StaticCall $at, ?ParamAccessor $read): array
         {
-            return null;
+            return ['status' => null, 'files' => []];
         }
 
         public function intDefault(string $file, string $class, string $method, int $index): ?int

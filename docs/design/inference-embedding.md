@@ -440,7 +440,9 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
 3. **Enum-case accessor folding** (the final hop). When the call site binds a concrete enum case,
    `EnumAccessorFolder` resolves the accessors the callee applied to it: `->value`/`->name` from the
    case by reflection — VENDOR-SAFE, no body analysed; a no-arg `->method()` only for a PROJECT enum, by
-   analysing one method body (a `match ($this)` arm naming the case, or a plain constant return). A
+   analysing one method body (a `match ($this)` arm naming the case, `$this->value`/`$this->name`, or a
+   plain constant return), at every return the case can reach — a return behind `if ($this === …)` for
+   another case is that case's answer, not this one's. A
    computed body, a vendor enum's method, or an un-pinnable argument folds NOTHING — honest-permissive,
    never guessed. A folded `->status()` supplies the response status as a literal, which the response
    builder prefers over the exception's throw-status hint.
@@ -852,9 +854,10 @@ document CARRIES, and `project_paths` bounds that on purpose; the declaring-call
 the error the document already carries SAYS, so its gate is the application's own source — the same scope
 every other status read uses, for the priming reason below. That is what lets a modular guard state its
 status as plainly as one in `app/`. Measured over one build of the fixture's throw corpus when it held 57
-(it holds 94 actions on two controllers now; every one added since depends only on files those already
+(it holds 106 actions on two controllers now; every one added since depends only on files those already
 did, but for the nine whose closures a helper runs, which add `app/Support/Attempts.php` and the helper
-files and were not re-measured), the analysed-file count is 163 with the read and 163 without, so no recorded walk is discarded; the cost is two
+files, and the twelve that read a reason enum, which add the enums and exception classes they read — none
+re-measured), the analysed-file count is 163 with the read and 163 without, so no recorded walk is discarded; the cost is two
 extra live file walks (25 against 23), one per callee body whose `throw` states a status —
 `app/Services/ManifestDeclaredQuery.php` and `modules/Billing/LedgerReviewQuery.php` — and no measurable
 wall time (1.2s either way).
@@ -877,6 +880,17 @@ that would not fold takes the whole answer with it, and two folding differently 
 happens in the scope at the CALL, never a body's end scope — a constructor that reassigns its status
 parameter after forwarding it makes the two disagree, and the end scope names a value the callee never
 received.
+
+**A slot can be read through the enum case it holds.** `parent::__construct($reason->status(), …)` forwards
+the `$reason` slot together with the read (`HttpExceptionStatus::statusRead()`, a `ParamAccessor` of kind
+`Method` or `Value`), and every fold above then applies that read to the case the construction passes
+(`CaseStatus`, through `EnumAccessorFolder`). A subclass handing that parent a bare `$reason` forwards the
+same read on its own parameter; one handing it `$x->method()` is a read of a read and forwards nothing.
+The same fold answers an argument that is already `Case->status()` (`abort(Reason::Gone->status())`,
+`parent::__construct(Reason::Gone->status())`). A case chosen at run time is folded over every case its
+type may be, and states a status only where they all agree — the throw side carries one status per
+exception, so cases mapping to two statuses are no status and the unread notice, as `abort($a ? 403 : 404)`
+is. A type that is not wholly enum cases (an interface, a nullable) states none.
 
 **Every file the status was read from is a dependency.** The class's whole hierarchy, the factory's file,
 and two the body itself does not name: the file a callee's body is WRITTEN in — PHP reports a
@@ -950,9 +964,9 @@ list and the read declines anyway — measured against Symfony's own `ConflictHt
 `__construct` has zero statements — while asking for it primes that file, grows the analysed set and
 discards every walk the replay layer had recorded. That argument is about PRIMING, so it reaches vendor and
 stops there: a primed root is already in the analysed set, its bodies intact, and reading one grows nothing.
-Measured over one build of the fixture app's throw corpus when it held 58 (it holds 94 throw actions now,
-and every one added since depends only on files those already did, but for the nine helper rows, not
-re-measured), the analysed-file count is the same whether the status reads are scoped to the
+Measured over one build of the fixture app's throw corpus when it held 58 (it holds 106 throw actions now,
+and every one added since depends only on files those already did, but for the nine helper rows and the
+twelve reason-enum rows, not re-measured), the analysed-file count is the same whether the status reads are scoped to the
 application or to the descend paths — so nothing recorded is discarded — and the wider scope costs one extra live file walk, for an exception class nothing else opened. (The
 absolute counts this paragraph used to give were taken against a smaller corpus than the one above it, and
 two adjacent paragraphs disagreeing about one corpus is what stops a reader trusting either.) Scoping these reads to the descend paths instead published a placeholder 500 for a
