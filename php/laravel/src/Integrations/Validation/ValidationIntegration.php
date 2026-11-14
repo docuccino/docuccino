@@ -23,6 +23,7 @@ use Docuccino\Laravel\Integrations\Validation\Transformers\DateWireRuleTransform
 use Docuccino\Laravel\Integrations\Validation\Transformers\DigitsRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\Transformers\ExistsRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\Transformers\FileRuleTransformer;
+use Docuccino\Laravel\Integrations\Validation\Transformers\FixedPatternRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\Transformers\JsonRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\Transformers\NoOpRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\Transformers\NotInRuleTransformer;
@@ -67,6 +68,7 @@ final class ValidationIntegration
             new AlphaRuleTransformer,
             new AffixRuleTransformer,
             new DigitsRuleTransformer,
+            new FixedPatternRuleTransformer,
             new JsonRuleTransformer,
             new TimezoneRuleTransformer,
             new BooleanConstRuleTransformer,
