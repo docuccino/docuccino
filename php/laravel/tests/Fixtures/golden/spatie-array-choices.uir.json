@@ -221,10 +221,13 @@
               "type": "string"
             },
             "not": {
-              "enum": [
-                "a",
-                "b"
-              ]
+              "type": "object",
+              "additionalProperties": {
+                "enum": [
+                  "a",
+                  "b"
+                ]
+              }
             }
           },
           "blocked": {
@@ -233,10 +236,13 @@
               "type": "string"
             },
             "not": {
-              "enum": [
-                "a",
-                "b"
-              ]
+              "type": "array",
+              "items": {
+                "enum": [
+                  "a",
+                  "b"
+                ]
+              }
             }
           },
           "capped": {
@@ -255,21 +261,22 @@
           },
           "labels": {
             "type": "object",
-            "enum": [
-              "a",
-              "b"
-            ],
             "additionalProperties": {
-              "type": "string"
-            },
-            "x-enum-varnames": [
-              "A",
-              "B"
-            ],
-            "x-enumNames": [
-              "A",
-              "B"
-            ]
+              "type": "string",
+              "enum": [
+                "a",
+                "b"
+              ],
+              "example": "a",
+              "x-enum-varnames": [
+                "A",
+                "B"
+              ],
+              "x-enumNames": [
+                "A",
+                "B"
+              ]
+            }
           },
           "maybe": {
             "x-docuccino": {
@@ -277,29 +284,26 @@
                 "blankAsNull": "^[\\x00\\t-\\r  ­͏؜ᅟᅠ ឴឵᠎           ​‌‍‎‏\u2028\u2029  ⁠⁡⁢⁣⁤⁥⁪⁫⁬⁭⁮⁯⠀　ㅤ﻿ﾠ𝅙𝅳𝅴𝅵𝅶𝅷𝅸𝅹𝅺󠀠]*$"
               }
             },
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
-              "type": "string"
-            },
-            "anyOf": [
-              {
-                "type": "array",
-                "enum": [
-                  "a",
-                  "b"
-                ],
-                "x-enum-varnames": [
-                  "A",
-                  "B"
-                ],
-                "x-enumNames": [
-                  "A",
-                  "B"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
+              "type": "string",
+              "enum": [
+                "a",
+                "b"
+              ],
+              "example": "a",
+              "x-enum-varnames": [
+                "A",
+                "B"
+              ],
+              "x-enumNames": [
+                "A",
+                "B"
+              ]
+            }
           },
           "overridden": {
             "type": "string",
@@ -321,21 +325,22 @@
           },
           "ruled": {
             "type": "array",
-            "enum": [
-              "a",
-              "b"
-            ],
             "items": {
-              "type": "string"
-            },
-            "x-enum-varnames": [
-              "A",
-              "B"
-            ],
-            "x-enumNames": [
-              "A",
-              "B"
-            ]
+              "type": "string",
+              "enum": [
+                "a",
+                "b"
+              ],
+              "example": "a",
+              "x-enum-varnames": [
+                "A",
+                "B"
+              ],
+              "x-enumNames": [
+                "A",
+                "B"
+              ]
+            }
           },
           "statuses": {
             "$ref": "#/components/schemas/ListingStatus",
@@ -346,21 +351,22 @@
           },
           "tags": {
             "type": "array",
-            "enum": [
-              "a",
-              "b"
-            ],
             "items": {
-              "type": "string"
-            },
-            "x-enum-varnames": [
-              "A",
-              "B"
-            ],
-            "x-enumNames": [
-              "A",
-              "B"
-            ]
+              "type": "string",
+              "enum": [
+                "a",
+                "b"
+              ],
+              "example": "a",
+              "x-enum-varnames": [
+                "A",
+                "B"
+              ],
+              "x-enumNames": [
+                "A",
+                "B"
+              ]
+            }
           },
           "unique": {
             "type": "array",
@@ -404,21 +410,22 @@
         "properties": {
           "merged": {
             "type": "array",
-            "enum": [
-              "a",
-              "b"
-            ],
             "items": {
-              "type": "string"
-            },
-            "x-enum-varnames": [
-              "A",
-              "B"
-            ],
-            "x-enumNames": [
-              "A",
-              "B"
-            ]
+              "type": "string",
+              "enum": [
+                "a",
+                "b"
+              ],
+              "example": "a",
+              "x-enum-varnames": [
+                "A",
+                "B"
+              ],
+              "x-enumNames": [
+                "A",
+                "B"
+              ]
+            }
           }
         }
       },
@@ -464,7 +471,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "78301abb1df4c621a88ae994088bb159c0b6c84265c52746971f5e333ec5e186"
+      "contentHash": "9143c79c41456e50e4c88c92ce6d45475f4b393a245a07b863209bc2c5e01596"
     },
     "generator": {
       "name": "docuccino/laravel",
