@@ -10,12 +10,14 @@ use App\Problems\ErrorProblem;
 use App\Problems\FieldProblem;
 use App\Problems\HttpProblem;
 use App\Problems\InstanceProblem;
+use App\Problems\SentProblem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\GoneHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
@@ -273,6 +275,18 @@ class RespondCallbacks
     public function problemFromStatic(): callable
     {
         return fn (Response $response): Response => $response instanceof JsonResponse ? ErrorProblem::make($response) : $response;
+    }
+
+    /** A retired resource answered with a problem that sends itself, built by the name of a class other problems extend. */
+    public function problemSendingItself(): callable
+    {
+        return function (Response $response, Throwable $e, Request $request): Response {
+            if ($e instanceof GoneHttpException) {
+                return (new SentProblem(410, 'Gone'))->toResponse($request);
+            }
+
+            return $response;
+        };
     }
 
     /** The reason phrase read inline off the status it is sent with, through the subclass the table is inherited by. */

@@ -104,6 +104,61 @@
               }
             }
           },
+          "410": {
+            "x-docuccino": {
+              "id": "res:v1:iyv74epfcjgoijp3",
+              "provenance": [
+                {
+                  "producer": "integration:inferred-handler",
+                  "layer": "integration",
+                  "fields": [
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/FormController.php",
+                    "line": 25,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
+                  }
+                }
+              ],
+              "facts": {
+                "examplePlaceholders": {
+                  "application/problem+json": [
+                    "type"
+                  ]
+                }
+              }
+            },
+            "description": "Gone",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "integration:inferred-handler",
+                        "layer": "integration",
+                        "fields": [
+                          "$ref"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/FormController.php",
+                          "line": 25,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
+                        }
+                      }
+                    ]
+                  },
+                  "$ref": "#/components/schemas/SentProblem"
+                },
+                "example": {
+                  "type": "string",
+                  "status": 410,
+                  "title": "Gone"
+                }
+              }
+            }
+          },
           "599": {
             "x-docuccino": {
               "id": "res:v1:rj3t4zqjrbvbnjqz",
@@ -701,6 +756,28 @@
           "status"
         ]
       },
+      "SentProblem": {
+        "x-docuccino": {
+          "id": "sch:v1:uwfmozzlwgb52kgs"
+        },
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "title"
+        ]
+      },
       "StoreWidgetRequest": {
         "x-docuccino": {
           "id": "sch:v1:zh4wul5w3rfncvua"
@@ -811,7 +888,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "88cc13d0cc09105d2d95e14b6221f7c3ee7d5a5ef3ff5b72f455e20d8d03420e"
+      "contentHash": "131e7dba602f25a2ba02713c6e6cfdd135bd694c172b4aec9abe26099d35a530"
     },
     "generator": {
       "name": "docuccino/laravel",

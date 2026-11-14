@@ -32,6 +32,7 @@ use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Symfony\Component\HttpKernel\Exception\GoneHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Workbench\App\Http\Controllers\FormController;
 use Workbench\App\Http\Controllers\ValidationController;
@@ -44,7 +45,8 @@ use Workbench\App\Http\Controllers\ValidationController;
  * schema shared across statuses names no phrase. An object body (`new HttpProblem($response)`) and an
  * array one answer alike, and so do the bodies two factories build: one whose constructor runs its parent's
  * (`FieldProblem`), and one built before the rendered body is read for Laravel's other members
- * (`DebugProblem`). Byte-locked, warm as well as cold; the scripted analyses are what the real engine
+ * (`DebugProblem`). Two problem classes other problems extend, one built through a factory (`ErrorProblem`)
+ * and one sending itself (`SentProblem`), say what their own constructors write. Byte-locked, warm as well as cold; the scripted analyses are what the real engine
  * recovers from the fixture app's own callbacks, which the last tests hold them to.
  */
 /** The members a problem's constructor reads off the rendered response it is sent with: its status, and the phrase of it. */
@@ -110,6 +112,19 @@ function statusTextErrorProblem(): ClassT
     ]);
 }
 
+function statusTextSentProblem(): ClassT
+{
+    return new ClassT('Illuminate\\Http\\JsonResponse', [
+        new ClassT('App\\Problems\\SentProblem'),
+        new UnknownT('status not folded'),
+        new LiteralT('application/problem+json'),
+        new ArrayShapeT([
+            new ArrayShapeField('status', new LiteralT(410)),
+            new ArrayShapeField('title', new LiteralT('Gone')),
+        ]),
+    ]);
+}
+
 /** @return array<string, ClassMetadata> */
 function statusTextProblemClasses(): array
 {
@@ -134,6 +149,11 @@ function statusTextProblemClasses(): array
             new PropertyMetadata('status', ScalarT::int(), initialised: true),
             new PropertyMetadata('detail', ScalarT::string(), initialised: false),
         ], 'The problem any error is sent as, which problems saying more about one family of error extend.'),
+        'App\\Problems\\SentProblem' => new ClassMetadata('App\\Problems\\SentProblem', [
+            new PropertyMetadata('type', ScalarT::string(), initialised: true),
+            new PropertyMetadata('status', ScalarT::int()),
+            new PropertyMetadata('title', ScalarT::string()),
+        ], 'An RFC 9457 problem that sends itself, which problems saying more about one family of error extend.'),
     ];
 }
 
@@ -156,6 +176,7 @@ it('illustrates each error with the reason phrase of its own status, byte-identi
         ValidationException::class => statusTextFieldProblem(),
         AccessDeniedHttpException::class => statusTextDebugProblem(),
         ConflictHttpException::class => statusTextErrorProblem(),
+        GoneHttpException::class => statusTextSentProblem(),
     ];
     $callables = [];
     foreach ($answers as $thrown => $answer) {
@@ -167,6 +188,7 @@ it('illustrates each error with the reason phrase of its own status, byte-identi
         FormController::class.'::index' => new ActionAnalysis(throws: [
             new ThrownException(HttpException::class, 599, [], ThrowConfidence::Certain, ThrowDisposition::Signal),
             new ThrownException(ConflictHttpException::class, 409, [], ThrowConfidence::Certain, ThrowDisposition::Signal),
+            new ThrownException(GoneHttpException::class, 410, [], ThrowConfidence::Certain, ThrowDisposition::Signal),
         ]),
         ValidationController::class.'::store' => new ActionAnalysis(throws: [
             new ThrownException(AccessDeniedHttpException::class, 403, [], ThrowConfidence::Certain, ThrowDisposition::Signal),
@@ -193,6 +215,7 @@ it('illustrates each error with the reason phrase of its own status, byte-identi
         ->and($example('/api/probe-tickets', '422', 'post'))->toBe(['errors' => [], 'type' => 'about:blank', 'title' => 'Unprocessable Content', 'status' => 422, 'detail' => 'string'])
         ->and($example('/api/probe-tickets', '403', 'post'))->toBe(['type' => 'about:blank', 'title' => 'Forbidden', 'status' => 403])
         ->and($example('/api/probe-forms', '409'))->toBe(['type' => 'string', 'title' => 'Conflict', 'status' => 409, 'detail' => 'string'])
+        ->and($example('/api/probe-forms', '410'))->toBe(['type' => 'string', 'status' => 410, 'title' => 'Gone'])
         ->and($document['components']['schemas']['HttpProblem']['properties']['title'] ?? null)->toBe(['type' => 'string']);
 });
 
@@ -229,6 +252,7 @@ it('scripts what the real engine recovers from the fixture app’s own callbacks
     'the object a factory builds through its parent constructor' => ['problemFactories', ValidationException::class, statusTextFieldProblem(...)],
     'the object a factory builds before reading the rendered body' => ['problemFactories', AccessDeniedHttpException::class, statusTextDebugProblem(...)],
     'the object a factory builds as `self`, of a class others extend' => ['problemFromSelf', ConflictHttpException::class, statusTextErrorProblem(...)],
+    'the object sending itself, of a class others extend' => ['problemSendingItself', GoneHttpException::class, statusTextSentProblem(...)],
 ])->group('fixture');
 
 it('scripts each problem class as the real engine reads it', function (string $class): void {
