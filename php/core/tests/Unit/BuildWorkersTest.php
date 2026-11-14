@@ -567,6 +567,26 @@ it('runs a task here when its answer is asked for, where no worker may be forked
         ->and($workers->answered())->toBe(0);
 });
 
+it('says when this process holds an answer: from the first ask until it is let go, wherever it was made', function (int $limit): void {
+    // What a caller holding one large answer at a time is held to, read from the order rather than from memory.
+    $events = [];
+    $workers = new BuildWorkers(static fn (): int => $limit, holds: static function (bool $made) use (&$events): void {
+        $events[] = $made ? 'made' : 'let go';
+    });
+
+    $answer = $workers->later(static fn (): string => (string) getmypid());
+    $unasked = $workers->later(static fn (): string => 'never asked for');
+    $events[] = 'started';
+    $where = $answer();
+    $answer();
+    $events[] = 'asked twice';
+    unset($answer, $unasked);
+
+    // An answer let go unasked was never held here, so it says nothing.
+    expect($events)->toBe(['started', 'made', 'asked twice', 'let go'])
+        ->and($where === (string) getmypid())->toBe($limit === 1);
+})->with(['made here' => 1, 'made by a worker' => 3]);
+
 it('keeps one worker fewer than its limit running, and runs the rest here', function (): void {
     $workers = new BuildWorkers(static fn (): int => 3);
     $where = static fn (): string => (string) getmypid();

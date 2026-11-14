@@ -43,11 +43,14 @@ final class BuildWorkers
      *                                              workers, and before each worker {@see later()} starts; one
      *                                              that throws leaves the build to work alone
      * @param  (Closure(): void)|null  $inWorker  run in each worker once, before it does anything else
+     * @param  (Closure(bool): void)|null  $holds  told true as one of {@see later()}'s answers is made in this
+     *                                             process, and false as that answer is let go
      */
     public function __construct(
         private readonly Closure $limit,
         private readonly ?Closure $beforeFork = null,
         private readonly ?Closure $inWorker = null,
+        private readonly ?Closure $holds = null,
     ) {}
 
     /** Workers for nobody: every operation is built where the build runs. */
@@ -91,7 +94,7 @@ final class BuildWorkers
     {
         $answer = self::forkable() && $this->live < $this->limit() - 1 ? $this->start($task) : null;
 
-        return ($answer ?? new TaskAnswer($task))->__invoke(...);
+        return ($answer ?? new TaskAnswer($task, holds: $this->holds))->__invoke(...);
     }
 
     /** How many of {@see later()}'s answers came from the worker started for each, rather than being made here. */
@@ -229,7 +232,7 @@ final class BuildWorkers
         return new TaskAnswer($task, $pid, $ours, function (bool $used): void {
             $this->live--;
             $this->answered += $used ? 1 : 0;
-        });
+        }, $this->holds);
     }
 
     /** Whether the host settled this process for a fork; one that could not has the build work alone. */
