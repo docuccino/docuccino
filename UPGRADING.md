@@ -6,8 +6,8 @@ full record either way.
 
 ## v0.24.0
 
-Three changes, each for a different reader. The last two also change what a generated document
-says, so read them before you diff a document across the upgrade.
+Three changes, each for a different reader, and a last part on what a diff across the upgrade
+reports, for anyone who compares or gates a committed document.
 
 ### A pointer in `lint.leakage.allow`
 
@@ -46,7 +46,7 @@ you kept it, under `lint.examples.allow` or past the `lint.example-mismatch` war
 ### An enum case in a choice rule
 
 Only a trace visitor in an extension needs editing. But a document whose choice rules or filter
-defaults name an enum case changes, so read the first two points even if you write no extensions.
+defaults name an enum case changes, so read the first point even if you write no extensions.
 
 - **A choice rule publishes the value Laravel compares.** `Rule::in()`, `new In`, `Rule::notIn()`,
   `new NotIn` and `Rule::array()` given enum cases, a Query Builder filter's `->default()` given a case,
@@ -55,17 +55,30 @@ defaults name an enum case changes, so read the first two points even if you wri
   request against. A pure enum's case is still its name. A constant that names a case reads as that
   case, and a plain constant on an enum as its value, where both were the constant's name. A rule
   that lists every case of one enum refers to that enum's component.
-- **Expect it in your diff.** A document committed before the upgrade differs from the next build
-  wherever such a rule is used. `docuccino:diff` reports each value that moved, and reads a value
-  leaving an `enum` (`schema.enum-value-removed`) as breaking, so a gate run with `--enforce` fails on
-  the upgrade. Your API did not change: the old document listed case names, and Laravel compares a
-  request against the backing values. Upgrade in a pull request of its own, so the changeset holds
-  only what the upgrade moved, and read it before you merge.
 - **A trace visitor reads `caseName()`.** Only if your extension implements `TraceVisitor`.
   `TypeScope::constantValueOf()` folds an enum case to a `ConstValue` of kind `case`, where it was a
   scalar holding the case's name: `isCase()` is true, `class` holds the enum and `caseName()` the
   case. A plain constant on an enum folds to its value. Read the name from `caseName()` rather than
   `scalar`.
+
+### What `docuccino:diff` reports across this upgrade
+
+Only if you diff a document committed before the upgrade against a build after it, or gate it with
+`--enforce`. Three fixes make a choice rule publish what Laravel checks, and the differ reads each as
+breaking where the rule is used:
+
+- **`new Enum` and `new In` publish their values.** Both were dropped, so the field published no
+  `enum`. An `enum` arriving where nothing constrained the field (`schema.enum-added`) is a narrowing,
+  and a narrowing is breaking.
+- **`Rule::notIn()` and `new NotIn` publish the values they exclude.** They were dropped too. A `not`
+  arriving (`schema.not-added`) is a narrowing in the same way.
+- **An enum case publishes its backing value**, as above. The case's name leaving and its value
+  arriving are reported together, and a value leaving an `enum` (`schema.enum-value-removed`) is
+  breaking.
+
+So a gate run with `--enforce` fails on the upgrade. Your API did not change: in each case the
+document now says what your server already did. Upgrade in a pull request of its own, so the
+changeset holds only what the upgrade moved, and read it before you merge.
 
 ## v0.23.0
 
