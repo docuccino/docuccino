@@ -152,6 +152,11 @@ class CreateInvoiceData extends Data
 `currency` is now documented with the enum's backing values instead of a bare string. Fields you
 don't mention keep their inferred rules, and a field you declare that no property matches is added.
 
+One difference from a Form Request is laravel-data's own: it splits a rule string at its pipes wherever
+the string is, so `['required', 'string|max:3']` is three rules, where Laravel would take `string|max:3`
+as one. A string holding `regex:` stays whole, so its pattern can hold a `|`. Docuccino splits each
+string as laravel-data does.
+
 ### Validation attributes
 
 Spatie Data's validation **attributes** are read too — statically, never executed — and map to exactly
@@ -185,7 +190,8 @@ base type where no attribute states one.
 
 The escape hatches work as you'd hope:
 
-- `#[Rule('max:10|min:1')]` passes its strings straight through as Laravel rules.
+- `#[Rule('max:10|min:1')]` passes its strings through as Laravel rules, split at their pipes as
+  laravel-data splits them, inside a list too. A string holding `regex:` stays whole.
 - `#[Rule(new SortCode)]` documents from the rule class's own
   [`#[RuleSchema]`](/laravel/documenting/requests/#documenting-a-custom-rule) — describe a custom rule
   once at the class and every property using it picks it up.

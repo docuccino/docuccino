@@ -81,8 +81,8 @@ generated from the document changes.
 ### What `docuccino:diff` reports across this upgrade
 
 Only if you diff a document committed before the upgrade against a build after it, or gate it with
-`--enforce`. Seven fixes make a choice rule publish what Laravel checks, and the differ reads each as
-breaking where the rule is used:
+`--enforce`. Seven fixes make a choice rule publish what Laravel checks, an eighth does the same for a
+Spatie Data rule string, and the differ reads each as breaking where the rule is used:
 
 - **`new Enum` and `new In` publish their values.** Both were dropped, so the field published no
   `enum`. An `enum` arriving where nothing constrained the field (`schema.enum-added`) is a narrowing,
@@ -104,6 +104,12 @@ breaking where the rule is used:
   which it dropped, now publish. An `#[Enum]` refers to the enum's component, as `Rule::enum()` does,
   where it listed the same values inline: the differ reports the component and its case descriptions
   arriving, neither of them breaking.
+- **A Spatie Data rule string is split as laravel-data splits it.** `#[Rule('string|max:3')]`, a piped
+  string in a `#[Rule([…])]` list, and one in a list in `rules()` were read as one rule named
+  `string|max`, so `max:3` was dropped and only a `validation.rule-unhandled` note named it. Each rule
+  now publishes, and a `maxLength` arriving is a narrowing. A `rules()` string holding `regex:` stays
+  whole, so `'regex:/^(a|b)$/'` publishes its `pattern`, where it was split at the `|` and published
+  none.
 - **A choice list is read as Laravel reads it.** A rule string's list is a CSV row, so `in:"x,y",z`
   lists `x,y` where it listed `"x` and `y"`, and the empty entry in `boolean|in:1,` is kept, so `false`
   joins the `enum`. Spatie Data's `#[In]` and `#[NotIn]` list each value they are given as one entry:

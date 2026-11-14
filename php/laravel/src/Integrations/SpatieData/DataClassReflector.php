@@ -15,6 +15,7 @@ use Docuccino\Core\Inference\DType\MapT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Support\Fqcn;
 use Docuccino\Laravel\Integrations\Support\EnumCaseValue;
+use Docuccino\Laravel\Integrations\Support\RuleParsing;
 use Docuccino\Laravel\Integrations\Validation\LiveRuleValue;
 use Illuminate\Support\Str;
 use ReflectionAttribute;
@@ -343,7 +344,7 @@ final class DataClassReflector
             }
 
             // `#[Rule('max:10|min:1')]` is spatie's escape hatch — its arguments already ARE Laravel
-            // rule strings, so pass them straight through rather than emit a junk `rule:…` token.
+            // rule strings, so they pass through, split, rather than emit a junk `rule:…` token.
             if ($name === self::RULE_ATTRIBUTE) {
                 foreach ($this->ruleAttributeTokens($attribute->getArguments()) as $token) {
                     $tokens[] = $token;
@@ -527,7 +528,8 @@ final class DataClassReflector
     }
 
     /**
-     * Every string in a `#[Rule(...)]` attribute's arguments, flattened — each one is a rule string.
+     * Every string in a `#[Rule(...)]` attribute's arguments, flattened and split into rules as laravel-data
+     * splits them ({@see RuleParsing::dataPieces()}), so `'string|max:3'` is two rules, bare or in a list.
      *
      * @param  array<array-key, mixed>  $arguments
      * @return list<string>
@@ -536,8 +538,8 @@ final class DataClassReflector
     {
         $out = [];
         array_walk_recursive($arguments, static function (mixed $value) use (&$out): void {
-            if (is_string($value) && trim($value) !== '') {
-                $out[] = trim($value);
+            if (is_string($value)) {
+                $out = [...$out, ...RuleParsing::dataPieces($value)];
             }
         });
 
