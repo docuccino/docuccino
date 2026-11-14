@@ -64,15 +64,23 @@ it('depends on the enum a status was read off through the facade', function (str
     expect($files)->toContain('ExportFault.php');
 })->with(['caseRead', 'helperCase', 'helperMade'])->group('fixture');
 
-it('types the file, stream and redirect responses the facade makes as the factory\'s', function (string $method, string $class): void {
+it('types the file responses the facade makes as the factory\'s', function (string $method, string $class): void {
     // Their media type and disposition are read off the call site, whichever spelling made it
-    // (`FileResponseVisitor`); the type only has to name the class.
+    // (`FileResponseVisitor`); neither call takes a status, so the type only has to name the class.
     expect(responseFacadeStatusReturn($method))->toEqual(new ClassT($class));
 })->with([
     'Response::download()' => ['download', 'Symfony\\Component\\HttpFoundation\\BinaryFileResponse'],
     'Response::file()' => ['file', 'Symfony\\Component\\HttpFoundation\\BinaryFileResponse'],
-    'Response::stream()' => ['stream', 'Symfony\\Component\\HttpFoundation\\StreamedResponse'],
-    'Response::redirectTo()' => ['redirect', 'Illuminate\\Http\\RedirectResponse'],
+])->group('fixture');
+
+it('carries the status a stream or redirect the facade makes is sent with', function (string $method, string $class, int $status): void {
+    // `Response::stream($cb, 206)` is sent as a 206 and `Response::redirectTo($url, 301)` as a 301: the bare
+    // class would document the framework's 200, or any 3xx, for a status the call names
+    // ({@see StreamStatusTest}, {@see RedirectStatusTest}).
+    expect(responseFacadeStatusReturn($method))->toEqual(new ClassT($class, [new UnknownT('payload not folded'), new LiteralT($status)]));
+})->with([
+    'Response::stream($cb, 206)' => ['stream', 'Symfony\\Component\\HttpFoundation\\StreamedResponse', 206],
+    'Response::redirectTo($url, 301)' => ['redirect', 'Illuminate\\Http\\RedirectResponse', 301],
 ])->group('fixture');
 
 it('claims nothing for the root-namespace alias, which the analyser cannot read', function (): void {

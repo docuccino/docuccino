@@ -31,6 +31,7 @@ use Docuccino\Inference\PhpStan\Support\OmissionSentinel;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Support\ResponseFactoryCall;
 use Docuccino\Inference\PhpStan\Support\ScalarFold;
+use Docuccino\Inference\PhpStan\Support\TransportResponseCall;
 use Docuccino\Inference\PhpStan\Throwing\CaseStatus;
 use Docuccino\Inference\PhpStan\Throwing\ConstantSource;
 use Docuccino\Inference\PhpStan\Trace\Callee;
@@ -135,6 +136,21 @@ final class ResponseShapeRefiner
         return in_array($fqcn, self::RESPONSE_FQCNS, true);
     }
 
+    /**
+     * Whether a FQCN is a file, stream or redirect response: only its status is recovered, and it is
+     * emitted as its own class ({@see RefinedResponse::$transport}).
+     */
+    public static function isTransportFqcn(string $fqcn): bool
+    {
+        return in_array($fqcn, TransportResponseCall::CLASSES, true);
+    }
+
+    /** Either kind of response the refiner reads where it was built. */
+    private static function isRefinable(string $fqcn): bool
+    {
+        return self::isResponseFqcn($fqcn) || self::isTransportFqcn($fqcn);
+    }
+
     /** Null when nothing better than the bare type is recoverable. */
     public function refine(Node\Expr $expr, Scope $scope): ?RefinedResponse
     {
@@ -181,7 +197,7 @@ final class ResponseShapeRefiner
         if ($expr instanceof Node\Expr\MethodCall) {
             $chain = $this->fluentChain->peel($expr, $scope);
             if ($chain !== null) {
-                return ResponseArms::allLaid($this->armsOf($chain['receiver'], $scope, $depth, $paramNames) ?? [new RefinedResponse], $chain);
+                return ResponseArms::allLaid($this->armsOf($chain['receiver'], $scope, $depth, $paramNames) ?? [$this->bare($chain['receiver'], $scope)], $chain);
             }
 
             $render = $this->rendering($expr, $scope);
@@ -255,7 +271,7 @@ final class ResponseShapeRefiner
         if ($expr instanceof Node\Expr\MethodCall) {
             $chain = $this->fluentChain->peel($expr, $scope);
             if ($chain !== null) {
-                return ResponseArms::laid($this->refineExpr($chain['receiver'], $scope, $paramNames, $depth) ?? new RefinedResponse, $chain);
+                return ResponseArms::laid($this->refineExpr($chain['receiver'], $scope, $paramNames, $depth) ?? $this->bare($chain['receiver'], $scope), $chain);
             }
         }
 
@@ -273,6 +289,13 @@ final class ResponseShapeRefiner
             return $this->foldMade($made, $scope, $paramNames);
         }
 
+        // 1c. A file, stream or redirect the framework makes (`response()->stream($cb, 202)`, `back(303)`,
+        // `new StreamedResponse($cb, 206)`): its status, and nothing of a body the class and its call describe.
+        $transport = TransportResponseCall::of($expr, $scope, $this->reflectionProvider);
+        if ($transport !== null) {
+            return $this->foldTransport($transport, $scope, $paramNames);
+        }
+
         // 2. Type system already carries the shape (`response()->json([...], 422)`, via our extension).
         $type = $this->translator->translate($scope->getType($expr));
         if ($type instanceof ClassT && self::isResponseFqcn($type->fqcn) && $type->typeArgs !== []) {
@@ -288,7 +311,7 @@ final class ResponseShapeRefiner
         if ($expr instanceof Node\Expr\Variable
             && is_string($expr->name)
             && $type instanceof ClassT
-            && self::isResponseFqcn($type->fqcn)
+            && self::isRefinable($type->fqcn)
         ) {
             return $this->refineLocal($expr->name, $scope, $paramNames, $depth);
         }
@@ -299,7 +322,7 @@ final class ResponseShapeRefiner
         // own ({@see parentRendering()}). One shape only: an override with several arms is several
         // responses, which only {@see refineArms()} can carry.
         if ($expr instanceof Node\Expr\MethodCall || $expr instanceof Node\Expr\StaticCall) {
-            if ($type instanceof ClassT && self::isResponseFqcn($type->fqcn)) {
+            if ($type instanceof ClassT && self::isRefinable($type->fqcn)) {
                 $render = $expr instanceof Node\Expr\MethodCall ? $this->rendering($expr, $scope) : null;
                 if ($render !== null) {
                     return ResponseArms::single($this->renderArms($render, $depth, $paramNames));
@@ -615,6 +638,42 @@ final class ResponseShapeRefiner
 
         // A status stated and unread replaced the 200 the bare class would publish.
         return $status === null && $statusSource === null ? $refined->withUnreadStatus() : $refined;
+    }
+
+    /**
+     * Fold a file, stream or redirect response ({@see TransportResponseCall}), its status read as the
+     * constructor's is. One sent with the signature's own default — a call taking no status, passed none, or
+     * passed that default — is the call the bare class already describes, so null.
+     *
+     * @param  array{class: string, slots: ArgumentSlots, status: int|null, default: int|null}  $call
+     * @param  list<string>  $paramNames
+     */
+    private function foldTransport(array $call, Scope $scope, array $paramNames): ?RefinedResponse
+    {
+        $position = $call['status'];
+        $statusArg = $position === null ? null : $call['slots']->at($position);
+        if ($statusArg === null && ($position === null || $call['slots']->knows($position))) {
+            return null;
+        }
+
+        [$status, $statusSource] = $statusArg === null ? [null, null] : $this->resolveStatus($statusArg, $scope, $paramNames);
+        if ($status instanceof LiteralT && $status->value === $call['default']) {
+            return null;
+        }
+        $refined = RefinedResponse::transported($call['class'], $status, $statusSource);
+
+        // A status stated and unread replaced the default the bare class would publish.
+        return $status === null && $statusSource === null ? $refined->withUnreadStatus() : $refined;
+    }
+
+    /** What a chain's receiver is when nothing was recovered of it: nothing, but of its own class. */
+    private function bare(Node\Expr $receiver, Scope $scope): RefinedResponse
+    {
+        $type = $this->translator->translate($scope->getType($receiver));
+
+        return $type instanceof ClassT && self::isTransportFqcn($type->fqcn)
+            ? RefinedResponse::transported($type->fqcn, null, null)
+            : new RefinedResponse;
     }
 
     /**

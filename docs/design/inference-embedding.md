@@ -919,7 +919,9 @@ same read on its own parameter; one handing it `$x->method()` is a read of a rea
 The same fold answers an argument that is already `Case->status()` (`abort(Reason::Gone->status())`,
 `parent::__construct(Reason::Gone->status())`), and so does every status the response tier reads
 (`ResponseShapeRefiner::statusIn()`): `response()->json()`/`noContent()`, `new JsonResponse()`, a plain response
-the factory makes (`response($content, $status)`, `->make()`, `->view()`: `MadeResponseCall`), a chain's
+the factory makes (`response($content, $status)`, `->make()`, `->view()`: `MadeResponseCall`), a stream, file or
+redirect the framework makes (`stream()`, `back()`, `redirect()->to()`, `new StreamedResponse()`: its signature's
+`status` parameter, `TransportResponseCall`; emitted as its own class, `RefinedResponse::$transport`), a chain's
 `->setStatusCode()`, and an argument bound at a helper's call site, whether it is the case or the status read
 off it. A factory call whose type carries the status as a bare int is refined for it
 (`outranksResolvedType()`), and the status's files — the enums the read went through, the class constants it

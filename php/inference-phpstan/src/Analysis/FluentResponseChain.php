@@ -32,11 +32,10 @@ use PHPStan\Type\StaticType;
  * receiver's shape through something that may have rewritten it. A call whose receiver is not a response
  * is a PRODUCER: that is the base, and the refiner takes it from there.
  *
- * `withStatus()` is deliberately absent: it is PSR-7's setter, and no class in
- * {@see ResponseShapeRefiner::isResponseFqcn()} declares it, so reading it would be a name that can never
- * fire. Subclasses are absent for a sharper reason — a strict receiver check is what keeps a
- * `(new StreamedResponse(…))->setStatusCode(202)` out of here, since the refiner emits everything it
- * recovers as a `JsonResponse` and a streamed body is not one.
+ * `withStatus()` is deliberately absent: it is PSR-7's setter, and no response class read here declares it,
+ * so reading it would be a name that can never fire. The receivers are the classes the refiner reads where
+ * they are built, a file, stream or redirect among them ({@see ResponseShapeRefiner::isTransportFqcn()}),
+ * which it emits as their own class; a subclass is not one of them.
  *
  * A link that cannot be read is reported UNKNOWN in the one fact it could have set, never refused: a
  * `->header($name, $v)` this cannot read cannot have touched the STATUS, and a `->setStatusCode($code)` it
@@ -127,7 +126,7 @@ final class FluentResponseChain
     private function readLink(Node\Expr\MethodCall $call, Scope $scope): array|false|null
     {
         $receiver = $this->translator->translate($scope->getType($call->var));
-        if (! $receiver instanceof ClassT || ! ResponseShapeRefiner::isResponseFqcn($receiver->fqcn)) {
+        if (! $receiver instanceof ClassT || (! ResponseShapeRefiner::isResponseFqcn($receiver->fqcn) && ! ResponseShapeRefiner::isTransportFqcn($receiver->fqcn))) {
             return null;
         }
 

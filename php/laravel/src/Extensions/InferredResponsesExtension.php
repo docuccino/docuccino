@@ -56,9 +56,10 @@ final class InferredResponsesExtension implements OperationExtension
     private const DEFAULT_STATUS = '200';
 
     /**
-     * The OAS range key a redirect documents under: `RedirectResponse` takes any 3xx and the return site
-     * names none of them, so the range is what the code proves and 302 would be a guess. Whether it is
-     * still there once every layer has spoken belongs to the document lint of the same name, not here: an
+     * The OAS range key a redirect documents under where no status was read for it: `RedirectResponse`
+     * takes any 3xx and the return site names none of them, so the range is what the code proves and 302
+     * would be a guess; a status the call states is published as itself ({@see frameworkResponse()}).
+     * Whether it is still there once every layer has spoken belongs to the document lint of the same name, not here: an
      * attribute retires it ({@see OperationDraft::supersedeStatusRange()}), and a diagnostic raised from
      * this side would tell an author who pinned the code to pin it again.
      */
@@ -412,9 +413,7 @@ final class InferredResponsesExtension implements OperationExtension
         }
 
         if ($type instanceof ClassT && FrameworkClasses::isResponse($type->fqcn)) {
-            [$status, $payload, $empty, $headers, $bodies] = $this->frameworkResponse($type, $fileCalls);
-
-            return [[$status], $payload, $empty, $headers, $bodies];
+            return $this->frameworkResponse($type, $fileCalls);
         }
 
         return [[self::DEFAULT_STATUS], $type, false, null, []];
@@ -427,23 +426,28 @@ final class InferredResponsesExtension implements OperationExtension
      * the no-body claim the class contradicts; a file or streamed response goes to {@see fileResponse()};
      * anything else proves neither media type nor shape.
      *
-     * @return array{0: string, 1: ?DType, 2: bool, 3: ?array<string, mixed>, 4: array<string, array<string, mixed>>}
+     * A redirect, file or stream the engine read a status for carries it as a `JsonResponse` does, in its
+     * second type argument ({@see statusesOf()}). A redirect whose status was not read keeps the range.
+     *
+     * @return array{0: non-empty-list<string>, 1: ?DType, 2: bool, 3: ?array<string, mixed>, 4: array<string, array<string, mixed>>}
      */
     private function frameworkResponse(ClassT $type, ?FileResponseVisitor $fileCalls): array
     {
         if (FrameworkClasses::isRedirect($type->fqcn)) {
-            return [self::REDIRECT_STATUS, null, true, self::LOCATION_HEADER, []];
+            $codes = StatusCodes::of($type->typeArgs[1] ?? null);
+
+            return [$codes === null ? [self::REDIRECT_STATUS] : array_map(strval(...), $codes), null, true, self::LOCATION_HEADER, []];
         }
 
         if ($type->fqcn === FrameworkClasses::JSON_RESPONSE) {
-            return [self::DEFAULT_STATUS, $type, false, null, []];
+            return [[self::DEFAULT_STATUS], $type, false, null, []];
         }
 
         if (FrameworkClasses::isBinaryFile($type->fqcn) || FrameworkClasses::isStreamed($type->fqcn)) {
-            return $this->fileResponse($type, $fileCalls);
+            return [self::statusesOf($type->typeArgs), ...$this->fileResponse($type, $fileCalls)];
         }
 
-        return [self::DEFAULT_STATUS, null, true, null, []];
+        return [[self::DEFAULT_STATUS], null, true, null, []];
     }
 
     /**
@@ -452,14 +456,14 @@ final class InferredResponsesExtension implements OperationExtension
      * recovered calls answer where there are any and the class's own fallback answers where there are
      * none ({@see BinaryRepresentation}). Several calls at one status become one content entry each.
      *
-     * @return array{0: string, 1: ?DType, 2: bool, 3: ?array<string, mixed>, 4: array<string, array<string, mixed>>}
+     * @return array{0: ?DType, 1: bool, 2: ?array<string, mixed>, 3: array<string, array<string, mixed>>}
      */
     private function fileResponse(ClassT $type, ?FileResponseVisitor $fileCalls): array
     {
         $calls = $fileCalls?->forClass($type->fqcn) ?? [];
 
         if ($calls === []) {
-            return [self::DEFAULT_STATUS, null, false, null, $this->classBody($type->fqcn)];
+            return [null, false, null, $this->classBody($type->fqcn)];
         }
 
         $bodies = [];
@@ -467,7 +471,7 @@ final class InferredResponsesExtension implements OperationExtension
             $bodies[$call->mediaType] = $call->schema;
         }
 
-        return [self::DEFAULT_STATUS, null, false, $this->dispositionHeader($calls), $bodies];
+        return [null, false, $this->dispositionHeader($calls), $bodies];
     }
 
     /**

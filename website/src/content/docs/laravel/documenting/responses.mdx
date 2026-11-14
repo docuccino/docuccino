@@ -446,6 +446,19 @@ return Response::json(['error' => 'locked'], 422); // → 422 with that body
 return Response::noContent(205);                   // → 205, no body
 ```
 
+So does a stream, a file or a redirect, however you build it:
+
+```php
+return response()->stream($export, 202, ['Content-Type' => 'text/csv']); // → 202
+return response()->streamJson($invoices, 206);                           // → 206
+return new BinaryFileResponse($path, 206);                               // → 206
+return redirect()->to('/invoices', 301);                                 // → 301
+return back(303);                                                        // → 303
+```
+
+`download()`, `file()`, `streamDownload()` and `eventStream()` take no status, so they're documented as
+`200`.
+
 A status Docuccino can't read at all, such as `->setStatusCode($upstream->status())`, is not documented
 under a code the endpoint may never send. Its body goes under `default` ("any status") and an
 `inferred-response.status-unread` info diagnostic names the action. Name the codes it sends with
@@ -574,14 +587,14 @@ What gets documented instead is only what the class itself proves:
 
 | Return type | Documented as |
 | --- | --- |
-| `RedirectResponse` | `3XX` with a `Location` header and no body |
+| `RedirectResponse` | the status the call names (`redirect()->to($url, 301)`) or else `3XX`, with a `Location` header and no body |
 | `JsonResponse` with no recoverable payload | `200` with an open `application/json` body |
-| `BinaryFileResponse`, `StreamedResponse` | `200` with a binary body — see [file downloads and streams](#file-downloads-and-streams) |
+| `BinaryFileResponse`, `StreamedResponse` | the status the call names (`response()->stream($callback, 202)`) or else `200`, with a binary body — see [file downloads and streams](#file-downloads-and-streams) |
 | `Illuminate\Http\Response` | the status alone, the one the call names (`response('', 410)`) or else `200` — neither media type nor shape is stated anywhere |
 
-The redirect gets the OAS `3XX` range key rather than `302`: Laravel's `RedirectResponse` defaults to
-302 but takes any 3xx (`redirect()->to($url, 301)`, `->away($url, 307)`), and nothing at the return
-site says which. Pin it with [`#[Response(status: 302)]`](/laravel/reference/attributes/#response) when
+A redirect whose call names no status gets the OAS `3XX` range key rather than `302`: Laravel's
+`RedirectResponse` defaults to 302 but takes any 3xx, and a status read off the request, or a redirect a
+collaborator hands back, doesn't say which. Pin it with [`#[Response(status: 302)]`](/laravel/reference/attributes/#response) when
 the endpoint always answers with one code, and declare each code where it answers with several — a
 declared 3xx **retires** the range, taking the `Location` header with it, so the document says exactly
 one thing about the redirect rather than a precise answer and a vague one side by side.

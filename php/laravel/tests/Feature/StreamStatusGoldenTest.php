@@ -6,6 +6,9 @@ use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\UnionT;
+use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
@@ -27,21 +30,23 @@ use Workbench\App\Http\Controllers\ExportStreamController;
  */
 function streamStatusReturns(): array
 {
-    $stream = new ClassT('Symfony\\Component\\HttpFoundation\\StreamedResponse');
-    $json = new ClassT('Symfony\\Component\\HttpFoundation\\StreamedJsonResponse');
-    $redirect = new ClassT('Illuminate\\Http\\RedirectResponse');
+    $stream = 'Symfony\\Component\\HttpFoundation\\StreamedResponse';
+    $json = 'Symfony\\Component\\HttpFoundation\\StreamedJsonResponse';
+    $redirect = 'Illuminate\\Http\\RedirectResponse';
+    // The status a call states rides on the class it makes, where a `JsonResponse` carries its own.
+    $stated = static fn (string $class, DType $status): ClassT => new ClassT($class, [new UnknownT('payload not folded'), $status]);
 
     return [
-        'queue' => $stream,
-        'rows' => $json,
-        'slice' => $json,
-        'report' => new ClassT('Symfony\\Component\\HttpFoundation\\BinaryFileResponse'),
-        'export' => $stream,
-        'relay' => $stream,
-        'moved' => $redirect,
-        'finished' => $redirect,
-        'latest' => $redirect,
-        'follow' => $redirect,
+        'queue' => $stated($stream, new LiteralT(202)),
+        'rows' => $stated($json, new LiteralT(206)),
+        'slice' => $stated($json, UnionT::of([new LiteralT(200), new LiteralT(206)])),
+        'report' => $stated('Symfony\\Component\\HttpFoundation\\BinaryFileResponse', new LiteralT(206)),
+        'export' => new ClassT($stream),
+        'relay' => $stated($stream, new UnknownT('status not folded')),
+        'moved' => $stated($redirect, new LiteralT(301)),
+        'finished' => $stated($redirect, new LiteralT(303)),
+        'latest' => new ClassT($redirect),
+        'follow' => $stated($redirect, new UnknownT('status not folded')),
     ];
 }
 
