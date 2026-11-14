@@ -122,7 +122,7 @@
           "ExportStream"
         ],
         "responses": {
-          "3XX": {
+          "303": {
             "x-docuccino": {
               "provenance": [
                 {
@@ -146,7 +146,7 @@
                 }
               ]
             },
-            "description": "Redirect",
+            "description": "See Other",
             "headers": {
               "Location": {
                 "description": "The URL to follow.",
@@ -356,7 +356,7 @@
           "ExportStream"
         ],
         "responses": {
-          "3XX": {
+          "301": {
             "x-docuccino": {
               "provenance": [
                 {
@@ -380,7 +380,7 @@
                 }
               ]
             },
-            "description": "Redirect",
+            "description": "Moved Permanently",
             "headers": {
               "Location": {
                 "description": "The URL to follow.",
@@ -434,9 +434,9 @@
           "ExportStream"
         ],
         "responses": {
-          "200": {
+          "202": {
             "x-docuccino": {
-              "id": "res:v1:h54sj3xlwvuuak5t",
+              "id": "res:v1:mwhujwcsmiq7ou3f",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -447,7 +447,7 @@
                 }
               ]
             },
-            "description": "OK",
+            "description": "Accepted",
             "content": {
               "text/csv": {
                 "schema": {
@@ -511,9 +511,9 @@
           "ExportStream"
         ],
         "responses": {
-          "200": {
+          "default": {
             "x-docuccino": {
-              "id": "res:v1:o7m73dxrp2pl2n4n",
+              "id": "res:v1:trqer4k7w7df54i3",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -522,9 +522,12 @@
                     "description"
                   ]
                 }
-              ]
+              ],
+              "facts": {
+                "statusUnplaced": true
+              }
             },
-            "description": "OK",
+            "description": "Any status",
             "content": {
               "text/csv": {
                 "schema": {
@@ -588,9 +591,9 @@
           "ExportStream"
         ],
         "responses": {
-          "200": {
+          "206": {
             "x-docuccino": {
-              "id": "res:v1:c2637rus34krmmsg",
+              "id": "res:v1:gi4wety7turgu2qn",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -601,7 +604,7 @@
                 }
               ]
             },
-            "description": "OK",
+            "description": "Partial Content",
             "content": {
               "application/octet-stream": {
                 "schema": {
@@ -665,9 +668,9 @@
           "ExportStream"
         ],
         "responses": {
-          "200": {
+          "206": {
             "x-docuccino": {
-              "id": "res:v1:uycw56h2bvrdp2u3",
+              "id": "res:v1:g4vmp5vmzqozoz7j",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -678,7 +681,7 @@
                 }
               ]
             },
-            "description": "OK",
+            "description": "Partial Content",
             "content": {
               "application/json": {
                 "schema": {}
@@ -746,6 +749,26 @@
                 "schema": {}
               }
             }
+          },
+          "206": {
+            "x-docuccino": {
+              "id": "res:v1:dgvm7vdck547iyfj",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Partial Content",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           }
         }
       }
@@ -755,7 +778,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "9abf6ec573a7c45bb8a967cf42183950873200b5788c3c3f795a5fe77b77d9e2"
+      "contentHash": "321ff4aa7faa12830fbf105b94fa42f69045073f077762165fd7fb2e377efdc9"
     },
     "generator": {
       "name": "docuccino/laravel",
