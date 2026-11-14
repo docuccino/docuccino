@@ -159,13 +159,36 @@
         "type": "object",
         "properties": {
           "code": {
-            "type": "string"
+            "type": "string",
+            "not": {
+              "enum": [
+                "legacy"
+              ]
+            }
           },
           "colour": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "red",
+              "blue"
+            ],
+            "example": "red",
+            "x-enum-varnames": [
+              "Red",
+              "Blue"
+            ],
+            "x-enumNames": [
+              "Red",
+              "Blue"
+            ]
           },
           "mark": {
-            "type": "string"
+            "type": "string",
+            "not": {
+              "enum": [
+                "void"
+              ]
+            }
           },
           "note": {
             "x-docuccino": {
@@ -176,57 +199,82 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "maxLength": 3,
+            "example": "exa"
           },
           "phase": {
             "type": "string",
             "enum": [
               "draft",
-              "published",
-              "archived"
+              "published"
             ],
             "example": "draft",
+            "x-enum-descriptions": [
+              "Not yet visible to applicants.",
+              "Live and accepting traffic."
+            ],
             "x-enum-varnames": [
               "Draft",
-              "Published",
-              "Archived"
+              "Published"
             ],
+            "x-enumDescriptions": {
+              "draft": "Not yet visible to applicants.",
+              "published": "Live and accepting traffic."
+            },
             "x-enumNames": [
               "Draft",
-              "Published",
-              "Archived"
+              "Published"
             ]
           },
           "priority": {
-            "type": "integer"
+            "$ref": "#/components/schemas/WidgetPriority"
           },
           "size": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "small",
+              "large"
+            ],
+            "example": "small",
+            "x-enum-varnames": [
+              "Small",
+              "Large"
+            ],
+            "x-enumNames": [
+              "Small",
+              "Large"
+            ]
           },
           "stage": {
-            "type": "string"
+            "$ref": "#/components/schemas/WidgetStatus"
           },
           "state": {
             "type": "string",
             "enum": [
               "draft",
-              "published",
-              "archived"
+              "published"
             ],
             "example": "draft",
+            "x-enum-descriptions": [
+              "Not yet visible to applicants.",
+              "Live and accepting traffic."
+            ],
             "x-enum-varnames": [
               "Draft",
-              "Published",
-              "Archived"
+              "Published"
             ],
+            "x-enumDescriptions": {
+              "draft": "Not yet visible to applicants.",
+              "published": "Live and accepting traffic."
+            },
             "x-enumNames": [
               "Draft",
-              "Published",
-              "Archived"
+              "Published"
             ]
           },
           "status": {
-            "type": "string"
+            "$ref": "#/components/schemas/WidgetStatus"
           }
         },
         "required": [
@@ -240,6 +288,59 @@
           "colour",
           "mark"
         ]
+      },
+      "WidgetPriority": {
+        "x-docuccino": {
+          "id": "sch:v1:glla22yq7z5c5qmw"
+        },
+        "type": "integer",
+        "enum": [
+          1,
+          5,
+          10
+        ],
+        "x-enum-descriptions": [
+          "Handled when idle.",
+          "",
+          "Jumps the queue."
+        ],
+        "x-enum-varnames": [
+          "Low",
+          "Normal",
+          "High"
+        ],
+        "x-enumNames": [
+          "Low",
+          "Normal",
+          "High"
+        ]
+      },
+      "WidgetStatus": {
+        "x-docuccino": {
+          "id": "sch:v1:xxkbfhrj65orbrgo"
+        },
+        "description": "Where a widget stands in its publication lifecycle.",
+        "type": "string",
+        "enum": [
+          "draft",
+          "published",
+          "archived"
+        ],
+        "x-enum-descriptions": [
+          "Not yet visible to applicants.",
+          "Live and accepting traffic.",
+          ""
+        ],
+        "x-enum-varnames": [
+          "Draft",
+          "Published",
+          "Archived"
+        ],
+        "x-enumNames": [
+          "Draft",
+          "Published",
+          "Archived"
+        ]
       }
     }
   },
@@ -247,7 +348,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "7ab62846de63bdd8207a43847dfaf796ee50f1bccd1b911709e4926fbd633d50"
+      "contentHash": "8ae963cab2710a71207c1129553542f6196dfb75af30d539a526b7c7261e5c8f"
     },
     "generator": {
       "name": "docuccino/laravel",
