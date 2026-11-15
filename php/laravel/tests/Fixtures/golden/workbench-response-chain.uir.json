@@ -78,13 +78,13 @@
                   },
                   "type": "object",
                   "properties": {
-                    "queued": {
+                    "accepted": {
                       "type": "boolean",
                       "const": true
                     }
                   },
                   "required": [
-                    "queued"
+                    "accepted"
                   ]
                 }
               }
@@ -148,32 +148,7 @@
             "description": "Accepted",
             "content": {
               "application/json": {
-                "schema": {
-                  "x-docuccino": {
-                    "provenance": [
-                      {
-                        "producer": "inference",
-                        "layer": "inference",
-                        "fields": [
-                          "properties",
-                          "required",
-                          "type"
-                        ],
-                        "confidence": 1
-                      }
-                    ]
-                  },
-                  "type": "object",
-                  "properties": {
-                    "ids": {
-                      "type": "array",
-                      "items": {}
-                    }
-                  },
-                  "required": [
-                    "ids"
-                  ]
-                }
+                "schema": {}
               }
             }
           }
@@ -219,9 +194,9 @@
           "ResponseChain"
         ],
         "responses": {
-          "default": {
+          "202": {
             "x-docuccino": {
-              "id": "res:v1:jt7du2clka2nnkyb",
+              "id": "res:v1:moeqzlkp775xa7rh",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -230,15 +205,37 @@
                     "description"
                   ]
                 }
-              ],
-              "facts": {
-                "statusUnplaced": true
-              }
+              ]
             },
-            "description": "Any status",
+            "description": "Accepted",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "queued": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "queued"
+                  ]
+                }
               }
             }
           }
@@ -284,9 +281,9 @@
           "ResponseChain"
         ],
         "responses": {
-          "200": {
+          "default": {
             "x-docuccino": {
-              "id": "res:v1:7ja6m2gzh332gjxb",
+              "id": "res:v1:wych67o22g3vtt44",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -295,9 +292,12 @@
                     "description"
                   ]
                 }
-              ]
+              ],
+              "facts": {
+                "statusUnplaced": true
+              }
             },
-            "description": "OK",
+            "description": "Any status",
             "content": {
               "application/json": {
                 "schema": {}
@@ -346,8 +346,9 @@
           "ResponseChain"
         ],
         "responses": {
-          "200": {
+          "202": {
             "x-docuccino": {
+              "id": "res:v1:x4jk56uqcj2fzvnt",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -358,7 +359,28 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "Accepted",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "const",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "string",
+                  "const": "accepted"
+                }
+              }
+            }
           }
         }
       }
@@ -418,32 +440,7 @@
             "description": "Accepted",
             "content": {
               "application/json": {
-                "schema": {
-                  "x-docuccino": {
-                    "provenance": [
-                      {
-                        "producer": "inference",
-                        "layer": "inference",
-                        "fields": [
-                          "properties",
-                          "required",
-                          "type"
-                        ],
-                        "confidence": 1
-                      }
-                    ]
-                  },
-                  "type": "object",
-                  "properties": {
-                    "queued": {
-                      "type": "boolean",
-                      "const": true
-                    }
-                  },
-                  "required": [
-                    "queued"
-                  ]
-                }
+                "schema": {}
               }
             }
           }
@@ -576,9 +573,9 @@
           "ResponseChain"
         ],
         "responses": {
-          "default": {
+          "202": {
             "x-docuccino": {
-              "id": "res:v1:qx37xncbzlhjn6ww",
+              "id": "res:v1:qp4rufd2diugabet",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -587,15 +584,37 @@
                     "description"
                   ]
                 }
-              ],
-              "facts": {
-                "statusUnplaced": true
-              }
+              ]
             },
-            "description": "Any status",
+            "description": "Accepted",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "accepted"
+                  ]
+                }
               }
             }
           }
@@ -641,7 +660,7 @@
           "ResponseChain"
         ],
         "responses": {
-          "3XX": {
+          "308": {
             "x-docuccino": {
               "provenance": [
                 {
@@ -665,7 +684,7 @@
                 }
               ]
             },
-            "description": "Redirect",
+            "description": "Permanent Redirect",
             "headers": {
               "Location": {
                 "description": "The URL to follow.",
@@ -806,9 +825,9 @@
           "ResponseChain"
         ],
         "responses": {
-          "200": {
+          "404": {
             "x-docuccino": {
-              "id": "res:v1:gos2htidxmdi3cry",
+              "id": "res:v1:p2awpbrsbcjawkmm",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -819,10 +838,35 @@
                 }
               ]
             },
-            "description": "OK",
+            "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "const": "This resource is gone."
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
               }
             }
           }
@@ -868,9 +912,9 @@
           "ResponseChain"
         ],
         "responses": {
-          "200": {
+          "202": {
             "x-docuccino": {
-              "id": "res:v1:ljei3ls2on7lkfw6",
+              "id": "res:v1:53uyhuiu3ji7tyk3",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -881,7 +925,7 @@
                 }
               ]
             },
-            "description": "OK",
+            "description": "Accepted",
             "content": {
               "application/json": {
                 "schema": {
@@ -901,13 +945,13 @@
                   },
                   "type": "object",
                   "properties": {
-                    "queued": {
+                    "accepted": {
                       "type": "boolean",
                       "const": true
                     }
                   },
                   "required": [
-                    "queued"
+                    "accepted"
                   ]
                 }
               }
@@ -955,9 +999,9 @@
           "ResponseChain"
         ],
         "responses": {
-          "202": {
+          "default": {
             "x-docuccino": {
-              "id": "res:v1:h5xuo4bm26s7svec",
+              "id": "res:v1:ldpoc6om2ldjey2v",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -966,37 +1010,15 @@
                     "description"
                   ]
                 }
-              ]
+              ],
+              "facts": {
+                "statusUnplaced": true
+              }
             },
-            "description": "Accepted",
+            "description": "Any status",
             "content": {
               "application/json": {
-                "schema": {
-                  "x-docuccino": {
-                    "provenance": [
-                      {
-                        "producer": "inference",
-                        "layer": "inference",
-                        "fields": [
-                          "properties",
-                          "required",
-                          "type"
-                        ],
-                        "confidence": 1
-                      }
-                    ]
-                  },
-                  "type": "object",
-                  "properties": {
-                    "queued": {
-                      "type": "boolean",
-                      "const": true
-                    }
-                  },
-                  "required": [
-                    "queued"
-                  ]
-                }
+                "schema": {}
               }
             }
           }
@@ -1008,7 +1030,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "9d17ac0d2a42c7e0de6f8b35d08cb0a8ca9406f387ef8e6e315d4d0be6bec039"
+      "contentHash": "0a96db010924c683663addda62f8e0350bade5bc09dd05bac241db2e5d197266"
     },
     "generator": {
       "name": "docuccino/laravel",
