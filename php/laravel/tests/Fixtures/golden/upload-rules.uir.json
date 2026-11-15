@@ -159,22 +159,30 @@
         "type": "object",
         "properties": {
           "avatar": {
-            "description": "An image file.",
+            "description": "An image file. Image dimensions: min_width=100, min_height=100.",
             "type": "string",
             "format": "binary"
           },
           "banner": {
-            "description": "An image file.",
+            "description": "An image file. Image dimensions: max_width=1920, max_height=1080.",
             "type": "string",
             "format": "binary"
           },
-          "document": {},
+          "document": {
+            "description": "Maximum file size: 10000 KB.",
+            "type": "string",
+            "format": "binary"
+          },
           "icon": {
             "description": "An image file. Image dimensions: min_width=64, max_width=512.",
             "type": "string",
             "format": "binary"
           },
-          "photo": {}
+          "photo": {
+            "description": "An image file. Image dimensions: max_width=4000.",
+            "type": "string",
+            "format": "binary"
+          }
         },
         "required": [
           "avatar"
@@ -186,7 +194,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "b2fda427fd9f868a1293740dc4f884d6f25a0326fed05c9bceb1cba075a8690c"
+      "contentHash": "5ecb75a93bfc7b5e9dc4fec37bc5ede6b141bfdd1648760b43b5c84d567a05db"
     },
     "generator": {
       "name": "docuccino/laravel",
