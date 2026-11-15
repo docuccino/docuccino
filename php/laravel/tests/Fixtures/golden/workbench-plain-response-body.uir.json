@@ -41,7 +41,7 @@
           "uses": {
             "responses": {
               "410": {
-                "id": "res:v1:kbekfqzslwglctpk",
+                "id": "res:v1:ybppm4kj2yso7v6z",
                 "provenance": [
                   {
                     "producer": "fallback",
@@ -62,7 +62,7 @@
         ],
         "responses": {
           "410": {
-            "$ref": "#/components/responses/Error410_3jekgf77"
+            "$ref": "#/components/responses/Error410"
           }
         }
       }
@@ -230,7 +230,7 @@
         "responses": {
           "200": {
             "x-docuccino": {
-              "id": "res:v1:p7nkq6mktmsbcopz",
+              "id": "res:v1:47jyhej4yqnl2ogq",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -243,7 +243,7 @@
             },
             "description": "OK",
             "content": {
-              "application/json": {
+              "text/csv": {
                 "schema": {
                   "x-docuccino": {
                     "provenance": [
@@ -308,7 +308,6 @@
         "responses": {
           "410": {
             "x-docuccino": {
-              "id": "res:v1:dzht2lnvjhqyolq3",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -319,28 +318,7 @@
                 }
               ]
             },
-            "description": "Gone",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "x-docuccino": {
-                    "provenance": [
-                      {
-                        "producer": "inference",
-                        "layer": "inference",
-                        "fields": [
-                          "const",
-                          "type"
-                        ],
-                        "confidence": 1
-                      }
-                    ]
-                  },
-                  "type": "string",
-                  "const": ""
-                }
-              }
-            }
+            "description": "Gone"
           }
         }
       }
@@ -380,7 +358,7 @@
           "uses": {
             "responses": {
               "410": {
-                "id": "res:v1:sfytv5qf33msy3lm",
+                "id": "res:v1:hpbi5t7olfecuyab",
                 "provenance": [
                   {
                     "producer": "fallback",
@@ -401,7 +379,7 @@
         ],
         "responses": {
           "410": {
-            "$ref": "#/components/responses/Error410_mt2mrnoe"
+            "$ref": "#/components/responses/Error410"
           }
         }
       }
@@ -441,7 +419,7 @@
           "uses": {
             "responses": {
               "410": {
-                "id": "res:v1:gu2dwtwjfrkmsfei",
+                "id": "res:v1:ov6ddkbssnufnssa",
                 "provenance": [
                   {
                     "producer": "fallback",
@@ -462,7 +440,7 @@
         ],
         "responses": {
           "410": {
-            "$ref": "#/components/responses/Error410_mt2mrnoe"
+            "$ref": "#/components/responses/Error410"
           }
         }
       }
@@ -502,7 +480,7 @@
           "uses": {
             "responses": {
               "410": {
-                "id": "res:v1:exbdtrwk54xwcgof",
+                "id": "res:v1:isa6zbz6volo2c4u",
                 "provenance": [
                   {
                     "producer": "fallback",
@@ -523,7 +501,7 @@
         ],
         "responses": {
           "410": {
-            "$ref": "#/components/responses/Error410_mt2mrnoe"
+            "$ref": "#/components/responses/Error410"
           }
         }
       }
@@ -569,6 +547,7 @@
         "responses": {
           "200": {
             "x-docuccino": {
+              "id": "res:v1:wvsf7ickaj7v4wrm",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -579,7 +558,37 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "locked"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -681,7 +690,7 @@
         "responses": {
           "503": {
             "x-docuccino": {
-              "id": "res:v1:bxw54eysx7vruy3r",
+              "id": "res:v1:xzb77ro33w44xs2p",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -694,8 +703,22 @@
             },
             "description": "Service Unavailable",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/html": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "string"
+                }
               }
             }
           }
@@ -733,23 +756,7 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "410": {
-                "id": "res:v1:p2rgjcojzx2m3ctl",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "description"
-                    ]
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "get.api.notices.helper-plain",
         "summary": "Read the archived notice as text.",
@@ -758,7 +765,39 @@
         ],
         "responses": {
           "410": {
-            "$ref": "#/components/responses/Error410_mt2mrnoe"
+            "x-docuccino": {
+              "id": "res:v1:yrzjfhlb5mxsdrdx",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Gone",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "const",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "$ref": "#/components/schemas/Error410"
+                }
+              }
+            }
           }
         }
       }
@@ -794,23 +833,7 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "410": {
-                "id": "res:v1:o7qydmsjaeiwuud6",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "description"
-                    ]
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "get.api.notices.helper-view",
         "summary": "Show the archived notice page.",
@@ -819,7 +842,38 @@
         ],
         "responses": {
           "410": {
-            "$ref": "#/components/responses/Error410_mt2mrnoe"
+            "x-docuccino": {
+              "id": "res:v1:wiabkjx7kemf4vom",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Gone",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -859,7 +913,7 @@
           "uses": {
             "responses": {
               "410": {
-                "id": "res:v1:poyy2btcb4ddxcsk",
+                "id": "res:v1:tfvqeuvqnu7jeiuo",
                 "provenance": [
                   {
                     "producer": "fallback",
@@ -880,7 +934,7 @@
         ],
         "responses": {
           "410": {
-            "$ref": "#/components/responses/Error410_mt2mrnoe"
+            "$ref": "#/components/responses/Error410"
           }
         }
       }
@@ -940,7 +994,32 @@
             "description": "Locked",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "locked"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
               }
             }
           }
@@ -982,7 +1061,7 @@
           "uses": {
             "responses": {
               "410": {
-                "id": "res:v1:273achjt67lhsm4s",
+                "id": "res:v1:xsnstgcnsxfqsntu",
                 "provenance": [
                   {
                     "producer": "fallback",
@@ -1003,7 +1082,7 @@
         ],
         "responses": {
           "410": {
-            "$ref": "#/components/responses/Error410_3jekgf77"
+            "$ref": "#/components/responses/Error410"
           }
         }
       }
@@ -1035,21 +1114,13 @@
       }
     },
     "responses": {
-      "Error410_3jekgf77": {
+      "Error410": {
         "description": "Gone",
         "content": {
-          "application/json": {
+          "text/html": {
             "schema": {
               "$ref": "#/components/schemas/Error410"
             }
-          }
-        }
-      },
-      "Error410_mt2mrnoe": {
-        "description": "Gone",
-        "content": {
-          "application/json": {
-            "schema": {}
           }
         }
       },
@@ -1069,7 +1140,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "af9693c9b7006bf52e6617c2f738e6150134223d62fb8fa756004a6fbf103997"
+      "contentHash": "14e7e3412216c388a6d74887d175aeb967a7d407f97905edb9c885aa10420321"
     },
     "generator": {
       "name": "docuccino/laravel",

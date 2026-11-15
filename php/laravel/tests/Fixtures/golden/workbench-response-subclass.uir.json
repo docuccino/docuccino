@@ -267,7 +267,7 @@
         "responses": {
           "409": {
             "x-docuccino": {
-              "id": "res:v1:knnmcjhfpbyc75dn",
+              "id": "res:v1:5xzmimtsht5tzwbb",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -280,7 +280,7 @@
             },
             "description": "Conflict",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "x-docuccino": {
                     "provenance": [
@@ -986,7 +986,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "2b928368f6628a6c4c55f89a558746b5c719bbef8a207ef8026ec2c917466822"
+      "contentHash": "a710790d416906c51dc06ad24e1c0dc76606827fccffc62c0e0f078b28a3c005"
     },
     "generator": {
       "name": "docuccino/laravel",

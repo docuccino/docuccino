@@ -103,6 +103,7 @@
         "responses": {
           "200": {
             "x-docuccino": {
+              "id": "res:v1:c3mryxskw5nmusny",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -113,7 +114,28 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "const",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "string",
+                  "const": "created"
+                }
+              }
+            }
           }
         }
       }
@@ -215,7 +237,7 @@
         "responses": {
           "410": {
             "x-docuccino": {
-              "id": "res:v1:oejav6yvqtuelglt",
+              "id": "res:v1:7tauqhkfrlctnhv4",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -228,8 +250,24 @@
             },
             "description": "Gone",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/html": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "const",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "string",
+                  "const": "archived"
+                }
               }
             }
           }
@@ -317,7 +355,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "3d4ae79d229ee82538f30118040c3467209960af3a0f23907b94e3b4437586ad"
+      "contentHash": "5af5f1f7ac1bcc40ae56ed70b85257fd8d7e384b6183b8ade974eafdbfbaf4ea"
     },
     "generator": {
       "name": "docuccino/laravel",
