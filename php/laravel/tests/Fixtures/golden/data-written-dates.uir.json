@@ -357,36 +357,32 @@
                 "blankAsNull": "^[\\x00\\t-\\r  ­͏؜ᅟᅠ ឴឵᠎           ​‌‍‎‏\u2028\u2029  ⁠⁡⁢⁣⁤⁥⁪⁫⁬⁭⁮⁯⠀　ㅤ﻿ﾠ𝅙𝅳𝅴𝅵𝅶𝅷𝅸𝅹𝅺󠀠]*$"
               }
             },
+            "description": "Expected format: one of \"d/m/Y\", \"Y-m-d\"",
             "type": [
               "string",
               "null"
             ],
-            "format": "date-time",
-            "example": "2024-01-01T00:00:00+00:00"
+            "example": "01/01/2024"
           },
-          "closedAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2024-01-01T00:00:00+00:00"
-          },
+          "closedAt": {},
           "dueOn": {
+            "description": "Expected format: one of \"d/m/Y\", \"Y-m-d\"",
             "type": "string",
-            "format": "date-time",
-            "example": "2024-01-01T00:00:00+00:00"
+            "example": "01/01/2024"
           },
           "expiresAt": {
             "description": "Unix timestamp (seconds).",
             "type": "integer"
           },
           "localAt": {
+            "description": "Expected format: one of \"d/m/Y\", \"Y-m-d\"",
             "type": "string",
-            "format": "date-time",
-            "example": "2024-01-01T00:00:00+00:00"
+            "example": "01/01/2024"
           },
           "openedOn": {
+            "description": "Expected format: one of \"Y-m-d\", \"d/m/Y\"",
             "type": "string",
-            "format": "date-time",
-            "example": "2024-01-01T00:00:00+00:00"
+            "example": "2024-01-01"
           },
           "pingedAt": {
             "x-docuccino": {
@@ -394,38 +390,30 @@
                 "blankAsNull": "^[\\x00\\t-\\r  ­͏؜ᅟᅠ ឴឵᠎           ​‌‍‎‏\u2028\u2029  ⁠⁡⁢⁣⁤⁥⁪⁫⁬⁭⁮⁯⠀　ㅤ﻿ﾠ𝅙𝅳𝅴𝅵𝅶𝅷𝅸𝅹𝅺󠀠]*$"
               }
             },
+            "description": "Expected format: one of \"d/m/Y\", \"Y-m-d\"",
             "type": [
               "string",
               "null"
             ],
-            "format": "date-time",
-            "example": "2024-01-01T00:00:00+00:00"
+            "example": "01/01/2024"
           },
           "postedAt": {
+            "description": "Expected format: one of \"d/m/Y\", \"Y-m-d\"",
             "type": "string",
-            "format": "date-time",
-            "example": "2024-01-01T00:00:00+00:00"
+            "example": "01/01/2024"
           },
           "recordedAt": {
+            "description": "Expected format: one of \"d/m/Y\", \"Y-m-d\"",
             "type": "string",
-            "format": "date-time",
-            "example": "2024-01-01T00:00:00+00:00"
+            "example": "01/01/2024"
           },
-          "seenAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2024-01-01T00:00:00+00:00"
-          },
+          "seenAt": {},
           "stampedAt": {
+            "description": "Expected format: one of \"d/m/Y\", \"Y-m-d\"",
             "type": "string",
-            "format": "date-time",
-            "example": "2024-01-01T00:00:00+00:00"
+            "example": "01/01/2024"
           },
-          "syncedAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2024-01-01T00:00:00+00:00"
-          }
+          "syncedAt": {}
         },
         "required": [
           "postedAt",
@@ -447,7 +435,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "2e094517fe0004c6cc5d5671cb384616baa9c4db30c8e10580ee64b3835caac2"
+      "contentHash": "41765ececf0c565a4880e2ed8ab3b9a1cb45c9852e2fed9bbf748b601bfe9106"
     },
     "generator": {
       "name": "docuccino/laravel",
