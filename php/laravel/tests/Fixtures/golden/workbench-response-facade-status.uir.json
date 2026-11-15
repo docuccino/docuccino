@@ -19,7 +19,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ArchiveFacadeController.php",
-                "line": 44,
+                "line": 45,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ArchiveFacadeController::expire"
               }
             },
@@ -106,7 +106,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ArchiveFacadeController.php",
-                "line": 32,
+                "line": 33,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ArchiveFacadeController::purge"
               }
             },
@@ -162,7 +162,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ArchiveFacadeController.php",
-                "line": 62,
+                "line": 63,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ArchiveFacadeController::purgeAliased"
               }
             },
@@ -205,6 +205,68 @@
         }
       }
     },
+    "/api/archive-facade/purge-in-real-time": {
+      "delete": {
+        "x-docuccino": {
+          "id": "op:v1:3arksdyzmxawwubu",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/ArchiveFacadeController.php",
+                "line": 81,
+                "symbol": "Workbench\\App\\Http\\Controllers\\ArchiveFacadeController::purgeInRealTime"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ]
+        },
+        "operationId": "delete.api.archive-facade.purge-in-real-time",
+        "summary": "Purge an archived entry, through a real-time facade.",
+        "tags": [
+          "ArchiveFacade"
+        ],
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:rvlo2d53ijf6gvoy",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/archive-facade/refuse": {
       "post": {
         "x-docuccino": {
@@ -218,7 +280,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ArchiveFacadeController.php",
-                "line": 20,
+                "line": 21,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ArchiveFacadeController::refuse"
               }
             },
@@ -279,7 +341,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ArchiveFacadeController.php",
-                "line": 56,
+                "line": 57,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ArchiveFacadeController::refuseAliased"
               }
             },
@@ -340,7 +402,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ArchiveFacadeController.php",
-                "line": 68,
+                "line": 69,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ArchiveFacadeController::refuseByReply"
               }
             },
@@ -388,6 +450,68 @@
         }
       }
     },
+    "/api/archive-facade/refuse-in-real-time": {
+      "post": {
+        "x-docuccino": {
+          "id": "op:v1:hl73jmblhk7cpj6p",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/ArchiveFacadeController.php",
+                "line": 75,
+                "symbol": "Workbench\\App\\Http\\Controllers\\ArchiveFacadeController::refuseInRealTime"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ]
+        },
+        "operationId": "post.api.archive-facade.refuse-in-real-time",
+        "summary": "Refuse to change a locked archive, through a real-time facade.",
+        "tags": [
+          "ArchiveFacade"
+        ],
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:463z4nlbuzcztdbe",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/archive-facade/reset": {
       "post": {
         "x-docuccino": {
@@ -401,7 +525,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ArchiveFacadeController.php",
-                "line": 26,
+                "line": 27,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ArchiveFacadeController::reset"
               }
             },
@@ -457,7 +581,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ArchiveFacadeController.php",
-                "line": 50,
+                "line": 51,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ArchiveFacadeController::status"
               }
             },
@@ -544,7 +668,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ArchiveFacadeController.php",
-                "line": 38,
+                "line": 39,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ArchiveFacadeController::tombstone"
               }
             },
@@ -643,7 +767,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "554404120d22f63247b275e2c24661b8461e6359e491263bed9e5a1b82cf9eaa"
+      "contentHash": "6423087257540e265647a3d4d7e5cc1be3a0e89a153a1ffe099ddfe6094cb7c8"
     },
     "generator": {
       "name": "docuccino/laravel",

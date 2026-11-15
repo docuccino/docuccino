@@ -9,6 +9,7 @@ use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
@@ -21,8 +22,8 @@ use Workbench\App\Http\Controllers\ArchiveFacadeController;
 /**
  * The document an application gets for responses made through the `Response` facade — JSON, no-content,
  * plain and view responses with a status of their own, one whose status a helper reads off the case it is
- * handed, and one sent with the framework's 200 — and through its root-namespace alias and an application's
- * own. Byte-locked, warm as well as cold; the scripted returns
+ * handed, and one sent with the framework's 200 — and through its root-namespace alias, an application's
+ * own and a real-time facade of the factory. Byte-locked, warm as well as cold; the scripted returns
  * are what the real engine recovers from the fixture app's same calls, which the last test holds them to.
  *
  * @return array<string, DType> action → the response it returns
@@ -45,6 +46,9 @@ function responseFacadeStatusReturns(): array
         'refuseAliased' => $sent($error('locked'), 422),
         'purgeAliased' => $sent(new VoidT, 410),
         'refuseByReply' => $sent($error('locked'), 422),
+        // A real-time facade of the factory: the analysis of the file naming it fails.
+        'refuseInRealTime' => new UnknownT('analysis failed'),
+        'purgeInRealTime' => new UnknownT('analysis failed'),
     ];
 }
 
@@ -71,6 +75,8 @@ function responseFacadeStatusRoutes(): callable
         $router->post('api/archive-facade/refuse-aliased', [ArchiveFacadeController::class, 'refuseAliased']);
         $router->delete('api/archive-facade/purge-aliased', [ArchiveFacadeController::class, 'purgeAliased']);
         $router->post('api/archive-facade/refuse-by-reply', [ArchiveFacadeController::class, 'refuseByReply']);
+        $router->post('api/archive-facade/refuse-in-real-time', [ArchiveFacadeController::class, 'refuseInRealTime']);
+        $router->delete('api/archive-facade/purge-in-real-time', [ArchiveFacadeController::class, 'purgeInRealTime']);
     };
 }
 
