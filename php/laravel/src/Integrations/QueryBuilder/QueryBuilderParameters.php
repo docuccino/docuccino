@@ -498,9 +498,11 @@ final class QueryBuilderParameters
 
         $description = self::withDefaultsNote($description, $onSchema ? [] : $defaults);
 
+        // Every sentence here is the allow-list's, so all of it stays beneath a description someone else
+        // writes: the values, what `-` means, the separator and a default the schema could not carry.
         return $comma
-            ? new QueryParameterSpec($name, $schema, $description, style: 'form', explode: false)
-            : new QueryParameterSpec($name, $schema, $description);
+            ? new QueryParameterSpec($name, $schema, $description, style: 'form', explode: false, notes: $description)
+            : new QueryParameterSpec($name, $schema, $description, notes: $description);
     }
 
     /**
@@ -668,11 +670,14 @@ final class QueryBuilderParameters
 
         if ($policy->filtersDeepObject()) {
             $properties = [];
+            $notes = [];
             foreach ($groups as $type => $columns) {
+                $key = $type === '' ? '_' : $type;
                 $prose = sprintf('Fields to return: %s.', implode(', ', $columns));
                 [$schema, $prose] = self::listSchema($columns, $prose, $config, $policy->enumNaming, self::fieldDescriptions($facts, $type, $columns, $describer), $facts->partial('fields'));
                 $schema['description'] = $prose;
-                $properties[$type === '' ? '_' : $type] = $schema;
+                $properties[$key] = $schema;
+                $notes[$key] = $prose;
             }
 
             return [new QueryParameterSpec(
@@ -681,6 +686,7 @@ final class QueryBuilderParameters
                 description: 'Request a sparse fieldset.',
                 style: 'deepObject',
                 explode: true,
+                propertyNotes: $notes,
             )];
         }
 
