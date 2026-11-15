@@ -914,9 +914,9 @@
           "DeferredExport"
         ],
         "responses": {
-          "default": {
+          "202": {
             "x-docuccino": {
-              "id": "res:v1:hwpj3ukvxufxsnpj",
+              "id": "res:v1:sdxtje37frj2dqjl",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -925,15 +925,37 @@
                     "description"
                   ]
                 }
-              ],
-              "facts": {
-                "statusUnplaced": true
-              }
+              ]
             },
-            "description": "Any status",
+            "description": "Accepted",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "queued": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "queued"
+                  ]
+                }
               }
             }
           }
@@ -1022,7 +1044,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "575065229fffccc27fb5e9f9d68b3548c698ccf55b8e4f42ff001f8126fb34d2"
+      "contentHash": "f11c1cabbe90bd4b561b814f74573a33b429e7ab89d58a4008fa41128a87aca6"
     },
     "generator": {
       "name": "docuccino/laravel",
