@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
@@ -17,8 +18,10 @@ use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
+use Docuccino\Laravel\Testing\ApiContract;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
+use Illuminate\Validation\ValidationException;
 use Workbench\App\Exceptions\SubmissionMalformedException;
 use Workbench\App\Http\Controllers\FailureOverrideController;
 use Workbench\App\Http\Requests\Failures\ApiRequest;
@@ -125,6 +128,53 @@ it('publishes what a form request answers a failed validation or authorization w
     $warm = assertWarmEqualsCold(formRequestFailureRoutes(), formRequestFailureRoutes(), formRequestFailureEngine());
 
     assertGolden('workbench-form-request-failure.uir.json', (new UirEmitter)->emit($warm->document));
+});
+
+it('documents the response the server really refuses each request with', function (string $action, int $status): void {
+    // The configured request throws whichever class this names; the framework's own is the one it is given.
+    config(['api.validation_exception' => ValidationException::class]);
+
+    $engine = formRequestFailureEngine();
+    formRequestFailureRoutes()(app('router'));
+    workbenchContract(bindEngine: static fn () => app()->instance(TypeEngine::class, $engine()));
+
+    try {
+        // No title, and no user to authorize: each request refuses before the action runs, with its own answer.
+        $response = $this->postJson('api/failures/'.$action, [])->assertStatus($status);
+
+        ApiContract::assertions()->assertValidResponse($response);
+    } finally {
+        @unlink(workbenchContractPath());
+        ApiContract::reset();
+    }
+})->with([
+    'a response thrown for the framework to send' => ['enveloped', 422],
+    'the same, inherited from the base every request extends' => ['inherited', 422],
+    'the framework exception, given messages, a bag and a redirect' => ['bagged', 422],
+    'an exception of the application stating a 400' => ['malformed', 400],
+    'the parent answer' => ['parentFailure', 422],
+    'an exception nothing can read, which here is the framework one' => ['configured', 422],
+    'a refusal with a message of its own' => ['refusalMessage', 403],
+    'a refusal answered as a 404' => ['hiddenRefusal', 404],
+]);
+
+it('tells the author which override it could not read, and documents the framework’s answer meanwhile', function (): void {
+    formRequestFailureRoutes()(app('router'));
+    app()->instance(TypeEngine::class, formRequestFailureEngine()());
+
+    $result = generateDocument();
+    $unread = diagnosticsCoded($result->diagnostics, 'inferred-response.form-request-failure-unread');
+
+    // Only the override nothing could be read from: one read as anything at all answers for itself.
+    expect($unread)->toHaveCount(1)
+        ->and($unread[0]->severity)->toBe(Severity::Warning)
+        ->and($unread[0]->message)->toContain(ConfiguredFailureRequest::class.'::failedValidation()')
+        ->and($unread[0]->routeSignature)->toBe('POST /api/failures/configured');
+
+    // What the server sends cannot be read, so the framework's answer is the one published, and named as such.
+    $responses = $result->document->toArray()['paths']['/api/failures/configured']['post']['responses'];
+    expect(array_keys($responses))->toBe([201, 422])
+        ->and($responses['422']['$ref'] ?? null)->toBe('#/components/responses/UnprocessableEntity');
 });
 
 it('scripts what the real engine recovers from the fixture app’s same requests', function (): void {
