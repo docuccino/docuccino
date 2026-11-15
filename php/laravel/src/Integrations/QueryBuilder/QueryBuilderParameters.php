@@ -115,8 +115,9 @@ final class QueryBuilderParameters
             $properties = [];
             $notes = [];
             foreach ($facts->filters as $filter) {
-                $properties[$filter->name] = $this->filterProperty($filter, $policy, $config);
-                $note = self::filterNotes($filter, $policy, $config);
+                $filterConfig = $config->forFilter($filter);
+                $properties[$filter->name] = $this->filterProperty($filter, $policy, $filterConfig);
+                $note = self::filterNotes($filter, $policy, $filterConfig);
                 if ($note !== null) {
                     $notes[$filter->name] = $note;
                 }
@@ -134,15 +135,17 @@ final class QueryBuilderParameters
 
         $specs = [];
         foreach ($facts->filters as $filter) {
-            [$schema, $style, $explode] = $this->filterSchema($filter, $policy, $config);
+            // A filter's own delimiter decides how its values split, so it is read under that one.
+            $filterConfig = $config->forFilter($filter);
+            [$schema, $style, $explode] = $this->filterSchema($filter, $policy, $filterConfig);
             $specs[] = new QueryParameterSpec(
                 name: self::filterParameter($filter->name, $policy, $config),
                 schema: $schema,
-                description: $this->filterDescription($filter, $policy, $config),
+                description: $this->filterDescription($filter, $policy, $filterConfig),
                 style: $style,
                 explode: $explode,
                 example: $filter->example,
-                notes: self::filterNotes($filter, $policy, $config),
+                notes: self::filterNotes($filter, $policy, $filterConfig),
             );
         }
 

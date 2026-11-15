@@ -198,6 +198,48 @@ it('emits single-value item schemas when an empty delimiter disables splitting',
 });
 
 /**
+ * Spatie splits a filter's values on `AllowedFilter::getDelimiter()`: the filter's own `->delimiter()`,
+ * else the configured one. So a filter with its own separator is published as it would be under a config
+ * naming that separator, while the filter beside it, and the sorts, keep splitting on the configured one.
+ */
+it('reads a filter with its own delimiter under that delimiter, and every other list under the config', function (string $configured, string $own, array $schema, ?string $style, string $notes): void {
+    $facts = factsWith(function (QueryBuilderFacts $f) use ($own): void {
+        $f->sorts = [new QbEntry('name', 'default')];
+        $f->filters = [
+            (new QbEntry('status', 'exact'))->withColumn(enumColumnSchema(), enumTyped: true),
+            (new QbEntry('own', 'exact', internal: 'status', delimiter: $own))->withColumn(enumColumnSchema(), enumTyped: true),
+        ];
+    });
+    $parameters = new QueryBuilderParameters;
+
+    $byName = specsByName($parameters->build($facts, bracketedPolicy(), new QueryBuilderConfig(delimiter: $configured)));
+    $underOwn = specsByName($parameters->build($facts, bracketedPolicy(), new QueryBuilderConfig(delimiter: $own)));
+    $underConfigured = specsByName($parameters->build($facts, bracketedPolicy(), new QueryBuilderConfig(delimiter: $configured)));
+
+    expect($byName['filter[own]']->schema)->toBe($schema)
+        ->and($byName['filter[own]']->style)->toBe($style)
+        ->and((string) $byName['filter[own]']->notes)->toBe($notes)
+        // Exactly the parameter a filter without a delimiter of its own gets under a config naming it.
+        ->and($byName['filter[own]']->schema)->toBe($underOwn['filter[status]']->schema)
+        ->and($byName['filter[own]']->notes)->toBe($underOwn['filter[status]']->notes)
+        ->and($byName['filter[status]']->schema)->not->toBe($schema)
+        ->and($byName['sort']->schema)->toBe($underConfigured['sort']->schema);
+
+    $property = $parameters->build($facts, deepObjectPolicy(), new QueryBuilderConfig(delimiter: $configured))[0]->schema['properties']['own'];
+    expect(array_diff_key($property, ['description' => true]))->toBe($schema);
+})->with([
+    'a pipe under the comma is a string naming it' => [
+        ',', '|', ['type' => 'string'], null,
+        'Accepts a `|`-separated list of values (matched as `whereIn`). Values: draft, published, archived.',
+    ],
+    'an empty one under the comma takes one value' => [',', '', enumColumnSchema(), null, ''],
+    'a comma under a configured pipe is the comma array' => [
+        '|', ',', ['type' => 'array', 'items' => enumColumnSchema()], 'form',
+        'Accepts a comma-separated list of values (matched as `whereIn`).',
+    ],
+]);
+
+/**
  * Below spatie/laravel-query-builder v7 the enum grammar itself is unproven — the explicit factory
  * minted Count/Exists + partials there, and the old config keys are not read — so sort, include and
  * the fields groups all degrade to the vague-true plain string: defaults in prose, no separator note

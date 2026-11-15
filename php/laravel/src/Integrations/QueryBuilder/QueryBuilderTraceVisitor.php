@@ -550,12 +550,14 @@ final class QueryBuilderTraceVisitor implements FollowsReturnType, TraceVisitor
             filterClass: $filterClass,
             factoryEnum: $factoryEnum,
             factoryClass: $factoryClass,
+            delimiter: $modifiers->delimiter,
         );
     }
 
     /**
-     * `->nullable()` / `->default(<const>)` a folded descriptor carries in its chain: the modifiers the
-     * helper applied in its own body, where the call site has no AST to peel.
+     * `->nullable()` / `->default(<const>)` / `->delimiter(<const>)` a folded descriptor carries in its
+     * chain: the modifiers the helper applied in its own body, where the call site has no AST to peel. The
+     * chain runs in call order, so a later call is the outer one.
      */
     private function chainModifiers(ConstValue $value): QbModifiers
     {
@@ -563,6 +565,15 @@ final class QueryBuilderTraceVisitor implements FollowsReturnType, TraceVisitor
         foreach ($value->chain as $call) {
             if ($call['method'] === 'nullable') {
                 $modifiers = $modifiers->merge(new QbModifiers(nullable: true));
+
+                continue;
+            }
+
+            if ($call['method'] === 'delimiter') {
+                $delimiter = self::delimiterOf($call['args'][0] ?? null);
+                if ($delimiter !== null) {
+                    $modifiers = (new QbModifiers(delimiter: $delimiter))->merge($modifiers);
+                }
 
                 continue;
             }
@@ -663,9 +674,10 @@ final class QueryBuilderTraceVisitor implements FollowsReturnType, TraceVisitor
     }
 
     /**
-     * Peels `->default(<const>)` / `->nullable()` off the top of an entry expression, returning the base
-     * expression plus the folded facts. An unrecognised or non-constant modifier just stops the peel —
-     * the base still recovers, so an unfoldable tail never costs us a whole entry.
+     * Peels `->default(<const>)` / `->nullable()` / `->delimiter(<const>)` off the top of an entry
+     * expression, returning the base expression plus the folded facts. An unrecognised or non-constant
+     * modifier just stops the peel — the base still recovers, so an unfoldable tail never costs us a whole
+     * entry.
      *
      * A first-class-callable modifier (`->default(...)`) stops it too: the entry is then a closure, not a
      * configured filter, so it stays unfolded and lands on {@see QueryBuilderFacts::$unresolved} rather
@@ -701,10 +713,28 @@ final class QueryBuilderTraceVisitor implements FollowsReturnType, TraceVisitor
                 continue;
             }
 
+            if ($modifier === 'delimiter') {
+                $arg = $base->getArgs()[0] ?? null;
+                $delimiter = self::delimiterOf($arg === null ? null : $scope->constantValueOf($arg->value));
+                if ($delimiter === null) {
+                    break;
+                }
+                $modifiers = $modifiers->merge(new QbModifiers(delimiter: $delimiter));
+                $base = $base->var;
+
+                continue;
+            }
+
             break;
         }
 
         return [$base, $modifiers];
+    }
+
+    /** A `->delimiter()` argument that folded to a string, the empty one (no splitting) included. */
+    private static function delimiterOf(?ConstValue $value): ?string
+    {
+        return $value !== null && $value->isScalar() && is_string($value->scalar) ? $value->scalar : null;
     }
 
     /**

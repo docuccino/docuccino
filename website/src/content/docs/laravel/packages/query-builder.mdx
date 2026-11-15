@@ -126,6 +126,12 @@ delimiter turns splitting off entirely, so the single-value schema emits directl
   "schema": { "type": "string" } }
 ```
 
+A filter can set a separator of its own with `->delimiter()`, and Spatie splits that filter's values on
+it instead of the configured one. Docuccino reads it the same way, for that filter alone. On an enum
+filter, `AllowedFilter::exact('status')->delimiter('|')` documents `filter[status]` as a plain string
+with `|` named in its description, while the rest of the list keeps the configured shape.
+`->delimiter('')` turns splitting off for that filter, so it takes a single value.
+
 Every sentence in that description comes from your allow-list, so a description you write with
 `#[QueryParameter('sort', description: 'How to order the list.')]` leads and those sentences stay
 beneath it as a paragraph of their own. The same goes for `include` and each fields group, under
