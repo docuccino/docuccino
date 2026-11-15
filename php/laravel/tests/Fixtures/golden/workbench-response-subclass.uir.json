@@ -45,8 +45,9 @@
           "Subscription"
         ],
         "responses": {
-          "200": {
+          "410": {
             "x-docuccino": {
+              "id": "res:v1:kzjcszfhj3ew3oze",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -57,7 +58,37 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "Gone",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "const": "This resource is gone."
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -101,7 +132,7 @@
           "Subscription"
         ],
         "responses": {
-          "200": {
+          "410": {
             "x-docuccino": {
               "provenance": [
                 {
@@ -113,7 +144,7 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "Gone"
           }
         }
       }
@@ -157,9 +188,9 @@
           "Subscription"
         ],
         "responses": {
-          "200": {
+          "206": {
             "x-docuccino": {
-              "id": "res:v1:fmbmrayxv6uimvbw",
+              "id": "res:v1:ns5jfxqoqc5vve2g",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -170,7 +201,7 @@
                 }
               ]
             },
-            "description": "OK",
+            "description": "Partial Content",
             "content": {
               "application/octet-stream": {
                 "schema": {
@@ -234,8 +265,9 @@
           "Subscription"
         ],
         "responses": {
-          "200": {
+          "409": {
             "x-docuccino": {
+              "id": "res:v1:knnmcjhfpbyc75dn",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -246,7 +278,41 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string",
+                      "const": "Conflict"
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "detail"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -290,9 +356,9 @@
           "Subscription"
         ],
         "responses": {
-          "200": {
+          "410": {
             "x-docuccino": {
-              "id": "res:v1:s3koy57kng7a3xza",
+              "id": "res:v1:ofzqdsh3bmjoasgp",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -303,7 +369,7 @@
                 }
               ]
             },
-            "description": "OK",
+            "description": "Gone",
             "content": {
               "*/*": {
                 "schema": {
@@ -367,9 +433,9 @@
           "Subscription"
         ],
         "responses": {
-          "200": {
+          "default": {
             "x-docuccino": {
-              "id": "res:v1:lvxzs6npog7fhn53",
+              "id": "res:v1:k7bkugri3bdjyr6v",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -378,9 +444,12 @@
                     "description"
                   ]
                 }
-              ]
+              ],
+              "facts": {
+                "statusUnplaced": true
+              }
             },
-            "description": "OK",
+            "description": "Any status",
             "content": {
               "*/*": {
                 "schema": {
@@ -444,7 +513,7 @@
           "Subscription"
         ],
         "responses": {
-          "3XX": {
+          "301": {
             "x-docuccino": {
               "provenance": [
                 {
@@ -468,7 +537,7 @@
                 }
               ]
             },
-            "description": "Redirect",
+            "description": "Moved Permanently",
             "headers": {
               "Location": {
                 "description": "The URL to follow.",
@@ -578,7 +647,7 @@
           "Subscription"
         ],
         "responses": {
-          "200": {
+          "202": {
             "x-docuccino": {
               "provenance": [
                 {
@@ -590,7 +659,7 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "Accepted"
           }
         }
       }
@@ -634,8 +703,9 @@
           "Subscription"
         ],
         "responses": {
-          "200": {
+          "503": {
             "x-docuccino": {
+              "id": "res:v1:pprb4wow6zc6or4k",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -646,7 +716,37 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "retry": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "retry"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -690,8 +790,9 @@
           "Subscription"
         ],
         "responses": {
-          "200": {
+          "429": {
             "x-docuccino": {
+              "id": "res:v1:dhjhp6t6gqril6uj",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -702,7 +803,37 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "retry": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "retry"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -746,7 +877,7 @@
           "Subscription"
         ],
         "responses": {
-          "200": {
+          "410": {
             "x-docuccino": {
               "provenance": [
                 {
@@ -758,7 +889,7 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "Gone"
           }
         }
       }
@@ -802,8 +933,9 @@
           "Subscription"
         ],
         "responses": {
-          "200": {
+          "429": {
             "x-docuccino": {
+              "id": "res:v1:shmpfh2utvqdxq2u",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -814,7 +946,37 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "quota_exceeded"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -824,7 +986,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "a4261275c5b2c048bbb31b8a2855f6ef9d866911493bcc3944d7ed4576f54526"
+      "contentHash": "2b928368f6628a6c4c55f89a558746b5c719bbef8a207ef8026ec2c917466822"
     },
     "generator": {
       "name": "docuccino/laravel",
