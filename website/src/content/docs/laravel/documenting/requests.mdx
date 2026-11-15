@@ -340,6 +340,12 @@ that is itself a parameter belongs to whichever caller supplied it. There's deli
 `maximum`, even when a `min`/`max` clamp is right there in the helper: a clamp *adjusts* an out-of-range
 size rather than rejecting it, and a bound would tell a client their value is invalid when it is merely
 pinned to the nearest one.
+
+Validation is different, because it rejects. When your rules bound the key
+(`'per_page' => 'integer|min:1|max:20'`), those bounds are published, and a fallback outside them, such
+as `integer('per_page', 50)`, moves out of the schema into the description as "Defaults to `50`." It
+isn't clamped, because an absent key really is served 50. But a `default` the schema itself rejects
+would have a generated client send a request your validation refuses.
 </Aside>
 
 The key's **value** has to reach the size. Inside a helper, that means reaching what the helper returns —

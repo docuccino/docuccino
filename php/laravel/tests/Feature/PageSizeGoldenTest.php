@@ -112,5 +112,10 @@ it('emits the page-size document byte-identical to its committed golden', functi
         ->and($schema($parameters('limited')['limit'] ?? []))->toBe(['type' => 'integer', 'default' => 15])
         // Both refusals: the endpoint pages by a literal, so `page` is the only selector documented.
         ->and(array_keys($parameters('preset')))->toBe(['page'])
-        ->and(array_keys($parameters('lazy')))->toBe(['page']);
+        ->and(array_keys($parameters('lazy')))->toBe(['page'])
+        // Under validated bounds a fallback past them is what an absent key gets, so it is stated in prose
+        // and never published as a default the schema rejects; one within them stays the default.
+        ->and($schema($parameters('overBound')['per_page']))->not->toHaveKey('default')
+        ->and($parameters('overBound')['per_page']['description'])->toBe("Number of items per page.\n\nDefaults to `50`.")
+        ->and($schema($parameters('withinBound')['per_page'])['default'] ?? null)->toBe(15);
 });

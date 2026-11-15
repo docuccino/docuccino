@@ -46,6 +46,7 @@ use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
 use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsIntegration;
 use Docuccino\Laravel\Integrations\InferredHandler\InferredHandlerIntegration;
 use Docuccino\Laravel\Integrations\Support\AuthConfigDigestContributor;
+use Docuccino\Laravel\Integrations\Support\PageSizeDefaultExtension;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
 use Docuccino\Laravel\Support\GatePoliciesDigestContributor;
@@ -110,6 +111,9 @@ final class DefaultExtensions
             // Finalize: every parameter every producer contributes now exists, so the subtractive
             // #[IgnoreParam] can drop one without a later producer writing it back.
             IgnoredParametersExtension::class,
+            // Finalize: every bound a page-size parameter carries has been written, so a fallback outside
+            // them can move into prose.
+            PageSizeDefaultExtension::class,
             // Finalize: a status only becomes a $ref once a mapper resolves, so this is the first point
             // at which a declared error-component name is known to have reached nothing.
             DeclaredErrorComponentsExtension::class,
