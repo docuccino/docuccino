@@ -7,6 +7,7 @@ use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
+use Docuccino\Laravel\Tests\Fixtures\Middleware\ApplicationAuthenticate;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Routing\Router;
@@ -33,6 +34,12 @@ beforeEach(function (): void {
     // stateful mode on it, so the alias-only reading published this one with no scheme at all.
     $router->get('api/secure/dual-by-class', [FormController::class, 'index'])
         ->middleware([Authenticate::using('sanctum'), 'Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful']);
+    // A cookie-only route behind the application's own authenticator, under an alias of its own: the
+    // session is read by the parent's `authenticate()`, so the route accepts the SPA cookie exactly as
+    // it would behind `auth`.
+    $router->aliasMiddleware('signed-in', ApplicationAuthenticate::class);
+    $router->get('api/secure/session-own-authenticator', [FormController::class, 'index'])
+        ->middleware(['Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful', 'signed-in']);
 
     setDocuments([
         'public' => [
