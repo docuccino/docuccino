@@ -7,6 +7,7 @@ namespace Docuccino\Laravel\Workflows;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Document\DocumentGraph;
+use Docuccino\Core\Document\ResponsePointer;
 use Docuccino\Core\Document\Workflow\StepBody;
 use Docuccino\Core\Document\Workflow\StepParameter;
 use Docuccino\Core\Document\Workflow\Workflow;

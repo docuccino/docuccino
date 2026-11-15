@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Docuccino\Laravel\Workflows\ResponsePointer;
+use Docuccino\Core\Document\ResponsePointer;
 
 /**
  * Whether a workflow output reads something its operation's response documents.
