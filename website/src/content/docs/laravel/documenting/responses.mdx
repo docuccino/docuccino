@@ -532,11 +532,13 @@ return response()->json($queued, 202)->cookie('queued', '1');         // → 202
 return response()->json($queued, 202)->withCallback($request->query('callback')); // → 202, open body
 ```
 
-`setContent()` and `setData()` replace the body and leave the status. A cookie changes nothing the document
-describes. A JSONP callback, or `setEncodingOptions()` with `JSON_FORCE_OBJECT` or `JSON_NUMERIC_CHECK`,
-changes the body in a way that can't be named, so the body is left open. Any other setter, such as
-`setNotModified()`, may change anything, so only the response's class is kept: its status and body are
-documented under `default` with an open body.
+`setContent()` and `setData()` replace the body and leave the status. A cookie, a cache header
+(`setMaxAge()`, `setPublic()`, `setEtag()` and the rest), the charset and removing a header other than
+`Content-Type` change nothing the document describes. `setNotModified()` is a `304` with no body. A JSONP
+callback, or `setEncodingOptions()` with `JSON_FORCE_OBJECT` or `JSON_NUMERIC_CHECK`, changes the body in a
+way that can't be named, so the body is left open. Any other call, such as `prepare($request)`, may change
+anything, so only the response's class is kept: its status and body are documented under `default` with
+an open body.
 
 A status Docuccino can't read at all, such as `->setStatusCode($upstream->status())`, is not documented
 under a code the endpoint may never send. Its body goes under `default` ("any status") and an

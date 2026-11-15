@@ -10,8 +10,11 @@ use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\VoidT;
+use Docuccino\Inference\PhpStan\Support\ContentTypeHeader;
 use Docuccino\Inference\PhpStan\Support\PlainContent;
 use Docuccino\Inference\PhpStan\Support\ScalarFold;
+use PHPStan\Type\Constant\ConstantArrayType;
+use PHPStan\Type\Constant\ConstantStringType;
 use PHPStan\Type\Type;
 
 /**
@@ -100,6 +103,38 @@ final class LinkFacts
         }
 
         return ['bodyUnknown' => true, 'contentTypeUnknown' => true] + self::untouched();
+    }
+
+    /**
+     * `withoutHeader($names)`: nothing documented, unless one of the names removed may be `Content-Type`.
+     *
+     * @param  ?Type  $names  a name or a list of them; null where nobody can see it
+     * @return ChainLink
+     */
+    public static function withoutHeader(?Type $names): array
+    {
+        $arrays = $names?->getConstantArrays() ?? [];
+        $values = $arrays === [] ? ($names === null ? [] : [$names]) : array_merge(...array_map(static fn (ConstantArrayType $array): array => $array->getValueTypes(), $arrays));
+        $strings = [];
+        foreach ($values as $value) {
+            $constants = $value->getConstantStrings();
+            if ($constants === [] || ! $value->isString()->yes()) {
+                return self::unknownMediaType();
+            }
+            $strings = [...$strings, ...array_map(static fn (ConstantStringType $each): string => $each->getValue(), $constants)];
+        }
+
+        return $names === null || array_filter($strings, ContentTypeHeader::names(...)) !== [] ? self::unknownMediaType() : self::untouched();
+    }
+
+    /**
+     * `setNotModified()`: a 304 with no body, its media type removed.
+     *
+     * @return ChainLink
+     */
+    public static function notModified(): array
+    {
+        return ['status' => new LiteralT(304), 'body' => new VoidT, 'contentTypeUnknown' => true] + self::untouched();
     }
 
     /**

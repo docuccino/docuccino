@@ -10,6 +10,7 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\UnknownT;
+use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
@@ -48,9 +49,11 @@ function responseChainReturns(): array
         // A pretty-printed encoding or a cookie changes nothing documented.
         'pretty' => $sent($queued, 202),
         'remember' => $sent($queued, 202),
-        // A setter nobody named may have changed anything.
-        'unchanged' => new ClassT($json, [$unread, new UnknownT('status not folded')]),
-        'cached' => new ClassT($json, [$unread, new UnknownT('status not folded')]),
+        // Marked not modified: a 304 with nothing in it.
+        'unchanged' => $sent(new VoidT, 304),
+        // Cache headers change nothing documented.
+        'cached' => $sent($queued, 202),
+        // `prepare()` may change anything for the request it is handed.
         'prepared' => new ClassT($json, [$unread, new UnknownT('status not folded')]),
         // A chain on an application's subclass is read over what its constructor hands the framework's.
         'removed' => $sent(new ArrayShapeT([new ArrayShapeField('message', new LiteralT('This resource is gone.'))]), 404),

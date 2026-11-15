@@ -31,7 +31,7 @@ use PHPStan\Type\Type;
  * that the INSTALLED framework declares as handing the same object back is a link; any other call is the
  * PRODUCER the chain was built on, and the refiner takes it from there. Each link is read for the three facts
  * the document carries — the status, the media type and the body — and a link reports only the facts it can
- * touch ({@see LINKS}): a `->cookie()` touches none, a `->setData($rows)` the body alone, and one this cannot
+ * touch ({@see LINKS}): a `->cookie()` or `->setMaxAge(60)` touches none, a `->setData($rows)` the body alone, and one this cannot
  * read is UNKNOWN in each fact it could have set, never refused. Refusing would leave the receiver's own
  * shape standing where the code plainly replaced it — the `JsonResponse<…, 200>` of `response()->json()`
  * published for a status the endpoint may never send. A link not in {@see LINKS}, a call this cannot name,
@@ -52,20 +52,44 @@ final class FluentResponseChain
 {
     /**
      * Every link read by name, and what it touches. `withStatus()` is absent: it is PSR-7's setter, which no
-     * response class read here declares.
+     * response class read here declares. So are `prepare()`, which may label, strip or re-status the response
+     * for the request it is handed, and the `send…()` methods, which write it out.
      */
     private const LINKS = [
         'setStatusCode' => self::STATUS,
         'header' => self::HEADER,
         'withHeaders' => self::HEADERS,
+        'withoutHeader' => self::WITHOUT_HEADER,
         'setContent' => self::CONTENT,
         'setData' => self::DATA,
+        'setJson' => self::JSON,
         'setEncodingOptions' => self::ENCODING,
         'setCallback' => self::CALLBACK,
         'withCallback' => self::CALLBACK,
-        'cookie' => self::COOKIE,
-        'withCookie' => self::COOKIE,
-        'withoutCookie' => self::COOKIE,
+        'setNotModified' => self::NOT_MODIFIED,
+        'cookie' => self::UNDOCUMENTED,
+        'withCookie' => self::UNDOCUMENTED,
+        'withoutCookie' => self::UNDOCUMENTED,
+        'withException' => self::UNDOCUMENTED,
+        'setProtocolVersion' => self::UNDOCUMENTED,
+        // The charset is a parameter appended to a text media type, never the media type itself.
+        'setCharset' => self::UNDOCUMENTED,
+        'setCache' => self::UNDOCUMENTED,
+        'setPublic' => self::UNDOCUMENTED,
+        'setPrivate' => self::UNDOCUMENTED,
+        'setImmutable' => self::UNDOCUMENTED,
+        'setMaxAge' => self::UNDOCUMENTED,
+        'setSharedMaxAge' => self::UNDOCUMENTED,
+        'setTtl' => self::UNDOCUMENTED,
+        'setClientTtl' => self::UNDOCUMENTED,
+        'setStaleIfError' => self::UNDOCUMENTED,
+        'setStaleWhileRevalidate' => self::UNDOCUMENTED,
+        'setEtag' => self::UNDOCUMENTED,
+        'setLastModified' => self::UNDOCUMENTED,
+        'setExpires' => self::UNDOCUMENTED,
+        'setDate' => self::UNDOCUMENTED,
+        'setVary' => self::UNDOCUMENTED,
+        'expire' => self::UNDOCUMENTED,
     ];
 
     /** Sets the status. */
@@ -77,11 +101,17 @@ final class FluentResponseChain
     /** Sets a map of headers at once. */
     private const HEADERS = 'headers';
 
+    /** Removes headers by name: the media type, or nothing documented. */
+    private const WITHOUT_HEADER = 'without-header';
+
     /** Replaces the body with content, as the constructor's first argument would. */
     private const CONTENT = 'content';
 
     /** Replaces a JSON body with data, as the constructor's first argument would. */
     private const DATA = 'data';
+
+    /** Replaces a JSON body with JSON text nobody here decodes. */
+    private const JSON = 'json';
 
     /** Re-encodes a JSON body, which only some flags change the shape of. */
     private const ENCODING = 'encoding';
@@ -89,8 +119,11 @@ final class FluentResponseChain
     /** Wraps a JSON body in a JavaScript call, labelled as JavaScript, unless the callback is null. */
     private const CALLBACK = 'callback';
 
-    /** Sets a cookie, which is no fact the document carries. */
-    private const COOKIE = 'cookie';
+    /** Makes the response a 304 with no body and no media type. */
+    private const NOT_MODIFIED = 'not-modified';
+
+    /** Sets state no fact the document carries reads: a cookie, a cache header, the protocol, the charset. */
+    private const UNDOCUMENTED = 'undocumented';
 
     /**
      * @param  Closure(Node\Expr, Scope): (LiteralT|UnionT|null)  $statusIn  the refiner's status reader
@@ -192,11 +225,14 @@ final class FluentResponseChain
             self::STATUS => $this->readStatus($args, $scope),
             self::HEADER => $this->readHeader($args, $scope),
             self::HEADERS => $this->readHeaders($args, $scope),
+            self::WITHOUT_HEADER => LinkFacts::withoutHeader($first),
             self::CONTENT => LinkFacts::content($first, $root, $this->payloadIn),
             self::DATA => LinkFacts::data($first, $this->payloadIn),
+            self::JSON => ['bodyUnknown' => true] + LinkFacts::untouched(),
             self::ENCODING => LinkFacts::encoding($first),
             self::CALLBACK => LinkFacts::callback($first, $args->knows(0)),
-            self::COOKIE => LinkFacts::untouched(),
+            self::NOT_MODIFIED => LinkFacts::notModified(),
+            self::UNDOCUMENTED => LinkFacts::untouched(),
             default => LinkFacts::unread(),
         };
     }

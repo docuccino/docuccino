@@ -12,6 +12,7 @@ use Docuccino\Inference\PhpStan\Analysis\LinkFacts;
 use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\Reflection\ReflectionProviderStaticAccessor;
 use PHPStan\Type\ArrayType;
+use PHPStan\Type\Constant\ConstantArrayType;
 use PHPStan\Type\Constant\ConstantIntegerType;
 use PHPStan\Type\Constant\ConstantStringType;
 use PHPStan\Type\MixedType;
@@ -24,7 +25,8 @@ use PHPStan\Type\UnionType;
 /**
  * What a link of a fluent chain sets is what the server sends once it has run: `setContent()` and
  * `setData()` replace the body and nothing else, `setEncodingOptions()` changes the body only with a flag
- * that reshapes it, and a JSONP callback wraps the body and relabels it unless the callback is null. A
+ * that reshapes it, removing a header changes the media type only where it may be `Content-Type`,
+ * `setNotModified()` sends a 304 with nothing, and a JSONP callback wraps the body and relabels it unless the callback is null. A
  * fact a link may have changed in a way nobody can read is unknown, never the one the response was built
  * with.
  */
@@ -106,6 +108,23 @@ it('reads a JSONP callback as a body and media type nobody can name, unless it i
     'a name' => [new ConstantStringType('handle'), true, true],
     'a name or null' => [new UnionType([new StringType, new NullType]), true, true],
 ]);
+
+it('reads a removed header as the media type only where it may be Content-Type', function (?Type $names, bool $mediaType): void {
+    expect(LinkFacts::withoutHeader($names))->toEqual(linkFacts($mediaType ? ['contentTypeUnknown' => true] : []));
+})->with([
+    'another header' => [new ConstantStringType('X-Queue'), false],
+    'other headers' => [new ConstantArrayType([new ConstantIntegerType(0), new ConstantIntegerType(1)], [new ConstantStringType('X-Queue'), new ConstantStringType('ETag')]), false],
+    'none' => [new ConstantArrayType([], []), false],
+    'Content-Type, in any case' => [new ConstantStringType('content-TYPE'), true],
+    'Content-Type among others' => [new ConstantArrayType([new ConstantIntegerType(0), new ConstantIntegerType(1)], [new ConstantStringType('X-Queue'), new ConstantStringType('Content-Type')]), true],
+    'a name nobody can read' => [new StringType, true],
+    'a list nobody can read' => [new ArrayType(new MixedType, new StringType), true],
+    'a name nobody can see' => [null, true],
+]);
+
+it('reads a response marked not modified as a 304 with no body and no media type', function (): void {
+    expect(LinkFacts::notModified())->toEqual(linkFacts(['status' => new LiteralT(304), 'body' => new VoidT, 'contentTypeUnknown' => true]));
+});
 
 it('reads a link that may have touched anything as touching everything', function (): void {
     expect(LinkFacts::unread())->toEqual(['status' => null, 'statusUnknown' => true, 'contentType' => null, 'contentTypeUnknown' => true, 'body' => null, 'bodyUnknown' => true])

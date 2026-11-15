@@ -402,7 +402,10 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    facts the document carries, through a table (`FluentResponseChain::LINKS`): `setStatusCode` the status,
    `header`/`withHeaders` the media type, `setContent`/`setData` the body (read as the constructor reads the
    same argument), `setEncodingOptions` the body only for a flag that reshapes it, `setCallback` the body
-   and the media type unless the callback is null, a cookie setter nothing. A link outside the table, a
+   and the media type unless the callback is null, `setNotModified` a 304 with no body, `withoutHeader` the
+   media type only for a name that may be `Content-Type`, and a cookie, cache-header, charset or protocol
+   setter nothing. `prepare()` and the `send…()` methods are left out on purpose: `prepare()` may label,
+   strip or re-status the response for a request this does not read. A link outside the table, a
    call it cannot name, and a setter an application's subclass OVERRIDES may have touched any of the three,
    so all three are unknown and only the class stands — never the receiver's shape passed through a call
    returning `static`, which would publish a body or status the link replaced. A subclass is safe to chain

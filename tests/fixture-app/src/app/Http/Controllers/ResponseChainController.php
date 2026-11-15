@@ -95,6 +95,31 @@ class ResponseChainController extends Controller
         return response()->json(['queued' => true], 202)->setMaxAge(60)->setEtag('queued')->setPublic();
     }
 
+    public function cacheHeaders(): JsonResponse
+    {
+        return response()->json(['queued' => true], 202)
+            ->setCache(['private' => true])
+            ->setPrivate()
+            ->setImmutable()
+            ->setSharedMaxAge(60)
+            ->setTtl(60)
+            ->setClientTtl(60)
+            ->setStaleIfError(60)
+            ->setStaleWhileRevalidate(60)
+            ->setLastModified(now())
+            ->setExpires(now()->addMinute())
+            ->setDate(now())
+            ->setVary('Accept')
+            ->expire()
+            ->setProtocolVersion('1.1')
+            ->withException(new \RuntimeException('queued'));
+    }
+
+    public function json(): JsonResponse
+    {
+        return response()->json(['queued' => true], 202)->setJson('{"accepted":true}');
+    }
+
     public function charset(): Response
     {
         return response('queued', 202)->setCharset('ISO-8859-1');
