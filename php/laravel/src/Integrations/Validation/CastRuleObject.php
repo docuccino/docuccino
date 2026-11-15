@@ -67,33 +67,6 @@ final class CastRuleObject
     }
 
     /**
-     * The rule strings `new $class(...$args)`, with its chained calls, stands for, or null where an argument is
-     * no literal or a step is not one this builds.
-     *
-     * @param  list<ConstValue>  $args
-     * @param  list<array{method: string, args: list<ConstValue>}>  $chain
-     * @return list<string>|null
-     */
-    public static function fromNew(string $class, array $args, array $chain): ?array
-    {
-        return self::castStrings(self::buildNew($class, $args, $chain));
-    }
-
-    /**
-     * The rule strings a `Rule::` call, with its chained calls, stands for, where the static builds one of these
-     * objects ({@see casts()}); null otherwise.
-     *
-     * @param  string  $factory  `Illuminate\\Validation\\Rule::acceptedIf`
-     * @param  list<ConstValue>  $args
-     * @param  list<array{method: string, args: list<ConstValue>}>  $chain
-     * @return list<string>|null
-     */
-    public static function fromFactory(string $factory, array $args, array $chain): ?array
-    {
-        return self::castStrings(self::buildFactory($factory, $args, $chain));
-    }
-
-    /**
      * The framework rule object a `new` or a static call written in a rules list builds, chained calls
      * included, where every value is a literal and every step is one this builds; null otherwise.
      */
@@ -176,9 +149,11 @@ final class CastRuleObject
     }
 
     /**
+     * The rule strings a built rule object is cast to, or null where Laravel does not cast it.
+     *
      * @return list<string>|null
      */
-    private static function castStrings(?object $rule): ?array
+    public static function castStrings(?object $rule): ?array
     {
         return $rule instanceof Stringable && self::casts($rule::class) ? self::strings($rule) : null;
     }
