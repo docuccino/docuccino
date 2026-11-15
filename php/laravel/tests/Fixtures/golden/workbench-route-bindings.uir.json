@@ -464,7 +464,6 @@
                   "producer": "inference",
                   "layer": "inference",
                   "fields": [
-                    "description",
                     "required"
                   ],
                   "source": {
@@ -473,35 +472,24 @@
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showCoupon"
                   }
                 }
-              ],
-              "facts": {
-                "routeBinding": {
-                  "key": "id"
-                }
-              }
+              ]
             },
             "name": "coupon",
             "in": "path",
-            "description": "Matched on the resource's `id`.",
             "required": true,
             "schema": {
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "inference",
-                    "layer": "inference",
+                    "producer": "fallback",
+                    "layer": "fallback",
                     "fields": [
                       "type"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 122,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showCoupon"
-                    }
+                    ]
                   }
                 ]
               },
-              "type": "integer"
+              "type": "string"
             }
           }
         ],
@@ -581,7 +569,6 @@
                   "producer": "inference",
                   "layer": "inference",
                   "fields": [
-                    "description",
                     "required"
                   ],
                   "source": {
@@ -590,35 +577,24 @@
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showCouponEntry"
                   }
                 }
-              ],
-              "facts": {
-                "routeBinding": {
-                  "key": "id"
-                }
-              }
+              ]
             },
             "name": "coupon",
             "in": "path",
-            "description": "Matched on the resource's `id`.",
             "required": true,
             "schema": {
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "inference",
-                    "layer": "inference",
+                    "producer": "fallback",
+                    "layer": "fallback",
                     "fields": [
                       "type"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 129,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showCouponEntry"
-                    }
+                    ]
                   }
                 ]
               },
-              "type": "integer"
+              "type": "string"
             }
           },
           {
@@ -641,33 +617,27 @@
               ],
               "facts": {
                 "routeBinding": {
-                  "key": "id",
                   "scopedTo": "coupon"
                 }
               }
             },
             "name": "entry",
             "in": "path",
-            "description": "Matched on the resource's `id`. Scoped to `{coupon}`: only values belonging to it match.",
+            "description": "Scoped to `{coupon}`: only values belonging to it match.",
             "required": true,
             "schema": {
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "inference",
-                    "layer": "inference",
+                    "producer": "fallback",
+                    "layer": "fallback",
                     "fields": [
                       "type"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 129,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showCouponEntry"
-                    }
+                    ]
                   }
                 ]
               },
-              "type": "integer"
+              "type": "string"
             }
           }
         ],
@@ -2649,7 +2619,6 @@
                   "producer": "inference",
                   "layer": "inference",
                   "fields": [
-                    "description",
                     "required"
                   ],
                   "source": {
@@ -2658,16 +2627,10 @@
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showVoucher"
                   }
                 }
-              ],
-              "facts": {
-                "routeBinding": {
-                  "key": "code"
-                }
-              }
+              ]
             },
             "name": "voucher",
             "in": "path",
-            "description": "Matched on the resource's `code`.",
             "required": true,
             "schema": {
               "x-docuccino": {
@@ -2761,7 +2724,6 @@
                   "producer": "inference",
                   "layer": "inference",
                   "fields": [
-                    "description",
                     "required"
                   ],
                   "source": {
@@ -2770,35 +2732,24 @@
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showVoucher"
                   }
                 }
-              ],
-              "facts": {
-                "routeBinding": {
-                  "key": "id"
-                }
-              }
+              ]
             },
             "name": "voucher",
             "in": "path",
-            "description": "Matched on the resource's `id`.",
             "required": true,
             "schema": {
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "inference",
-                    "layer": "inference",
+                    "producer": "fallback",
+                    "layer": "fallback",
                     "fields": [
                       "type"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 108,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showVoucher"
-                    }
+                    ]
                   }
                 ]
               },
-              "type": "integer"
+              "type": "string"
             }
           }
         ],
@@ -2927,7 +2878,6 @@
                   "producer": "inference",
                   "layer": "inference",
                   "fields": [
-                    "description",
                     "required"
                   ],
                   "source": {
@@ -2936,35 +2886,24 @@
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showVoucherEntry"
                   }
                 }
-              ],
-              "facts": {
-                "routeBinding": {
-                  "key": "id"
-                }
-              }
+              ]
             },
             "name": "voucher",
             "in": "path",
-            "description": "Matched on the resource's `id`.",
             "required": true,
             "schema": {
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "inference",
-                    "layer": "inference",
+                    "producer": "fallback",
+                    "layer": "fallback",
                     "fields": [
                       "type"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 115,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showVoucherEntry"
-                    }
+                    ]
                   }
                 ]
               },
-              "type": "integer"
+              "type": "string"
             }
           }
         ],
@@ -3118,7 +3057,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "b439df224b52a48e3c96de581596f40396d16b26c242ad174f5093607e7c9206"
+      "contentHash": "1d182f2d24ed42ecbf59669c9a1ca91447caacf46c0fd5b4937725332d8dd47f"
     },
     "generator": {
       "name": "docuccino/laravel",
