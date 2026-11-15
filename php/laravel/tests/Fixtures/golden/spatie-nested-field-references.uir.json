@@ -173,7 +173,7 @@
                 "type": "integer"
               },
               "max": {
-                "description": "Must be greater than min.",
+                "description": "Must be greater than range.min.",
                 "type": "integer"
               },
               "min": {
@@ -196,7 +196,7 @@
                   "type": "integer"
                 },
                 "max": {
-                  "description": "Must be greater than min.",
+                  "description": "Must be greater than ranges.*.min.",
                   "type": "integer"
                 },
                 "min": {
@@ -223,7 +223,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "b2ae7c2a7f8272c261ee2144dde11515ae8c8fe9c3a8dfd9eb55cf8efc730d76"
+      "contentHash": "3fb49f7b9ecaeb870d593133e9bbea30bb439dd2fd5a30d180a693a4f03a53b6"
     },
     "generator": {
       "name": "docuccino/laravel",
