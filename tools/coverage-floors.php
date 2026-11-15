@@ -139,11 +139,14 @@ const FLOORS = [
     // exception to, and a `toResponse()` read for the object it renders: which call a site hands the
     // exception to (`ForwardedSite`) is unit-tested in process, while the harvest through the helper and
     // `RuntimeAdapter::holding()` run only under real analysis, the fixture group's.
-    // Measured 58.78% (3233/5500): 58% of it is 3190.00 statements, 43.00 of margin.
+    // Re-recorded 58.78 → 58.94 when content that may be JSON or text came to be read as any media
+    // type and the app's root facade aliases to be declared before analysis (`FacadeAliases`, unit-tested
+    // in process).
+    // Measured 58.94% (3257/5526): 58% of it is 3205.08 statements, 51.92 of margin.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads 3 statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 58, 'measured' => 58.78],
+    'inference-phpstan' => ['floor' => 58, 'measured' => 58.94],
 ];
 
 /*
