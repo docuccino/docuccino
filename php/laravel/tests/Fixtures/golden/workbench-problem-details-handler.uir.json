@@ -30,28 +30,7 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "500": {
-                "id": "res:v1:rzd43abaarl5hwfs",
-                "provenance": [
-                  {
-                    "producer": "integration:inferred-handler",
-                    "layer": "integration",
-                    "fields": [
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/ProblemDetailsController.php",
-                      "line": 39,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\ProblemDetailsController::carried"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "post.api.problems.carried",
         "tags": [
@@ -59,7 +38,23 @@
         ],
         "responses": {
           "500": {
-            "$ref": "#/components/responses/Error500"
+            "x-docuccino": {
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/ProblemDetailsController.php",
+                    "line": 39,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\ProblemDetailsController::carried"
+                  }
+                }
+              ]
+            },
+            "description": "Internal Server Error"
           }
         }
       }
@@ -88,36 +83,99 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "500": {
-                "id": "res:v1:peqi2ixjr3ghgaps",
-                "provenance": [
-                  {
-                    "producer": "integration:inferred-handler",
-                    "layer": "integration",
-                    "fields": [
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/ProblemDetailsController.php",
-                      "line": 19,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\ProblemDetailsController::conflict"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "post.api.problems.conflict",
         "tags": [
           "ProblemDetails"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/Error500"
+          "409": {
+            "x-docuccino": {
+              "id": "res:v1:f3d6ulluby4s6wps",
+              "provenance": [
+                {
+                  "producer": "integration:inferred-handler",
+                  "layer": "integration",
+                  "fields": [
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/ProblemDetailsController.php",
+                    "line": 19,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\ProblemDetailsController::conflict"
+                  }
+                }
+              ],
+              "facts": {
+                "examplePlaceholders": {
+                  "application/problem+json": [
+                    "detail",
+                    "instance"
+                  ]
+                }
+              }
+            },
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "integration:inferred-handler",
+                        "layer": "integration",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/ProblemDetailsController.php",
+                          "line": 19,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\ProblemDetailsController::conflict"
+                        }
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "const": 409
+                    },
+                    "title": {
+                      "type": "string",
+                      "const": "Conflict"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "https://errors.test/problems/conflict"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance"
+                  ]
+                },
+                "example": {
+                  "type": "https://errors.test/problems/conflict",
+                  "title": "Conflict",
+                  "status": 409,
+                  "detail": "string",
+                  "instance": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -146,28 +204,7 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "500": {
-                "id": "res:v1:pksze6se4lxib33b",
-                "provenance": [
-                  {
-                    "producer": "integration:inferred-handler",
-                    "layer": "integration",
-                    "fields": [
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/ProblemDetailsController.php",
-                      "line": 44,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\ProblemDetailsController::failed"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "post.api.problems.failed",
         "tags": [
@@ -175,7 +212,91 @@
         ],
         "responses": {
           "500": {
-            "$ref": "#/components/responses/Error500"
+            "x-docuccino": {
+              "id": "res:v1:pksze6se4lxib33b",
+              "provenance": [
+                {
+                  "producer": "integration:inferred-handler",
+                  "layer": "integration",
+                  "fields": [
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/ProblemDetailsController.php",
+                    "line": 44,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\ProblemDetailsController::failed"
+                  }
+                }
+              ],
+              "facts": {
+                "examplePlaceholders": {
+                  "application/problem+json": [
+                    "instance"
+                  ]
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "integration:inferred-handler",
+                        "layer": "integration",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/ProblemDetailsController.php",
+                          "line": 44,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\ProblemDetailsController::failed"
+                        }
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                      "const": "Something went wrong on our side."
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "const": 500
+                    },
+                    "title": {
+                      "type": "string",
+                      "const": "Server Error"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "about:blank"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance"
+                  ]
+                },
+                "example": {
+                  "type": "about:blank",
+                  "title": "Server Error",
+                  "status": 500,
+                  "detail": "Something went wrong on our side.",
+                  "instance": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -227,7 +348,16 @@
                     "symbol": "Workbench\\App\\Http\\Controllers\\ProblemDetailsController::invalid"
                   }
                 }
-              ]
+              ],
+              "facts": {
+                "examplePlaceholders": {
+                  "application/problem+json": [
+                    "detail",
+                    "errors",
+                    "instance"
+                  ]
+                }
+              }
             },
             "description": "Unprocessable Entity",
             "content": {
@@ -239,7 +369,8 @@
                         "producer": "integration:inferred-handler",
                         "layer": "integration",
                         "fields": [
-                          "additionalProperties",
+                          "properties",
+                          "required",
                           "type"
                         ],
                         "source": {
@@ -251,7 +382,47 @@
                     ]
                   },
                   "type": "object",
-                  "additionalProperties": {}
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "title": {
+                      "type": "string",
+                      "const": "Unprocessable Content"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "https://errors.test/problems/validation"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "errors"
+                  ]
+                },
+                "example": {
+                  "type": "https://errors.test/problems/validation",
+                  "title": "Unprocessable Content",
+                  "status": 422,
+                  "detail": "string",
+                  "instance": "string",
+                  "errors": [
+                    "string"
+                  ]
                 }
               }
             }
@@ -306,7 +477,16 @@
                     "symbol": "Workbench\\App\\Http\\Controllers\\ProblemDetailsController::missing"
                   }
                 }
-              ]
+              ],
+              "facts": {
+                "examplePlaceholders": {
+                  "application/problem+json": [
+                    "detail",
+                    "instance",
+                    "status"
+                  ]
+                }
+              }
             },
             "description": "Not Found",
             "content": {
@@ -318,7 +498,8 @@
                         "producer": "integration:inferred-handler",
                         "layer": "integration",
                         "fields": [
-                          "additionalProperties",
+                          "properties",
+                          "required",
                           "type"
                         ],
                         "source": {
@@ -330,7 +511,37 @@
                     ]
                   },
                   "type": "object",
-                  "additionalProperties": {}
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "status": {},
+                    "title": {
+                      "type": "string",
+                      "const": "Request refused"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "about:blank"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance"
+                  ]
+                },
+                "example": {
+                  "type": "about:blank",
+                  "title": "Request refused",
+                  "status": "string",
+                  "detail": "string",
+                  "instance": "string"
                 }
               }
             }
@@ -362,58 +573,98 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "500": {
-                "id": "res:v1:qjyjze54zc77zv5h",
-                "provenance": [
-                  {
-                    "producer": "integration:inferred-handler",
-                    "layer": "integration",
-                    "fields": [
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/ProblemDetailsController.php",
-                      "line": 29,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\ProblemDetailsController::unauthenticated"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "post.api.problems.unauthenticated",
         "tags": [
           "ProblemDetails"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/Error500"
-          }
-        }
-      }
-    }
-  },
-  "components": {
-    "schemas": {
-      "Error500": {
-        "x-docuccino": {
-          "id": "sch:v1:qu2hu4gg6qpv5dua"
-        },
-        "type": "object",
-        "additionalProperties": {}
-      }
-    },
-    "responses": {
-      "Error500": {
-        "description": "Internal Server Error",
-        "content": {
-          "application/problem+json": {
-            "schema": {
-              "$ref": "#/components/schemas/Error500"
+          "401": {
+            "x-docuccino": {
+              "id": "res:v1:unykib7kerpvvkv4",
+              "provenance": [
+                {
+                  "producer": "integration:inferred-handler",
+                  "layer": "integration",
+                  "fields": [
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/ProblemDetailsController.php",
+                    "line": 29,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\ProblemDetailsController::unauthenticated"
+                  }
+                }
+              ],
+              "facts": {
+                "examplePlaceholders": {
+                  "application/problem+json": [
+                    "instance"
+                  ]
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "integration:inferred-handler",
+                        "layer": "integration",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/ProblemDetailsController.php",
+                          "line": 29,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\ProblemDetailsController::unauthenticated"
+                        }
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                      "const": "Sign in to continue."
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "const": 401
+                    },
+                    "title": {
+                      "type": "string",
+                      "const": "Unauthenticated"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "about:blank"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance"
+                  ]
+                },
+                "example": {
+                  "type": "about:blank",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Sign in to continue.",
+                  "instance": "string"
+                }
+              }
             }
           }
         }
@@ -424,7 +675,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "1a4f530a14fb4b7524982f21301ec42fec3b70a56301f33665184411011e1d61"
+      "contentHash": "eac46825b7f6c6ecc92518d37d1795882d226c96fb14dd7386a96cb1ff274542"
     },
     "generator": {
       "name": "docuccino/laravel",
