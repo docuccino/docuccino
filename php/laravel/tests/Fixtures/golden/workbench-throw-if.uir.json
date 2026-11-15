@@ -81,63 +81,6 @@
                 }
               }
             }
-          },
-          "403": {
-            "x-docuccino": {
-              "id": "res:v1:luc2usa2ailqfsdg",
-              "provenance": [
-                {
-                  "producer": "fallback",
-                  "layer": "fallback",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/ThrowIfController.php",
-                    "line": 124,
-                    "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::abortIfFalse"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "Forbidden"
-              }
-            },
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "x-docuccino": {
-                    "provenance": [
-                      {
-                        "producer": "fallback",
-                        "layer": "fallback",
-                        "fields": [
-                          "properties",
-                          "required",
-                          "type"
-                        ],
-                        "source": {
-                          "file": "workbench/app/Http/Controllers/ThrowIfController.php",
-                          "line": 124,
-                          "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::abortIfFalse"
-                        }
-                      }
-                    ]
-                  },
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "message"
-                  ]
-                }
-              }
-            }
           }
         }
       }
@@ -217,63 +160,6 @@
                 }
               }
             }
-          },
-          "503": {
-            "x-docuccino": {
-              "id": "res:v1:3eenwtjtvnropizl",
-              "provenance": [
-                {
-                  "producer": "fallback",
-                  "layer": "fallback",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/ThrowIfController.php",
-                    "line": 131,
-                    "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::abortIfReadOnly"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "ServiceUnavailable"
-              }
-            },
-            "description": "Service Unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "x-docuccino": {
-                    "provenance": [
-                      {
-                        "producer": "fallback",
-                        "layer": "fallback",
-                        "fields": [
-                          "properties",
-                          "required",
-                          "type"
-                        ],
-                        "source": {
-                          "file": "workbench/app/Http/Controllers/ThrowIfController.php",
-                          "line": 131,
-                          "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::abortIfReadOnly"
-                        }
-                      }
-                    ]
-                  },
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "message"
-                  ]
-                }
-              }
-            }
           }
         }
       }
@@ -302,7 +188,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "409": {
+                "id": "res:v1:4opjzxdfj5gqg5jq",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/ThrowIfController.php",
+                      "line": 103,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::declaredGuard"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.throw-if.declaredGuard",
         "tags": [
@@ -354,63 +262,8 @@
               }
             }
           },
-          "500": {
-            "x-docuccino": {
-              "id": "res:v1:wqv5dmftcpkpgkru",
-              "provenance": [
-                {
-                  "producer": "fallback",
-                  "layer": "fallback",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/ThrowIfController.php",
-                    "line": 103,
-                    "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::declaredGuard"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "InternalServerError",
-                "statusUnplaced": true
-              }
-            },
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "x-docuccino": {
-                    "provenance": [
-                      {
-                        "producer": "fallback",
-                        "layer": "fallback",
-                        "fields": [
-                          "properties",
-                          "required",
-                          "type"
-                        ],
-                        "source": {
-                          "file": "workbench/app/Http/Controllers/ThrowIfController.php",
-                          "line": 103,
-                          "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::declaredGuard"
-                        }
-                      }
-                    ]
-                  },
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "message"
-                  ]
-                }
-              }
-            }
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           }
         }
       }
@@ -490,6 +343,51 @@
                 }
               }
             }
+          },
+          "429": {
+            "x-docuccino": {
+              "id": "res:v1:37bs74ghcx4rhud3",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "slow down"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -518,7 +416,32 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "500": {
+                "id": "res:v1:syd4r4dhotz4sr4g",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/ThrowIfController.php",
+                      "line": 96,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::ifChosen"
+                    }
+                  }
+                ],
+                "facts": {
+                  "statusUnplaced": true
+                }
+              }
+            }
+          }
         },
         "operationId": "post.api.throw-if.ifChosen",
         "tags": [
@@ -569,6 +492,9 @@
                 }
               }
             }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
@@ -597,7 +523,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "423": {
+                "id": "res:v1:mnnghpux7iejwhcb",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/ThrowIfController.php",
+                      "line": 40,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::ifClassString"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.throw-if.ifClassString",
         "tags": [
@@ -648,6 +596,9 @@
                 }
               }
             }
+          },
+          "423": {
+            "$ref": "#/components/responses/Locked"
           }
         }
       }
@@ -676,7 +627,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "410": {
+                "id": "res:v1:zhzpss6oipkpvqiu",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/ThrowIfController.php",
+                      "line": 82,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::ifClosure"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.throw-if.ifClosure",
         "tags": [
@@ -727,6 +700,9 @@
                 }
               }
             }
+          },
+          "410": {
+            "$ref": "#/components/responses/Gone"
           }
         }
       }
@@ -755,7 +731,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "410": {
+                "id": "res:v1:aa2nytuvoah7iloe",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/ThrowIfController.php",
+                      "line": 75,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::ifEnumClassString"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.throw-if.ifEnumClassString",
         "tags": [
@@ -806,6 +804,9 @@
                 }
               }
             }
+          },
+          "410": {
+            "$ref": "#/components/responses/Gone"
           }
         }
       }
@@ -834,7 +835,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "423": {
+                "id": "res:v1:marbcndev2wrrgly",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/ThrowIfController.php",
+                      "line": 68,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::ifEnumInstance"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.throw-if.ifEnumInstance",
         "tags": [
@@ -885,6 +908,9 @@
                 }
               }
             }
+          },
+          "423": {
+            "$ref": "#/components/responses/Locked"
           }
         }
       }
@@ -992,7 +1018,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "409": {
+                "id": "res:v1:xq2sxxh6gcwq3b3v",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/ThrowIfController.php",
+                      "line": 26,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::ifInstance"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.throw-if.ifInstance",
         "tags": [
@@ -1043,6 +1091,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           }
         }
       }
@@ -1071,7 +1122,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "500": {
+                "id": "res:v1:zgicqoj3ew6odeia",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/ThrowIfController.php",
+                      "line": 61,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::ifMessage"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.throw-if.ifMessage",
         "tags": [
@@ -1122,6 +1195,9 @@
                 }
               }
             }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
@@ -1150,7 +1226,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "423": {
+                "id": "res:v1:j362wblfbtlkasls",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/ThrowIfController.php",
+                      "line": 54,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::ifNamedParameter"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.throw-if.ifNamedParameter",
         "tags": [
@@ -1201,6 +1299,9 @@
                 }
               }
             }
+          },
+          "423": {
+            "$ref": "#/components/responses/Locked"
           }
         }
       }
@@ -1387,7 +1488,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "409": {
+                "id": "res:v1:ttgvv7ztm3bfkev5",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/ThrowIfController.php",
+                      "line": 47,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::unlessClassString"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.throw-if.unlessClassString",
         "tags": [
@@ -1438,6 +1561,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           }
         }
       }
@@ -1466,7 +1592,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "423": {
+                "id": "res:v1:3gcws5hm2zof6d6k",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/ThrowIfController.php",
+                      "line": 33,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\ThrowIfController::unlessInstance"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.throw-if.unlessInstance",
         "tags": [
@@ -1517,6 +1665,111 @@
                 }
               }
             }
+          },
+          "423": {
+            "$ref": "#/components/responses/Locked"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Conflict": {
+        "x-docuccino": {
+          "id": "sch:v1:mcoixcxwgnz2mbf4"
+        },
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "Gone": {
+        "x-docuccino": {
+          "id": "sch:v1:etg5yg2aqh2cp26i"
+        },
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "InternalServerError": {
+        "x-docuccino": {
+          "id": "sch:v1:ymhinvqj233m43e2"
+        },
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "Locked": {
+        "x-docuccino": {
+          "id": "sch:v1:srgmu3ngad7ic3wz"
+        },
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      }
+    },
+    "responses": {
+      "Conflict": {
+        "description": "Conflict",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Conflict"
+            }
+          }
+        }
+      },
+      "Gone": {
+        "description": "Gone",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Gone"
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Internal Server Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/InternalServerError"
+            }
+          }
+        }
+      },
+      "Locked": {
+        "description": "Locked",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Locked"
+            }
           }
         }
       }
@@ -1526,7 +1779,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "5c5408c9f97502d0e42da1120d3bc66624ad41dbb57c9cc6179cb1db3db68556"
+      "contentHash": "eb466b6261e0eb20370ae1392476ec6838bdc7652da940056f84e1fbe4c2a57c"
     },
     "generator": {
       "name": "docuccino/laravel",
