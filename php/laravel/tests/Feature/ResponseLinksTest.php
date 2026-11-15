@@ -31,6 +31,8 @@ use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ParcelResource;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Scan;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ScanController;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ScanResource;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Token;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\TokenController;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Docuccino\Laravel\Versioning\ApiVersionTransformer;
 use Docuccino\Laravel\Workflows\WorkflowAssembly;
@@ -288,6 +290,44 @@ it('writes no link to a segment whose binding it could not read', function (): v
     expect($targets)->not->toHaveKey('get.api.consignments.@consignment')
         // …and the label is rewritten on its way out, so nothing is ever linked on it.
         ->and(json_encode($document['paths'], JSON_UNESCAPED_SLASHES))->not->toContain('body#/data/label');
+});
+
+/**
+ * A model that resolves its own bindings — a hashid trait decoding the segment — matches on whatever its
+ * code says. The key it sends, or a column the route names, is a value the server never looks up by, so
+ * following a link on it would 404, or find the wrong record.
+ */
+it('writes no link to a model that resolves its bindings itself', function (): void {
+    $routes = static function (Router $router): void {
+        $router->post('api/tokens', [TokenController::class, 'store']);
+        $router->get('api/tokens/{token}', [TokenController::class, 'show']);
+        $router->get('api/tokens-by-code/{token:code}', [TokenController::class, 'show']);
+        $router->post('api/crates', [CrateController::class, 'store']);
+        $router->get('api/crates/{crate}', [CrateController::class, 'show']);
+    };
+    $engine = static function (): TypeEngine {
+        $returns = static fn (string $fqcn): ActionAnalysis => new ActionAnalysis(returns: [new ReturnSite(new ClassT($fqcn), new SourceLocation(''))]);
+
+        return WorkbenchEngine::make(
+            classOverrides: [
+                Token::class => new ClassMetadata(Token::class, [new PropertyMetadata('id', ScalarT::int()), new PropertyMetadata('code', ScalarT::string())]),
+                Crate::class => new ClassMetadata(Crate::class, [new PropertyMetadata('id', ScalarT::int())]),
+            ],
+            analysisOverrides: [
+                TokenController::class.'::store' => $returns(Token::class),
+                TokenController::class.'::show' => $returns(Token::class),
+                CrateController::class.'::store' => $returns(Crate::class),
+                CrateController::class.'::show' => $returns(Crate::class),
+            ],
+        );
+    };
+
+    $paths = emittedArray(localityBuild($routes, $engine))['paths'];
+
+    // The plain model beside it is linked, so the build is one that links.
+    expect($paths['/api/crates']['post']['responses']['200']['links'])->toHaveKey('get.api.crates.@crate')
+        ->and($paths['/api/tokens']['post']['responses']['200'])->not->toHaveKey('links')
+        ->and($paths['/api/tokens/{token}']['get']['responses']['200'])->not->toHaveKey('links');
 });
 
 /**

@@ -130,6 +130,10 @@ it('names the column a binding is matched on', function (string $path, string $n
     // …and never sees the route's `:reference`, which only implicit binding reads. Publishing it would
     // name a column the server does not look the value up by.
     'a Route::model() binding the route names a column for' => ['/api/binding-explicit-refs/{explicit}', 'explicit', 'id'],
+    // `HasUuids` checks the value is a uuid, then runs the framework's own lookup on the key.
+    'a model whose framework trait validates the value first' => ['/api/binding-beacons/{beacon}', 'beacon', 'id'],
+    // The parent decodes its own segment but finds its children the framework's way, on their key.
+    'a child of a model that resolves only its own binding' => ['/api/binding-vouchers/{voucher}/entries/{entry}', 'entry', 'id'],
 ]);
 
 /**
@@ -168,6 +172,13 @@ it('says nothing about a column it cannot read', function (string $path, string 
     // An enum segment is matched against the enum's own values, which the schema already publishes as
     // an `enum` — there is no column and nothing prose could add.
     'an enum binding' => ['/api/binding-seasons/{season}', 'season'],
+    // The model resolves the binding itself — a hashid trait decoding the segment — so the key it would
+    // name by default, and a column the route names, are both columns the server may never query.
+    'a model that resolves its bindings itself' => ['/api/binding-vouchers/{voucher}', 'voucher'],
+    'a model that resolves its bindings itself, under a column the route names' => ['/api/binding-voucher-codes/{voucher}', 'voucher'],
+    'a model that narrows its binding query' => ['/api/binding-coupons/{coupon}', 'coupon'],
+    // The parent finds its scoped children in code of its own, so the child's key decides nothing.
+    'a child its parent finds its own way' => ['/api/binding-coupons/{coupon}/entries/{entry}', 'entry'],
 ]);
 
 /**
@@ -190,10 +201,17 @@ it('widens the schema of a binding whose column it cannot read, and reports it',
 
     expect($parameter['schema']['type'])->toBe('string')
         ->and($parameter['schema'])->not->toHaveKey('format')
-        ->and(diagnosticsCoded($result->diagnostics, $code))->toHaveCount(1);
+        ->and(array_filter(
+            diagnosticsCoded($result->diagnostics, $code),
+            static fn ($diagnostic): bool => $diagnostic->routeSignature === 'GET '.$path && str_contains($diagnostic->message, '{'.$name.'}'),
+        ))->toHaveCount(1);
 })->with([
     'a model that decides its route key at run time' => ['/api/binding-dossiers/{dossier}', 'dossier', 'route-binding.untyped'],
     'a segment the application binds itself' => ['/api/binding-custom/{custom}', 'custom', 'route-binding.custom-binder'],
+    // A hashid segment holds a code, not the integer key: `integer` would refuse every value it takes.
+    'a model that resolves its bindings itself' => ['/api/binding-vouchers/{voucher}', 'voucher', 'route-binding.untyped'],
+    'a model that narrows its binding query' => ['/api/binding-coupons/{coupon}', 'coupon', 'route-binding.untyped'],
+    'a child its parent finds its own way' => ['/api/binding-coupons/{coupon}/entries/{entry}', 'entry', 'route-binding.untyped'],
 ]);
 
 /**

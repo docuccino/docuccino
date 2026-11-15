@@ -273,6 +273,11 @@ final class PathParametersExtension implements OperationExtension
             return null;
         }
 
+        // A model that finds the record in code of its own may match any column, in any shape.
+        if (BoundColumn::resolvedInCode($context, $name)) {
+            return null;
+        }
+
         $modelFqcn = $context->routeBindings[$name];
 
         if ($field !== null) {
