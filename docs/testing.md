@@ -315,9 +315,9 @@ would sit too close to the figure for an ordinary change to survive it (see `lar
 |---------------------|------------|-------|--------------------------------------------------|
 | `core`              | **97.87%** | 97    | fully in-process-measurable; 0.87pp above it, ~166 statements |
 | `laravel`           | **97.27%** | 97    | ratcheted 95 → 96 → 97, the last once the figure cleared 97.20%, see below; 0.27pp above it, ~46 statements |
-| `inference-phpstan` | **58.96%** | 58    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51 → 53 → 54 → 55 → 56 → 58; 0.96pp, ~48 statements |
+| `inference-phpstan` | **59.11%** | 58    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51 → 53 → 54 → 55 → 56 → 58; 1.11pp, ~56 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 92.95%     | —     | informational only; no longer a gate (statement sum of the rows above) |
+| Overall             | 92.89%     | —     | informational only; no longer a gate (statement sum of the rows above) |
 
 Every figure here is one `composer test:coverage` run of the whole set — CI's coverage job on PHP 8.4,
 which is what the record describes — so the three read off the same clover report and the floors file
