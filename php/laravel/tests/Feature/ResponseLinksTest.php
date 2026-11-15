@@ -18,6 +18,7 @@ use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\BranchingCrateResource;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Crate;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\CrateController;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\KeyedCrateResource;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\LabelController;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Pallet;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\PalletResource;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Parcel;
@@ -54,6 +55,7 @@ beforeEach(function (): void {
         $router->patch('api/parcels/{parcel}/scans/{scan}', [ScanController::class, 'update'])->scopeBindings();
         $router->get('api/parcels/{parcel}/latest-scan', [ScanController::class, 'latest']);
         $router->get('api/scans/{scan}', [ScanController::class, 'find']);
+        $router->post('api/labels', [LabelController::class, 'store']);
     };
 
     $this->engine = static function (): TypeEngine {
@@ -88,6 +90,10 @@ beforeEach(function (): void {
                 $controller.'storePallet' => $returns(PalletResource::class),
                 $controller.'showPallet' => $returns(PalletResource::class),
                 ScanController::class.'::store' => $returns(ScanResource::class),
+                LabelController::class.'::store' => new ActionAnalysis(returns: [new ReturnSite(new ArrayShapeT([
+                    new ArrayShapeField('parcel', ScalarT::int()),
+                    new ArrayShapeField('printer', ScalarT::string()),
+                ]), new SourceLocation(''))]),
                 ScanController::class.'::show' => $returns(ScanResource::class),
                 ScanController::class.'::update' => $returns(ScanResource::class),
                 ScanController::class.'::latest' => $returns(ScanResource::class),
@@ -218,7 +224,7 @@ it('writes no link to a segment whose binding it could not read', function (): v
     // The application's own binder decides what `{consignment}` holds, in a closure.
     expect($targets)->not->toHaveKey('get.api.consignments.@consignment')
         // …and the label is rewritten on its way out, so nothing is ever linked on it.
-        ->and(json_encode($document['paths']))->not->toContain('/label');
+        ->and(json_encode($document['paths'], JSON_UNESCAPED_SLASHES))->not->toContain('body#/data/label');
 });
 
 /**
