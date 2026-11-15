@@ -11,7 +11,6 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
-use Symfony\Component\HttpKernel\Exception\HttpException;
 use Workbench\App\Exceptions\ExportFaultException;
 use Workbench\App\Http\Controllers\ExportController;
 
@@ -32,14 +31,12 @@ function enumLookupThrows(): array
         'lock' => [
             $thrown(ExportFaultException::class, 423, ThrowConfidence::Certain),
         ],
-        // 999 backs no case, so `from()` always throws its ValueError.
+        // 999 backs no case, so `from()` always throws its ValueError and the refusal is never built.
         'retire' => [
-            $thrown(ExportFaultException::class, null, ThrowConfidence::Certain),
             $thrown(ValueError::class, 500, ThrowConfidence::Certain),
         ],
-        // The same lookup read for the message abort() is handed beside its 404.
+        // The same lookup read for the message abort() is handed: abort() is never called, so no 404.
         'withdraw' => [
-            $thrown(HttpException::class, 404, ThrowConfidence::Certain),
             $thrown(ValueError::class, 500, ThrowConfidence::Certain),
         ],
         // A value the request chooses is not matched, so both stand as declared.

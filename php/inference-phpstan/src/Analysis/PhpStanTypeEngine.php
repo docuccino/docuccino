@@ -6,6 +6,7 @@ namespace Docuccino\Inference\PhpStan\Analysis;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
+use Docuccino\Core\Extensions\Schema\DeclarationFiles;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\CallableRef;
@@ -42,6 +43,7 @@ use Docuccino\Inference\PhpStan\Throwing\FactoryStatus;
 use Docuccino\Inference\PhpStan\Throwing\ReturnedExceptions;
 use Docuccino\Inference\PhpStan\Throwing\SubclassStatus;
 use Docuccino\Inference\PhpStan\Throwing\ThrowAnalyzer;
+use Docuccino\Inference\PhpStan\Throwing\Unreached;
 use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
 use Docuccino\Inference\PhpStan\Trace\ReturnValueFolder;
 use Docuccino\Inference\PhpStan\Trace\Tracer;
@@ -220,7 +222,8 @@ final class PhpStanTypeEngine implements TypeEngine
             );
         }
 
-        $returns = $this->harvestReturns($body, $action->file);
+        $harvest = $this->harvestReturns($body, $action->file);
+        $returns = $harvest['returns'];
 
         $throwAnalyzer = $this->makeThrowAnalyzer();
         $throws = $throwAnalyzer->analyze($body, $this->selfLabel($action));
@@ -234,7 +237,7 @@ final class PhpStanTypeEngine implements TypeEngine
             returns: $returns,
             throws: $throws,
             diagnostics: $truncation === null ? $diagnostics : [...$diagnostics, $truncation],
-            dependencyFiles: [$action->file, ...$throwAnalyzer->visitedFiles(), ...$this->drainRefinerFiles()],
+            dependencyFiles: [$action->file, ...$harvest['files'], ...$throwAnalyzer->visitedFiles(), ...$this->drainRefinerFiles()],
         );
     }
 
@@ -274,16 +277,25 @@ final class PhpStanTypeEngine implements TypeEngine
     }
 
     /**
-     * Every return a body can answer with, the arrow function's one implicit return included.
+     * Every return a body can answer with, the arrow function's one implicit return included — but not one
+     * whose value always throws before it is returned ({@see Unreached}), with the files of the enums that
+     * decided so.
      *
-     * @return list<ReturnSite>
+     * @return array{returns: list<ReturnSite>, files: list<string>}
      */
     private function harvestReturns(CallableBody $body, string $file): array
     {
         $returns = [];
+        $files = [];
+        $read = static function (string $enum) use (&$files): void {
+            $files = [...$files, ...DeclarationFiles::of($enum)];
+        };
         foreach ($body->returns as $return) {
             $location = new SourceLocation($file, $return['at']->getStartLine());
             $scope = $this->fileAnalyzer->stableScope($return['scope']);
+            if ($return['expr'] !== null && Unreached::alwaysThrows($return['expr'], $scope, $read)) {
+                continue;
+            }
             // One return statement can be several responses: an application's `toResponse()` answering a
             // guard arm beside the framework's rendering ({@see ResponseShapeRefiner::refineArms()}).
             foreach ($this->siteShapes($return['expr'], $scope) as $shape) {
@@ -291,7 +303,7 @@ final class PhpStanTypeEngine implements TypeEngine
             }
         }
 
-        return $returns;
+        return ['returns' => $returns, 'files' => $files];
     }
 
     /**

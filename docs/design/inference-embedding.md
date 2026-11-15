@@ -882,6 +882,13 @@ constructor whose helper the class being built overrides is not the body PHP run
    `strict_types` and is left as declared without it, since coercion decides. A class no value throws is
    dropped and one every value throws is `certain`; the enum's files join the dependency set either way.
    A runtime argument keeps both declarations, and `tryFrom()` declares neither.
+   **A point an operand always throws ahead of is never reached** (`Unreached`). PHP evaluates a call's
+   arguments and a method call's receiver before the call, so where one of them always throws — a `throw`
+   expression, or a `from()` whose every constant value throws — the call, construction or `throw` is never
+   made and only that operand's own throw leaves: `throw new X(Enum::from(999))` publishes the `ValueError`
+   and not `X`. A `return` whose value always throws answers nothing, so the action's harvest drops it.
+   Operands PHP may skip (`??`, a ternary, a nullsafe call's arguments) never count, and the enum read joins
+   the dependency set either way.
    **`throw_if()` and `throw_unless()` are read as the `throw` they stand for** (`HandedException`). Their
    generic `@throws TException` names at most the class (nothing, for a class name), and the construction
    that decides the status is the argument: an instance is `throw $it`, a class name is

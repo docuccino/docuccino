@@ -119,6 +119,15 @@ it('depends on the enum a case lookup was matched against', function (): void {
     expect(throwDependencyNames('enumLookedUp'))->toContain('ExportFault.php');
 })->group('fixture');
 
+it('depends on the enum that decides a construction or return is never reached', function (string $method): void {
+    // Adding a case backed by 999 makes the lookup complete, and then the refusal is built, or the
+    // response returned, after all.
+    expect(throwDependencyNames($method))->toContain('ExportFault.php');
+})->with([
+    'a refusal built from a value no case backs' => ['enumFromNoCase'],
+    'a response whose status no case backs' => ['enumFromNoCaseReturn'],
+])->group('fixture');
+
 it('depends on the file the factory was written in', function (): void {
     // The same soundness one hop on: the status this route publishes is now a fact of a factory body, so
     // that file has to be able to invalidate the route as well.
