@@ -37,7 +37,7 @@ interface ClassBodies
      *
      * @return array{status: int|null, files: list<string>}
      */
-    public function foldStatus(string $file, Node\Expr $expr, Node\Expr\New_|Node\Expr\StaticCall $at, ?ParamAccessor $read): array;
+    public function foldStatus(string $file, Node\Expr $expr, Node\Expr\New_|Node\Expr\StaticCall|Node\Expr\MethodCall $at, ?ParamAccessor $read): array;
 
     /**
      * The constant integer default of parameter `$index` of `$class::$method`, as WRITTEN in `$file` — the

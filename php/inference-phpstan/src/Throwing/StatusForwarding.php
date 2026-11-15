@@ -12,7 +12,7 @@ use PhpParser\Node;
 use PhpParser\NodeFinder;
 
 /**
- * The statements half of {@see HttpExceptionStatus}: what a constructor hands its parent in one argument
+ * The statements half of {@see SubclassStatus}: what a constructor hands its parent in one argument
  * slot, whether the constructor moves that value before handing it over, and every `new` a body makes of
  * the class. Nothing here resolves a type, so it answers off the parse alone.
  *
@@ -41,6 +41,45 @@ final class StatusForwarding
         );
 
         return count($calls) === 1 ? $calls[0] : null;
+    }
+
+    /**
+     * Every `$this->{$method}(…)` a body makes, wherever in it.
+     *
+     * @param  array<array-key, Node\Stmt>  $statements
+     * @return list<Node\Expr\MethodCall>
+     */
+    public static function selfCalls(array $statements, string $method): array
+    {
+        /** @var list<Node\Expr\MethodCall> $calls */
+        $calls = (new NodeFinder)->find(
+            $statements,
+            static fn (Node $node): bool => $node instanceof Node\Expr\MethodCall
+                && $node->var instanceof Node\Expr\Variable
+                && $node->var->name === 'this'
+                && $node->name instanceof Node\Identifier
+                && $node->name->toLowerString() === strtolower($method)
+                && ! $node->isFirstClassCallable(),
+        );
+
+        return $calls;
+    }
+
+    /**
+     * The position of the statement that IS `$call` among a body's own statements, or null where the call is
+     * not one of them — nested in a branch, a loop or a larger expression, where it may not run.
+     *
+     * @param  list<Node\Stmt>  $statements
+     */
+    public static function statementOf(array $statements, Node\Expr $call): ?int
+    {
+        foreach ($statements as $index => $statement) {
+            if ($statement instanceof Node\Stmt\Expression && $statement->expr === $call) {
+                return $index;
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -4,8 +4,14 @@ declare(strict_types=1);
 
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\DType\ArrayShapeField;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\ScalarT;
+use Docuccino\Core\Inference\DType\UnknownT;
+use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
@@ -28,20 +34,28 @@ use Workbench\App\Http\Controllers\SubscriptionController;
 function responseSubclassReturns(): array
 {
     $responses = 'Workbench\\App\\Http\\Responses\\';
+    // A JSON or plain response is emitted as the framework's JSON response, its body, status and any media
+    // type in the slots a `JsonResponse` carries them in; a file, stream or redirect keeps its own class.
+    $json = static fn (DType $body, DType $status, DType ...$mediaType): ClassT => new ClassT('Illuminate\\Http\\JsonResponse', [$body, $status, ...$mediaType]);
+    $stated = static fn (string $class, DType $status): ClassT => new ClassT($responses.$class, [new UnknownT('payload not folded'), $status]);
+    $retry = new ArrayShapeT([new ArrayShapeField('retry', new LiteralT(true))]);
 
     return [
-        'cancelled' => new ClassT($responses.'GoneResponse'),
-        'renew' => new ClassT($responses.'RetryLaterResponse'),
-        'throttled' => new ClassT($responses.'RetryLaterResponse'),
-        'moved' => new ClassT($responses.'MovedResponse'),
-        'invoices' => new ClassT($responses.'FaultStreamResponse'),
-        'ledger' => new ClassT($responses.'FaultStreamResponse'),
-        'contract' => new ClassT($responses.'PartialFileResponse'),
-        'pause' => new ClassT($responses.'AcceptedResponse'),
-        'trial' => new ClassT($responses.'ExpiredResponse'),
-        'handle' => new ClassT($responses.'ConflictProblemResponse'),
-        'archived' => new ClassT($responses.'GoneJsonResponse'),
-        'upgrade' => new ClassT($responses.'QuotaResponse'),
+        'cancelled' => $json(new VoidT, new LiteralT(410)),
+        'renew' => $json($retry, new LiteralT(503)),
+        'throttled' => $json($retry, new LiteralT(429)),
+        'moved' => $stated('MovedResponse', new LiteralT(301)),
+        'invoices' => $stated('FaultStreamResponse', new LiteralT(410)),
+        'ledger' => $stated('FaultStreamResponse', new UnknownT('status not folded')),
+        'contract' => $stated('PartialFileResponse', new LiteralT(206)),
+        'pause' => $json(new VoidT, new LiteralT(202)),
+        'trial' => $json(new VoidT, new LiteralT(410)),
+        'handle' => $json(new ArrayShapeT([
+            new ArrayShapeField('title', new LiteralT('Conflict')),
+            new ArrayShapeField('detail', ScalarT::string()),
+        ]), new LiteralT(409), new LiteralT('application/problem+json')),
+        'archived' => $json(new ArrayShapeT([new ArrayShapeField('message', new LiteralT('This resource is gone.'))]), new LiteralT(410)),
+        'upgrade' => $json(new ArrayShapeT([new ArrayShapeField('error', new LiteralT('quota_exceeded'))]), new LiteralT(429)),
         'notes' => new ClassT($responses.'BranchingResponse'),
     ];
 }

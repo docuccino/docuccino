@@ -21,7 +21,7 @@ use FilesystemIterator;
  *
  * The three also have to agree with each other, which no one of them can say: a class that pins a status
  * may not disagree with what its own constructions build, and a slot no class forwards leaves nothing for
- * the constructions to be read in. {@see HttpExceptionStatusTest} states those two rules over the table.
+ * the constructions to be read in. {@see SubclassStatusTest} states those two rules over the table.
  */
 final class HttpProbeRows
 {
@@ -45,6 +45,10 @@ final class HttpProbeRows
             'the base that pins for everything below it' => [self::NAMESPACE.'ProbePinningBase', 410, null, null],
             // A base that pins leaves a subclass only the message to choose, so the pin is the subclass's.
             'a pin inherited from a base that states it' => [self::NAMESPACE.'ProbeInheritsPin', 410, null, null],
+            // A slot the subclass leaves empty passes its base's default, which is every instance's status.
+            'a slot left empty below a base defaulting it' => [self::NAMESPACE.'ProbeLeavesSlotEmpty', 409, null, null],
+            // …while the base itself, public, may be handed any status: its default is no status of its own.
+            'a public base forwarding a defaulted status' => [self::NAMESPACE.'ProbeDefaultingBase', null, 1, null],
             'a literal pinned by a class that also has a factory' => [self::NAMESPACE.'ProbePinsWithFactory', 410, null, null],
 
             // A private constructor with no factory writing the slot: the default is what every instance

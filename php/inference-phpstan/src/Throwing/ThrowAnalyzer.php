@@ -49,7 +49,7 @@ use Throwable;
  * handed a constant keeps only what that value can throw ({@see EnumLookup}).
  *
  * A status comes from {@see KnownThrowers} where a name-keyed entry has one, and otherwise from what an
- * `HttpException` subclass sets on itself ({@see HttpExceptionStatus}) or, for a class that sets none, from
+ * `HttpException` subclass sets on itself ({@see SubclassStatus}) or, for a class that sets none, from
  * the construction THIS throw makes — the arguments of a `throw new X(…)`, or the `new` inside the static
  * factory it names ({@see FactoryStatus}). A throw whose point carries no construction because a callee
  * DECLARED it is read one hop on, off that callee's own `throw` ({@see inDeclaringCallee()}): a `@throws`
@@ -96,7 +96,7 @@ final class ThrowAnalyzer
         private readonly FileAnalyzer $fileAnalyzer,
         private readonly KnownThrowers $knownThrowers,
         private readonly CalleeResolver $calleeResolver,
-        private readonly HttpExceptionStatus $httpExceptionStatus,
+        private readonly SubclassStatus $httpExceptionStatus,
         private readonly FactoryStatus $factoryStatus,
         private readonly CaseStatus $caseStatus,
         // A diagnostic leaves here publishable, like every other one the engine composes: the file a
@@ -898,7 +898,7 @@ final class ThrowAnalyzer
      * the registry indexes, and `abort()` defaults no status to fall back on.
      *
      * `$read` is how the slot's argument becomes the status where the class reads it through the enum case
-     * it holds ({@see HttpExceptionStatus::statusRead()}); with none, the argument is the status itself.
+     * it holds ({@see SubclassStatus::statusRead()}); with none, the argument is the status itself.
      *
      * @param  array{names: list<string>, default: int|null}  $constructor
      */
@@ -982,7 +982,7 @@ final class ThrowAnalyzer
             }
         }
 
-        if ($this->httpExceptionStatus->isHttpException($fqcn)) {
+        if ($this->httpExceptionStatus->governs($fqcn)) {
             // `fellBack` states the rule {@see ThrowSignal} is written to, which is "no status anyone could
             // read" — not "the answer was the 500". Being an HttpException subclass is not itself a status:
             // a vendor `@throws` of one this build cannot read says no more about the API than any other
@@ -999,7 +999,7 @@ final class ThrowAnalyzer
      * What an `HttpException` subclass's status is here: the one the class pins on every instance, else the
      * one THIS throw builds it with, else — where the throw is a call whose `@throws` is all this point
      * carries — the one the callee that declared it builds with ({@see inDeclaringCallee()}), and only then
-     * the one every construction the class writes of itself agrees on ({@see HttpExceptionStatus::agreed()}).
+     * the one every construction the class writes of itself agrees on ({@see SubclassStatus::agreed()}).
      * Where none of them reads, the answer is a recorded {@see UnreadStatus}, which is what
      * {@see diagnostics()} reports from.
      *
@@ -1102,7 +1102,7 @@ final class ThrowAnalyzer
      *
      * Reading a body is not walking into it: what descent bounds is which errors the document CARRIES, and
      * this changes only what the error it already carries says. So the gate is the application's own source
-     * ({@see HttpExceptionStatus} for the whole argument, and the priming that makes it cost nothing), not
+     * ({@see SubclassStatus} for the whole argument, and the priming that makes it cost nothing), not
      * the descend scope — a modular guard states its status as plainly as one in `app/`.
      *
      * `read` is the file whose expression gave up, for the actionability rule, and null where the callee

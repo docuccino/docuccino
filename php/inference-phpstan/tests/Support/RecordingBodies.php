@@ -25,7 +25,7 @@ final class RecordingBodies implements ClassBodies
         return $this->inner->methods($file, $class);
     }
 
-    public function foldStatus(string $file, Node\Expr $expr, Node\Expr\New_|Node\Expr\StaticCall $at, ?ParamAccessor $read): array
+    public function foldStatus(string $file, Node\Expr $expr, Node\Expr\New_|Node\Expr\StaticCall|Node\Expr\MethodCall $at, ?ParamAccessor $read): array
     {
         $this->folded[] = $at instanceof Node\Expr\New_ ? 'construction' : 'parent-call';
 

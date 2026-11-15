@@ -9,6 +9,7 @@ use PhpParser\Node;
 use PHPStan\Analyser\Scope;
 use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\Type\ObjectType;
+use PHPStan\Type\Type;
 
 /**
  * Where a plain response the factory makes takes its body, status and headers: `make($content, $status,
@@ -82,8 +83,12 @@ final class MadeResponseCall
             return $slots->knows(0);
         }
 
-        $type = $scope->getType($content);
+        return self::isEmpty($scope->getType($content));
+    }
 
+    /** Whether content of this type is provably nothing — `''` or `null`, whichever it is. */
+    public static function isEmpty(Type $type): bool
+    {
         return $type->isConstantScalarValue()->yes()
             && array_filter($type->getConstantScalarValues(), static fn (mixed $value): bool => $value !== '' && $value !== null) === [];
     }

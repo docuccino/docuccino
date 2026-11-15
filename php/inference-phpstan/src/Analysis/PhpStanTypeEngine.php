@@ -38,8 +38,8 @@ use Docuccino\Inference\PhpStan\Throwing\AnalyzedBodies;
 use Docuccino\Inference\PhpStan\Throwing\CaseStatus;
 use Docuccino\Inference\PhpStan\Throwing\ClassBodies;
 use Docuccino\Inference\PhpStan\Throwing\FactoryStatus;
-use Docuccino\Inference\PhpStan\Throwing\HttpExceptionStatus;
 use Docuccino\Inference\PhpStan\Throwing\ReturnedExceptions;
+use Docuccino\Inference\PhpStan\Throwing\SubclassStatus;
 use Docuccino\Inference\PhpStan\Throwing\ThrowAnalyzer;
 use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
 use Docuccino\Inference\PhpStan\Trace\ReturnValueFolder;
@@ -101,7 +101,7 @@ final class PhpStanTypeEngine implements TypeEngine
      * function of the class — or of the class and one factory name — alone, which is what makes the memo
      * sound across routes.
      */
-    private ?HttpExceptionStatus $httpExceptionStatus = null;
+    private ?SubclassStatus $httpExceptionStatus = null;
 
     private ?FactoryStatus $factoryStatus = null;
 
@@ -308,6 +308,11 @@ final class PhpStanTypeEngine implements TypeEngine
         if (ResponseShapeRefiner::isTransportFqcn($type->fqcn)) {
             // A file, stream or redirect: the status its call states, on the class it already is.
             return ResponseArms::sites($this->refiner()->refineArms($expr, $scope), $type, $type->fqcn);
+        }
+        if ($this->refiner()->isResponseSubclass($type->fqcn)) {
+            // A response class the application derives: the status and body its constructor hands the
+            // framework's, emitted as that framework class would be.
+            return ResponseArms::sites($this->refiner()->refineArms($expr, $scope), $type, ResponseShapeRefiner::CANONICAL_RESPONSE);
         }
         if (! ResponseShapeRefiner::isResponseFqcn($type->fqcn)) {
             // The router sends a returned Responsable as its `toResponse()`, so an application-written one
@@ -956,7 +961,7 @@ final class PhpStanTypeEngine implements TypeEngine
         // this build may descend is `project_paths`' question, and whether a declaration is the
         // application's is not. An exception class in a modular root is the application's, its file is
         // primed, and reading it grows no analysed set.
-        $statuses = $this->httpExceptionStatus ??= new HttpExceptionStatus($bodies, $this->appFilter);
+        $statuses = $this->httpExceptionStatus ??= SubclassStatus::ofHttpExceptions($bodies, $this->appFilter);
 
         return new ThrowAnalyzer(
             $this->adapter->reflectionProvider(),
