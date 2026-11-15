@@ -921,7 +921,9 @@ halves are read from the code:
   writes its own serialised form (`toArray()`, `jsonSerialize()` and the like), which may send anything
   under any name. A resource
   sends the columns its `toArray()` writes as `$this->column` (or `$this->getRouteKey()`). Docuccino reads which model a resource wraps from where
-  your action builds it — `new OrderResource($order)` — or from the resource's `@mixin`.
+  your action builds it — `new OrderResource($order)`. Only where the action builds it nowhere Docuccino
+  can see, as with `$order->toResource()`, does the resource's `@mixin` answer: one built around either of
+  two models gives nothing, whatever the `@mixin` says.
 
 The same goes for a response that already binds the model: `show` links to `destroy`, because the order
 it sends back carries the key `destroy` takes. A segment the two routes share is passed straight through

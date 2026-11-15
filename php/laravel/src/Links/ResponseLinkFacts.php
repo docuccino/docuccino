@@ -156,8 +156,8 @@ final class ResponseLinkFacts implements OperationExtension
 
     /**
      * The model bodies this operation returns, by the identity their component is published under:
-     * a model itself, or a resource whose model is known — from where the action builds it, else from
-     * its `@mixin`.
+     * a model itself, or a resource whose model is known — from where the action builds it, or from its
+     * `@mixin` where the action builds it nowhere the walk sees.
      *
      * @return array<string, array{0: string, 1: string}> published id → [class, model]
      */
@@ -186,7 +186,7 @@ final class ResponseLinkFacts implements OperationExtension
                 $context->trace($visitor);
             }
 
-            $model = $visitor->modelOf($class) ?? BodyColumns::mixin($class);
+            $model = $visitor->wrappedModel($class);
             if ($model !== null) {
                 $bodies[SchemaIdentity::publishedId($class)] = [$class, $model];
             }

@@ -695,7 +695,7 @@ $result = match ($mode) {
         $visitor = new ResourceModelVisitor;
         $engine->trace($ref, $visitor);
 
-        return ['model' => $visitor->modelOf($argv[5] ?? '')];
+        return ['model' => $visitor->modelOf($argv[5] ?? ''), 'wrapped' => $visitor->wrappedModel($argv[5] ?? '')];
     })(),
     'trace-wrapped-collection' => (static function () use ($engine, $ref, $argv): array {
         // WrappedCollectionVisitor types what each construction of the collection is handed — the proof a

@@ -15,7 +15,8 @@ use PhpParser\Node;
  * What the walk hands each construction of a resource — `new PostResource($post)`,
  * `PostResource::make($post)` — typed by the analyser, so which model a resource wraps is read where the
  * action builds it rather than from the resource's name. A resource the walk sees built around anything
- * but one model class — a union, a nullable find, an array — wraps nothing it can name.
+ * but one model class — a union, a nullable find, an array — wraps nothing it can name, whatever its
+ * `@mixin` says.
  *
  * @internal
  */
@@ -47,6 +48,16 @@ final class ResourceModelVisitor implements TraceVisitor
         $models = array_keys($this->wrapped[$resource] ?? []);
 
         return count($models) === 1 && $models[0] !== self::UNKNOWN ? $models[0] : null;
+    }
+
+    /**
+     * The model `$resource` wraps as a body: what the walk saw it built around, and only where the walk
+     * saw no construction of it at all, the model its `@mixin` names. A construction around anything but
+     * one model is an answer — none — that a docblock written for the IDE must not overrule.
+     */
+    public function wrappedModel(string $resource): ?string
+    {
+        return isset($this->wrapped[$resource]) ? $this->modelOf($resource) : BodyColumns::mixin($resource);
     }
 
     /** What a construction hands the resource to wrap, or null where `$node` builds none. */

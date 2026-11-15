@@ -185,7 +185,9 @@ them.
   status-text table a `respond()` callback reads through it (`RespondCallbacks::statusTextThroughApp()`).
 - `app/Http/Controllers/LinkedUserController.php` + `app/Http/Resources/LinkedUserResource.php` — one resource
   with no `@mixin`, built around `User::create()`, a bound `User` through `::make()`, a `User` a private helper
-  wraps, and a `find()` that may be null: which model a response link reads the resource's columns off.
+  wraps, and a `find()` that may be null: which model a response link reads the resource's columns off. Beside
+  it `app/Http/Resources/MixinUserResource.php`, whose `@mixin User` is consulted only where no construction
+  shows (`toResource()`), never over one around either of two models.
 
 ### Closures located by line
 

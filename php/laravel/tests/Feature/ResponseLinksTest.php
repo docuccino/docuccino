@@ -508,3 +508,25 @@ it('reads the model a resource wraps from where the action builds it, on the rea
     'built in a helper the action calls' => ['helped', 'App\\Models\\User'],
     'built around a find() that may be null' => ['maybe', null],
 ])->group('fixture');
+
+/**
+ * A `@mixin` is written for the IDE and says nothing about what one action wraps. So it stands in only
+ * where the walk saw no construction at all; a construction around either of two models is an answer —
+ * none — and a link read off the mixin's columns there would send another model's key.
+ */
+it('reads a resource\'s @mixin only where no construction of it shows, on the real engine', function (string $method, ?string $model): void {
+    ensureFixtureAvailable(FixtureRunner::available());
+
+    $trace = FixtureRunner::traceResourceModels(
+        'app/Http/Controllers/LinkedUserController.php',
+        'App\\Http\\Controllers\\LinkedUserController',
+        $method,
+        'App\\Http\\Resources\\MixinUserResource',
+    );
+
+    expect($trace['wrapped'])->toBe($model);
+})->with([
+    'built around the model it names' => ['agreed', 'App\\Models\\User'],
+    'built around either of two models' => ['either', null],
+    'handed out by the model, no construction in sight' => ['handedOut', 'App\\Models\\User'],
+])->group('fixture');
