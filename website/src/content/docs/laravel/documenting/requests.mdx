@@ -596,8 +596,12 @@ Within a rules array, Docuccino reads pipe strings (`'required|integer'`), array
 `Rule::array()`, `Rule::exists()` and `Rule::unique()` or the objects they build
 (`new Enum(Currency::class)`, `new In([...])`, `new NotIn([...])`, chained calls included), the `Rule::`
 methods that return a rule string, such as `Rule::nullable()` and `Rule::sometimes()`, which document
-exactly as `'nullable'` and `'sometimes'` do, and your own rule objects — `new SortCode` documents from
-the rule class's [`#[RuleSchema]`](#documenting-a-custom-rule). An enum case in a value list documents
+exactly as `'nullable'` and `'sometimes'` do, and the rest of Laravel's rule objects that it validates as a
+rule string. `Rule::string()->min(2)`, `Rule::date()->afterToday()`, `Rule::acceptedIf('kind', 'business')`
+and `new RequiredWith('vat')` document exactly as `'string|min:2'`, `'date|after:today'`,
+`'accepted_if:kind,business'` and `'required_with:vat'` do, as long as every value is written at the call.
+Your own rule objects are read too: `new SortCode` documents from the rule class's
+[`#[RuleSchema]`](#documenting-a-custom-rule). An enum case in a value list documents
 the value Laravel compares it as: `Rule::in([Status::Draft])` accepts `draft`, the backing value, and a
 pure enum's case is its name. A list of one enum's cases is documented as a choice from that enum.
 
@@ -609,8 +613,9 @@ as a Data property's own type — kept without the constraints those rules state
 
 When only one of a field's rules can't be read, what happens depends on what that rule could do:
 
-- **A check on the value** — a rule object with no `#[RuleSchema]`, a closure, or one of Laravel's own
-  rules Docuccino doesn't read, such as `Password::min(8)` — can only refuse values. The field keeps the
+- **A check on the value** — a rule object with no `#[RuleSchema]`, a closure, one of Laravel's own
+  rules Docuccino doesn't read, such as `Password::min(8)`, or one built from a value a call returns,
+  such as `Rule::string()->max($this->limit())` — can only refuse values. The field keeps the
   rules that were read, so it's documented a little wider than your endpoint, which is still true.
 - **A rule whose content isn't known until runtime** — `Rule::when()`, `Rule::forEach()`, a spread, or a
   rule chosen by a call or a ternary — could turn out to be `nullable`, `sometimes` or `exclude`. Then none

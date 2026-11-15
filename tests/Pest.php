@@ -5802,11 +5802,13 @@ function attributeCarrier(string $class, string $arguments): string
 
 /**
  * The rules Laravel's own parser makes of one rule object in a field's list, as the constants a rules array would
- * spell them, the empty rule the validator skips left out.
+ * spell them, the empty rule the validator skips left out. One it keeps as an object and reads by its parameters
+ * is spelled as the string it casts to.
  */
 function laravelParsedRules(object $rule): ConstValue
 {
     $parsed = (new ValidationRuleParser([]))->explode(['f' => [$rule]])->rules['f'];
+    $strings = array_map(static fn (mixed $item): string => $item instanceof Stringable ? (string) $item : (is_string($item) ? $item : ''), $parsed);
 
-    return ConstValue::array(array_map(ConstValue::scalar(...), array_values(array_filter($parsed, static fn (mixed $item): bool => $item !== ''))));
+    return ConstValue::array(array_map(ConstValue::scalar(...), array_values(array_filter($strings, static fn (string $item): bool => $item !== ''))));
 }
