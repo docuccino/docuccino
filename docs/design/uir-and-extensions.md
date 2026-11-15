@@ -1564,7 +1564,10 @@ interface ExceptionTranslator {
 // exception every mapper renders and every finalizer is handed — a framework that swaps an exception
 // before rendering it (Laravel's `$exceptions->map()`, applied at the top of Handler::render()) sends the
 // swap's response, never the thrown class's. Nothing re-translates an answer, as mapException() maps once.
-// The answer keeps the throw's call chain, confidence and disposition; only class and status move, and
+// The answer keeps the throw's call chain, confidence and disposition; only class, status and the response
+// it carries move (ThrownException::$response — an HttpResponseException a mapper returns is sent as that
+// response, which the inferred-handler tier renders past any render callback for the class, as
+// Handler::render() does, through every producer that asks the chain), and
 // MappedResponse::$translated carries it so a class-level #[ErrorComponent] names the body from the class
 // that RENDERED it. The Laravel implementation (InferredHandler\ExceptionMapTranslator) reads the booted
 // handler's `$exceptionMap` in registration order with mapException()'s `is_a()` on the THROWN class —

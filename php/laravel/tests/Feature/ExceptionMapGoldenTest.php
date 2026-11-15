@@ -5,7 +5,10 @@ declare(strict_types=1);
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\DType\ArrayShapeField;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
@@ -18,6 +21,7 @@ use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Router;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\GoneHttpException;
@@ -38,7 +42,13 @@ function carriedMapperScript(): ActionAnalysis
 {
     return new ActionAnalysis(
         returns: [new ReturnSite(new ClassT(HttpResponseException::class), new SourceLocation(''))],
-        throws: [new ThrownException(HttpResponseException::class, 500, [], ThrowConfidence::Certain, ThrowDisposition::Signal)],
+        throws: [new ThrownException(HttpResponseException::class, 500, [], ThrowConfidence::Certain, ThrowDisposition::Signal, new ReturnSite(
+            new ClassT(JsonResponse::class, [
+                new ArrayShapeT([new ArrayShapeField('error', new LiteralT('gone_elsewhere'))]),
+                new LiteralT(423),
+            ]),
+            new SourceLocation(''),
+        ))],
     );
 }
 
@@ -101,7 +111,7 @@ it('publishes each mapped throw as the exception it is translated to, byte-ident
     $statuses = static fn (string $path): array => array_map('strval', array_keys($document['paths'][$path]['get']['responses']));
 
     expect($statuses('/api/mapped-forms/{form}'))->toBe(['200', '402'])
-        ->and($statuses('/api/mapped-forms'))->toBe(['200', '401', '403', '500'])
+        ->and($statuses('/api/mapped-forms'))->toBe(['200', '401', '403', '423'])
         ->and($warned)->toHaveCount(1)
         ->and($warned[0]->message)->toContain('Illuminate\\Auth\\AuthenticationException');
 });

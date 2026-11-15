@@ -202,6 +202,12 @@ like a route binding's missing model or a failed validation, are translated too.
 The status is read from what the closure returns, the same way it is read from a `throw`: a literal
 argument, a local assigned once, or a class that fixes its own status. When the class reads and the status
 does not, the error is documented as that class under the [stand-in status](#when-a-500-is-a-stand-in).
+
+When the closure returns an `HttpResponseException`, Laravel sends the response it carries, so that
+response is what's documented, with its status and its body, wherever the exception you mapped would have
+been: `fn ($e) => new HttpResponseException(response()->json(['error' => 'gone_elsewhere'], 423))` keyed on
+`ModelNotFoundException` documents the route binding's missing model as that `423`.
+
 When the closure's return can't be named at all, or it returns different exceptions on different branches,
 the error stays documented as the exception thrown. Either way the `inferred-handler.too-dynamic`
 diagnostic names the map entry, so you know which one to make readable.
