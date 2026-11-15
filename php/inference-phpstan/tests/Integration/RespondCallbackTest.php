@@ -274,7 +274,7 @@ it('reads a member as the reason phrase of the status the response is sent with,
         ->and(echoedMembers($type->typeArgs[0]))->toBe($expected);
 })->with([
     // Through the helper, where the status is named in a local before both the body and the response read it.
-    'a local both read' => ['everywhere', ['type' => 'literal', 'title' => ['statusText', 'scalar', 'Error'], 'status' => 'statusMarker', 'errors' => 'list']],
+    'a local both read' => ['everywhere', ['type' => 'literal', 'title' => ['statusText', 'scalar', 'Error'], 'status' => 'statusMarker', 'errors' => 'map']],
     'read inline, through a class inheriting the table' => ['statusTextInline', ['title' => ['statusText', 'scalar', null], 'status' => 'statusMarker']],
     // The phrase of a code nothing says is the one sent: the member is the string it was read as.
     'a key that is not the status' => ['statusTextOtherKey', ['title' => 'scalar', 'status' => 'statusMarker']],
