@@ -133,11 +133,13 @@ const FLOORS = [
     // Re-recorded 58.74 → 58.93 when the engine came to settle which copy of phpdoc-parser it reads
     // before PHPStan boots (`PhpDocParserCopy`), unit-tested in process, measured on the tree that also
     // holds the `HttpResponseException` subclass reader above.
-    // Measured 58.93% (3018/5121): 58% of it is 2970.18 statements, 47.82 of margin.
+    // Re-recorded 58.93 → 59.59 when a status or media type set on its own line on a returned local came
+    // to be read: which chains on the local definitely run (`LocalRestatements`) is unit-tested in process.
+    // Measured 59.59% (3160/5303): 58% of it is 3075.74 statements, 84.26 of margin.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads 3 statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 58, 'measured' => 58.93],
+    'inference-phpstan' => ['floor' => 58, 'measured' => 59.59],
 ];
 
 /*
