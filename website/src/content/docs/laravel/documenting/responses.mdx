@@ -921,6 +921,24 @@ halves are read from the code:
   sends the columns its `toArray()` writes as `$this->column` (or `$this->getRouteKey()`). Docuccino reads which model a resource wraps from where
   your action builds it — `new OrderResource($order)` — or from the resource's `@mixin`.
 
+The same goes for a response that already binds the model: `show` links to `destroy`, because the order
+it sends back carries the key `destroy` takes. A segment the two routes share is passed straight through
+from the request, so a nested create links to its child:
+
+```php
+Route::post('/orders/{order}/notes', [OrderNoteController::class, 'store']);
+Route::get('/orders/{order}/notes/{note}', [OrderNoteController::class, 'show'])->scopeBindings();
+```
+
+```json
+"parameters": { "order": "$request.path.order", "note": "$response.body#/data/id" }
+```
+
+A scoped child (`->scopeBindings()`) only resolves within its parent, so Docuccino fills it from a body
+only where the code proves the record belongs to the parent in the request: on the child's own
+collection, as above, or on its own path. A route like `/orders/{order}/latest-note` could return any
+note as far as the code says, so it is not linked to the scoped route.
+
 A column only counts when it reaches the wire unchanged, because the route looks a record up by what is
 stored: one an accessor rewrites, a date, or a cast other than `int` or `string` is not linked on.
 

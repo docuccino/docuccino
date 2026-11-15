@@ -23,6 +23,9 @@ use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\PalletResource;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Parcel;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ParcelController;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ParcelResource;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Scan;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ScanController;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ScanResource;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
 
@@ -46,6 +49,11 @@ beforeEach(function (): void {
         $router->get('api/shipments/{shipment}', [ParcelController::class, 'shipped']);
         $router->post('api/pallets', [ParcelController::class, 'storePallet']);
         $router->get('api/pallets/{pallet}', [ParcelController::class, 'showPallet']);
+        $router->post('api/parcels/{parcel}/scans', [ScanController::class, 'store']);
+        $router->get('api/parcels/{parcel}/scans/{scan}', [ScanController::class, 'show'])->scopeBindings();
+        $router->patch('api/parcels/{parcel}/scans/{scan}', [ScanController::class, 'update'])->scopeBindings();
+        $router->get('api/parcels/{parcel}/latest-scan', [ScanController::class, 'latest']);
+        $router->get('api/scans/{scan}', [ScanController::class, 'find']);
     };
 
     $this->engine = static function (): TypeEngine {
@@ -57,6 +65,11 @@ beforeEach(function (): void {
                 Pallet::class => new ClassMetadata(Pallet::class, [
                     new PropertyMetadata('id', ScalarT::int()),
                     new PropertyMetadata('tag', ScalarT::string()),
+                ]),
+                Scan::class => new ClassMetadata(Scan::class, [
+                    new PropertyMetadata('id', ScalarT::int()),
+                    new PropertyMetadata('parcel_id', ScalarT::int()),
+                    new PropertyMetadata('place', ScalarT::string()),
                 ]),
                 Parcel::class => new ClassMetadata(Parcel::class, [
                     new PropertyMetadata('id', ScalarT::int()),
@@ -74,6 +87,16 @@ beforeEach(function (): void {
                 $controller.'shipped' => $returns(ParcelResource::class),
                 $controller.'storePallet' => $returns(PalletResource::class),
                 $controller.'showPallet' => $returns(PalletResource::class),
+                ScanController::class.'::store' => $returns(ScanResource::class),
+                ScanController::class.'::show' => $returns(ScanResource::class),
+                ScanController::class.'::update' => $returns(ScanResource::class),
+                ScanController::class.'::latest' => $returns(ScanResource::class),
+                ScanController::class.'::find' => $returns(ScanResource::class),
+                ScanResource::class.'::toArray' => new ActionAnalysis(returns: [new ReturnSite(new ArrayShapeT([
+                    new ArrayShapeField('id', ScalarT::int()),
+                    new ArrayShapeField('parcel_id', ScalarT::int()),
+                    new ArrayShapeField('place', ScalarT::string()),
+                ]), new SourceLocation(''))]),
                 PalletResource::class.'::toArray' => new ActionAnalysis(returns: [new ReturnSite(new ArrayShapeT([
                     new ArrayShapeField('id', ScalarT::int()),
                     new ArrayShapeField('tag', ScalarT::string()),
@@ -103,13 +126,61 @@ it('links a create endpoint to every route that binds the model it gives back', 
     expect(array_map(static fn (array $link): array => $link['parameters'], $links))->toBe([
         'delete.api.parcels.@parcel' => ['parcel' => '$response.body#/data/id'],
         'get.api.parcels.@parcel' => ['parcel' => '$response.body#/data/id'],
+        // A route under the parcel takes nothing else, so the parcel's key is all it needs.
+        'get.api.parcels.@parcel.latest-scan' => ['parcel' => '$response.body#/data/id'],
         // `Route::model('shipment', Parcel::class)` resolves on the parcel's route key, so the key fills it.
         'get.api.shipments.@shipment' => ['shipment' => '$response.body#/data/id'],
         'get.api.tracked-parcels.@parcel' => ['parcel' => '$response.body#/data/tracking'],
         'patch.api.parcels.@parcel' => ['parcel' => '$response.body#/data/id'],
+        'post.api.parcels.@parcel.scans' => ['parcel' => '$response.body#/data/id'],
     ])
         ->and($links['get.api.parcels.@parcel']['operationId'])->toBe('get.api.parcels.@parcel')
         ->and($links['get.api.parcels.@parcel']['x-docuccino']['provenance'])->toBe([['producer' => 'inference', 'layer' => 'inference']]);
+});
+
+it('links a resource to its own other routes', function (): void {
+    $document = emittedArray(localityBuild($this->routes, $this->engine));
+    $links = $document['paths']['/api/parcels/{parcel}']['get']['responses']['200']['links'];
+
+    // The parcel read back carries its own key, so every other route on that parcel is one call away —
+    // and the route that read it is not a place to go.
+    expect(array_keys($links))->toBe([
+        'delete.api.parcels.@parcel',
+        'get.api.parcels.@parcel.latest-scan',
+        'get.api.shipments.@shipment',
+        'get.api.tracked-parcels.@parcel',
+        'patch.api.parcels.@parcel',
+        'post.api.parcels.@parcel.scans',
+    ])
+        ->and($links['patch.api.parcels.@parcel']['parameters'])->toBe(['parcel' => '$response.body#/data/id']);
+});
+
+/**
+ * A scoped child resolves only within its parent, so a scan id from any other parcel 404s. The parent a
+ * link passes on is the one in the request, so the scan it pairs with has to be one that parcel owns:
+ * proved for a scan made under it, or read back from under it, and for nothing else.
+ */
+it('fills a parent segment from the request, and a scoped child only from its own collection', function (): void {
+    $paths = emittedArray(localityBuild($this->routes, $this->engine))['paths'];
+    $linked = static fn (string $path, string $method): array => array_map(
+        static fn (array $link): array => $link['parameters'],
+        $paths[$path][$method]['responses']['200']['links'] ?? [],
+    );
+
+    $made = $linked('/api/parcels/{parcel}/scans', 'post');
+    $read = $linked('/api/parcels/{parcel}/scans/{scan}', 'get');
+    $latest = $linked('/api/parcels/{parcel}/latest-scan', 'get');
+
+    expect($made['get.api.parcels.@parcel.scans.@scan'])->toBe(['parcel' => '$request.path.parcel', 'scan' => '$response.body#/data/id'])
+        ->and($made['get.api.scans.@scan'])->toBe(['scan' => '$response.body#/data/id'])
+        ->and($read)->toBe([
+            'get.api.scans.@scan' => ['scan' => '$response.body#/data/id'],
+            'patch.api.parcels.@parcel.scans.@scan' => ['parcel' => '$request.path.parcel', 'scan' => '$response.body#/data/id'],
+        ])
+        // Nothing in the code says the latest scan is this parcel's, so only the unscoped lookup takes it.
+        ->and($latest)->toBe(['get.api.scans.@scan' => ['scan' => '$response.body#/data/id']])
+        // `parcel_id` is a scan's column that happens to be named for a parcel: not linked on.
+        ->and(json_encode($paths))->not->toContain('parcel_id"');
 });
 
 it('links on the route key a model names for itself', function (): void {
