@@ -147,6 +147,64 @@
                   ]
                 }
               }
+            },
+            "links": {
+              "delete.api.parcels.@parcel": {
+                "operationId": "delete.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "get.api.parcels.@parcel": {
+                "operationId": "get.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "get.api.tracked-parcels.@parcel": {
+                "operationId": "get.api.tracked-parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/tracking"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "patch.api.parcels.@parcel": {
+                "operationId": "patch.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              }
             }
           },
           "404": {
@@ -225,6 +283,64 @@
                   },
                   "required": [
                     "data"
+                  ]
+                }
+              }
+            },
+            "links": {
+              "delete.api.parcels.@parcel": {
+                "operationId": "delete.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "get.api.parcels.@parcel": {
+                "operationId": "get.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "get.api.tracked-parcels.@parcel": {
+                "operationId": "get.api.tracked-parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/tracking"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "patch.api.parcels.@parcel": {
+                "operationId": "patch.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
                   ]
                 }
               }
@@ -375,6 +491,50 @@
                   },
                   "required": [
                     "data"
+                  ]
+                }
+              }
+            },
+            "links": {
+              "delete.api.parcels.@parcel": {
+                "operationId": "delete.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "get.api.tracked-parcels.@parcel": {
+                "operationId": "get.api.tracked-parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/tracking"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "patch.api.parcels.@parcel": {
+                "operationId": "patch.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
                   ]
                 }
               }
@@ -636,6 +796,50 @@
                   ]
                 }
               }
+            },
+            "links": {
+              "delete.api.parcels.@parcel": {
+                "operationId": "delete.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "get.api.parcels.@parcel": {
+                "operationId": "get.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "get.api.tracked-parcels.@parcel": {
+                "operationId": "get.api.tracked-parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/tracking"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              }
             }
           },
           "404": {
@@ -705,6 +909,64 @@
                     ]
                   },
                   "$ref": "#/components/schemas/Parcel"
+                }
+              }
+            },
+            "links": {
+              "delete.api.parcels.@parcel": {
+                "operationId": "delete.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "get.api.parcels.@parcel": {
+                "operationId": "get.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "get.api.tracked-parcels.@parcel": {
+                "operationId": "get.api.tracked-parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/tracking"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "patch.api.parcels.@parcel": {
+                "operationId": "patch.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
                 }
               }
             }
@@ -857,6 +1119,50 @@
                   ]
                 }
               }
+            },
+            "links": {
+              "delete.api.parcels.@parcel": {
+                "operationId": "delete.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "get.api.parcels.@parcel": {
+                "operationId": "get.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "patch.api.parcels.@parcel": {
+                "operationId": "patch.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              }
             }
           },
           "404": {
@@ -954,7 +1260,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "995e1dde4e78024452dc55703715348da9802b9c3f2207ca3ee1781c4721ec55"
+      "contentHash": "04149c174db7898c888041ed10468d7cb004571033ad723f3646f168dfdd0bcf"
     },
     "generator": {
       "name": "docuccino/laravel",
