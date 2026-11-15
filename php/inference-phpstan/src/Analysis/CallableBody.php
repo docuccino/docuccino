@@ -10,6 +10,7 @@ use PHPStan\Node\ClosureReturnStatementsNode;
 use PHPStan\Node\FunctionReturnStatementsNode;
 use PHPStan\Node\MethodReturnStatementsNode;
 use PHPStan\Node\ReturnStatementsNode;
+use PHPStan\Reflection\ParameterReflection;
 
 /**
  * One analysable callable body — a method, a function, a closure or an arrow function — as the returns it can answer
@@ -47,10 +48,7 @@ final readonly class CallableBody
 
     public static function ofFunction(FunctionReturnStatementsNode $node): self
     {
-        $parameters = [];
-        foreach ($node->getFunctionReflection()->getVariants()[0]->getParameters() as $parameter) {
-            $parameters[] = $parameter->getName();
-        }
+        $parameters = array_map(static fn (ParameterReflection $parameter): string => $parameter->getName(), $node->getFunctionReflection()->getVariants()[0]->getParameters());
 
         return new self(self::returnsOf($node), array_values($node->getStatements()), $parameters, $node);
     }

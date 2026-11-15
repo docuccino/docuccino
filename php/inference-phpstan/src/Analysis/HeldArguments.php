@@ -73,6 +73,19 @@ final class HeldArguments
     }
 
     /**
+     * The one `new` a factory returns, or null where it returns anything else or more than once: a factory
+     * with two returns builds two objects, and neither is the one a call to it built.
+     *
+     * @param  list<Node\Expr|null>  $returned  what each of its `return`s returns
+     */
+    public static function soleConstruction(array $returned): ?Node\Expr\New_
+    {
+        $new = count($returned) === 1 ? $returned[0] : null;
+
+        return $new instanceof Node\Expr\New_ && $new->class instanceof Node\Name ? $new : null;
+    }
+
+    /**
      * The constructor parameters that promote a readonly property. Such a property is written once, before
      * any method of the object runs, so every read of it there is what the construction passed.
      *

@@ -80,3 +80,19 @@ it('holds only the properties a constructor promotes readonly to what it was bui
     'an inherited constructor' => [InheritedHeldProblem::class, ['status', 'detail']],
     'no constructor' => [stdClass::class, []],
 ]);
+
+it('reads the object a factory builds only where it builds one', function (array $returned, bool $found): void {
+    expect(HeldArguments::soleConstruction($returned))->toBe($found ? $returned[0] : null);
+})->with(function (): array {
+    $new = new Node\Expr\New_(new Node\Name('Problem'), [new Node\Arg(new Node\Expr\Variable('status'))]);
+
+    return [
+        'one `new`' => [[$new], true],
+        // Two returns are two objects, and neither is the one this call built.
+        'two returns' => [[$new, $new], false],
+        'a `new` of a class held in a variable' => [[new Node\Expr\New_(new Node\Expr\Variable('class'))], false],
+        'something else' => [[new Node\Expr\Variable('problem')], false],
+        'a bare return' => [[null], false],
+        'no return' => [[], false],
+    ];
+});

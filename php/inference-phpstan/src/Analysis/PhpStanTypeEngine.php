@@ -654,15 +654,10 @@ final class PhpStanTypeEngine implements TypeEngine
             return null;
         }
 
-        $call = $this->renderedReceiver($expr, $scope) ?? $expr;
-        if ((! $call instanceof Node\Expr\MethodCall && ! $call instanceof Node\Expr\StaticCall && ! $call instanceof Node\Expr\FuncCall)
-            || $call->isFirstClassCallable()
-        ) {
-            return null;
-        }
-
-        $callee = ($this->callees ??= new CalleeResolver($this->adapter->reflectionProvider()))->resolve($call, $scope);
-        if ($callee === null
+        $call = ForwardedSite::call($expr, fn (Node\Expr $receiver): bool => $this->rendersOwnResponse($receiver, $scope));
+        $callee = $call === null ? null : ($this->callees ??= new CalleeResolver($this->adapter->reflectionProvider()))->resolve($call, $scope);
+        if ($call === null
+            || $callee === null
             || ! $this->appFilter->isProjectFile($callee->file)
             || in_array($callee->key(), $this->forwarding, true)
             || count($this->forwarding) >= $this->config->traceDepth
@@ -690,53 +685,24 @@ final class PhpStanTypeEngine implements TypeEngine
         }
 
         $files = [$callee->file, $callee->writtenIn(), ...$inner['files']];
-        $component = $chosen['component'];
+        $declared = null;
         if ($callee->class !== null) {
-            $written = $this->declarations()->fileFor($callee->class, $callee->method);
-            if ($written !== null) {
-                $files[] = $written;
-            }
-            if (! $chosen['delegates']) {
-                $component = $this->declarations()->on($callee->class, $callee->method) ?? $component;
-            }
+            $files[] = $this->declarations()->fileFor($callee->class, $callee->method) ?? $callee->file;
+            $declared = $this->declarations()->on($callee->class, $callee->method);
         }
 
-        return [
-            'site' => [
-                'type' => $chosen['type'],
-                'component' => $component,
-                'delegates' => $chosen['delegates'],
-                'expr' => $chosen['expr'],
-                'foldScope' => $chosen['foldScope'],
-            ] + $site,
-            'diagnostics' => $inner['diagnostics'],
-            'files' => $files,
-        ];
+        return ['site' => ForwardedSite::answeredBy($site, $chosen, $declared), 'diagnostics' => $inner['diagnostics'], 'files' => $files];
     }
 
-    /**
-     * The object a `->toResponse()` call renders, where the application wrote that method: sending the
-     * object is the same response as returning it, so the object is what was handed on. Null for any other
-     * expression.
-     */
-    private function renderedReceiver(Node\Expr $expr, Scope $scope): ?Node\Expr
+    /** Whether the one class an object is has a `toResponse()` the application wrote. */
+    private function rendersOwnResponse(Node\Expr $object, Scope $scope): bool
     {
-        if (! $expr instanceof Node\Expr\MethodCall
-            || ! $expr->name instanceof Node\Identifier
-            || $expr->name->toLowerString() !== strtolower(ResponsableRendering::TO_RESPONSE)
-        ) {
-            return null;
-        }
-
-        $classes = $scope->getType($expr->var)->getObjectClassNames();
+        $classes = $scope->getType($object)->getObjectClassNames();
         $provider = $this->adapter->reflectionProvider();
-        if (count($classes) !== 1 || ! $provider->hasClass($classes[0])) {
-            return null;
-        }
 
-        $owner = ResponsableRendering::of($provider->getClass($classes[0])->getNativeReflection(), ResponsableRendering::TO_RESPONSE, $this->appFilter->isProjectFile(...));
-
-        return $owner === ResponsableRendering::APPLICATION ? $expr->var : null;
+        return count($classes) === 1
+            && $provider->hasClass($classes[0])
+            && ResponsableRendering::of($provider->getClass($classes[0])->getNativeReflection(), ResponsableRendering::TO_RESPONSE, $this->appFilter->isProjectFile(...)) === ResponsableRendering::APPLICATION;
     }
 
     /**

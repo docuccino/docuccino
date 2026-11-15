@@ -42,6 +42,7 @@ use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
 use Docuccino\Inference\PhpStan\Translation\TypeTranslator;
 use PhpParser\Node;
 use PHPStan\Analyser\Scope;
+use PHPStan\Node\ReturnStatement;
 use PHPStan\Reflection\ParameterReflection;
 use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\Type\Constant\ConstantStringType;
@@ -678,13 +679,9 @@ final class ResponseShapeRefiner
         $this->touch($factory->writtenIn());
 
         $returns = $this->fileAnalyzer->callee($factory)?->getReturnStatements() ?? [];
-        $new = count($returns) === 1 ? $returns[0]->getReturnNode()->expr : null;
-        if (! $new instanceof Node\Expr\New_ || ! $new->class instanceof Node\Name) {
-            return null;
-        }
-
-        $factoryScope = $this->fileAnalyzer->stableScope($returns[0]->getScope());
-        if ($factoryScope->resolveName($new->class) !== $fqcn) {
+        $new = HeldArguments::soleConstruction(array_map(static fn (ReturnStatement $return): ?Node\Expr => $return->getReturnNode()->expr, $returns));
+        $factoryScope = $new === null ? null : $this->fileAnalyzer->stableScope($returns[0]->getScope());
+        if ($new === null || $factoryScope === null || ! $new->class instanceof Node\Name || $factoryScope->resolveName($new->class) !== $fqcn) {
             return null;
         }
 
