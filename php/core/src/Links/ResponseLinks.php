@@ -21,7 +21,8 @@ use Docuccino\Core\Provenance\ProvenanceRecord;
  * only by an operation on its own collection or its own path, so the parent it must belong to is the one
  * in the request. Nothing is matched by name, and a target whose operationId is not the document's only
  * one is not linked, since that is all a link can name it by. Nor is an `x-internal` target from a public
- * source: filters cut the target from public output and would leave the link pointing at nothing. One
+ * source: filters cut the target from public output and would leave the link pointing at nothing. A
+ * DELETE leads nowhere: the record it gives back no longer resolves. One
  * response carries at most {@see MOST_DERIVED} derived links, the rest reported.
  *
  * A declared link is checked against the document and reported where it cannot be written: an operation
@@ -113,6 +114,11 @@ final class ResponseLinks
      */
     private static function derived(string $signature, array $site, OperationLinks $source, array $facts, array $sites, array $doc): array
     {
+        // What a DELETE hands back is gone: every route that would look it up answers 404.
+        if (str_starts_with($signature, 'DELETE ')) {
+            return [];
+        }
+
         $ids = self::uniqueOperationIds($sites);
         $internal = self::internal($site['operation']);
         $out = [];

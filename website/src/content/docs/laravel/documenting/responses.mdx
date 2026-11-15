@@ -947,6 +947,9 @@ Nothing is matched by name. A response sending a `customer_id` is not linked to 
 — a `Route::bind()` closure, a `getRouteKeyName()` that decides at run time — no link is written, and the notices
 in [Diagnostics](/laravel/reference/diagnostics/#routes-operations-and-names) name the segment.
 
+A `DELETE` response leads nowhere on its own, even when it sends the record back: that record no longer
+resolves, so every route that would look it up answers `404`.
+
 A link only names what the document publishes. An older [API version](/laravel/guides/api-versioning/)
 links to the operations and members that version has. A public operation never links on its own to one
 marked [`#[Internal]`](/laravel/reference/attributes/#internal), because the tools that strip internal

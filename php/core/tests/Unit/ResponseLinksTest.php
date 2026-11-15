@@ -156,6 +156,33 @@ it('writes no link where a segment cannot be filled from what the code proved', 
 ]);
 
 /**
+ * The record a DELETE hands back has been removed, so the routes that would look it up by its key answer
+ * 404 — a link there sends a client to a miss. A link the author declares (a restore, say) is theirs.
+ */
+it('derives no link from what a delete hands back', function (): void {
+    $doc = ($this->doc)([
+        'DELETE /posts/{post}' => ['operationId' => 'posts.destroy'],
+        'GET /posts/{post}' => ['operationId' => 'posts.show'],
+        'POST /posts/{post}/restore' => ['operationId' => 'posts.restore'],
+    ]);
+    $bound = new OperationLinks(takes: ['post' => $this->post], gives: [($this->gives)()]);
+
+    [$out] = ResponseLinks::write($doc, [
+        'DELETE /posts/{post}' => new OperationLinks(
+            takes: ['post' => $this->post],
+            gives: [($this->gives)()],
+            declared: [new DeclaredLink('posts.restore', ['post' => '$response.body#/data/id'])],
+        ),
+        'GET /posts/{post}' => $bound,
+        'POST /posts/{post}/restore' => $bound,
+    ]);
+
+    expect(array_keys($out['paths']['/posts/{post}']['delete']['responses']['200']['links']))->toBe(['posts.restore'])
+        // The same facts on a read do lead on, so it is the method that refuses.
+        ->and(array_keys($out['paths']['/posts/{post}']['get']['responses']['200']['links']))->toBe(['posts.destroy', 'posts.restore']);
+});
+
+/**
  * `x-internal` is the mark SDK generators and public-doc filters cut an operation by. A public operation
  * linking to one would, once filtered, name an endpoint the reader was never meant to see, through a link
  * that leads nowhere. An internal operation is cut with its links, so it may lead anywhere; and a link an
