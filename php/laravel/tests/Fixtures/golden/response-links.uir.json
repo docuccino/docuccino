@@ -268,7 +268,7 @@
               ],
               "source": {
                 "file": "tests/Fixtures/ResponseLinks/LabelController.php",
-                "line": 16,
+                "line": 20,
                 "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\LabelController::store"
               }
             },
@@ -329,6 +329,28 @@
                   "required": [
                     "parcel",
                     "printer"
+                  ]
+                }
+              }
+            },
+            "links": {
+              "LabelledParcel": {
+                "description": "The parcel the label is for.",
+                "operationId": "get.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/parcel"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "attribute",
+                      "layer": "attribute",
+                      "source": {
+                        "file": "tests/Fixtures/ResponseLinks/LabelController.php",
+                        "line": 20,
+                        "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\LabelController::store"
+                      }
+                    }
                   ]
                 }
               }
@@ -3113,7 +3135,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "6deb8a7bbce794dc693eb2fce6ce893ccea933d0abd4efe4ea3f09b526e35365"
+      "contentHash": "87e64268f04af1a000c8774c3ece265bd4cdfa961071e3ece9071d3956097e6e"
     },
     "generator": {
       "name": "docuccino/laravel",
