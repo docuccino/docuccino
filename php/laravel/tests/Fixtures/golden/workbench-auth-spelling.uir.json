@@ -275,6 +275,13 @@
               "fields": [
                 "operationId"
               ]
+            },
+            {
+              "producer": "integration:security",
+              "layer": "integration",
+              "fields": [
+                "security"
+              ]
             }
           ],
           "uses": {
@@ -305,6 +312,11 @@
         "description": "Returns the collection of forms visible to the caller.",
         "tags": [
           "Forms"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ],
         "responses": {
           "200": {
@@ -416,7 +428,7 @@
     "document": {
       "id": "doc:spelling",
       "configHash": "d45f9ec9ecbb16025a4f461fe3930d42d91e02270892c582a516693901e6961b",
-      "contentHash": "78ad1c8862520050dcff36fb5bf0ce9b18bd3a6b49461f0f8f0942c01c734439"
+      "contentHash": "5d6e4218c0ccf5958daff0d55a98ddde00edb9e8ea287d8ba4d4515ef79d76b7"
     },
     "generator": {
       "name": "docuccino/laravel",

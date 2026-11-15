@@ -641,6 +641,18 @@
               "fields": [
                 "operationId"
               ]
+            },
+            {
+              "producer": "integration:passport",
+              "layer": "integration",
+              "fields": [
+                "security"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/FormController.php",
+                "line": 25,
+                "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
+              }
             }
           ]
         },
@@ -649,6 +661,11 @@
         "description": "Returns the collection of forms visible to the caller.",
         "tags": [
           "Forms"
+        ],
+        "security": [
+          {
+            "passport": []
+          }
         ],
         "responses": {
           "200": {
@@ -1002,6 +1019,18 @@
               "fields": [
                 "operationId"
               ]
+            },
+            {
+              "producer": "integration:sanctum",
+              "layer": "integration",
+              "fields": [
+                "security"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/FormController.php",
+                "line": 25,
+                "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
+              }
             }
           ]
         },
@@ -1010,6 +1039,11 @@
         "description": "Returns the collection of forms visible to the caller.",
         "tags": [
           "Forms"
+        ],
+        "security": [
+          {
+            "sanctumToken": []
+          }
         ],
         "responses": {
           "200": {
@@ -1115,7 +1149,7 @@
     "document": {
       "id": "doc:wave-d-auth",
       "configHash": "8547b39dbe461c3bd22293a7d4d22e89f6281fe06c7f02efb8f7fd1ef40c8c60",
-      "contentHash": "4f8f553a044f1ff6c89c0ded1cc7dac8dd2d9bd9cc05cd2f7bc9a966d223d7b9"
+      "contentHash": "2b4e4775dcfb13b26db854ff735eb94f1ee3b2f4ade3a1eaaaf4198595c12e4b"
     },
     "generator": {
       "name": "docuccino/laravel",
