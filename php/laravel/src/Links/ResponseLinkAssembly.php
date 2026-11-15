@@ -12,18 +12,20 @@ use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Links\OperationLinks;
 use Docuccino\Core\Links\ResponseLinks;
+use Docuccino\Laravel\Versioning\ApiVersionTransformer;
 
 /**
  * Turns what each operation recorded about its links ({@see ResponseLinkFacts}) into response `links`,
  * through core's {@see ResponseLinks}. The observation rides the fragment and the join does not, so a warm
  * build writes the links a cold one does.
  *
- * Late, after API versioning, so a link never names an operation an older version does not serve, nor a
- * member it renamed: the join reads the document that will be emitted.
+ * After API versioning, so a link never names an operation an older version does not serve, nor a member
+ * it renamed: the join reads the document that will be emitted. The edge is explicit because both are
+ * late, and a tie between them would otherwise go to the class name.
  *
  * @internal
  */
-#[ExtensionOrder(priority: Priorities::LATE)]
+#[ExtensionOrder(priority: Priorities::LATE, after: [ApiVersionTransformer::class])]
 final class ResponseLinkAssembly implements DocumentTransformer, RouteNoteCollector
 {
     /** @var array<string, list<string>> signature → the facts its routes recorded */

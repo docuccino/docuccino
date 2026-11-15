@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Emit\UirEmitter;
+use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
+use Docuccino\Core\Extensions\Ordering\ExtensionSorter;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
@@ -14,6 +16,7 @@ use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
+use Docuccino\Laravel\Links\ResponseLinkAssembly;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\BranchingCrateResource;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Crate;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\CrateController;
@@ -29,6 +32,8 @@ use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Scan;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ScanController;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ScanResource;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
+use Docuccino\Laravel\Versioning\ApiVersionTransformer;
+use Docuccino\Laravel\Workflows\WorkflowAssembly;
 use Illuminate\Routing\Router;
 
 /**
@@ -162,6 +167,62 @@ it('links a resource to its own other routes', function (): void {
     ])
         ->and($links['patch.api.parcels.@parcel']['parameters'])->toBe(['parcel' => '$response.body#/data/id']);
 });
+
+/**
+ * An older version's document is a contract of its own: a client reading it can call only what that
+ * version serves and read only what it sends. So a link in it names an operation that version publishes
+ * and reads a member under the name that version gives it — the join reads the versioned document.
+ */
+it('links only what the version it documents publishes', function (string $changes, Closure $applied, string $gone, string $absent): void {
+    setDocuments(['default' => [
+        ...documentSettings(),
+        'info' => ['title' => 'Parcels', 'version' => '2026-06-01'],
+        'api_version' => ['changes' => [dirname(__DIR__).'/Fixtures/ResponseLinks/Versions/'.$changes]],
+    ]]);
+
+    $document = emittedArray(localityBuild($this->routes, $this->engine));
+    $links = $document['paths']['/api/parcels']['post']['responses']['200']['links'];
+
+    // The change took effect, and what it left alone is still linked: the row is not passing on a build
+    // that versioned nothing, or linked nothing.
+    expect($applied($document))->toBeTrue()
+        ->and($links['patch.api.parcels.@parcel']['parameters'])->toBe(['parcel' => '$response.body#/data/id'])
+        ->and($links)->not->toHaveKey($gone)
+        ->and(json_encode($document, JSON_UNESCAPED_SLASHES))->not->toContain($absent);
+})->with([
+    // The read route arrived later: the older document does not publish it, so nothing may lead there.
+    'an operation a later version added' => [
+        'ReadBackAdded',
+        static fn (array $document): bool => ! isset($document['paths']['/api/parcels/{parcel}']['get']),
+        'get.api.parcels.@parcel',
+        '"operationId":"get.api.parcels.@parcel"',
+    ],
+    // The older resource sends `tracking_code`, so a pointer at `/data/tracking` reads nothing it sends.
+    // The bare model is not the renamed resource, so its own `/tracking` link stands.
+    'a member a later version renamed' => [
+        'TrackingRenamed',
+        static fn (array $document): bool => str_contains((string) json_encode($document['components']['schemas']['ParcelResource']), '"tracking_code"')
+            && isset($document['paths']['/api/raw-parcels']['post']['responses']['200']['links']['get.api.tracked-parcels.@parcel']),
+        'get.api.tracked-parcels.@parcel',
+        'body#/data/tracking"',
+    ],
+]);
+
+/**
+ * Versioning and the joins over its output all run late, and a tie at one priority goes to the class
+ * name. So each join owes versioning a hard edge: without one, renaming a class would decide whether an
+ * older version's document names operations and members that version never had.
+ */
+it('joins over the versioned document whatever the joins are called', function (string $join): void {
+    $order = (new ReflectionClass($join))->getAttributes(ExtensionOrder::class)[0]->newInstance();
+    $sorted = (new ExtensionSorter)->sort([app($join), app(ApiVersionTransformer::class)]);
+
+    expect($order->after)->toContain(ApiVersionTransformer::class)
+        ->and(array_map(static fn (object $extension): string => $extension::class, $sorted))->toBe([ApiVersionTransformer::class, $join]);
+})->with([
+    'response links' => [ResponseLinkAssembly::class],
+    'workflows' => [WorkflowAssembly::class],
+]);
 
 /**
  * A scoped child resolves only within its parent, so a scan id from any other parcel 404s. The parent a

@@ -19,6 +19,7 @@ use Docuccino\Core\Extensions\Contracts\RouteNoteCollector;
 use Docuccino\Core\Extensions\Document\UirDocumentDraft;
 use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
+use Docuccino\Laravel\Versioning\ApiVersionTransformer;
 
 /**
  * Turns what each operation said about the workflows it takes part in into the document's
@@ -35,11 +36,12 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
  *
  * A step whose operation this document does not publish is dropped in silence. That is the multi-document
  * case rather than a mistake — one workflow's steps can live in documents that do not overlap — and a
- * warning there would fire on every build of every application that splits its routes.
+ * warning there would fire on every build of every application that splits its routes. It runs after API
+ * versioning, so "publish" means what the version being documented publishes.
  *
  * @internal
  */
-#[ExtensionOrder(priority: Priorities::LATE)]
+#[ExtensionOrder(priority: Priorities::LATE, after: [ApiVersionTransformer::class])]
 final class WorkflowAssembly implements DocumentTransformer, RouteNoteCollector
 {
     /** What a workflow id and a step id may be spelled with, which is Arazzo's own character set. */
