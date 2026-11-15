@@ -238,7 +238,7 @@
             },
             "name": "filter[scores]",
             "in": "query",
-            "description": "Exact match on `scores`.",
+            "description": "Exact match on `scores`. Defaults to `10`, `20`.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -307,7 +307,9 @@
                 ]
               },
               "type": "array",
-              "default": "published",
+              "default": [
+                "published"
+              ],
               "items": {
                 "$ref": "#/components/schemas/WidgetStatus"
               }
@@ -360,7 +362,10 @@
                 ]
               },
               "type": "array",
-              "default": "draft,published",
+              "default": [
+                "draft",
+                "published"
+              ],
               "items": {
                 "$ref": "#/components/schemas/WidgetStatus"
               }
@@ -400,6 +405,7 @@
                     "producer": "integration:query-builder",
                     "layer": "integration",
                     "fields": [
+                      "default",
                       "items",
                       "type"
                     ],
@@ -412,6 +418,10 @@
                 ]
               },
               "type": "array",
+              "default": [
+                "draft",
+                "published"
+              ],
               "items": {
                 "$ref": "#/components/schemas/WidgetStatus"
               }
@@ -440,7 +450,7 @@
             },
             "name": "filter[unset_status]",
             "in": "query",
-            "description": "Exact match on `unset_status`. Accepts a comma-separated list of values (matched as `whereIn`).",
+            "description": "Exact match on `unset_status`. Accepts a comma-separated list of values (matched as `whereIn`). Accepts `null` to filter for absent values. Defaults to `null`.",
             "required": false,
             "style": "form",
             "explode": false,
@@ -613,7 +623,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "bb5003cbab4f636ca377665f09b8385b655690adb6f29fc91943097dceec05ee"
+      "contentHash": "86642ec749fccaff2e0ac395227c7e1780860ae1d572d6d606cee8f83166d586"
     },
     "generator": {
       "name": "docuccino/laravel",
