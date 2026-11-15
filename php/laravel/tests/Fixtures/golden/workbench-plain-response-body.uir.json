@@ -358,7 +358,7 @@
           "uses": {
             "responses": {
               "410": {
-                "id": "res:v1:ycx4dlkinynl6lbp",
+                "id": "res:v1:egnesh5q5l3efc6m",
                 "provenance": [
                   {
                     "producer": "fallback",
@@ -379,7 +379,7 @@
         ],
         "responses": {
           "410": {
-            "$ref": "#/components/responses/Error410_mt2mrnoe"
+            "$ref": "#/components/responses/Error410_hcdqg4mp"
           }
         }
       }
@@ -689,7 +689,7 @@
           "uses": {
             "responses": {
               "410": {
-                "id": "res:v1:xe7ijsarx5fs5cuv",
+                "id": "res:v1:ybroni7ho72shale",
                 "provenance": [
                   {
                     "producer": "fallback",
@@ -710,7 +710,7 @@
         ],
         "responses": {
           "410": {
-            "$ref": "#/components/responses/Error410_mt2mrnoe"
+            "$ref": "#/components/responses/Error410_hcdqg4mp"
           }
         }
       }
@@ -756,7 +756,7 @@
         "responses": {
           "200": {
             "x-docuccino": {
-              "id": "res:v1:5yvdzwzah2llyap4",
+              "id": "res:v1:w4lbtlgfifki44k2",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -769,7 +769,7 @@
             },
             "description": "OK",
             "content": {
-              "text/csv": {
+              "*/*": {
                 "schema": {}
               }
             }
@@ -818,6 +818,7 @@
         "responses": {
           "200": {
             "x-docuccino": {
+              "id": "res:v1:fhegf4yi7qtu54g4",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -828,7 +829,12 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {}
+              }
+            }
           }
         }
       }
@@ -1420,23 +1426,7 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "410": {
-                "id": "res:v1:ckwlwzg7o463fhkl",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "description"
-                    ]
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "get.api.notices.symfony-cached",
         "summary": "Read the transport's cached notice.",
@@ -1445,7 +1435,24 @@
         ],
         "responses": {
           "410": {
-            "$ref": "#/components/responses/Error410_mt2mrnoe"
+            "x-docuccino": {
+              "id": "res:v1:uxno6lhksaqgiztw",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Gone",
+            "content": {
+              "text/html": {
+                "schema": {}
+              }
+            }
           }
         }
       }
@@ -1487,10 +1494,10 @@
           }
         }
       },
-      "Error410_mt2mrnoe": {
+      "Error410_hcdqg4mp": {
         "description": "Gone",
         "content": {
-          "application/json": {
+          "*/*": {
             "schema": {}
           }
         }
@@ -1511,7 +1518,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "0df932ad9c4a647bd9cac84accceb7e90006dadad89fd0698d9aac1052ebf567"
+      "contentHash": "8e5779b8e4a5e4bfab21c6fb46db548be8e608cda862fdee0b8f1c05562c5f12"
     },
     "generator": {
       "name": "docuccino/laravel",
