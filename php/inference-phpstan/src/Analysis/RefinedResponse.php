@@ -152,6 +152,15 @@ final readonly class RefinedResponse
     }
 
     /**
+     * The body once something this cannot read may have rewritten it: nothing of the one it was built with
+     * stands, so none is claimed.
+     */
+    public function withUnreadBody(): self
+    {
+        return new self(null, $this->status, $this->statusSource, $this->contentType, $this->delegates, [], null, $this->component, $this->statusOfPayload, $this->statusUnread, transport: $this->transport);
+    }
+
+    /**
      * Re-home a pass-through status onto an outer callee's parameter: the inner callee read its status from
      * parameter X, the outer call passed its own Y into X, so from out there the status reads through Y.
      */

@@ -9,6 +9,8 @@ use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\UnionT;
+use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
@@ -34,17 +36,21 @@ function statementStatusReturns(): array
     $sent = static fn (DType $body, int $status): ClassT => new ClassT($json, [$body, new LiteralT($status)]);
 
     return [
-        'queue' => $sent($queued(true), 200),
-        'note' => new ClassT($json, [new LiteralT('queued'), new LiteralT(200), new LiteralT('text/html')]),
-        'stream' => new ClassT('Symfony\\Component\\HttpFoundation\\StreamedResponse'),
-        'forward' => new ClassT('Illuminate\\Http\\RedirectResponse'),
-        'defer' => $sent($queued(true), 200),
-        'retry' => $sent($queued(true), 200),
+        // The status a statement sets on its own line, as it would chained onto the call that built it.
+        'queue' => $sent($queued(true), 202),
+        'note' => new ClassT($json, [new LiteralT('queued'), new LiteralT(202), new LiteralT('text/html')]),
+        'stream' => new ClassT('Symfony\\Component\\HttpFoundation\\StreamedResponse', [new UnknownT('payload not folded'), new LiteralT(202)]),
+        'forward' => new ClassT('Illuminate\\Http\\RedirectResponse', [new UnknownT('payload not folded'), new LiteralT(303)]),
+        // Set on one branch: sent with either.
+        'defer' => new ClassT($json, [$queued(true), UnionT::of([new LiteralT(200), new LiteralT(202)])]),
+        // The last one to run is the one sent.
+        'retry' => $sent($queued(true), 202),
         'restart' => $sent(new ArrayShapeT([new ArrayShapeField('created', new LiteralT(true))]), 201),
-        'hand' => $sent($queued(true), 200),
-        'relay' => $sent($queued(true), 200),
-        'csv' => new ClassT($json, [new LiteralT('id,total'), new LiteralT(202), new LiteralT('text/html')]),
-        'refuse' => $sent($queued(false), 200),
+        // A helper the build does not follow may have changed anything, so nothing it was built with stands.
+        'hand' => new ClassT($json, [new UnknownT('payload not folded'), new UnknownT('status not folded')]),
+        'relay' => new ClassT($json, [$queued(true), new UnknownT('status not folded')]),
+        'csv' => new ClassT($json, [new LiteralT('id,total'), new LiteralT(202), new LiteralT('text/csv')]),
+        'refuse' => $sent($queued(false), 409),
     ];
 }
 

@@ -69,6 +69,8 @@ use ReflectionClass;
  * narrower descend scope throws/QB-trace use; every file touched is reported via {@see takeFiles()} so
  * the fragment cache stays sound.
  *
+ * @phpstan-import-type Restated from LocalRestatements
+ *
  * @internal
  */
 final class ResponseShapeRefiner
@@ -273,6 +275,9 @@ final class ResponseShapeRefiner
         if ($expr instanceof Node\Expr\New_ || $this->fluentChain->peel($expr, $scope) !== null) {
             return true;
         }
+        if ($expr instanceof Node\Expr\Variable) {
+            return $this->restated($expr, $scope) !== null;
+        }
 
         $status = $expr instanceof Node\Expr\MethodCall || $expr instanceof Node\Expr\StaticCall ? $this->factoryStatus($expr, $scope) : null;
         if ($status === null) {
@@ -322,6 +327,25 @@ final class ResponseShapeRefiner
             }
         }
 
+        // 0b. A local whose later statements restate what the chain would have (`$r->setStatusCode(202);`):
+        // the response as it was built, with those statements laid over it in the order they ran.
+        if ($expr instanceof Node\Expr\Variable) {
+            $restated = $this->restated($expr, $scope);
+            if ($restated !== null) {
+                return $this->restate($this->refineBuilt($expr, $scope, $paramNames, $depth) ?? $this->bare($expr, $scope), $restated, $expr);
+            }
+        }
+
+        return $this->refineBuilt($expr, $scope, $paramNames, $depth);
+    }
+
+    /**
+     * The response as the expression builds it, before anything after it restates a part of it.
+     *
+     * @param  list<string>  $paramNames
+     */
+    private function refineBuilt(Node\Expr $expr, Scope $scope, array $paramNames, int $depth): ?RefinedResponse
+    {
         // 1. `new JsonResponse($body, $status, [headers])` — fold the constructor arguments directly — or
         // `new GoneResponse(…)`, whose own constructor hands its framework parent the status and body.
         if ($expr instanceof Node\Expr\New_ && $expr->class instanceof Node\Name) {
@@ -602,6 +626,67 @@ final class ResponseShapeRefiner
         }
 
         return $this->refineExpr($assigned, $this->fileAnalyzer->stableScope($assignedScope), $paramNames, $depth);
+    }
+
+    /**
+     * What the statements ahead of a returned local restate about the response it holds
+     * ({@see LocalRestatements}), or null where they restate nothing. A parameter, or `$this`, holds a
+     * response someone else built, which is not the one this reads.
+     *
+     * @return Restated|null
+     */
+    private function restated(Node\Expr\Variable $local, Scope $scope): ?array
+    {
+        if (! is_string($local->name) || $local->getStartFilePos() < 0 || in_array($local->name, ['this', ...self::ownParameters($scope)], true)) {
+            return null;
+        }
+        $type = $this->translator->translate($scope->getType($local));
+        if (! $type instanceof ClassT || ! $this->isRefinable($type->fqcn)) {
+            return null;
+        }
+
+        $file = $scope->getFile();
+        $body = $this->fileAnalyzer->bodyAround($file, $local->getStartFilePos());
+        if ($body === null) {
+            return null;
+        }
+
+        $restatements = new LocalRestatements(
+            function (Node\Expr\MethodCall $call) use ($file): ?array {
+                $at = $this->fileAnalyzer->scopeAtCall($file, $call);
+
+                return $at === null ? null : $this->fluentChain->peel($call, $at);
+            },
+            fn (int $at, ?Node\Expr\MethodCall $madeOn): bool => $this->fileAnalyzer->keepsAt($file, $at, $madeOn, $this->touchProject(...)),
+        );
+
+        return $restatements->before($body, $local->name, $local->getStartFilePos());
+    }
+
+    /**
+     * A response with what later statements restated laid over it. A status set only on some paths joins the
+     * one the response already had, which therefore has to be one this read: a status a parameter or the
+     * payload decides cannot be joined, and is unknown.
+     *
+     * @param  Restated  $restated
+     */
+    private function restate(RefinedResponse $built, array $restated, Node\Expr\Variable $local): ?RefinedResponse
+    {
+        $built = $restated['bodyUnknown'] ? $built->withUnreadBody() : $built;
+        [$status, $unknown] = [$restated['status'], $restated['statusUnknown']];
+        if ($restated['mayAlsoBe'] !== [] && ! $unknown) {
+            $before = $status ?? ($built->statusSource === null && ! $built->statusOfPayload ? $built->status : null);
+            $joined = $before === null ? null : UnionT::of([$before, ...$restated['mayAlsoBe']]);
+            [$status, $unknown] = $joined instanceof LiteralT || $joined instanceof UnionT ? [$joined, false] : [null, true];
+        }
+
+        return ResponseArms::laid($built, [
+            'receiver' => $local,
+            'status' => $status,
+            'statusUnknown' => $unknown,
+            'contentType' => $restated['contentType'],
+            'contentTypeUnknown' => $restated['contentTypeUnknown'],
+        ]);
     }
 
     /**
