@@ -510,6 +510,11 @@ in the file being walked, and an array return is no type the trace follows:
   case it is handed or not, a class two
   levels below the framework each way, and a class built by static factories through `new self` and
   `new static`.
+- `app/Exceptions/Rfc9457/` — an RFC 9457 handler as an application registers it: a render callback
+  handing every error to a static helper whose `match` picks a readonly `Problem` (built in an arm, by a
+  helper handed the exception, by a factory, or carried on the exception itself), which the framework
+  sends through the problem's own `toResponse()` as `application/problem+json` with its extension members
+  spread in; and the same helper sending the problem itself behind a nullable `JsonResponse`.
 - `app/Http/Controllers/DashboardPageController.php` — a Blade page: `view('…')` behind a declared
   `: View` (the contract) and behind no return type at all. Proof that the engine hands back the CONCRETE
   `Illuminate\View\View` either way, so recognising only the contract would miss every real app.
