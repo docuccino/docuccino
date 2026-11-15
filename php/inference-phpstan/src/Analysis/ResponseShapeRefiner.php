@@ -747,8 +747,8 @@ final class ResponseShapeRefiner
      *
      * Deliberately narrow, because a wrong answer here is a body the endpoint never sends: only a local
      * the method assigns EXACTLY ONCE ({@see FileAnalyzer::localAssignments()}) — two branches writing one
-     * variable are not described by either — and never one assigned from another local, which says nothing
-     * this call has not already asked and is how a self-assignment would never end.
+     * variable are not described by either — never one assigned from another local, which says nothing
+     * this call has not already asked, and only for a read written after the assignment ({@see assignment()}).
      *
      * The depth is the caller's: naming a value is not a call hop, and the descent the assignment may
      * itself be counts its own.
@@ -763,7 +763,10 @@ final class ResponseShapeRefiner
     }
 
     /**
-     * The one expression a local is assigned ({@see refineLocal()}), and the scope it is assigned in.
+     * The one expression a local is assigned ({@see refineLocal()}), and the scope it is assigned in. Null for
+     * a read written before the assignment ends: `$response` inside `$response = $response->header(…)` is the
+     * response the local held before, a parameter's or nothing, which this assignment does not describe. So
+     * each local followed lies wholly before the read that followed it, and no chain of them comes back round.
      *
      * @return array{Node\Expr, Scope}|null
      */
@@ -775,7 +778,10 @@ final class ResponseShapeRefiner
         }
 
         $assignment = $this->fileAnalyzer->localAssignments($scope->getFile())[$key][$local->name] ?? null;
-        if ($assignment === null || $assignment[0] instanceof Node\Expr\Variable) {
+        if ($assignment === null
+            || $assignment[0] instanceof Node\Expr\Variable
+            || $assignment[0]->getEndFilePos() >= $local->getStartFilePos()
+        ) {
             return null;
         }
 

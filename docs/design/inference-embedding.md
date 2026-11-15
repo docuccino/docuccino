@@ -381,6 +381,10 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    whatever its arguments hold by then, which is how a shape stops being true. Only for a local the method
    assigns EXACTLY ONCE: two branches writing one variable are described by neither, and picking one would
    publish a body the other branch never sends. Naming a value is not a call hop, so it costs no depth.
+   And only for a read written AFTER the assignment: the `$response` in `$response = $response->header(…)`
+   holds what the local held before (a helper's parameter), not the assignment it sits in. That rule is also
+   what bounds the walk without a depth: each local followed lies wholly before the read that followed it,
+   so no chain of locals, however they name each other, comes back round.
 
    "Once" has to mean once in the language, not once in one node type. `Docuccino\Core\Inference\LocalWrites`
    is the single grammar both this harvest and the adapter's page-size reader ask — the plain `=` is the only
