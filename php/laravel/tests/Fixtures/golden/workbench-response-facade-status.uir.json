@@ -188,9 +188,8 @@
           "ArchiveFacade"
         ],
         "responses": {
-          "200": {
+          "410": {
             "x-docuccino": {
-              "id": "res:v1:ee2xnnpiyhvkeebq",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -201,12 +200,7 @@
                 }
               ]
             },
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+            "description": "Gone"
           }
         }
       }
@@ -242,7 +236,23 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "422": {
+                "id": "res:v1:kwrlqxpinq2vg2eu",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "description"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.archive-facade.refuse",
         "summary": "Refuse to change a locked archive.",
@@ -251,49 +261,7 @@
         ],
         "responses": {
           "422": {
-            "x-docuccino": {
-              "id": "res:v1:kwrlqxpinq2vg2eu",
-              "provenance": [
-                {
-                  "producer": "fallback",
-                  "layer": "fallback",
-                  "fields": [
-                    "description"
-                  ]
-                }
-              ]
-            },
-            "description": "Unprocessable Entity",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "x-docuccino": {
-                    "provenance": [
-                      {
-                        "producer": "inference",
-                        "layer": "inference",
-                        "fields": [
-                          "properties",
-                          "required",
-                          "type"
-                        ],
-                        "confidence": 1
-                      }
-                    ]
-                  },
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string",
-                      "const": "locked"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ]
-                }
-              }
-            }
+            "$ref": "#/components/responses/Error422"
           }
         }
       }
@@ -329,7 +297,23 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "422": {
+                "id": "res:v1:vfeacclqjaiz4chb",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "description"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.archive-facade.refuse-aliased",
         "summary": "Refuse to change a locked archive, through the root-namespace alias.",
@@ -337,25 +321,8 @@
           "ArchiveFacade"
         ],
         "responses": {
-          "200": {
-            "x-docuccino": {
-              "id": "res:v1:vz6tg54nyh5bm43s",
-              "provenance": [
-                {
-                  "producer": "fallback",
-                  "layer": "fallback",
-                  "fields": [
-                    "description"
-                  ]
-                }
-              ]
-            },
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+          "422": {
+            "$ref": "#/components/responses/Error422"
           }
         }
       }
@@ -391,7 +358,23 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "422": {
+                "id": "res:v1:7jpkihselbwxlmuu",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "description"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.archive-facade.refuse-by-reply",
         "summary": "Refuse to change a locked archive, through the application's own alias.",
@@ -399,25 +382,8 @@
           "ArchiveFacade"
         ],
         "responses": {
-          "200": {
-            "x-docuccino": {
-              "id": "res:v1:xfrvsgrttli3dr7f",
-              "provenance": [
-                {
-                  "producer": "fallback",
-                  "layer": "fallback",
-                  "fields": [
-                    "description"
-                  ]
-                }
-              ]
-            },
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+          "422": {
+            "$ref": "#/components/responses/Error422"
           }
         }
       }
@@ -642,11 +608,42 @@
       }
     }
   },
+  "components": {
+    "schemas": {
+      "Error422": {
+        "x-docuccino": {
+          "id": "sch:v1:nzqr7bijbjezgqtr"
+        },
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "const": "locked"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      }
+    },
+    "responses": {
+      "Error422": {
+        "description": "Unprocessable Entity",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error422"
+            }
+          }
+        }
+      }
+    }
+  },
   "x-docuccino": {
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "d0db80eac053b9094ddb33e5ec711ce4d339a99c48130139d476af2a2cff8daa"
+      "contentHash": "554404120d22f63247b275e2c24661b8461e6359e491263bed9e5a1b82cf9eaa"
     },
     "generator": {
       "name": "docuccino/laravel",
