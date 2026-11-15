@@ -86,6 +86,7 @@
                   "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "explode",
                     "required",
                     "style"
@@ -100,7 +101,7 @@
             },
             "name": "filter[status]",
             "in": "query",
-            "description": "The state to list.",
+            "description": "The state to list.\n\nAccepts a comma-separated list of values (matched as `whereIn`). Accepts `null` to filter for absent values.",
             "required": false,
             "style": "form",
             "explode": false,
@@ -582,19 +583,13 @@
                     "file": "tests/Fixtures/DescribedNotes/ListingController.php",
                     "line": 17,
                     "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\DescribedNotes\\ListingController::index"
-                  },
-                  "overrode": [
-                    {
-                      "field": "description",
-                      "value": "Must not be sent when kind is business.",
-                      "producer": "integration:form-request"
-                    }
-                  ]
+                  }
                 },
                 {
                   "producer": "integration:form-request",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "required"
                   ],
                   "source": {
@@ -607,7 +602,7 @@
             },
             "name": "nickname",
             "in": "query",
-            "description": "What the lister goes by.",
+            "description": "What the lister goes by.\n\nMust not be sent when kind is business.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -647,7 +642,7 @@
                   "overrode": [
                     {
                       "field": "description",
-                      "value": "How far through review a submission has got. Required when name is present.",
+                      "value": "How far through review a submission has got.",
                       "producer": "integration:form-request"
                     }
                   ]
@@ -656,6 +651,7 @@
                   "producer": "integration:form-request",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "required"
                   ],
                   "source": {
@@ -668,7 +664,7 @@
             },
             "name": "stage",
             "in": "query",
-            "description": "The stage to list.",
+            "description": "The stage to list.\n\nRequired when name is present.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -721,19 +717,13 @@
                     "file": "tests/Fixtures/DescribedNotes/ListingController.php",
                     "line": 17,
                     "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\DescribedNotes\\ListingController::index"
-                  },
-                  "overrode": [
-                    {
-                      "field": "description",
-                      "value": "Must be a date after from.",
-                      "producer": "integration:form-request"
-                    }
-                  ]
+                  }
                 },
                 {
                   "producer": "integration:form-request",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "required"
                   ],
                   "source": {
@@ -746,7 +736,7 @@
             },
             "name": "until",
             "in": "query",
-            "description": "End of the range.",
+            "description": "End of the range.\n\nMust be a date after from.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -839,7 +829,7 @@
                               "type": "string"
                             },
                             "stage": {
-                              "description": "How far through review a submission has got. Required when name is present.",
+                              "description": "How far through review a submission has got.\n\nRequired when name is present.",
                               "enum": [
                                 "queued",
                                 "approved"
@@ -925,7 +915,7 @@
                     "type": "string"
                   },
                   "name": {
-                    "description": "Who to look for.",
+                    "description": "Who to look for.\n\nMust start with one of: ab, cd.",
                     "type": "string",
                     "example": "abexample"
                   },
@@ -934,7 +924,7 @@
                     "type": "string"
                   },
                   "stage": {
-                    "description": "How far through review a submission has got. Required when name is present.",
+                    "description": "How far through review a submission has got.\n\nRequired when name is present.",
                     "type": "string",
                     "enum": [
                       "queued",
@@ -951,7 +941,7 @@
                     ]
                   },
                   "until": {
-                    "description": "End of the range.",
+                    "description": "End of the range.\n\nMust be a date after from.",
                     "type": "string",
                     "format": "date"
                   }
@@ -1339,7 +1329,7 @@
             },
             "name": "stage",
             "in": "query",
-            "description": "How far through review a submission has got. Required when name is present.",
+            "description": "How far through review a submission has got.\n\nRequired when name is present.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -1607,7 +1597,7 @@
             },
             "name": "nickname",
             "in": "query",
-            "description": "What the lister goes by.",
+            "description": "What the lister goes by.\n\nMust not be sent when kind is business.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -1650,7 +1640,7 @@
             },
             "name": "until",
             "in": "query",
-            "description": "End of the range.",
+            "description": "End of the range.\n\nMust be a date after from.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -1829,11 +1819,11 @@
             "type": "string"
           },
           "nickname": {
-            "description": "What the lister goes by.",
+            "description": "What the lister goes by.\n\nMust not be sent when kind is business.",
             "type": "string"
           },
           "until": {
-            "description": "End of the range.",
+            "description": "End of the range.\n\nMust be a date after from.",
             "type": "string"
           }
         },
@@ -1853,7 +1843,7 @@
             "example": "2024-01-01"
           },
           "until": {
-            "description": "End of the range.",
+            "description": "End of the range.\n\nMust be a date after from.",
             "type": "string",
             "format": "date"
           }
@@ -1914,7 +1904,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "8f7eeda32123d2dee5fba7c0722222043d8ddbf9b8453f13b0703604d4a1472a",
-      "contentHash": "f028c109260deb99948eda74f0ef24f77a01d4723e63e3a7701dfe4fd95babc6"
+      "contentHash": "ab57e3a13b009c154c04ff1fe3d46ee3886002fb345e7c544a2e85230d7417e4"
     },
     "generator": {
       "name": "docuccino/laravel",
