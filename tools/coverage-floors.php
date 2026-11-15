@@ -117,11 +117,15 @@ const FLOORS = [
     // Re-recorded 59.03 → 58.74 when a response thrown for the framework to send came to be read as a
     // return: the throw analysis that finds it runs only under real analysis, the fixture group's, and the
     // refiner it reads the response through was already measured as far as it can be in process.
-    // Measured 58.74% (2907/4949): 58% of it is 2870.42 statements, 36.58 of margin.
+    // Re-recorded 58.74 → 58.96 when a helper written as a function came to be resolved and read: the
+    // parameter lookup the refiner and the return folder share moved onto `Callee`, where a function's is
+    // read by name, and is unit-tested in process; the descent into the function's body is the fixture
+    // group's. 59 is out of reach: 59% of the denominator is 2925.81 statements, above the 2924 covered.
+    // Measured 58.96% (2924/4959): 58% of it is 2876.22 statements, 47.78 of margin.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads 3 statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 58, 'measured' => 58.74],
+    'inference-phpstan' => ['floor' => 58, 'measured' => 58.96],
 ];
 
 /*
