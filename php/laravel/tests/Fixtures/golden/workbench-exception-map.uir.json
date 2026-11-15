@@ -195,15 +195,14 @@
               }
             }
           },
-          "500": {
+          "423": {
             "x-docuccino": {
-              "id": "res:v1:oyyij3uneoqpojit",
+              "id": "res:v1:5ngbip5qo2qd6zd4",
               "provenance": [
                 {
-                  "producer": "fallback",
-                  "layer": "fallback",
+                  "producer": "integration:inferred-handler",
+                  "layer": "integration",
                   "fields": [
-                    "component",
                     "description"
                   ],
                   "source": {
@@ -212,20 +211,17 @@
                     "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
                   }
                 }
-              ],
-              "facts": {
-                "component": "InternalServerError"
-              }
+              ]
             },
-            "description": "Internal Server Error",
+            "description": "Locked",
             "content": {
               "application/json": {
                 "schema": {
                   "x-docuccino": {
                     "provenance": [
                       {
-                        "producer": "fallback",
-                        "layer": "fallback",
+                        "producer": "integration:inferred-handler",
+                        "layer": "integration",
                         "fields": [
                           "properties",
                           "required",
@@ -241,13 +237,17 @@
                   },
                   "type": "object",
                   "properties": {
-                    "message": {
-                      "type": "string"
+                    "error": {
+                      "type": "string",
+                      "const": "gone_elsewhere"
                     }
                   },
                   "required": [
-                    "message"
+                    "error"
                   ]
+                },
+                "example": {
+                  "error": "gone_elsewhere"
                 }
               }
             }
@@ -506,7 +506,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "06a818cd8555d32df6746b3f66a5f6ec34a3d5bfad03374e23ae030b1f36f9f6"
+      "contentHash": "99959ad0e09366fc85090aa283f64acf7e515367c8a618d1209b2845631d5f6e"
     },
     "generator": {
       "name": "docuccino/laravel",
