@@ -21,7 +21,7 @@ beforeEach(function (): void {
 });
 
 it('reads a failed validation’s messages as each field’s list of messages, however they are reached', function (): void {
-    $methods = ['exceptionErrors', 'inheritedErrors', 'bagMessages', 'bagArray', 'overriddenErrors'];
+    $methods = ['exceptionErrors', 'inheritedErrors', 'bagMessages', 'bagArray', 'bagJson', 'overriddenErrors'];
     $read = [];
     foreach (FixtureRunner::analyzeMany('app/Http/Controllers/ValidationErrorsController.php', 'App\\Http\\Controllers\\ValidationErrorsController', $methods) as $method => $raw) {
         $analysis = ActionAnalysis::fromArray($raw);
@@ -40,7 +40,9 @@ it('reads a failed validation’s messages as each field’s list of messages, h
         // A subclass that leaves `errors()` alone sends the framework's map.
         'inheritedErrors' => $byField,
         'bagMessages' => $byField,
+        // A release that declares these a bare `array` reads them as the same map.
         'bagArray' => $byField,
+        'bagJson' => $byField,
         // One that overrides it sends what its override returns.
         'overriddenErrors' => (new ListT(ScalarT::string()))->toArray(),
     ]);

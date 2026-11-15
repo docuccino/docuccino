@@ -32,6 +32,11 @@ final class ValidationErrorsController
         return response()->json(['errors' => $e->validator->errors()->toArray()], 422);
     }
 
+    public function bagJson(ValidationException $e): JsonResponse
+    {
+        return response()->json(['errors' => $e->validator->errors()->jsonSerialize()], 422);
+    }
+
     public function overriddenErrors(FlatValidationException $e): JsonResponse
     {
         return response()->json(['errors' => $e->errors()], 422);
