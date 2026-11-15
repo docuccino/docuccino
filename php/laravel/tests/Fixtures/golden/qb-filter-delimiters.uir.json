@@ -46,9 +46,7 @@
                   "layer": "integration",
                   "fields": [
                     "description",
-                    "explode",
-                    "required",
-                    "style"
+                    "required"
                   ],
                   "source": {
                     "file": "tests/Fixtures/QueryBuilder/FilterDelimitersController.php",
@@ -60,10 +58,8 @@
             },
             "name": "filter[default_then_piped]",
             "in": "query",
-            "description": "Exact match on `default_then_piped`. Accepts a comma-separated list of values (matched as `whereIn`).",
+            "description": "Exact match on `default_then_piped`. Accepts a `|`-separated list of values (matched as `whereIn`).",
             "required": false,
-            "style": "form",
-            "explode": false,
             "schema": {
               "x-docuccino": {
                 "provenance": [
@@ -71,7 +67,7 @@
                     "producer": "integration:query-builder",
                     "layer": "integration",
                     "fields": [
-                      "items",
+                      "default",
                       "type"
                     ],
                     "source": {
@@ -82,10 +78,8 @@
                   }
                 ]
               },
-              "type": "array",
-              "items": {
-                "$ref": "#/components/schemas/WidgetStatus"
-              }
+              "type": "string",
+              "default": "draft"
             }
           },
           {
@@ -97,9 +91,7 @@
                   "layer": "integration",
                   "fields": [
                     "description",
-                    "explode",
-                    "required",
-                    "style"
+                    "required"
                   ],
                   "source": {
                     "file": "tests/Fixtures/QueryBuilder/FilterDelimitersController.php",
@@ -111,10 +103,8 @@
             },
             "name": "filter[piped]",
             "in": "query",
-            "description": "Exact match on `piped`. Accepts a comma-separated list of values (matched as `whereIn`).",
+            "description": "Exact match on `piped`. Accepts a `|`-separated list of values (matched as `whereIn`).",
             "required": false,
-            "style": "form",
-            "explode": false,
             "schema": {
               "x-docuccino": {
                 "provenance": [
@@ -122,7 +112,6 @@
                     "producer": "integration:query-builder",
                     "layer": "integration",
                     "fields": [
-                      "items",
                       "type"
                     ],
                     "source": {
@@ -133,10 +122,7 @@
                   }
                 ]
               },
-              "type": "array",
-              "items": {
-                "$ref": "#/components/schemas/WidgetStatus"
-              }
+              "type": "string"
             }
           },
           {
@@ -148,9 +134,7 @@
                   "layer": "integration",
                   "fields": [
                     "description",
-                    "explode",
-                    "required",
-                    "style"
+                    "required"
                   ],
                   "source": {
                     "file": "tests/Fixtures/QueryBuilder/FilterDelimitersController.php",
@@ -162,10 +146,8 @@
             },
             "name": "filter[piped_default]",
             "in": "query",
-            "description": "Exact match on `piped_default`. Accepts a comma-separated list of values (matched as `whereIn`).",
+            "description": "Exact match on `piped_default`. Accepts a `|`-separated list of values (matched as `whereIn`).",
             "required": false,
-            "style": "form",
-            "explode": false,
             "schema": {
               "x-docuccino": {
                 "provenance": [
@@ -174,7 +156,6 @@
                     "layer": "integration",
                     "fields": [
                       "default",
-                      "items",
                       "type"
                     ],
                     "source": {
@@ -185,13 +166,8 @@
                   }
                 ]
               },
-              "type": "array",
-              "default": [
-                "draft|published"
-              ],
-              "items": {
-                "$ref": "#/components/schemas/WidgetStatus"
-              }
+              "type": "string",
+              "default": "draft|published"
             }
           },
           {
@@ -254,9 +230,7 @@
                   "layer": "integration",
                   "fields": [
                     "description",
-                    "explode",
-                    "required",
-                    "style"
+                    "required"
                   ],
                   "source": {
                     "file": "tests/Fixtures/QueryBuilder/FilterDelimitersController.php",
@@ -268,10 +242,8 @@
             },
             "name": "filter[unsplit]",
             "in": "query",
-            "description": "Exact match on `unsplit`. Accepts a comma-separated list of values (matched as `whereIn`).",
+            "description": "Exact match on `unsplit`.",
             "required": false,
-            "style": "form",
-            "explode": false,
             "schema": {
               "x-docuccino": {
                 "provenance": [
@@ -279,8 +251,7 @@
                     "producer": "integration:query-builder",
                     "layer": "integration",
                     "fields": [
-                      "items",
-                      "type"
+                      "$ref"
                     ],
                     "source": {
                       "file": "tests/Fixtures/QueryBuilder/FilterDelimitersController.php",
@@ -290,10 +261,7 @@
                   }
                 ]
               },
-              "type": "array",
-              "items": {
-                "$ref": "#/components/schemas/WidgetStatus"
-              }
+              "$ref": "#/components/schemas/WidgetStatus"
             }
           },
           {
@@ -441,7 +409,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "2615538924ea71f0c2200feebbd368a024723b42392e43397af3baa84d7b597e"
+      "contentHash": "29973579f36bbc0e83963b6a2bce374fa522769c214bcef50d0235a55ff676ea"
     },
     "generator": {
       "name": "docuccino/laravel",
