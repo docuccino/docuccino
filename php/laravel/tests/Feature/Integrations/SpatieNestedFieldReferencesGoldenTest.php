@@ -61,3 +61,15 @@ function spatieNestedFieldReferencesBuild(): GenerationResult
 it('emits field references inside nested Data byte-identical to their committed golden', function (): void {
     assertGolden('spatie-nested-field-references.uir.json', (new UirEmitter)->emit(spatieNestedFieldReferencesBuild()->document));
 });
+
+it('names a referenced field where laravel-data compares it', function (): void {
+    $document = json_decode((new UirEmitter)->emit(spatieNestedFieldReferencesBuild()->document), true, flags: JSON_THROW_ON_ERROR);
+    $body = $document['components']['schemas']['NestedReferenceDataRequest']['properties'];
+
+    // laravel-data resolves `#[GreaterThan('min')]` under the object declaring it, so a nested range compares
+    // its own `min`, an item of the list its own, and a reference written from the root the root's field.
+    expect($body['max']['description'])->toBe('Must be greater than min.')
+        ->and($body['range']['properties']['max']['description'])->toBe('Must be greater than range.min.')
+        ->and($body['ranges']['items']['properties']['max']['description'])->toBe('Must be greater than ranges.*.min.')
+        ->and($body['range']['properties']['cap']['description'])->toBe('Must be less than max.');
+});

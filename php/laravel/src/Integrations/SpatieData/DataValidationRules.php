@@ -417,7 +417,7 @@ final class DataValidationRules
                 continue;
             }
 
-            $tokens = $this->reflector->validationTokens($fqcn, $property->name);
+            $tokens = $this->reflector->validationTokens($fqcn, $property->name, rtrim($prefix, '.'));
             $this->dependencyFiles->add(...$this->reflector->validationEnumFiles($fqcn, $property->name));
             [$objectRules, $opaque] = $this->ruleObjectRules($fqcn, $property->name, $key);
             $stated = $opaque ? [] : [
