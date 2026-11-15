@@ -35,6 +35,7 @@ use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Support\SourceOrder;
 use Docuccino\Inference\PhpStan\Throwing\AnalyzedBodies;
+use Docuccino\Inference\PhpStan\Throwing\CarriedResponses;
 use Docuccino\Inference\PhpStan\Throwing\CaseStatus;
 use Docuccino\Inference\PhpStan\Throwing\ClassBodies;
 use Docuccino\Inference\PhpStan\Throwing\FactoryStatus;
@@ -104,6 +105,9 @@ final class PhpStanTypeEngine implements TypeEngine
     private ?SubclassStatus $httpExceptionStatus = null;
 
     private ?FactoryStatus $factoryStatus = null;
+
+    /** Memoises each subclass's constructor walk the same way. */
+    private ?CarriedResponses $carriedResponses = null;
 
     private ?ClassBodies $classBodies = null;
 
@@ -979,6 +983,7 @@ final class PhpStanTypeEngine implements TypeEngine
             $this->labels,
             $this->config->throwDepth,
             $this->siteShapes(...),
+            $this->carriedResponses ??= new CarriedResponses(new ParentArgument($bodies, $this->appFilter), $bodies, $this->fileAnalyzer, $this->appFilter),
         );
     }
 

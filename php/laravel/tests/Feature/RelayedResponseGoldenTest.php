@@ -4,12 +4,21 @@ declare(strict_types=1);
 
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\DType\ArrayShapeField;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
+use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\ScalarT;
+use Docuccino\Core\Inference\DType\UnionT;
+use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\ReturnSite;
-use Docuccino\Core\Inference\ThrowConfidence;
+use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
+use Docuccino\Laravel\Testing\ApiContract;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
 use Workbench\App\Http\Controllers\RelayedResponseController;
@@ -25,23 +34,31 @@ use Workbench\App\Http\Controllers\RelayedResponseController;
  */
 function relayedResponseAnalyses(): array
 {
-    $thrown = static fn (string $class): ThrownException => new ThrownException(
-        'Workbench\\App\\Exceptions\\Relayed\\'.$class,
-        500,
-        [],
-        ThrowConfidence::Certain,
-        ThrowDisposition::Signal,
-    );
+    $at = static fn (DType $type): ReturnSite => new ReturnSite($type, new SourceLocation(''));
+    $json = static fn (DType $body, DType $status): ClassT => new ClassT('Illuminate\\Http\\JsonResponse', [$body, $status]);
+    $error = static fn (DType $value): ArrayShapeT => new ArrayShapeT([new ArrayShapeField('error', $value)]);
+    $carried = static fn (string $error, int $status): ActionAnalysis => new ActionAnalysis(returns: [
+        $at($json(new ArrayShapeT([new ArrayShapeField('error', new LiteralT($error))]), new LiteralT($status))),
+    ]);
 
     return [
-        'handedOn' => new ActionAnalysis(throws: [$thrown('RelayedResponseException')]),
-        'handedOnNamed' => new ActionAnalysis(throws: [$thrown('RelayedResponseException')]),
-        'builtItself' => new ActionAnalysis(throws: [$thrown('ExportLockedResponseException')]),
-        'twoLevelsHandedOn' => new ActionAnalysis(throws: [$thrown('UpstreamRelayedException')]),
-        'twoLevelsBuilt' => new ActionAnalysis(throws: [$thrown('QuotaExceededException')]),
-        'builtFromCase' => new ActionAnalysis(throws: [$thrown('ExportFaultResponseException')]),
-        'factory' => new ActionAnalysis(throws: [$thrown('ExportRefusedException')]),
-        'staticFactory' => new ActionAnalysis(throws: [$thrown('ExportRefusedException')]),
+        // Laravel sends the response an HttpResponseException carries as it is, whichever class carries it: what
+        // lands in the framework constructor's `$response` is each request's answer.
+        'handedOn' => $carried('locked', 423),
+        'handedOnNamed' => $carried('locked', 423),
+        // Built in the constructor, typed where it is written: the reason it takes is any string.
+        'builtItself' => new ActionAnalysis(returns: [$at($json($error(new ScalarT('string')), new LiteralT(423)))]),
+        // Built from whichever case the constructor is handed: Gone answers 410 and Locked 423, so no one code
+        // is true of every construction and none is read.
+        'builtFromCase' => new ActionAnalysis(returns: [$at($json(
+            $error(UnionT::of([new LiteralT('Gone'), new LiteralT('Locked')])),
+            new UnknownT('status not folded'),
+        ))]),
+        'twoLevelsHandedOn' => $carried('unavailable', 503),
+        'twoLevelsBuilt' => $carried('quota_exceeded', 429),
+        // A static factory carries the response the `new` it makes is handed.
+        'factory' => $carried('locked', 423),
+        'staticFactory' => $carried('gone', 410),
     ];
 }
 
@@ -70,6 +87,30 @@ it('publishes the response an application’s own response exception carries, by
 
     assertGolden('workbench-relayed-response.uir.json', (new UirEmitter)->emit($warm->document));
 });
+
+it('documents the response the server really sends for each throw', function (string $action, int $status): void {
+    $engine = relayedResponseEngine();
+    relayedResponseRoutes()(app('router'));
+    workbenchContract(bindEngine: static fn () => app()->instance(TypeEngine::class, $engine()));
+
+    try {
+        $response = $this->postJson('api/relayed/'.$action)->assertStatus($status);
+
+        ApiContract::assertions()->assertValidResponse($response);
+    } finally {
+        @unlink(workbenchContractPath());
+        ApiContract::reset();
+    }
+})->with([
+    'a response handed on' => ['handedOn', 423],
+    'a response handed on by name' => ['handedOnNamed', 423],
+    'a response the class builds' => ['builtItself', 423],
+    'a response the class builds from the case it is handed' => ['builtFromCase', 423],
+    'a response handed on two levels below the framework' => ['twoLevelsHandedOn', 503],
+    'a response built two levels below the framework' => ['twoLevelsBuilt', 429],
+    'a static factory\'s response' => ['factory', 423],
+    'a factory building `new static`' => ['staticFactory', 410],
+]);
 
 it('scripts what the real engine recovers from the fixture app’s same calls', function (): void {
     ensureFixtureAvailable(FixtureRunner::available());

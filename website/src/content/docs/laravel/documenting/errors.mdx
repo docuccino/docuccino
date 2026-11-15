@@ -652,6 +652,26 @@ documented under `default`, as it is for a response you return. Handing a respon
 `abort_if()` or `abort_unless()` throws the same exception, so `abort(response()->json([…], 423))` is
 documented the same way, as is an `HttpResponseException` handed to `throw_if()` or `throw_unless()`.
 
+Your own subclass of `HttpResponseException` reads the same way. Laravel sends whatever response reaches
+the framework's constructor, so Docuccino follows your constructor to it: the response you pass in, or
+the one the class builds for itself:
+
+```php
+class OrderLockedException extends HttpResponseException
+{
+    public function __construct(Order $order)
+    {
+        parent::__construct(response()->json(['error' => "Order {$order->id} is locked."], 423));
+    }
+}
+```
+
+Every `throw new OrderLockedException($order)` documents that `423`. That holds through a class two
+levels below the framework and through a static factory on the class, like `throw
+OrderLockedException::for($order)`. A response built from a value the constructor takes, such as an
+enum case, is read from the constructor's own types. So when the cases carry different statuses, the
+response is documented under `default`.
+
 ### When a `500` is a stand-in
 
 A `500` in your document is not one fact. It is the right answer when your code says so, and it is the
