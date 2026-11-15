@@ -7,6 +7,8 @@ namespace Docuccino\Core\Links;
 /**
  * One column of one resource that a response body carries verbatim, at a JSON pointer into the body —
  * the other half of a {@see BindingTake}, matched on the same resource and key.
+ *
+ * @internal
  */
 final readonly class BodyGive
 {

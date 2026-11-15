@@ -8,6 +8,8 @@ namespace Docuccino\Core\Links;
  * A path parameter that takes one column of one resource — what the code proves the segment is matched
  * on. `$resource` is an adapter's own name for the thing bound (a model class), compared and never
  * published; `$scopedTo` is the parameter the framework resolves this one within, where it does.
+ *
+ * @internal
  */
 final readonly class BindingTake
 {

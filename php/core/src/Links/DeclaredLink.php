@@ -12,6 +12,8 @@ use Docuccino\Core\Support\Hydrate;
  * /path` as the document names it — and what each of its parameters is filled with. `$status` null
  * means the operation's first success response; `$name` empty means the target's operationId. `$layer`
  * is the precedence layer it was declared in, which is what its provenance says.
+ *
+ * @internal
  */
 final readonly class DeclaredLink
 {

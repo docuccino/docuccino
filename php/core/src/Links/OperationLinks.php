@@ -16,6 +16,8 @@ use Throwable;
  * Carried as JSON because it rides the operation fragment's notes, which is what makes a warm build write
  * the links a cold one does. A declaration JSON cannot carry — a pure enum case among its parameters — is
  * kept as the reason it could not be ({@see $unreadable}), so the writer can report it rather than lose it.
+ *
+ * @internal
  */
 final readonly class OperationLinks
 {
