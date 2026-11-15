@@ -30,6 +30,8 @@ function bindingFactRoutes(): callable
         // BEFORE implicit binding and ignores both the route's column and the model's route key.
         $router->bind('custom', static fn (string $value): ?string => $value);
         $router->model('explicit', Ledger::class);
+        // …and with a fallback the framework calls when the key finds nothing, which decides in a closure.
+        $router->model('fallback', Ledger::class, static fn (string $value): Ledger => new Ledger);
 
         $router->get('api/binding-ledgers/{ledger}', [BindingController::class, 'showByReference']);
         $router->get('api/binding-refs/{ledger:reference}', [BindingController::class, 'showByReference']);
@@ -58,6 +60,19 @@ function bindingFactRoutes(): callable
         // Bound with `Route::model()`, by key and with a column the framework ignores for it.
         $router->get('api/binding-explicit/{explicit}', [BindingController::class, 'showExplicit']);
         $router->get('api/binding-explicit-refs/{explicit:reference}', [BindingController::class, 'showExplicit']);
+        $router->get('api/binding-fallback/{fallback}', [BindingController::class, 'showFallback']);
+        // Models that resolve a binding in code of their own: a hashid trait, by key and by a named column,
+        // which leaves the scoped children it finds the framework's way alone; and a narrowed binding
+        // query on a model that also finds its scoped children itself.
+        $router->get('api/binding-vouchers/{voucher}', [BindingController::class, 'showVoucher']);
+        $router->get('api/binding-voucher-codes/{voucher:code}', [BindingController::class, 'showVoucher']);
+        $router->get('api/binding-vouchers/{voucher}/entries/{entry}', [BindingController::class, 'showVoucherEntry'])
+            ->scopeBindings();
+        $router->get('api/binding-coupons/{coupon}', [BindingController::class, 'showCoupon']);
+        $router->get('api/binding-coupons/{coupon}/entries/{entry}', [BindingController::class, 'showCouponEntry'])
+            ->scopeBindings();
+        // A framework trait that validates the value before the default lookup, which keeps the column.
+        $router->get('api/binding-beacons/{beacon}', [BindingController::class, 'showBeacon']);
         // Every note a binding writes, on segments their author described as well.
         $router->get('api/binding-described/{ledger:reference}/entries/{entry}', [DescribedBindingController::class, 'showEntry'])
             ->scopeBindings()

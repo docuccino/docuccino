@@ -9,16 +9,19 @@ use Illuminate\Http\JsonResponse;
 use Workbench\App\Enums\Season;
 use Workbench\App\Models\Almanac;
 use Workbench\App\Models\Article;
+use Workbench\App\Models\Beacon;
+use Workbench\App\Models\Coupon;
 use Workbench\App\Models\Dossier;
 use Workbench\App\Models\Form;
 use Workbench\App\Models\Journal;
 use Workbench\App\Models\Ledger;
+use Workbench\App\Models\Voucher;
 
 /**
  * Every kind of route binding Laravel resolves, one action each: the plain implicit one, a route that
  * names its own column, a nested child the router scopes to its parent, a model that decides its key
  * in a method body, a string-backed enum, a segment the application resolves with a binder of its
- * own, and one it binds to a model with `Route::model()`. What each one lets the document say about the path parameter is different, and several of them
+ * own, one it binds to a model with `Route::model()`, and models that resolve their bindings themselves. What each one lets the document say about the path parameter is different, and several of them
  * are what it must NOT say.
  */
 final class BindingController
@@ -91,5 +94,47 @@ final class BindingController
     public function showExplicit(mixed $explicit): JsonResponse
     {
         return response()->json($explicit);
+    }
+
+    /** Show a ledger bound with `Route::model()` and a fallback for values the key does not find. */
+    #[Group('Bindings')]
+    public function showFallback(mixed $fallback): JsonResponse
+    {
+        return response()->json($fallback);
+    }
+
+    /** Show a voucher by the code it hands out. */
+    #[Group('Bindings')]
+    public function showVoucher(Voucher $voucher): JsonResponse
+    {
+        return response()->json($voucher);
+    }
+
+    /** Show one form redeemed against a voucher. */
+    #[Group('Bindings')]
+    public function showVoucherEntry(Voucher $voucher, Form $entry): JsonResponse
+    {
+        return response()->json($entry);
+    }
+
+    /** Show a coupon by its public id. */
+    #[Group('Bindings')]
+    public function showCoupon(Coupon $coupon): JsonResponse
+    {
+        return response()->json($coupon);
+    }
+
+    /** Show one form filed under a coupon. */
+    #[Group('Bindings')]
+    public function showCouponEntry(Coupon $coupon, Form $entry): JsonResponse
+    {
+        return response()->json($entry);
+    }
+
+    /** Show a beacon by its uuid. */
+    #[Group('Bindings')]
+    public function showBeacon(Beacon $beacon): JsonResponse
+    {
+        return response()->json($beacon);
     }
 }
