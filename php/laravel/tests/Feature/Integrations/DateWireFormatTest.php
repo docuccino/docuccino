@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Draft\SchemaNotes;
 use Docuccino\Core\Extensions\BuiltIn\DateTimeTypeToSchema;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\Context\AttributeSet;
@@ -330,8 +331,8 @@ it('keeps the recovered wire format under a rules() override that says less', fu
     ]);
 
     $rules = (new DataValidationRules)->build(DateOverrideData::class, $metadata, $engine, $override, $converter);
-    $schema = (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))
-        ->convert((new RuleOrdering)->order((new RuleSetNormalizer)->normalize($rules)), $converter)->schema;
+    $schema = SchemaNotes::rendered((new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))
+        ->convert((new RuleOrdering)->order((new RuleSetNormalizer)->normalize($rules)), $converter)->schema);
 
     expect($schema['properties']['restatedDate']['format'])->toBe('date-time')
         ->and($schema['properties']['statedFormat'])->not->toHaveKey('format')

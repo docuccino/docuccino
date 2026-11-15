@@ -17,18 +17,29 @@ use Docuccino\Core\Patch\PatchGuard;
  */
 final class DescriptionNotes
 {
-    /** @var list<array{0: string, 1: Contribution}> */
+    /** @var list<array{0: string, 1: Contribution, 2: bool}> */
     private array $notes = [];
 
-    public function declare(string $note, Contribution $by): void
+    /**
+     * `$inOwnDescription` is for a producer whose own description already states the note: it is published
+     * only beneath a description someone else wrote, since while that producer's wins it says it already.
+     */
+    public function declare(string $note, Contribution $by, bool $inOwnDescription = false): void
     {
-        $this->notes[] = [$note, $by];
+        $this->notes[] = [$note, $by, $inOwnDescription];
     }
 
-    /** The winning description with every note beneath it, or the notes alone where nothing won. */
-    public function joinedTo(?string $description): ?string
+    /**
+     * The winning description with every note beneath it, or the notes alone where nothing won. `$writer`
+     * is whoever wrote the winning description.
+     */
+    public function joinedTo(?string $description, ?Contribution $writer = null): ?string
     {
-        foreach ($this->notes as [$note]) {
+        foreach ($this->notes as [$note, $by, $inOwnDescription]) {
+            if ($inOwnDescription && $writer?->recordKey() === $by->recordKey()) {
+                continue;
+            }
+
             $description = DescriptionAppender::joined($description, $note);
         }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Docuccino\Core\Contract\ContractIndex;
 use Docuccino\Core\Contract\SchemaCheck;
 use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Draft\SchemaNotes;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
@@ -48,7 +49,7 @@ function convertLaravelRules(array $fields, RepresentationPolicy $policy = new R
 
     $ordered = (new RuleOrdering)->order(new RuleSet($set));
 
-    return (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, vocabularyContext($policy));
+    return publishedNotes((new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, vocabularyContext($policy)));
 }
 
 /**
@@ -67,7 +68,19 @@ function convertFieldRules(array $rules): ValidationSchema
 
     $ordered = (new RuleOrdering)->order(new RuleSet(['f' => $ruleObjects]));
 
-    return (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, vocabularyContext());
+    return publishedNotes((new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, vocabularyContext()));
+}
+
+/** The conversion with each field's notes beneath its description, as the document publishes them. */
+function publishedNotes(ValidationSchema $result): ValidationSchema
+{
+    return new ValidationSchema(
+        SchemaNotes::rendered($result->schema),
+        $result->mediaType,
+        $result->diagnostics,
+        $result->variants,
+        SchemaNotes::rendered($result->merged),
+    );
 }
 
 /**
@@ -353,7 +366,9 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'format' => [[['string'], ['format', ['iban']]], ['format' => 'iban', 'type' => 'string']],
     'format (never overwrites a type rule\'s own)' => [[['email'], ['format', ['iban']]], ['format' => 'email', 'type' => 'string', 'example' => 'user@example.com']],
     'description' => [[['string'], ['description', ['A bank reference.']]], ['description' => 'A bank reference.', 'type' => 'string']],
-    'description (appends to an earlier note)' => [[['timezone'], ['description', ['Europe only.']]], ['description' => 'Must be a valid timezone identifier. Europe only.', 'type' => 'string', 'example' => 'UTC']],
+    // A stated description is the author's prose and a note is what the rules enforce: the prose leads
+    // and the fact stands beneath it, rather than the two fused into one sentence in rule order.
+    'description (leads an earlier note)' => [[['timezone'], ['description', ['Europe only.']]], ['description' => "Europe only.\n\nMust be a valid timezone identifier.", 'type' => 'string', 'example' => 'UTC']],
     'example (string)' => [[['string'], ['example', ['GB123456']]], ['example' => 'GB123456', 'type' => 'string']],
     'example (integer)' => [[['integer'], ['example', ['42']]], ['example' => 42, 'type' => 'integer']],
     'example (number)' => [[['numeric'], ['example', ['1.25']]], ['example' => 1.25, 'type' => 'number']],

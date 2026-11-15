@@ -58,11 +58,12 @@ final class ParameterDraft
 
     /**
      * Add a sentence beneath whatever description wins, such as how a bound segment resolves, rather than
-     * contesting the description itself ({@see DescriptionNotes}).
+     * contesting the description itself ({@see DescriptionNotes}). `$inOwnDescription` where the
+     * description `$by` writes already states it.
      */
-    public function declareDescriptionNote(string $note, Contribution $by): void
+    public function declareDescriptionNote(string $note, Contribution $by, bool $inOwnDescription = false): void
     {
-        $this->descriptionNotes->declare($note, $by);
+        $this->descriptionNotes->declare($note, $by, $inOwnDescription);
     }
 
     public function setRequired(?bool $value, Contribution $by): PatchResult
@@ -161,7 +162,10 @@ final class ParameterDraft
     {
         $resolved = $this->guard->resolved();
 
-        $description = $this->descriptionNotes->joinedTo(Hydrate::stringOrNull($resolved['description'] ?? null));
+        $description = $this->descriptionNotes->joinedTo(
+            Hydrate::stringOrNull($resolved['description'] ?? null),
+            $this->guard->contributions()['description']['by'] ?? null,
+        );
         $required = Hydrate::boolOrNull($resolved['required'] ?? null);
         $deprecated = Hydrate::boolOrNull($resolved['deprecated'] ?? null);
 

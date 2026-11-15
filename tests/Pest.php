@@ -22,6 +22,7 @@ use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Draft\SchemaDraft;
 use Docuccino\Core\Draft\SchemaKeywords;
+use Docuccino\Core\Draft\SchemaNotes;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\Context\AttributeSet;
@@ -834,7 +835,8 @@ function validationSchema(RuleSet $rules, SchemaConverter $context, bool $normal
 {
     $ordered = (new RuleOrdering)->order($normalize ? (new RuleSetNormalizer)->normalize($rules) : $rules);
 
-    return (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, $context)->schema;
+    // Rendered as the document publishes it: the notes a field carries, beneath its description.
+    return SchemaNotes::rendered((new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, $context)->schema);
 }
 
 /**

@@ -220,7 +220,10 @@ final class PatchGuard
             foreach (is_array($contributors) ? $contributors : [$contributors] as $by) {
                 $key = $by->recordKey();
                 $groups[$key] ??= ['contribution' => $by, 'fields' => [], 'overrode' => []];
-                $groups[$key]['fields'][] = $field;
+                // A producer that won the field and also added to it wrote it once.
+                if (! in_array($field, $groups[$key]['fields'], true)) {
+                    $groups[$key]['fields'][] = $field;
+                }
             }
         }
 

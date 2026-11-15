@@ -12,7 +12,7 @@ use Docuccino\Laravel\Integrations\Validation\BlankString;
 
 /**
  * `accepted` → a boolean `const: true`, `declined` → `const: false`. The `_if` variants keep the same
- * `const` — the documented happy path — and add a description naming the condition that enforces it.
+ * `const` — the documented happy path — and add a note naming the condition that enforces it.
  */
 final class BooleanConstRuleTransformer implements RuleTransformer
 {
@@ -45,8 +45,7 @@ final class BooleanConstRuleTransformer implements RuleTransformer
             if ($condition !== null) {
                 $verb = $accepted ? 'accepted' : 'declined';
                 $note = sprintf('Must be %s when %s.', $verb, $condition);
-                $existing = $field->get('description');
-                $field->set('description', is_string($existing) && $existing !== '' ? $existing.' '.$note : $note);
+                $field->note($note);
             }
         }
     }

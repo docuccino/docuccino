@@ -6,7 +6,7 @@ full record either way.
 
 ## v0.24.0
 
-Four changes, each for a different reader, and a last part on what a diff across the upgrade
+Five changes, each for a different reader, and a last part on what a diff across the upgrade
 reports, for anyone who compares or gates a committed document.
 
 ### A pointer in `lint.leakage.allow`
@@ -77,6 +77,30 @@ generated from the document changes.
   builds the request from the member classes needs no change.
 - **`docuccino:diff` reads it as no change.** The two spellings say the same thing, so a diff across
   the upgrade reports nothing for that field.
+
+### A field's rules beside its description
+
+Only an extension that reads the schema `ValidationRulesToSchema::convert()` returns, or a
+`RuleTransformer` that writes a fact into a field's `description`, needs editing. But a document whose
+fields you described changes, so read the first point even if you write no extensions.
+
+- **A description you write keeps what the rules enforce beneath it.** A `#[QueryParameter]` or
+  `#[BodyParameter]` description, a property docblock or `#[Description]`, and an enum's own
+  description each lead, and a rule's note ("Must be a date after from.", "Required when …") follows
+  as a paragraph of its own. The note was dropped, or run into the prose as one sentence. A Query
+  Builder filter's `whereIn` and `null` notes stay beneath a `#[QueryParameter]` description the same
+  way. Nothing changes where nobody wrote a description, and `docuccino:diff` never reads a changed
+  description as breaking.
+- **A converted schema carries its notes apart.** The schema `convert()` returns keeps each field's
+  notes under `x-docuccino.notes`, and its `description` holds only prose. `RecoveredRequest::apply()`
+  renders them for you, and so does publishing the schema as a request body or a component. An
+  extension that hands it to the document another way renders it first with `SchemaNotes::rendered()`,
+  or takes a field's notes with `SchemaNotes::take()` and declares them with the draft's
+  `declareDescriptionNote()`.
+- **A rule transformer states a fact with `note()`.** `ValidationField::get('description')` no longer
+  includes the notes earlier rules stated; `notes()` reads them. A transformer that appends its fact to
+  the description still publishes it, but as prose that a description written later replaces. Write
+  it with `$field->note()` instead.
 
 ### What `docuccino:diff` reports across this upgrade
 

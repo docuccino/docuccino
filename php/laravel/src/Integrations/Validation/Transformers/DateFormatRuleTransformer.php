@@ -11,7 +11,7 @@ use Docuccino\Core\Extensions\Validation\ValidationRule;
 use Docuccino\Laravel\Integrations\Support\DateWireFormat;
 
 /**
- * `date_format:Y-m-d` → a string schema carrying the raw PHP format in its description, so a reader keeps
+ * `date_format:Y-m-d` → a string schema carrying the raw PHP format in a note, so a reader keeps
  * the exact contract, plus the OAS `format` the pattern's own values satisfy where {@see DateWireFormat}
  * has one for it. The app states the accepted wire format outright here, so this is the most specific
  * source there is and nothing displaces it.
@@ -49,8 +49,8 @@ final class DateFormatRuleTransformer implements RuleTransformer
             $field->remove('format');
         }
 
-        if (! $field->has('description')) {
-            $field->set('description', DateWireFormat::expected($pattern));
+        if ($field->notes() === []) {
+            $field->note(DateWireFormat::expected($pattern));
         }
 
         $field->proposeExample(DateWireFormat::example($pattern));

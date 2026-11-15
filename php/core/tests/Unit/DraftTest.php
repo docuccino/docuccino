@@ -129,6 +129,46 @@ it('names a note and the requirement it shares a record with in one provenance r
     ]);
 });
 
+it('joins a note beneath a schema member\'s description, as a parameter does', function (): void {
+    // A deepObject member is the same field a flat parameter would be, so the rule it carries owes the
+    // same answer: the author's prose leads, and the rule's fact stands beneath it.
+    $member = new SchemaDraft;
+    $rules = Contribution::integration('form-request');
+
+    $member->set('type', 'string', $rules);
+    $member->declareDescriptionNote('Must be a date after from.', $rules);
+    $member->set('description', 'End of the range.', Contribution::attribute());
+
+    $frozen = $member->freeze()->toArray();
+    $byProducer = array_column($frozen['x-docuccino']['provenance'] ?? [], 'fields', 'producer');
+
+    expect($frozen['description'])->toBe("End of the range.\n\nMust be a date after from.")
+        ->and($byProducer)->toBe(['attribute' => ['description'], 'integration:form-request' => ['description', 'type']]);
+});
+
+it('publishes a schema member\'s notes alone where nothing wrote a description', function (): void {
+    $member = new SchemaDraft;
+    $member->declareDescriptionNote('Required when name is present.', Contribution::integration('form-request'));
+
+    expect($member->freeze()->toArray()['description'])->toBe('Required when name is present.');
+});
+
+it('names a producer once that both won a description and wrote a note beneath it', function (): void {
+    // An enum's own prose and the rule beside it come from one producer: it wrote the field once.
+    $parameter = new ParameterDraft('query', 'stage');
+    $rules = Contribution::integration('form-request');
+
+    $parameter->setDescription('How far through review a submission has got.', $rules);
+    $parameter->declareDescriptionNote('Required when name is present.', $rules);
+
+    $frozen = $parameter->freeze();
+
+    expect($frozen->description)->toBe("How far through review a submission has got.\n\nRequired when name is present.")
+        ->and(array_column($frozen->docuccino?->provenance?->toArray() ?? [], 'fields', 'producer'))->toBe([
+            'integration:form-request' => ['description'],
+        ]);
+});
+
 it('merges parameters by (in, name) rather than replacing the collection', function (): void {
     $draft = new OperationDraft;
 

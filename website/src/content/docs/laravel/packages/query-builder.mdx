@@ -680,7 +680,8 @@ generated (the allowed values and the `-` descending convention).
 A comment above the entry is the narrowest thing anyone can say about a filter, so it wins over a
 `description` on the [filter class](#custom-filter-classes) it registers: the class describes every
 call site, the comment describes this one. (A `#[QueryParameter]` on the *action* is narrower still,
-and stays ahead of both.)
+and stays ahead of both. Its description leads, and the `whereIn` and `null` notes stay beneath it as
+a paragraph of their own.)
 
 ### Defaults and nullable filters
 

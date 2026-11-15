@@ -113,8 +113,13 @@ final class QueryBuilderParameters
 
         if ($policy->filtersDeepObject()) {
             $properties = [];
+            $notes = [];
             foreach ($facts->filters as $filter) {
                 $properties[$filter->name] = $this->filterProperty($filter, $policy, $config);
+                $note = self::filterNotes($filter, $config);
+                if ($note !== null) {
+                    $notes[$filter->name] = $note;
+                }
             }
 
             return [new QueryParameterSpec(
@@ -123,6 +128,7 @@ final class QueryBuilderParameters
                 description: 'Filter the result set.',
                 style: 'deepObject',
                 explode: true,
+                propertyNotes: $notes,
             )];
         }
 
@@ -136,6 +142,7 @@ final class QueryBuilderParameters
                 style: $style,
                 explode: $explode,
                 example: $filter->example,
+                notes: self::filterNotes($filter, $config),
             );
         }
 
@@ -272,13 +279,32 @@ final class QueryBuilderParameters
         return $schema;
     }
 
-    /** A filter's description: its comment (else the kind's contract sentence), plus whereIn/nullable notes. */
+    /** A filter's description: its comment (else the kind's contract sentence), plus its notes. */
     private function filterDescription(QbEntry $filter, QueryBuilderConfig $config): string
     {
         // The entry's own comment describes THIS filter, so it still outranks a per-kind sentence, which
         // describes every filter of that kind.
         $base = $filter->comment ?? self::filterKindDescription($filter, $config);
 
+        $notes = self::filterNotes($filter, $config);
+        if ($notes === null) {
+            return $base;
+        }
+
+        // Terminate the lead so the appended notes read as sentences. Every generated sentence already
+        // ends itself; an author's comment is whatever they wrote.
+        $lead = preg_match('/[.!?]$/', $base) === 1 ? $base : $base.'.';
+
+        return $lead.' '.$notes;
+    }
+
+    /**
+     * What the filter accepts that its schema cannot say — a list matched as `whereIn`, a `null` that
+     * matches absent values — as one paragraph, or null where it accepts nothing more. True whatever
+     * describes the filter, so a description an author writes over it keeps these beneath.
+     */
+    private static function filterNotes(QbEntry $filter, QueryBuilderConfig $config): ?string
+    {
         $notes = [];
         if ($filter->enumTyped) {
             $notes = [...$notes, ...self::whereInNotes($filter, $config)];
@@ -287,15 +313,7 @@ final class QueryBuilderParameters
             $notes[] = self::NULLABLE_NOTE;
         }
 
-        if ($notes === []) {
-            return $base;
-        }
-
-        // Terminate the lead so the appended notes read as sentences. Every generated sentence already
-        // ends itself; an author's comment is whatever they wrote.
-        $lead = preg_match('/[.!?]$/', $base) === 1 ? $base : $base.'.';
-
-        return implode(' ', [$lead, ...$notes]);
+        return $notes === [] ? null : implode(' ', $notes);
     }
 
     /**
