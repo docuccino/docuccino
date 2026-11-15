@@ -368,9 +368,9 @@
           "ResponseChain"
         ],
         "responses": {
-          "default": {
+          "200": {
             "x-docuccino": {
-              "id": "res:v1:nxznkz4yqftiity5",
+              "id": "res:v1:65vuuedrsamt447f",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -379,12 +379,9 @@
                     "description"
                   ]
                 }
-              ],
-              "facts": {
-                "statusUnplaced": true
-              }
+              ]
             },
-            "description": "Any status",
+            "description": "OK",
             "content": {
               "application/octet-stream": {
                 "schema": {
@@ -448,7 +445,7 @@
           "ResponseChain"
         ],
         "responses": {
-          "3XX": {
+          "303": {
             "x-docuccino": {
               "provenance": [
                 {
@@ -472,7 +469,7 @@
                 }
               ]
             },
-            "description": "Redirect",
+            "description": "See Other",
             "headers": {
               "Location": {
                 "description": "The URL to follow.",
@@ -1331,7 +1328,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "6c93fa0ee6eb4e4423f8a6de05ec8a41fbb119e423d606bc51350389adde2d56"
+      "contentHash": "12581503fcd598f74e06a659af3d10b6ffa143ee8795a60931c6f2576b3c261e"
     },
     "generator": {
       "name": "docuccino/laravel",
