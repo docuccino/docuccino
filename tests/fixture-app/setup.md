@@ -41,6 +41,13 @@ composer require --working-dir=tests/fixture-app/app -W \
   "timacdonald/json-api:^1.0@beta" "spatie/laravel-json-api-paginate:^2.0" \
   "lorisleiva/laravel-actions:^2.0" --no-interaction
 
+# 4b. Docuccino's own runtime dependencies that the skeleton doesn't pull in on every Laravel major.
+#     The `contract-builds` runner mode boots docuccino/laravel inside this app, as an installed
+#     application has it, and its classes come from this app's vendor — Laravel 12 brings symfony/yaml
+#     in transitively, Laravel 13 doesn't. Keep the constraints in step with php/core/composer.json.
+composer require --working-dir=tests/fixture-app/app \
+  "symfony/yaml:^7.4.23 || ^8.1.11" "opis/json-schema:^2.4" --no-interaction
+
 # 5. Overlay the tracked fixture sources onto the install's app/ directory.
 cp -R tests/fixture-app/src/app/. tests/fixture-app/app/app/
 

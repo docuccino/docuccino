@@ -345,6 +345,9 @@ jobs:
           composer require --working-dir=tests/fixture-app/app spatie/laravel-query-builder spatie/laravel-data --no-interaction --no-progress
           # Integration packages (JSON:API + laravel-actions real-engine tests):
           composer require --working-dir=tests/fixture-app/app -W "timacdonald/json-api:^1.0@beta" "spatie/laravel-json-api-paginate:^2.0" "lorisleiva/laravel-actions:^2.0" --no-interaction --no-progress
+          # Docuccino's own runtime dependencies the skeleton doesn't pull in on every Laravel major
+          # (the contract-builds runner boots docuccino/laravel from this app's vendor; setup.md step 4b).
+          composer require --working-dir=tests/fixture-app/app "symfony/yaml:^7.4.23 || ^8.1.11" "opis/json-schema:^2.4" --no-interaction --no-progress
           # Overlay the tracked fixture sources onto the install's app/ dir.
           cp -R tests/fixture-app/src/app/. tests/fixture-app/app/app/
           # Overlay the modular sources (a `Modules\` PSR-4 root outside app/) + register + dump.
