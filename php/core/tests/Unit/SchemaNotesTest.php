@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Draft\ResponseDraft;
 use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Draft\SchemaNotes;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
@@ -117,4 +118,21 @@ it('publishes notes in an operation\'s body as it freezes, and in a body another
 
     expect($operation['requestBody']['content']['application/json']['schema']['properties']['until']['description'])->toBe("End of the range.\n\nMust be a date after from.")
         ->and($overrode['content']['application/json']['schema']['properties']['until']['description'] ?? null)->toBe("A date.\n\nMust be a date after from.");
+});
+
+it('publishes notes in a response body as it freezes, beneath the description and in place of none', function (): void {
+    // A response states what the server sends as a request states what it accepts, so a note reaching a
+    // body inline is published the same way, and never as an x-docuccino member a reader cannot use.
+    $draft = new ResponseDraft('200');
+    $draft->content('application/json')->declareShape(['type' => 'object', 'properties' => [
+        'closed_on' => SchemaNotes::onto(['type' => 'string', 'description' => 'The day it closed.'], ['Serialized using the date format "d/m/Y".']),
+        'opened_on' => SchemaNotes::onto(['type' => 'string'], ['Serialized using the date format "d/m/Y".']),
+    ]], Contribution::integration('eloquent'));
+
+    $properties = $draft->freeze()->toArray()['content']['application/json']['schema']['properties'];
+
+    expect($properties)->toBe([
+        'closed_on' => ['type' => 'string', 'description' => "The day it closed.\n\nSerialized using the date format \"d/m/Y\"."],
+        'opened_on' => ['type' => 'string', 'description' => 'Serialized using the date format "d/m/Y".'],
+    ]);
 });

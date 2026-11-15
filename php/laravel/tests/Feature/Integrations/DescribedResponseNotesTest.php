@@ -73,3 +73,48 @@ function describedResponseNotesBuild(): GenerationResult
 it('emits response properties their author described byte-identical to their committed golden', function (): void {
     assertGolden('described-response-notes.uir.json', (new UirEmitter)->emit(describedResponseNotesBuild()->document));
 });
+
+/**
+ * One property of a response body, followed through its component.
+ *
+ * @return array<string, mixed>
+ */
+function describedResponseProperty(string $path, string $property): array
+{
+    $document = emittedArray(describedResponseNotesBuild());
+    $schema = resolveSchema($document, $document['paths'][$path]['get']['responses']['200']['content']['application/json']['schema']);
+
+    return $schema['properties'][$property];
+}
+
+/*
+ * The pattern a date is written with is a fact of what the server sends, true whatever prose the property
+ * carries, and no keyword states it — so the sentence naming it is all a consumer has to parse the value
+ * by. An author's description says what the property MEANS; it leads, and the pattern stands beneath it
+ * as a paragraph of its own, as a request field's rules do beneath theirs.
+ */
+it('keeps the pattern a date is written with beneath the description an author writes', function (string $path, string $property, string $expected): void {
+    expect(describedResponseProperty($path, $property)['description'] ?? null)->toBe($expected);
+})->with([
+    'a date cast, beneath a @property summary' => ['/api/zz-logbooks', 'closed_on', "The day the logbook was closed.\n\nSerialized using the date format \"d/m/Y\"."],
+    'a nullable date-time cast, beneath a @property summary' => ['/api/zz-logbooks', 'sealed_on', "When the logbook was sealed, if it has been.\n\nSerialized using the date format \"d/m/Y H:i\"."],
+    'a Data property, beneath its docblock' => ['/api/zz-logbooks/summary', 'closedOn', "The day the logbook was closed.\n\nSerialized using the date format \"d/m/Y\"."],
+    'a Data property, beneath its #[Description]' => ['/api/zz-logbooks/summary', 'openedOn', "When the logbook was opened.\n\nSerialized using the date format \"d/m/Y\"."],
+    'a nullable Data property, beneath its docblock' => ['/api/zz-logbooks/summary', 'reviewedOn', "When the logbook was last reviewed, if it has been.\n\nSerialized using the date format \"d/m/Y\"."],
+]);
+
+it('publishes the pattern alone where nobody described the date', function (string $path, string $property): void {
+    expect(describedResponseProperty($path, $property))->toBe(['description' => 'Serialized using the date format "d/m/Y".', 'type' => 'string']);
+})->with([
+    'a date cast' => ['/api/zz-logbooks', 'opened_on'],
+    'a Data property' => ['/api/zz-logbooks/summary', 'sealedOn'],
+]);
+
+it('adds nothing beneath the description of a date whose format a keyword states', function (): void {
+    // The keyword already says it, and `$dateFormat` only decides how the column is stored.
+    expect(describedResponseProperty('/api/zz-logbooks', 'created_at'))->toBe([
+        'description' => 'When the logbook was started.',
+        'type' => 'string',
+        'format' => 'date-time',
+    ]);
+});
