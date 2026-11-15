@@ -50,7 +50,9 @@ bracketed JSON:API form. Docuccino detects the terminal — several method calls
 </Tabs>
 
 `page[size]` carries both bounds, so a client knows the ceiling before it hits it: `default` is the
-package's `default_size` and `maximum` is `max_results` (both `30` out of the box).
+package's `default_size` and `maximum` is `max_results` (both `30` out of the box). The package caps
+every size at the maximum, its own default included, so a default larger than the maximum is documented
+as the maximum: that is the size a request without `page[size]` gets.
 
 ## The response envelope
 
@@ -83,7 +85,7 @@ parameters always match the requests your app actually accepts:
 | `size_parameter` | `size` | The page-size member name |
 | `cursor_parameter` | `cursor` | The cursor member name, under cursor pagination |
 | `method_name` | `jsonPaginate` | The terminal method Docuccino looks for while tracing |
-| `default_size` | `30` | `page[size]`'s `default` |
+| `default_size` | `30` | `page[size]`'s `default`, capped at `max_results` |
 | `max_results` | `30` | `page[size]`'s `maximum` |
 | `use_simple_pagination` | `false` | Selects the simple envelope |
 | `use_cursor_pagination` | `false` | Selects the cursor envelope and `page[cursor]` |
