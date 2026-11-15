@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Workbench\App\Enums\Season;
 use Workbench\App\Models\Almanac;
 use Workbench\App\Models\Article;
+use Workbench\App\Models\Dossier;
 use Workbench\App\Models\Form;
 use Workbench\App\Models\Journal;
 use Workbench\App\Models\Ledger;
@@ -16,8 +17,8 @@ use Workbench\App\Models\Ledger;
 /**
  * Every kind of route binding Laravel resolves, one action each: the plain implicit one, a route that
  * names its own column, a nested child the router scopes to its parent, a model that decides its key
- * in a method body, a string-backed enum, and a segment the application resolves with a binder of its
- * own. What each one lets the document say about the path parameter is different, and several of them
+ * in a method body, a string-backed enum, a segment the application resolves with a binder of its
+ * own, and one it binds to a model with `Route::model()`. What each one lets the document say about the path parameter is different, and several of them
  * are what it must NOT say.
  */
 final class BindingController
@@ -76,5 +77,19 @@ final class BindingController
     public function showBound(Form $custom): JsonResponse
     {
         return response()->json($custom);
+    }
+
+    /** Show a dossier. */
+    #[Group('Bindings')]
+    public function showDossier(Dossier $dossier): JsonResponse
+    {
+        return response()->json($dossier);
+    }
+
+    /** Show a ledger the application binds with `Route::model()`, so the signature names no type. */
+    #[Group('Bindings')]
+    public function showExplicit(mixed $explicit): JsonResponse
+    {
+        return response()->json($explicit);
     }
 }

@@ -19,7 +19,7 @@
               ],
               "source": {
                 "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                "line": 41,
+                "line": 42,
                 "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::consigned"
               }
             },
@@ -52,7 +52,7 @@
                     ],
                     "source": {
                       "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                      "line": 41,
+                      "line": 42,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -79,7 +79,7 @@
                   ],
                   "source": {
                     "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                    "line": 41,
+                    "line": 42,
                     "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::consigned"
                   }
                 }
@@ -213,6 +213,225 @@
         }
       }
     },
+    "/api/pallets": {
+      "post": {
+        "x-docuccino": {
+          "id": "op:v1:orqgjxkm34n2jgyv",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
+                "line": 53,
+                "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::storePallet"
+              }
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ]
+        },
+        "operationId": "post.api.pallets",
+        "tags": [
+          "Parcel"
+        ],
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:yvmvyjikqd2cjuav",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 0.9
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PalletResource"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pallets/{pallet}": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:4ktm7a4kerrjgd4h",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
+                "line": 58,
+                "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::showPallet"
+              }
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ],
+          "uses": {
+            "responses": {
+              "404": {
+                "id": "res:v1:i36ktlzkspnzetyi",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
+                      "line": 58,
+                      "symbol": "implicit:route-model-binding"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "get.api.pallets.@pallet",
+        "tags": [
+          "Parcel"
+        ],
+        "parameters": [
+          {
+            "x-docuccino": {
+              "id": "par:v1:teliswhgsh2paut7",
+              "provenance": [
+                {
+                  "producer": "inference",
+                  "layer": "inference",
+                  "fields": [
+                    "required"
+                  ],
+                  "source": {
+                    "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
+                    "line": 58,
+                    "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::showPallet"
+                  }
+                }
+              ]
+            },
+            "name": "pallet",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "type"
+                    ]
+                  }
+                ]
+              },
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:v3l6mfgbbvbeqxgo",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 0.9
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PalletResource"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/api/parcels": {
       "post": {
         "x-docuccino": {
@@ -226,7 +445,7 @@
               ],
               "source": {
                 "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                "line": 13,
+                "line": 14,
                 "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::store"
               }
             },
@@ -362,7 +581,7 @@
               ],
               "source": {
                 "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                "line": 18,
+                "line": 19,
                 "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::show"
               }
             },
@@ -388,7 +607,7 @@
                     ],
                     "source": {
                       "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                      "line": 18,
+                      "line": 19,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -415,7 +634,7 @@
                   ],
                   "source": {
                     "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                    "line": 18,
+                    "line": 19,
                     "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::show"
                   }
                 }
@@ -441,7 +660,7 @@
                     ],
                     "source": {
                       "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                      "line": 18,
+                      "line": 19,
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::show"
                     }
                   }
@@ -557,7 +776,7 @@
               ],
               "source": {
                 "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                "line": 28,
+                "line": 29,
                 "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::destroy"
               }
             },
@@ -583,7 +802,7 @@
                     ],
                     "source": {
                       "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                      "line": 28,
+                      "line": 29,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -610,7 +829,7 @@
                   ],
                   "source": {
                     "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                    "line": 28,
+                    "line": 29,
                     "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::destroy"
                   }
                 }
@@ -636,7 +855,7 @@
                     ],
                     "source": {
                       "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                      "line": 28,
+                      "line": 29,
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::destroy"
                     }
                   }
@@ -664,7 +883,7 @@
               ],
               "source": {
                 "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                "line": 23,
+                "line": 24,
                 "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::update"
               }
             },
@@ -690,7 +909,7 @@
                     ],
                     "source": {
                       "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                      "line": 23,
+                      "line": 24,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -717,7 +936,7 @@
                   ],
                   "source": {
                     "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                    "line": 23,
+                    "line": 24,
                     "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::update"
                   }
                 }
@@ -743,7 +962,7 @@
                     ],
                     "source": {
                       "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                      "line": 23,
+                      "line": 24,
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::update"
                     }
                   }
@@ -861,7 +1080,7 @@
               ],
               "source": {
                 "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                "line": 35,
+                "line": 36,
                 "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::storeRaw"
               }
             },
@@ -974,6 +1193,183 @@
         }
       }
     },
+    "/api/shipments/{shipment}": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:jragbzamvzvu6rhn",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
+                "line": 48,
+                "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::shipped"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ]
+        },
+        "operationId": "get.api.shipments.@shipment",
+        "summary": "Bound with `Route::model()`, so the signature names no type.",
+        "tags": [
+          "Parcel"
+        ],
+        "parameters": [
+          {
+            "x-docuccino": {
+              "id": "par:v1:xm2zyagu5rctvzb5",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "required"
+                  ]
+                }
+              ]
+            },
+            "name": "shipment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "type"
+                    ]
+                  }
+                ]
+              },
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:npk3qcdt5uo7su2e",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 0.9
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ParcelResource"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            },
+            "links": {
+              "delete.api.parcels.@parcel": {
+                "operationId": "delete.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "get.api.parcels.@parcel": {
+                "operationId": "get.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "get.api.tracked-parcels.@parcel": {
+                "operationId": "get.api.tracked-parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/tracking"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "patch.api.parcels.@parcel": {
+                "operationId": "patch.api.parcels.@parcel",
+                "parameters": {
+                  "parcel": "$response.body#/data/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tracked-parcels/{parcel}": {
       "get": {
         "x-docuccino": {
@@ -987,7 +1383,7 @@
               ],
               "source": {
                 "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                "line": 30,
+                "line": 31,
                 "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::track"
               }
             },
@@ -1013,7 +1409,7 @@
                     ],
                     "source": {
                       "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                      "line": 30,
+                      "line": 31,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -1040,7 +1436,7 @@
                   ],
                   "source": {
                     "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                    "line": 30,
+                    "line": 31,
                     "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::track"
                   }
                 }
@@ -1066,7 +1462,7 @@
                     ],
                     "source": {
                       "file": "tests/Fixtures/ResponseLinks/ParcelController.php",
-                      "line": 30,
+                      "line": 31,
                       "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\ParcelController::track"
                     }
                   }
@@ -1188,6 +1584,24 @@
           "message"
         ]
       },
+      "PalletResource": {
+        "x-docuccino": {
+          "id": "sch:v1:iqzgm6tclckyg3ij"
+        },
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tag"
+        ]
+      },
       "Parcel": {
         "x-docuccino": {
           "id": "sch:v1:b6dagkfpks3kasut"
@@ -1260,7 +1674,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "04149c174db7898c888041ed10468d7cb004571033ad723f3646f168dfdd0bcf"
+      "contentHash": "d13ff5b9474ea9ee55eb0487b1b3ea75b5e0bcd66da355442afafa12fb1bea34"
     },
     "generator": {
       "name": "docuccino/laravel",

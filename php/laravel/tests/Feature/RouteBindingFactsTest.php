@@ -7,6 +7,7 @@ use Docuccino\Laravel\Config\BuildConfig;
 use Illuminate\Routing\Router;
 use Workbench\App\Http\Controllers\BindingController;
 use Workbench\App\Http\Controllers\DescribedBindingController;
+use Workbench\App\Models\Ledger;
 
 /**
  * What a route binding lets a path parameter tell a consumer, and — the harder half — what it does
@@ -28,6 +29,7 @@ function bindingFactRoutes(): callable
         // The application's own binder, registered the way a service provider registers one. It runs
         // BEFORE implicit binding and ignores both the route's column and the model's route key.
         $router->bind('custom', static fn (string $value): ?string => $value);
+        $router->model('explicit', Ledger::class);
 
         $router->get('api/binding-ledgers/{ledger}', [BindingController::class, 'showByReference']);
         $router->get('api/binding-refs/{ledger:reference}', [BindingController::class, 'showByReference']);
@@ -52,6 +54,10 @@ function bindingFactRoutes(): callable
         $router->get('api/binding-articles/{article}', [BindingController::class, 'showArticle']);
         $router->get('api/binding-seasons/{season}', [BindingController::class, 'showSeason']);
         $router->get('api/binding-custom/{custom}', [BindingController::class, 'showBound']);
+        $router->get('api/binding-dossiers/{dossier}', [BindingController::class, 'showDossier']);
+        // Bound with `Route::model()`, by key and with a column the framework ignores for it.
+        $router->get('api/binding-explicit/{explicit}', [BindingController::class, 'showExplicit']);
+        $router->get('api/binding-explicit-refs/{explicit:reference}', [BindingController::class, 'showExplicit']);
         // Every note a binding writes, on segments their author described as well.
         $router->get('api/binding-described/{ledger:reference}/entries/{entry}', [DescribedBindingController::class, 'showEntry'])
             ->scopeBindings()

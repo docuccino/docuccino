@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Tests\Fixtures\ResponseLinks;
 
 /**
- * A parcel's routes: made, read, changed, removed, read by tracking code, and made again answering with
- * the model itself rather than a resource. Never dispatched.
+ * A parcel's routes: made, read, changed, removed, read by tracking code, made again answering with the
+ * model itself rather than a resource, and read through a `Route::model()` binding; and a pallet's,
+ * looked up by the key its model names. Never dispatched.
  */
 final class ParcelController
 {
@@ -41,5 +42,21 @@ final class ParcelController
     public function consigned(Parcel $consignment): ParcelResource
     {
         return new ParcelResource($consignment);
+    }
+
+    /** Bound with `Route::model()`, so the signature names no type. */
+    public function shipped(mixed $shipment): ParcelResource
+    {
+        return new ParcelResource($shipment);
+    }
+
+    public function storePallet(): PalletResource
+    {
+        return new PalletResource(Pallet::create([]));
+    }
+
+    public function showPallet(Pallet $pallet): PalletResource
+    {
+        return new PalletResource($pallet);
     }
 }

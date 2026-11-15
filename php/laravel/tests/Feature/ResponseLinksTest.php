@@ -18,6 +18,8 @@ use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\BranchingCrateResource;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Crate;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\CrateController;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\KeyedCrateResource;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Pallet;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\PalletResource;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Parcel;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ParcelController;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ParcelResource;
@@ -40,6 +42,10 @@ beforeEach(function (): void {
         $router->get('api/tracked-parcels/{parcel:tracking}', [ParcelController::class, 'track']);
         $router->post('api/raw-parcels', [ParcelController::class, 'storeRaw']);
         $router->get('api/consignments/{consignment}', [ParcelController::class, 'consigned']);
+        $router->model('shipment', Parcel::class);
+        $router->get('api/shipments/{shipment}', [ParcelController::class, 'shipped']);
+        $router->post('api/pallets', [ParcelController::class, 'storePallet']);
+        $router->get('api/pallets/{pallet}', [ParcelController::class, 'showPallet']);
     };
 
     $this->engine = static function (): TypeEngine {
@@ -48,6 +54,10 @@ beforeEach(function (): void {
 
         return WorkbenchEngine::make(
             classOverrides: [
+                Pallet::class => new ClassMetadata(Pallet::class, [
+                    new PropertyMetadata('id', ScalarT::int()),
+                    new PropertyMetadata('tag', ScalarT::string()),
+                ]),
                 Parcel::class => new ClassMetadata(Parcel::class, [
                     new PropertyMetadata('id', ScalarT::int()),
                     new PropertyMetadata('tracking', ScalarT::string()),
@@ -61,6 +71,13 @@ beforeEach(function (): void {
                 $controller.'track' => $returns(ParcelResource::class),
                 $controller.'storeRaw' => $returns(Parcel::class),
                 $controller.'consigned' => $returns(ParcelResource::class),
+                $controller.'shipped' => $returns(ParcelResource::class),
+                $controller.'storePallet' => $returns(PalletResource::class),
+                $controller.'showPallet' => $returns(PalletResource::class),
+                PalletResource::class.'::toArray' => new ActionAnalysis(returns: [new ReturnSite(new ArrayShapeT([
+                    new ArrayShapeField('id', ScalarT::int()),
+                    new ArrayShapeField('tag', ScalarT::string()),
+                ]), new SourceLocation(''))]),
                 ParcelResource::class.'::toArray' => new ActionAnalysis(returns: [new ReturnSite(new ArrayShapeT([
                     new ArrayShapeField('id', ScalarT::int()),
                     new ArrayShapeField('tracking', ScalarT::string()),
