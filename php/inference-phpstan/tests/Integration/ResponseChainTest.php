@@ -40,6 +40,7 @@ function responseChainAnalyses(): array
             'prepared', 'pretty', 'forceObject', 'callback', 'noCallback', 'unknownLink', 'twoUnread', 'twoUnreadThenStatus',
             'subclass', 'subclassHeader', 'subclassStream', 'subclassRedirect', 'overridden', 'overriddenLocal',
             'localFactory', 'localJson', 'localPlain', 'localData', 'localContent',
+            'download', 'downloadHeaders', 'redirectFlash',
         ],
     );
 }
@@ -84,6 +85,17 @@ it('leaves the response as it was built where a link touches nothing documented'
     'cached', 'cacheHeaders', 'withoutHeader',
     // Removing the media type leaves the default one, which a JSON body already had.
     'withoutContentType',
+])->group('fixture');
+
+it('leaves a download and a redirect as they were built where their own setters touch nothing documented', function (string $method, DType $expected): void {
+    // Deleting the file once it is sent, its ETag, Last-Modified and Content-Disposition headers, what a
+    // redirect flashes to the session, its cookies and its target's fragment change no status, media type or
+    // body: a download is still the 200 file the factory built, and the redirect still a 303.
+    expect(responseChainReturn($method))->toEqual($expected);
+})->with([
+    'download(…)->deleteFileAfterSend()' => ['download', new ClassT('Symfony\\Component\\HttpFoundation\\BinaryFileResponse')],
+    'download(…)->setAutoEtag()->setAutoLastModified()->setContentDisposition(…)' => ['downloadHeaders', new ClassT('Symfony\\Component\\HttpFoundation\\BinaryFileResponse')],
+    'redirect($url, 303)->with(…)->withErrors(…)->withInput()->withCookies(…)->withFragment(…)->withoutFragment()' => ['redirectFlash', new ClassT('Illuminate\\Http\\RedirectResponse', [new UnknownT('payload not folded'), new LiteralT(303)])],
 ])->group('fixture');
 
 it('keeps the media type a plain response is labelled with through a charset', function (): void {

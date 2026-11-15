@@ -54,9 +54,10 @@ function responseChainReturns(): array
         'unchanged' => $sent(new VoidT, 304),
         // Cache headers change nothing documented.
         'cached' => $sent($queued, 202),
-        // A setter the chain reader does not name may have changed anything.
-        'export' => new ClassT('Symfony\\Component\\HttpFoundation\\BinaryFileResponse', [$unread, new UnknownT('status not folded')]),
-        'flash' => new ClassT('Illuminate\\Http\\RedirectResponse', [$unread, new UnknownT('status not folded')]),
+        // A download's and a redirect's own setters change nothing documented: the file the factory built, sent
+        // with a 200, and the 303 the redirect was built with.
+        'export' => new ClassT('Symfony\\Component\\HttpFoundation\\BinaryFileResponse'),
+        'flash' => new ClassT('Illuminate\\Http\\RedirectResponse', [$unread, new LiteralT(303)]),
         // `prepare()` may change anything for the request it is handed.
         'prepared' => new ClassT($json, [$unread, new UnknownT('status not folded')]),
         // A chain on an application's subclass is read over what its constructor hands the framework's.
