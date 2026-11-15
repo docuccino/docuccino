@@ -228,6 +228,7 @@
                   "producer": "inference",
                   "layer": "inference",
                   "fields": [
+                    "description",
                     "required"
                   ],
                   "source": {
@@ -236,20 +237,31 @@
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showArticle"
                   }
                 }
-              ]
+              ],
+              "facts": {
+                "routeBinding": {
+                  "key": "slug"
+                }
+              }
             },
             "name": "article",
             "in": "path",
+            "description": "Matched on the resource's `slug`.",
             "required": true,
             "schema": {
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "fallback",
-                    "layer": "fallback",
+                    "producer": "inference",
+                    "layer": "inference",
                     "fields": [
                       "type"
-                    ]
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/BindingController.php",
+                      "line": 63,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showArticle"
+                    }
                   }
                 ]
               },
@@ -711,7 +723,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "404": {
+                "id": "res:v1:vkzkb6j7sytwst2y",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/BindingController.php",
+                      "line": 91,
+                      "symbol": "implicit:route-model-binding"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "get.api.binding-explicit-refs.@explicit",
         "summary": "Show a ledger the application binds with `Route::model()`, so the signature names no type.",
@@ -724,33 +758,55 @@
               "id": "par:v1:xrohptvhnt3gsyjp",
               "provenance": [
                 {
-                  "producer": "fallback",
-                  "layer": "fallback",
+                  "producer": "inference",
+                  "layer": "inference",
                   "fields": [
+                    "description",
                     "required"
-                  ]
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/BindingController.php",
+                    "line": 91,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showExplicit"
+                  }
                 }
-              ]
+              ],
+              "facts": {
+                "routeBinding": {
+                  "key": "id"
+                }
+              }
             },
             "name": "explicit",
             "in": "path",
+            "description": "Matched on the resource's `id`.",
             "required": true,
             "schema": {
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "fallback",
-                    "layer": "fallback",
+                    "producer": "inference",
+                    "layer": "inference",
                     "fields": [
                       "type"
-                    ]
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/BindingController.php",
+                      "line": 91,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showExplicit"
+                    }
                   }
                 ]
               },
-              "type": "string"
+              "type": "integer"
             }
           }
-        ]
+        ],
+        "responses": {
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
       }
     },
     "/api/binding-explicit/{explicit}": {
@@ -784,7 +840,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "404": {
+                "id": "res:v1:4czauq5h5zi3kkwb",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/BindingController.php",
+                      "line": 91,
+                      "symbol": "implicit:route-model-binding"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "get.api.binding-explicit.@explicit",
         "summary": "Show a ledger the application binds with `Route::model()`, so the signature names no type.",
@@ -797,33 +875,55 @@
               "id": "par:v1:32vpwdsvmkr3kico",
               "provenance": [
                 {
-                  "producer": "fallback",
-                  "layer": "fallback",
+                  "producer": "inference",
+                  "layer": "inference",
                   "fields": [
+                    "description",
                     "required"
-                  ]
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/BindingController.php",
+                    "line": 91,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showExplicit"
+                  }
                 }
-              ]
+              ],
+              "facts": {
+                "routeBinding": {
+                  "key": "id"
+                }
+              }
             },
             "name": "explicit",
             "in": "path",
+            "description": "Matched on the resource's `id`.",
             "required": true,
             "schema": {
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "fallback",
-                    "layer": "fallback",
+                    "producer": "inference",
+                    "layer": "inference",
                     "fields": [
                       "type"
-                    ]
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/BindingController.php",
+                      "line": 91,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showExplicit"
+                    }
                   }
                 ]
               },
-              "type": "string"
+              "type": "integer"
             }
           }
-        ]
+        ],
+        "responses": {
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
       }
     },
     "/api/binding-journals/{journal}": {
@@ -2104,7 +2204,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "5674d670e3e87e41961dcd9b2393db35a57040809973be34e933271c12755500"
+      "contentHash": "02169eb20f4e3afb5b6b90ff5321e1f57354000996174a08c70f13bf4d737796"
     },
     "generator": {
       "name": "docuccino/laravel",
