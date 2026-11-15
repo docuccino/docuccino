@@ -34,6 +34,7 @@ declare(strict_types=1);
  *   php engine-runner.php trace-created-resource    <controllerFile> <class> <method>
  *   php engine-runner.php trace-wrapped-collection  <controllerFile> <class> <method> <collectionFqcn>
  *   php engine-runner.php trace-resource-models     <controllerFile> <class> <method> <resourceFqcn>
+ *   php engine-runner.php trace-data-sources        <controllerFile> <class> <method> <dataFqcn>
  *   php engine-runner.php data-response-status      <dataFile>       <class[,class…]> <ignored>
  *   php engine-runner.php trace-file-responses      <controllerFile> <class> <method>
  *   php engine-runner.php trace-closure             <file> <ignored> <ignored> <line>
@@ -85,6 +86,8 @@ use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderTraceVisitor;
 use Docuccino\Laravel\Integrations\QueryBuilder\ScopeParameterResolver;
 use Docuccino\Laravel\Integrations\SpatieData\DataResponseStatus;
 use Docuccino\Laravel\Integrations\Support\PaginationTerminalVisitor;
+use Docuccino\Laravel\Links\DataConstruction;
+use Docuccino\Laravel\Links\DataSourceVisitor;
 use Docuccino\Laravel\Links\ResourceModelVisitor;
 
 $repoRoot = dirname(__DIR__, 4);
@@ -696,6 +699,18 @@ $result = match ($mode) {
         $engine->trace($ref, $visitor);
 
         return ['model' => $visitor->modelOf($argv[5] ?? ''), 'wrapped' => $visitor->wrappedModel($argv[5] ?? '')];
+    })(),
+    'trace-data-sources' => (static function () use ($engine, $ref, $argv): array {
+        // DataSourceVisitor types what each construction of a Data class is built from — which model's
+        // columns a response link reads the Data body's properties off.
+        $visitor = new DataSourceVisitor;
+        $engine->trace($ref, $visitor);
+        $constructions = $visitor->constructionsOf($argv[5] ?? '');
+
+        return ['constructions' => $constructions === null ? null : array_map(
+            static fn (DataConstruction $built): array => ['kind' => $built->kind, 'model' => $built->model, 'sources' => $built->sources],
+            $constructions,
+        )];
     })(),
     'trace-wrapped-collection' => (static function () use ($engine, $ref, $argv): array {
         // WrappedCollectionVisitor types what each construction of the collection is handed — the proof a

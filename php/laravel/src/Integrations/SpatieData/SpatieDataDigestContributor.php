@@ -11,7 +11,8 @@ use Illuminate\Contracts\Config\Repository as ConfigRepository;
  * Contributes the `spatie/laravel-data` global config to the environment digest (design §10, A4): the
  * response wrap key (`data.wrap`), the name-mapping strategy (`data.name_mapping_strategy.input`/
  * `.output` — a whole-class default rename), and what a date is read and written with (`data.date_format`,
- * a format or a list of them, `data.casts` and `data.transformers`). Each reshapes every documented Data
+ * a format or a list of them, `data.casts` and `data.transformers`), and what reads a model into one
+ * (`data.normalizers`, which a response link's Data half trusts). Each reshapes every documented Data
  * class but reflects no route file, so it must key the warm-fragment cache. Gated with the spatie-data
  * integration.
  */
@@ -34,6 +35,8 @@ final class SpatieDataDigestContributor implements EnvironmentDigestContributor
             $this->json('data.transformers'),
             'casts',
             $this->json('data.casts'),
+            'normalizers',
+            $this->json('data.normalizers'),
         ]);
     }
 

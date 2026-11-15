@@ -47,6 +47,9 @@ final class EloquentModelReflector
     /** The methods a model is serialised through, from the whole body down to the attributes it sends. */
     private const SERIALISATION = ['toJson', 'jsonSerialize', 'toArray', 'attributesToArray', 'getArrayableAttributes'];
 
+    /** Where a model's attribute is read: what `$model->column` and laravel-data's model normalizer return. */
+    private const ATTRIBUTE_READS = ['__get', 'getAttribute', 'getAttributeValue', 'getAttributeFromArray'];
+
     /** The methods a scope parent resolves its children through. */
     private const CHILD_BINDING = ['resolveChildRouteBinding', 'resolveSoftDeletableChildRouteBinding', 'resolveChildRouteBindingQuery'];
 
@@ -160,6 +163,12 @@ final class EloquentModelReflector
     public static function serialisesItself(string $fqcn): bool
     {
         return self::overridesAny($fqcn, self::SERIALISATION);
+    }
+
+    /** Whether the model reads its attributes in code of its own, so a column may not reach PHP as stored. */
+    public static function readsAttributesItself(string $fqcn): bool
+    {
+        return self::overridesAny($fqcn, self::ATTRIBUTE_READS);
     }
 
     /** Whether the model finds the children scoped to it in code of its own. */

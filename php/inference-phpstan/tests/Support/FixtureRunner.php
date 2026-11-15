@@ -281,6 +281,17 @@ final class FixtureRunner
     }
 
     /**
+     * Trace a controller with the DataSourceVisitor: what each construction of `$data` the walk sees is
+     * built from, or null where it sees none.
+     *
+     * @return array<string, mixed>
+     */
+    public static function traceDataSources(string $controllerRelPath, string $class, string $method, string $data): array
+    {
+        return self::invoke('trace-data-sources', self::path($controllerRelPath), $class, $method, $data);
+    }
+
+    /**
      * Trace a closure located by start line with the {@see ClosureReturnProbe}: returns one entry per
      * return expression the engine handed over, with its node kind and the scope's type for it.
      *

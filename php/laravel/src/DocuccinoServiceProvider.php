@@ -74,6 +74,7 @@ use Docuccino\Laravel\Integrations\SpatieData\ReadDate;
 use Docuccino\Laravel\Integrations\SpatieData\WrapResolver;
 use Docuccino\Laravel\Integrations\SpatieData\WrittenDate;
 use Docuccino\Laravel\Integrations\Support\DateWireFormat;
+use Docuccino\Laravel\Links\DataColumns;
 use Docuccino\Laravel\Pipeline\BuildFingerprint;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
@@ -475,6 +476,20 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
                 dateFormat: self::dataOutputDateFormat(),
                 wrap: new WrapResolver(self::stringConfig('data.wrap')),
                 transformers: self::dataClassMap('data.transformers', WrittenDate::DEFAULT_TRANSFORMERS),
+            );
+        });
+
+        // A response link's Data half reads laravel-data as the app configured it: the names, the envelope,
+        // and what may stand between a model's column and the wire.
+        $this->app->bind(DataColumns::class, function (Application $app): DataColumns {
+            return new DataColumns(
+                reflector: $app->make(DataClassReflector::class),
+                wrap: new WrapResolver(self::stringConfig('data.wrap')),
+                globalInputMapper: self::stringConfig('data.name_mapping_strategy.input'),
+                globalOutputMapper: self::stringConfig('data.name_mapping_strategy.output'),
+                normalizers: is_array(config('data.normalizers')) ? array_values(array_filter(config('data.normalizers'), is_string(...))) : null,
+                castTypes: array_keys(self::dataClassMap('data.casts', [])),
+                transformerTypes: array_keys(self::dataClassMap('data.transformers', [])),
             );
         });
 

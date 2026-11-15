@@ -24,7 +24,7 @@ use ReflectionMethod;
  * `$this->getRouteKey()`, `$this->getKey()`).
  *
  * A column is sent verbatim only where nothing between the database and the wire rewrites it: no accessor,
- * no date handling, and no cast but `int`/`integer`/`string`. A route binding looks the segment up by the
+ * no date handling, no cast but `int`/`integer`/`string`, and no attribute read the model writes itself. A route binding looks the segment up by the
  * stored value, so a member an accessor or a cast class produced is not a value the route matches on.
  *
  * @internal
@@ -36,9 +36,11 @@ final class BodyColumns
     /** Casts that leave a key's value as the route matches it. */
     private const array VERBATIM_CASTS = ['int', 'integer', 'string'];
 
-    private const string ROUTE_KEY = "\0routeKey";
+    /** Stands for the column `getRouteKey()` reads. */
+    public const string ROUTE_KEY = "\0routeKey";
 
-    private const string PRIMARY_KEY = "\0primaryKey";
+    /** Stands for the column `getKey()` reads. */
+    public const string PRIMARY_KEY = "\0primaryKey";
 
     public function __construct(
         private readonly EloquentModelReflector $models = new EloquentModelReflector,
@@ -67,18 +69,31 @@ final class BodyColumns
 
         $carried = [];
         foreach ($members as $member => $column) {
-            $column = match ($column) {
-                self::ROUTE_KEY => $context->routeBindingKeyName($model),
-                self::PRIMARY_KEY => $this->primaryKey($model),
-                default => $column,
-            };
+            $column = in_array($member, $published, true) ? $this->sentAsStored($model, $column, $context) : null;
 
-            if ($column !== null && in_array($member, $published, true) && $this->verbatim($model, $column)) {
+            if ($column !== null) {
                 $carried[(string) $member] = $column;
             }
         }
 
         return $carried;
+    }
+
+    /**
+     * The column `$column` (or a key marker) names on `$model`, where its value reaches the wire as it is
+     * stored; null otherwise.
+     */
+    public function sentAsStored(string $model, string $column, RouteContext $context): ?string
+    {
+        $context->recordDependencyFiles(DeclarationFiles::of($model));
+
+        $column = match ($column) {
+            self::ROUTE_KEY => $context->routeBindingKeyName($model),
+            self::PRIMARY_KEY => $this->primaryKey($model),
+            default => $column,
+        };
+
+        return $column !== null && $this->verbatim($model, $column) ? $column : null;
     }
 
     /**
@@ -224,6 +239,11 @@ final class BodyColumns
     /** Whether `$column` reaches the wire as it is stored. */
     private function verbatim(string $model, string $column): bool
     {
+        // A model that reads its own attributes may hand back anything under a column's name.
+        if (EloquentModelReflector::readsAttributesItself($model)) {
+            return false;
+        }
+
         $facts = $this->models->facts($model);
         $cast = $facts['casts'][$column] ?? null;
 
