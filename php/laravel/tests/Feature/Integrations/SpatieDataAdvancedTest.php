@@ -252,7 +252,7 @@ it('silently drops an object-valued #[Rule(new …)] but recovers the string for
         ->and($reflector->validationTokens(PinnedRuleData::class, 'code'))->toBe(['max:5']);
 });
 
-it('documents a WithCast DateTimeInterfaceCast format:U property as an integer timestamp', function (): void {
+it('documents a WithCast DateTimeInterfaceCast format:U property as the string the transformer writes', function (): void {
     $components = new ComponentRegistry;
     $engine = new StubTypeEngine(classes: [
         TimestampData::class => new ClassMetadata(TimestampData::class, [
@@ -264,11 +264,12 @@ it('documents a WithCast DateTimeInterfaceCast format:U property as an integer t
 
     $properties = $components->schemas()['TimestampData']['properties'];
 
-    // A `format: 'U'` cast becomes an integer (Unix seconds); a plain datetime stays a date-time string.
-    expect($properties['expiresAt'])->toBe(['type' => 'integer', 'description' => 'Unix timestamp (seconds).'])
+    // A cast only reads input. laravel-data writes both with its date transformer, which formats with
+    // `data.date_format` and never consults the cast, so the two publish alike.
+    expect($properties['expiresAt'])->toBe(['type' => 'string', 'format' => 'date-time'])
         ->and($properties['createdAt'])->toBe(['type' => 'string', 'format' => 'date-time']);
 
-    // The reflector reads the format straight off the attribute.
+    // The reflector still reads the format straight off the attribute, for the request side.
     expect((new DataClassReflector)->dateTimeCastFormat(TimestampData::class, 'expiresAt'))->toBe('U')
         ->and((new DataClassReflector)->dateTimeCastFormat(TimestampData::class, 'createdAt'))->toBeNull();
 });

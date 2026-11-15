@@ -10,9 +10,9 @@ use Docuccino\Core\Draft\SchemaNotes;
 
 /**
  * A PHP `date()` format string → what a value written with it publishes. One home for the policy, because
- * three readers ask the same question: a Data class's response properties read the app's
- * `data.date_format`, its request properties read whatever the property's most specific source states,
- * and an Eloquent `datetime:FORMAT` cast reads its own parameter.
+ * three readers ask the same question: a Data class's response properties read the format their transformer
+ * writes, its request properties the one their cast reads, and an Eloquent `datetime:FORMAT` cast its own
+ * parameter.
  *
  * The `format` claim is an ALLOW-LIST rather than a heuristic: `date`/`date-time` name RFC 3339 shapes and
  * nothing else, so a pattern that writes something else publishes a string naming the pattern instead of a
@@ -27,7 +27,7 @@ final class DateWireFormat
     /** The one PHP format whose value is an integer rather than a formatted string. */
     public const UNIX = 'U';
 
-    /** What a `U` value is, in the one sentence both directions say it with. */
+    /** What an integer epoch is, in the one sentence every reader says it with. */
     public const TIMESTAMP_NOTE = 'Unix timestamp (seconds).';
 
     /** The instant every {@see example()} is of: a constant, so no clock or locale reaches the document. */
@@ -73,7 +73,7 @@ final class DateWireFormat
     }
 
     /**
-     * What a value serialized as a Unix timestamp publishes, its meaning as a note for the reason
+     * What a value serialized as an integer Unix timestamp publishes, its meaning as a note for the reason
      * {@see serializedSchema()} gives.
      *
      * @return array<string, mixed>

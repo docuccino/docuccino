@@ -369,16 +369,24 @@ status separately. A computed status falls back to `200` with a
 
 ### Dates and timestamps
 
-A `DateTimeInterface` property is documented as a string, with the `format` following your app's
-`data.date_format`: an ISO format gives `date-time` or `date`, and anything else — `d/m/Y H:i` — gives a
-plain string naming the format, because `date-time` means RFC 3339 and a claim your values fail is worse
-than none. A docblock or `#[Description]` you write for the property leads, and the sentence naming the
-format stays beneath it. The one property that isn't a string is a Unix timestamp:
+A `DateTimeInterface` property in a response is documented as whatever laravel-data writes it as. Out
+of the box that is its `DateTimeInterfaceTransformer`, formatting with your app's `data.date_format`, or
+the first format when it is a list. An ISO format gives `date-time` or `date`, and anything else
+(`d/m/Y H:i`) gives a plain string naming the format, because `date-time` means RFC 3339 and a claim your
+values fail is worse than none. A docblock or `#[Description]` you write for the property leads, and the
+sentence naming the format stays beneath it.
+
+A transformer on the property writes it instead, so its format is the one documented:
 
 ```php
-#[WithCast(DateTimeInterfaceCast::class, format: 'U')]
-public CarbonImmutable $issuedAt; // → { "type": "integer", "description": "Unix timestamp (seconds)." }
+#[WithTransformer(DateTimeInterfaceTransformer::class, format: 'Y-m-d')]
+public CarbonImmutable $dueOn; // → { "type": "string", "format": "date" }
 ```
+
+A cast never changes the response. `#[WithCast(DateTimeInterfaceCast::class, format: 'U')]` tells
+laravel-data how to read the value a request sends, and the response still carries the
+`data.date_format` string. A transformer of your own, on the property or in `data.transformers`, can
+write anything, so that property is documented with no type at all rather than a guess.
 
 That holds in **both directions**. A date property in a request body is documented from the most
 specific source the class gives, not from a validation rule that says less:
@@ -386,9 +394,9 @@ specific source the class gives, not from a validation rule that says less:
 | On the property | The request documents |
 | --- | --- |
 | `#[DateFormat('d/m/Y')]` | "Expected format: d/m/Y" and `example: 01/01/2024` — you stated the wire format outright, and no `format` word describes it. |
-| `#[WithCast(DateTimeInterfaceCast::class, format: 'U')]` | `type: integer` — the cast parses a timestamp, so that is what the endpoint takes. |
+| `#[WithCast(DateTimeInterfaceCast::class, format: 'U')]` | `type: integer` and "Unix timestamp (seconds)." — the cast parses a timestamp, so that is what the endpoint takes. |
 | `#[WithCast(DateTimeInterfaceCast::class, format: 'Y-m-d')]` | `format: date` — the cast's format is the one it accepts. |
-| A `DateTimeInterface` type, nothing else | The `format` your `data.date_format` gives, exactly as the response side reads it. |
+| A `DateTimeInterface` type, nothing else | The `format` your `data.date_format` gives. |
 
 The example is always rendered with the format itself, so it is a value your endpoint accepts rather than
 an ISO one it would reject.
@@ -405,8 +413,9 @@ public ?CarbonImmutable $expectedUpdatedAt;
 // response → { "type": ["string", "null"], "format": "date-time" }
 ```
 
-Where your app really is asymmetric the two sides say so: a `d/m/Y` cast with an ISO `data.date_format`
-documents a `d/m/Y` string in and `date-time` out, because that is what the endpoint does.
+Where your app really is asymmetric the two sides say so: a `d/m/Y` or `U` cast with an ISO
+`data.date_format` documents a `d/m/Y` string or an integer in and `date-time` out, because that is what
+the endpoint does.
 
 ### Wrapping
 
@@ -690,7 +699,8 @@ JSON your app actually produces and accepts:
 | A constructor `@param` / a property `@var` | Supplies the element type PHP can't declare (`list<T>`), wherever the native type is vague. |
 | `calculateResponseStatus()`, or Spatie's inherited default | Documents the success status: `201` on `POST`, `200` otherwise, unless the class overrides it — and an override deciding on the route name documents the one status each route takes. |
 | An overridden `toResponse()` / `transform()` | Docuccino reads your own construction instead — its status, headers and media type win. |
-| `#[WithCast(DateTimeInterfaceCast::class, format: 'U')]` | Documents the property as an integer Unix timestamp. |
+| `#[WithCast(DateTimeInterfaceCast::class, format: '…')]` | Documents the format a request body's date is read with; `U` makes it an integer Unix timestamp. |
+| `#[WithTransformer(DateTimeInterfaceTransformer::class, format: '…')]` / `data.transformers` | Documents the format a response's date is written with. A transformer of your own leaves the property untyped. |
 | `rules()` | Overrides the inferred request rules per field. |
 | `allowedRequest*()` | Surfaces the `include`/`exclude`/`only`/`except` query parameters. |
 | `#[SchemaName]` / `#[SchemaId]` | Names the component / pins its diff identity. |
@@ -715,9 +725,9 @@ None required. Like every integration, the Data support accepts an `enabled` opt
 [configuration reference](/laravel/reference/configuration/#integrations). It's a no-op when the package
 isn't installed.
 
-Three of your app's own `config/data.php` settings do reshape the output, and Docuccino reads all
-three: `wrap`, `name_mapping_strategy`, and `date_format`. Change one and every documented Data class
-is rebuilt.
+Four of your app's own `config/data.php` settings do reshape the output, and Docuccino reads all
+four: `wrap`, `name_mapping_strategy`, `date_format`, and `transformers`. Change one and every documented
+Data class is rebuilt.
 
 ## When it can't tell
 

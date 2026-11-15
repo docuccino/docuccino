@@ -113,6 +113,11 @@ final class DataClassReflector
 
     private const WITH_TRANSFORMER = 'Spatie\\LaravelData\\Attributes\\WithTransformer';
 
+    private const WITH_CAST_AND_TRANSFORMER = 'Spatie\\LaravelData\\Attributes\\WithCastAndTransformer';
+
+    /** Present from laravel-data 4.14, whose attribute lookup reads `#[WithTransformer]` before `#[WithCastAndTransformer]`. */
+    private const ATTRIBUTES_BY_KIND = 'Spatie\\LaravelData\\Support\\DataAttributesCollection';
+
     private const DATA_COLLECTION_OF = 'Spatie\\LaravelData\\Attributes\\DataCollectionOf';
 
     private const RULE_ATTRIBUTE = 'Spatie\\LaravelData\\Attributes\\Validation\\Rule';
@@ -1048,6 +1053,44 @@ final class DataClassReflector
 
         return $reflection !== null
             && $reflection->getAttributes(self::WITH_TRANSFORMER, ReflectionAttribute::IS_INSTANCEOF) !== [];
+    }
+
+    /**
+     * The transformer laravel-data writes this property with, as the class and constructor arguments its
+     * attribute names (nothing is instantiated), else null. That is the first `#[WithTransformer]` or
+     * `#[WithCastAndTransformer]`: from 4.14 a `#[WithTransformer]` before any `#[WithCastAndTransformer]`,
+     * and before that whichever is declared first.
+     *
+     * @return array{class: string, arguments: array<array-key, mixed>}|null
+     */
+    public function propertyTransformer(string $fqcn, string $property): ?array
+    {
+        $reflection = $this->property($fqcn, $property);
+        if ($reflection === null) {
+            return null;
+        }
+
+        $attributes = array_values(array_filter(
+            $reflection->getAttributes(),
+            static fn (ReflectionAttribute $attribute): bool => is_a($attribute->getName(), self::WITH_TRANSFORMER, true)
+                || is_a($attribute->getName(), self::WITH_CAST_AND_TRANSFORMER, true),
+        ));
+
+        if (class_exists(self::ATTRIBUTES_BY_KIND)) {
+            // Stable, so each kind keeps its declared order.
+            usort($attributes, static fn (ReflectionAttribute $a, ReflectionAttribute $b): int => (int) ! is_a($a->getName(), self::WITH_TRANSFORMER, true)
+                <=> (int) ! is_a($b->getName(), self::WITH_TRANSFORMER, true));
+        }
+
+        if ($attributes === []) {
+            return null;
+        }
+
+        $arguments = $attributes[0]->getArguments();
+        $class = $arguments[0] ?? $arguments['transformerClass'] ?? $arguments['class'] ?? null;
+        unset($arguments[0], $arguments['transformerClass'], $arguments['class']);
+
+        return is_string($class) ? ['class' => $class, 'arguments' => $arguments] : null;
     }
 
     /**

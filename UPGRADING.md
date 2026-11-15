@@ -6,7 +6,7 @@ full record either way.
 
 ## v0.24.0
 
-Five changes, each for a different reader, and a last part on what a diff across the upgrade
+Six changes, each for a different reader, and a last part on what a diff across the upgrade
 reports, for anyone who compares or gates a committed document.
 
 ### A pointer in `lint.leakage.allow`
@@ -101,6 +101,25 @@ fields you described changes, so read the first point even if you write no exten
   includes the notes earlier rules stated; `notes()` reads them. A transformer that appends its fact to
   the description still publishes it, but as prose that a description written later replaces. Write
   it with `$field->note()` instead.
+
+### A date in a Spatie Data response
+
+Nothing needs editing. But a document whose Data classes put a cast or a transformer on a date property,
+or whose `data.date_format` is a list, changes, and a client generated from it changes with it.
+
+- **A response date is documented as laravel-data writes it.** That is the property's
+  `#[WithTransformer]`, else the transformer in `data.transformers`, which formats with
+  `data.date_format`, or the first format when it is a list. A `#[WithCast(DateTimeInterfaceCast::class,
+  format: 'U')]` property was documented as an integer in the response too, and is now the configured
+  string the server sends; the request still takes the integer. `#[WithTransformer(…, format: 'Y-m-d')]`
+  is `format: date` where the app's format stood. A transformer of your own, on the property or in
+  `data.transformers`, now leaves the property untyped rather than documented as a date string it may
+  not be.
+- **An Eloquent `timestamp` column says what it counts.** In a response it is still an integer, now
+  described as a Unix timestamp in seconds.
+- **`docuccino:diff` reads a date whose type changes as breaking.** The `U` cast's integer becoming a
+  string is a changed type. Your API did not change: the document now says what your server already
+  sent.
 
 ### What `docuccino:diff` reports across this upgrade
 
