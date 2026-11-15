@@ -201,6 +201,7 @@
         "responses": {
           "200": {
             "x-docuccino": {
+              "id": "res:v1:rwaug7jw4gy4djfn",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -211,7 +212,12 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           }
         }
       }
@@ -391,6 +397,7 @@
         "responses": {
           "200": {
             "x-docuccino": {
+              "id": "res:v1:tpx2tlygvhlhnbgk",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -401,7 +408,12 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           }
         }
       }
@@ -509,6 +521,7 @@
         "responses": {
           "200": {
             "x-docuccino": {
+              "id": "res:v1:yb6xgdvkkklbjcj7",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -519,7 +532,12 @@
                 }
               ]
             },
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           }
         }
       }
@@ -529,7 +547,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "71f247e186d1d2a3b0f9b95b7062aeab6395d898387754ae75e5955797b8852e"
+      "contentHash": "b9f5ca82c6b8cf6ac7dfcb1d5008769a9f8ede262508347cb1c9ce3116f605b8"
     },
     "generator": {
       "name": "docuccino/laravel",
