@@ -6,6 +6,7 @@ use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
@@ -59,20 +60,24 @@ it('publishes the status a plain response is made with', function (string $metho
     '$this->faulted(Case), reading $fault->statusCode()' => ['helperCase', 423],
 ])->group('fixture');
 
-it('reads the body only where the call proves it', function (string $method, DType $payload): void {
+it('reads the body as Laravel sends it', function (string $method, DType $payload, ?DType $mediaType): void {
     // An empty content is no body at all; a view is the view it renders. A string is sent as it is, not as
-    // JSON, so its shape is left unread rather than published as a JSON string.
-    expect(responseHelperStatusReturn($method)->typeArgs[0] ?? null)->toEqual($payload);
+    // JSON, and labelled `text/html`, as Symfony labels any body nobody else did.
+    $type = responseHelperStatusReturn($method);
+
+    expect($type->typeArgs[0] ?? null)->toEqual($payload)
+        ->and($type->typeArgs[2] ?? null)->toEqual($mediaType);
 })->with([
-    'empty content' => ['literal', new VoidT],
-    'no content argument' => ['named', new VoidT],
-    'a string' => ['constant', new UnknownT('payload not folded')],
-    'a view' => ['view', new ClassT('Illuminate\\Contracts\\View\\View')],
+    'empty content' => ['literal', new VoidT, null],
+    'no content argument' => ['named', new VoidT, null],
+    'a string' => ['constant', new LiteralT('archived'), new LiteralT('text/html')],
+    'a string a helper is handed' => ['helperStatus', ScalarT::string(), new LiteralT('text/html')],
+    'a view' => ['view', new ClassT('Illuminate\\Contracts\\View\\View'), null],
 ])->group('fixture');
 
-it('leaves a plain response sent with the framework\'s 200 as the bare class it already describes', function (): void {
-    // `response($body)` is a 200 with a body nothing read, which is what the bare class publishes.
-    expect(responseHelperStatusReturn('plainOk'))->toEqual(new ClassT('Illuminate\\Http\\Response'));
+it('documents text sent with the framework\'s 200, which the bare class cannot describe', function (): void {
+    // `response('created')` is a 200 whose body is that text, not the body nobody read that the bare class publishes.
+    expect(responseHelperStatusReturn('plainOk'))->toEqual(new ClassT('Illuminate\\Http\\JsonResponse', [new LiteralT('created'), new LiteralT(200), new LiteralT('text/html')]));
 })->group('fixture');
 
 it('claims no status where the one the call states cannot be read', function (): void {

@@ -946,7 +946,11 @@ replaces what the parent was handed, and any other placement of one (before it, 
 nothing. And a slot a `parent::__construct()` leaves empty passes the parent's default — the root's, or the
 application constructor's — which holds for exceptions too. The refiner binds a forwarded slot at the `new`
 the way a `throw new` is bound, and reads a JSON or plain response's BODY off the same constructors
-(`ParentArgument`); a file, stream or redirect keeps its own class (`RefinedResponse::$transport`). Only a
+(`ParentArgument`); a file, stream or redirect keeps its own class (`RefinedResponse::$transport`). A plain
+response's content, however it was built, is read by one reader (`PlainContent`, as Laravel's
+`Response::setContent()` decides): nothing is no body, an array or anything Laravel morphs is JSON under
+`application/json` over any stated header, a Renderable is the view, and any other scalar is text under the
+stated `Content-Type` or `text/html`. Only a
 class in the application's files is read: a package's subclass stays the bare class it is typed as.
 
 **Every file the status was read from is a dependency.** The class's whole hierarchy, the factory's file,

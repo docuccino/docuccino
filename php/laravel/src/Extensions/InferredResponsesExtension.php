@@ -20,6 +20,7 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\NeverT;
 use Docuccino\Core\Inference\DType\PayloadStatusT;
 use Docuccino\Core\Inference\DType\UnionT;
@@ -102,7 +103,7 @@ final class InferredResponsesExtension implements OperationExtension
 
         $fileCalls = $this->fileResponseCalls($analysis, $context);
 
-        /** @var array<string, array{payloads: list<DType>, location: ?SourceLocation, empty: bool, headers: ?array<string, mixed>, bodies: array<string, array<string, mixed>>}> $byStatus */
+        /** @var array<string, array{payloads: list<array{DType, ?string}>, location: ?SourceLocation, empty: bool, headers: ?array<string, mixed>, bodies: array<string, array<string, mixed>>}> $byStatus */
         $byStatus = [];
 
         /** @var array<string, list<string>> $unrecovered */
@@ -111,7 +112,7 @@ final class InferredResponsesExtension implements OperationExtension
         $unread = false;
 
         foreach ($analysis->returns as $return) {
-            [$statuses, $payload, $empty, $headers, $bodies] = $this->unwrap($return->type, $fileCalls);
+            [$statuses, $payload, $empty, $headers, $bodies, $mediaType] = $this->unwrap($return->type, $fileCalls);
             $unread = $unread || $statuses === [OperationDraft::UNREAD_STATUS];
 
             // Every status the class landed on, not just the first: two return paths of one bare
@@ -136,7 +137,7 @@ final class InferredResponsesExtension implements OperationExtension
                     $bucket = $byStatus[$placedStatus] ??= ['payloads' => [], 'location' => null, 'empty' => false, 'headers' => null, 'bodies' => []];
                     $bucket['location'] ??= $return->location;
                     if ($placedPayload !== null) {
-                        $bucket['payloads'][] = $placedPayload;
+                        $bucket['payloads'][] = [$placedPayload, $mediaType];
                     }
                     $bucket['empty'] = $bucket['empty'] || ($placedPayload === null && $empty);
                     $bucket['headers'] ??= $headers;
@@ -387,18 +388,19 @@ final class InferredResponsesExtension implements OperationExtension
     }
 
     /**
-     * Unwrap a return type to `(statuses, payloadType, isEmptyBody, headers, bodies)`. A
-     * `JsonResponse<payload, status>` yields the payload under each status it folds to (void payload =
-     * empty body); an unparameterised framework response goes to {@see frameworkResponse()};
-     * anything else yields itself under 200. `bodies` are media-type-keyed schemas the response class
-     * proves directly, rather than payload types the converter has to map.
+     * Unwrap a return type to `(statuses, payloadType, isEmptyBody, headers, bodies, mediaType)`. A
+     * `JsonResponse<payload, status, contentType>` yields the payload under each status it folds to (void
+     * payload = empty body), sent as the media type the code stated where it stated one; an unparameterised
+     * framework response goes to {@see frameworkResponse()}; anything else yields itself under 200. `bodies`
+     * are media-type-keyed schemas the response class proves directly, rather than payload types the
+     * converter has to map.
      *
-     * @return array{0: non-empty-list<string>, 1: ?DType, 2: bool, 3: ?array<string, mixed>, 4: array<string, array<string, mixed>>}
+     * @return array{0: non-empty-list<string>, 1: ?DType, 2: bool, 3: ?array<string, mixed>, 4: array<string, array<string, mixed>>, 5: ?string}
      */
     private function unwrap(DType $type, ?FileResponseVisitor $fileCalls): array
     {
         if ($type instanceof VoidT || $type instanceof NeverT) {
-            return [[self::DEFAULT_STATUS], null, false, null, []];
+            return [[self::DEFAULT_STATUS], null, false, null, [], null];
         }
 
         if ($type instanceof ClassT && $type->fqcn === FrameworkClasses::JSON_RESPONSE && $type->typeArgs !== []) {
@@ -406,17 +408,19 @@ final class InferredResponsesExtension implements OperationExtension
             $payload = $type->typeArgs[0];
 
             if ($payload instanceof VoidT || $payload instanceof NeverT) {
-                return [$statuses, null, true, null, []];
+                return [$statuses, null, true, null, [], null];
             }
 
-            return [$statuses, $payload, false, null, []];
+            $stated = $type->typeArgs[2] ?? null;
+
+            return [$statuses, $payload, false, null, [], $stated instanceof LiteralT && is_string($stated->value) ? $stated->value : null];
         }
 
         if ($type instanceof ClassT && FrameworkClasses::isResponse($type->fqcn)) {
-            return $this->frameworkResponse($type, $fileCalls);
+            return [...$this->frameworkResponse($type, $fileCalls), null];
         }
 
-        return [[self::DEFAULT_STATUS], $type, false, null, []];
+        return [[self::DEFAULT_STATUS], $type, false, null, [], null];
     }
 
     /**
@@ -602,7 +606,7 @@ final class InferredResponsesExtension implements OperationExtension
      * fallback, since the code stated them. `$bodies` are schemas the response class proved directly,
      * sorted so which entry is primary follows from the set and not from return-path order.
      *
-     * @param  list<DType>  $payloads
+     * @param  list<array{DType, ?string}>  $payloads  each with the media type its code stated, if it stated one
      * @param  ?array<string, mixed>  $headers
      * @param  array<string, array<string, mixed>>  $bodies
      */
@@ -668,21 +672,22 @@ final class InferredResponsesExtension implements OperationExtension
     }
 
     /**
-     * The status's payloads grouped by the media type each serialises as, from the gated
-     * {@see PayloadMediaTypeResolver} chain — JSON:API resources answer `application/vnd.api+json`, a
-     * rendered view `text/html`, everything else the default `application/json`. A return path that
+     * The status's payloads grouped by the media type each serialises as: the one its code stated in a
+     * `Content-Type` header, or else the gated {@see PayloadMediaTypeResolver} chain's — JSON:API resources
+     * answer `application/vnd.api+json`, a rendered view `text/html`, everything else the default
+     * `application/json`. A return path that
      * negotiates between representations is one content entry per media type rather than one `anyOf`
      * under a media type half of it contradicts. Sorted, so which entry is primary follows from the set
      * of payloads and not from return-path order.
      *
-     * @param  list<DType>  $payloads
+     * @param  list<array{DType, ?string}>  $payloads
      * @return array<string, list<DType>>
      */
     private function byMediaType(RouteContext $context, array $payloads): array
     {
         $groups = [];
-        foreach ($payloads as $payload) {
-            $groups[$context->payloadMediaType($payload)][] = $payload;
+        foreach ($payloads as [$payload, $stated]) {
+            $groups[$stated ?? $context->payloadMediaType($payload)][] = $payload;
         }
 
         ksort($groups);

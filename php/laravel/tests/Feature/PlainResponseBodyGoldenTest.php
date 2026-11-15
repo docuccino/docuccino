@@ -9,7 +9,7 @@ use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
-use Docuccino\Core\Inference\DType\UnknownT;
+use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
@@ -32,26 +32,32 @@ function plainResponseBodyReturns(): array
 {
     $json = static fn (DType $body, int $status, DType ...$mediaType): ClassT => new ClassT('Illuminate\\Http\\JsonResponse', [$body, new LiteralT($status), ...$mediaType]);
     $text = new LiteralT('The export has expired.');
+    $html = new LiteralT('text/html');
     $locked = new ArrayShapeT([new ArrayShapeField('error', new LiteralT('locked'))]);
-    $unread = new UnknownT('payload not folded');
 
     return [
-        'constructed' => $json($text, 410),
-        'constructedEmpty' => $json(new LiteralT(''), 410),
-        'constructedArray' => $json($locked, 422),
+        // A string is sent as it is, under the label Symfony gives a body nobody labelled: the text itself.
+        'constructed' => $json($text, 410, $html),
+        'helper' => $json($text, 410, $html),
+        'facade' => $json($text, 410, $html),
+        'factory' => $json($text, 410, $html),
+        'symfony' => $json($text, 410, $html),
+        'subclass' => $json($text, 410, $html),
+        // A string nothing folds is still text, of no one value.
+        'helperMessage' => $json(ScalarT::string(), 503, $html),
+        // A `Content-Type` header relabels the text.
         'constructedCsv' => $json(new LiteralT('id,name'), 200, new LiteralT('text/csv')),
-        'constructedArrayLabelled' => $json($locked, 422, new LiteralT('text/plain')),
-        'helper' => $json($unread, 410),
+        'helperPlain' => $json($text, 410, new LiteralT('text/plain')),
+        // Empty content is no body at all.
+        'constructedEmpty' => $json(new VoidT, 410),
         'helperEmpty' => $json(new VoidT, 200),
-        'helperArray' => new ClassT('Illuminate\\Http\\Response'),
-        'helperPlain' => $json($unread, 410, new LiteralT('text/plain')),
-        'helperMessage' => $json($unread, 503),
-        'helperView' => $json($unread, 410),
-        'facade' => $json($unread, 410),
-        'factory' => $json($unread, 410),
-        'symfony' => $json($text, 410),
-        'subclass' => $json($unread, 410),
-        'subclassArray' => $json($unread, 423),
+        // An array is morphed to JSON and labelled `application/json`, over any header the call stated.
+        'constructedArray' => $json($locked, 422),
+        'constructedArrayLabelled' => $json($locked, 422),
+        'helperArray' => $json($locked, 200),
+        'subclassArray' => $json($locked, 423),
+        // A view is rendered, so the body is the HTML it renders.
+        'helperView' => $json(new ClassT('Illuminate\\Contracts\\View\\View'), 410),
     ];
 }
 
@@ -79,6 +85,48 @@ it('publishes what a plain response sends for the content it is handed, byte-ide
     $warm = assertWarmEqualsCold(plainResponseBodyRoutes(), plainResponseBodyRoutes(), plainResponseBodyEngine());
 
     assertGolden('workbench-plain-response-body.uir.json', (new UirEmitter)->emit($warm->document));
+});
+
+it('documents each body under the media type Laravel labels it with', function (): void {
+    $document = emittedArray(localityBuild(plainResponseBodyRoutes(), plainResponseBodyEngine()));
+
+    // Each route's one response, through the shared error component where it was hoisted to one, as media
+    // type → schema with provenance left out.
+    $content = static function (string $path) use ($document): ?array {
+        $response = array_values($document['paths']['/api/notices/'.$path]['get']['responses'])[0];
+        $ref = $response['$ref'] ?? null;
+        $response = is_string($ref) ? $document['components']['responses'][substr($ref, strlen('#/components/responses/'))] : $response;
+
+        return isset($response['content']) ? array_map(
+            static fn (array $media): array => array_diff_key(resolveSchema($document, $media['schema']), ['x-docuccino' => true, '$ref' => true]),
+            $response['content'],
+        ) : null;
+    };
+    $text = ['type' => 'string', 'const' => 'The export has expired.'];
+
+    // Laravel sends a string as it is, which Symfony labels `text/html` unless a header says otherwise; a
+    // literal is that text, as any literal in a body is.
+    expect($content('constructed'))->toBe(['text/html' => $text])
+        ->and($content('helper'))->toBe(['text/html' => $text])
+        ->and($content('facade'))->toBe(['text/html' => $text])
+        ->and($content('factory'))->toBe(['text/html' => $text])
+        ->and($content('symfony'))->toBe(['text/html' => $text])
+        ->and($content('subclass'))->toBe(['text/html' => $text])
+        ->and($content('helper-message'))->toBe(['text/html' => ['type' => 'string']])
+        // The header the code states is the label sent, and so the media type documented.
+        ->and($content('constructed-csv'))->toBe(['text/csv' => ['type' => 'string', 'const' => 'id,name']])
+        ->and($content('helper-plain'))->toBe(['text/plain' => $text])
+        // Empty content is an empty body, which no schema describes.
+        ->and($content('constructed-empty'))->toBeNull()
+        ->and($content('helper-empty'))->toBeNull()
+        // A view is rendered HTML.
+        ->and(array_keys($content('helper-view') ?? []))->toBe(['text/html']);
+
+    // An array is morphed to JSON and relabelled `application/json`, whatever header the call stated.
+    foreach (['constructed-array', 'constructed-array-labelled', 'helper-array', 'subclass-array'] as $path) {
+        expect(array_keys($content($path) ?? []))->toBe(['application/json'], $path)
+            ->and(array_keys($content($path)['application/json']['properties'] ?? []))->toBe(['error'], $path);
+    }
 });
 
 it('scripts what the real engine recovers from the fixture app’s same calls', function (): void {
