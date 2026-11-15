@@ -13,6 +13,11 @@ use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\BranchingCrateResource;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Crate;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\CrateController;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\KeyedCrateResource;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Parcel;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ParcelController;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ParcelResource;
@@ -71,3 +76,126 @@ it('publishes the links its routes prove, warm as cold', function (): void {
 
     assertGolden('response-links.uir.json', (new UirEmitter)->emit($warm->document));
 });
+
+it('links a create endpoint to every route that binds the model it gives back', function (): void {
+    $document = emittedArray(localityBuild($this->routes, $this->engine));
+    $links = $document['paths']['/api/parcels']['post']['responses']['200']['links'];
+
+    // Each segment is matched on a column the resource sends as it is stored: the key under `id`, the
+    // tracking code under `tracking`. So the value handed back is the value each route looks up.
+    expect(array_map(static fn (array $link): array => $link['parameters'], $links))->toBe([
+        'delete.api.parcels.@parcel' => ['parcel' => '$response.body#/data/id'],
+        'get.api.parcels.@parcel' => ['parcel' => '$response.body#/data/id'],
+        'get.api.tracked-parcels.@parcel' => ['parcel' => '$response.body#/data/tracking'],
+        'patch.api.parcels.@parcel' => ['parcel' => '$response.body#/data/id'],
+    ])
+        ->and($links['get.api.parcels.@parcel']['operationId'])->toBe('get.api.parcels.@parcel')
+        ->and($links['get.api.parcels.@parcel']['x-docuccino']['provenance'])->toBe([['producer' => 'inference', 'layer' => 'inference']]);
+});
+
+it('reads a model returned bare as sending its columns under their own names', function (): void {
+    $document = emittedArray(localityBuild($this->routes, $this->engine));
+    $links = $document['paths']['/api/raw-parcels']['post']['responses']['200']['links'];
+
+    expect($links['get.api.parcels.@parcel']['parameters'])->toBe(['parcel' => '$response.body#/id'])
+        ->and($links['get.api.tracked-parcels.@parcel']['parameters'])->toBe(['parcel' => '$response.body#/tracking']);
+});
+
+it('writes no link to a segment whose binding it could not read', function (): void {
+    $document = emittedArray(localityBuild($this->routes, $this->engine));
+    $targets = [];
+    foreach ($document['paths'] as $item) {
+        foreach ($item as $operation) {
+            foreach ($operation['responses'] as $response) {
+                foreach ($response['links'] ?? [] as $link) {
+                    $targets[$link['operationId']] = true;
+                }
+            }
+        }
+    }
+
+    // The application's own binder decides what `{consignment}` holds, in a closure.
+    expect($targets)->not->toHaveKey('get.api.consignments.@consignment')
+        // …and the label is rewritten on its way out, so nothing is ever linked on it.
+        ->and(json_encode($document['paths']))->not->toContain('/label');
+});
+
+/**
+ * A route looks a record up by the value stored in the column, so only a member that reaches the wire as
+ * stored can fill its segment. Each refusal below is a member whose value the server rewrote on the way
+ * out: passing it back would look up something else, or nothing.
+ */
+it('links on a column only where the body sends it as it is stored', function (): void {
+    $routes = static function (Router $router): void {
+        $router->post('api/crates', [CrateController::class, 'store']);
+        $router->post('api/keyed-crates', [CrateController::class, 'storeKeyed']);
+        $router->post('api/branching-crates', [CrateController::class, 'storeBranching']);
+        $router->get('api/crates/{crate}', [CrateController::class, 'show']);
+        foreach (['code', 'label', 'secret', 'badge', 'created_at'] as $column) {
+            $router->get('api/crates-by-'.$column.'/{crate:'.$column.'}', [CrateController::class, 'show']);
+        }
+    };
+    $engine = static function (): TypeEngine {
+        $returns = static fn (string $fqcn): ActionAnalysis => new ActionAnalysis(returns: [new ReturnSite(new ClassT($fqcn), new SourceLocation(''))]);
+        $shape = static fn (array $fields): ActionAnalysis => new ActionAnalysis(returns: [new ReturnSite(new ArrayShapeT($fields), new SourceLocation(''))]);
+        $controller = CrateController::class.'::';
+
+        return WorkbenchEngine::make(
+            classOverrides: [Crate::class => new ClassMetadata(Crate::class, [
+                new PropertyMetadata('id', ScalarT::int()),
+                new PropertyMetadata('code', ScalarT::int()),
+                new PropertyMetadata('label', ScalarT::string()),
+                new PropertyMetadata('secret', ScalarT::string()),
+            ])],
+            analysisOverrides: [
+                $controller.'store' => $returns(Crate::class),
+                $controller.'show' => $returns(Crate::class),
+                $controller.'storeKeyed' => $returns(KeyedCrateResource::class),
+                $controller.'storeBranching' => $returns(BranchingCrateResource::class),
+                KeyedCrateResource::class.'::toArray' => $shape([new ArrayShapeField('ref', ScalarT::int()), new ArrayShapeField('maybe', ScalarT::int())]),
+                BranchingCrateResource::class.'::toArray' => $shape([new ArrayShapeField('id', ScalarT::int()), new ArrayShapeField('code', ScalarT::int())]),
+            ],
+        );
+    };
+
+    $paths = emittedArray(localityBuild($routes, $engine))['paths'];
+    $linked = static fn (string $path): array => array_map(
+        static fn (array $link): array => $link['parameters'],
+        $paths[$path]['post']['responses']['200']['links'] ?? [],
+    );
+
+    // The key, and a code cast to `integer`, which writes the number it stores. Not the label an accessor
+    // capitalises, the secret an encrypting cast hides, the badge appended from no column, or the
+    // timestamp the framework writes in its own date format.
+    expect($linked('/api/crates'))->toBe([
+        'get.api.crates-by-code.@crate' => ['crate' => '$response.body#/code'],
+        'get.api.crates.@crate' => ['crate' => '$response.body#/id'],
+    ])
+        // `getRouteKey()` is the route key; a member sent only `when()` something holds is not always there.
+        ->and($linked('/api/keyed-crates'))->toBe(['get.api.crates.@crate' => ['crate' => '$response.body#/data/ref']])
+        // Two returns agree on the key and not on the code, and a closure's return is not one of them.
+        ->and($linked('/api/branching-crates'))->toBe(['get.api.crates.@crate' => ['crate' => '$response.body#/data/id']]);
+});
+
+/**
+ * Which model a resource wraps is read where the action builds it, typed by the analyser — the half no
+ * stub can stand in for. Anything but exactly one model class is no answer, because a link read off the
+ * wrong model's columns sends a client a value no route matches.
+ */
+it('reads the model a resource wraps from where the action builds it, on the real engine', function (string $method, ?string $model): void {
+    ensureFixtureAvailable(FixtureRunner::available());
+
+    $trace = FixtureRunner::traceResourceModels(
+        'app/Http/Controllers/LinkedUserController.php',
+        'App\\Http\\Controllers\\LinkedUserController',
+        $method,
+        'App\\Http\\Resources\\LinkedUserResource',
+    );
+
+    expect($trace['model'])->toBe($model);
+})->with([
+    'new Resource(Model::create())' => ['made', 'App\\Models\\User'],
+    'Resource::make($bound)' => ['shown', 'App\\Models\\User'],
+    'built in a helper the action calls' => ['helped', 'App\\Models\\User'],
+    'built around a find() that may be null' => ['maybe', null],
+])->group('fixture');

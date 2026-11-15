@@ -48,6 +48,8 @@ use Docuccino\Laravel\Integrations\InferredHandler\InferredHandlerIntegration;
 use Docuccino\Laravel\Integrations\Support\AuthConfigDigestContributor;
 use Docuccino\Laravel\Integrations\Support\PageSizeDefaultExtension;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
+use Docuccino\Laravel\Links\ResponseLinkAssembly;
+use Docuccino\Laravel\Links\ResponseLinkFacts;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
 use Docuccino\Laravel\Support\GatePoliciesDigestContributor;
 use Docuccino\Laravel\Support\LeakageDigestContributor;
@@ -173,6 +175,10 @@ final class DefaultExtensions
             // rides the operation fragment, so a warm build assembles the same workflows a cold one does.
             WorkflowStepExtension::class,
             WorkflowAssembly::class,
+            // Records what each operation's code proves about the links it takes part in, and joins them
+            // into response `links` once the whole route set — versioned — has been seen.
+            ResponseLinkFacts::class,
+            ResponseLinkAssembly::class,
             // The document lints. All diagnostics-only, and all pinned to Priorities::LAST so they read
             // what will be emitted — this list's order is not what settles that, the attribute is.
             SensitiveFieldLint::class,

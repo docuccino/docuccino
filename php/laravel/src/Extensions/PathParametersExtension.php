@@ -14,7 +14,6 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Extensions\Contracts\RouteBindingFieldSchemaResolver;
-use Docuccino\Core\Extensions\Contracts\RouteBindingKeyResolver;
 use Docuccino\Core\Extensions\Contracts\RouteBindingSchemaResolver;
 use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
@@ -24,6 +23,7 @@ use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Core\Inference\DType\EnumT;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Support\PortablePattern;
+use Docuccino\Laravel\Routing\BoundColumn;
 use Docuccino\Laravel\Routing\RouteConstraints;
 use Docuccino\Laravel\Routing\RouteTemplate;
 use Docuccino\Laravel\Support\ListValueNames;
@@ -141,7 +141,7 @@ final class PathParametersExtension implements OperationExtension
             }
 
             if ($isBound) {
-                $this->describeBinding($parameter, $context, $name, $field, $contribution);
+                $this->describeBinding($parameter, $context, $name, $contribution);
             }
         }
     }
@@ -222,13 +222,12 @@ final class PathParametersExtension implements OperationExtension
         ParameterDraft $parameter,
         RouteContext $context,
         string $name,
-        ?string $field,
         Contribution $contribution,
     ): void {
         $notes = [];
         $facts = [];
 
-        $key = $this->matchedColumn($context, $name, $field);
+        $key = BoundColumn::of($context, $name);
         if ($key !== null) {
             $facts['key'] = $key;
             $notes[] = sprintf('Matched on the resource\'s `%s`.', $key);
@@ -252,24 +251,6 @@ final class PathParametersExtension implements OperationExtension
         if ($facts !== []) {
             $parameter->setDocuccinoFact('routeBinding', $facts);
         }
-    }
-
-    /**
-     * The column the value is matched on, or null when nothing static settles it.
-     *
-     * A binder the application registered is asked FIRST and ends the question: the framework runs it
-     * before implicit binding and ignores both the route's column and the model's route key, so
-     * publishing either would name a column the server never looks at. Otherwise the route's own
-     * column wins where it names one, and the bound model's route key answers the rest
-     * ({@see RouteBindingKeyResolver}).
-     */
-    private function matchedColumn(RouteContext $context, string $name, ?string $field): ?string
-    {
-        if (self::isCustomBound($context, $name)) {
-            return null;
-        }
-
-        return $field ?? $context->routeBindingKeyName($context->routeBindings[$name]);
     }
 
     /**

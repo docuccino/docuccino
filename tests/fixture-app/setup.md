@@ -183,6 +183,9 @@ them.
   `status` read off the rendered response and its `title` the status text at that status.
   `app/Http/Responses/ApiResponse.php` is the application's own `JsonResponse` subclass, inheriting the
   status-text table a `respond()` callback reads through it (`RespondCallbacks::statusTextThroughApp()`).
+- `app/Http/Controllers/LinkedUserController.php` + `app/Http/Resources/LinkedUserResource.php` — one resource
+  with no `@mixin`, built around `User::create()`, a bound `User` through `::make()`, a `User` a private helper
+  wraps, and a `find()` that may be null: which model a response link reads the resource's columns off.
 
 ### Closures located by line
 
