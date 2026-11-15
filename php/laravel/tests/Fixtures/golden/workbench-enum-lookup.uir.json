@@ -463,63 +463,6 @@
           }
         ],
         "responses": {
-          "404": {
-            "x-docuccino": {
-              "id": "res:v1:3k24upxir7jmuuo3",
-              "provenance": [
-                {
-                  "producer": "fallback",
-                  "layer": "fallback",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/ExportController.php",
-                    "line": 36,
-                    "symbol": "Workbench\\App\\Http\\Controllers\\ExportController::withdraw"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "NotFound"
-              }
-            },
-            "description": "Not Found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "x-docuccino": {
-                    "provenance": [
-                      {
-                        "producer": "fallback",
-                        "layer": "fallback",
-                        "fields": [
-                          "properties",
-                          "required",
-                          "type"
-                        ],
-                        "source": {
-                          "file": "workbench/app/Http/Controllers/ExportController.php",
-                          "line": 36,
-                          "symbol": "Workbench\\App\\Http\\Controllers\\ExportController::withdraw"
-                        }
-                      }
-                    ]
-                  },
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "message"
-                  ]
-                }
-              }
-            }
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -561,7 +504,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "3cc2ce0183de32ef9fa97877119c23f2dd4493e1b6fb817b90b631691cc8e482"
+      "contentHash": "f5cc3ba9acbeee3300dd32894423af68a20a7ed142fde085f5a0a39bb0690a0b"
     },
     "generator": {
       "name": "docuccino/laravel",
