@@ -6,6 +6,7 @@ namespace App\Exceptions;
 
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Throwable;
@@ -43,6 +44,12 @@ class ExceptionMappers
     public function frameworkClass(): callable
     {
         return fn (ModelNotFoundException $e) => new ConflictHttpException('Gone elsewhere.', $e);
+    }
+
+    /** A missing model answered with a response of the application's own, sent as it is. */
+    public function carriedResponse(): callable
+    {
+        return fn ($e) => new HttpResponseException(response()->json(['error' => 'gone_elsewhere'], 423));
     }
 
     /** A status read at run time. */
