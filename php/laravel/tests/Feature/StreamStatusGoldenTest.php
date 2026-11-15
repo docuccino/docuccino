@@ -22,7 +22,8 @@ use Workbench\App\Http\Controllers\ExportStreamController;
  * The document an application gets for streams, files and redirects sent with a status of their own —
  * `response()->stream($cb, 202)`, `streamJson($rows, 206)`, a choice of two, `new BinaryFileResponse($f, 206)`,
  * `redirect()->to($url, 301)`, `back(303)` — beside a stream sent with the framework's 200, a redirect with
- * its 302, and one of each whose status nothing can read. Byte-locked, warm as well as cold; the scripted
+ * its 302, one of each whose status nothing can read, and two streams whose headers and download name are
+ * passed by argument name. Byte-locked, warm as well as cold; the scripted
  * returns are what the real engine recovers from the fixture app's same calls, which the last test holds
  * them to.
  *
@@ -42,6 +43,8 @@ function streamStatusReturns(): array
         'slice' => $stated($json, UnionT::of([new LiteralT(200), new LiteralT(206)])),
         'report' => $stated('Symfony\\Component\\HttpFoundation\\BinaryFileResponse', new LiteralT(206)),
         'export' => new ClassT($stream),
+        'named' => new ClassT($stream),
+        'ledger' => new ClassT($stream),
         'relay' => $stated($stream, new UnknownT('status not folded')),
         'moved' => $stated($redirect, new LiteralT(301)),
         'finished' => $stated($redirect, new LiteralT(303)),
@@ -66,6 +69,8 @@ function streamStatusEngine(): callable
         'slice' => "response()->streamJson(['rows' => []], \$partial ? 206 : 200)",
         'export' => "response()->stream(fn () => null, 200, ['Content-Type' => 'text/csv'])",
         'relay' => "response()->stream(fn () => null, \$request->integer('status'), ['Content-Type' => 'text/csv'])",
+        'named' => "response()->stream(fn () => null, headers: ['Content-Type' => 'text/csv'])",
+        'ledger' => "\\Illuminate\\Support\\Facades\\Response::streamDownload(fn () => null, name: 'ledger.csv', headers: ['Content-Type' => 'text/csv'])",
     ];
     $scripted = [];
     foreach ($traces as $action => $call) {
@@ -84,6 +89,8 @@ function streamStatusRoutes(): callable
         $router->get('api/exports/report', [ExportStreamController::class, 'report']);
         $router->get('api/exports/export', [ExportStreamController::class, 'export']);
         $router->get('api/exports/relay', [ExportStreamController::class, 'relay']);
+        $router->get('api/exports/named', [ExportStreamController::class, 'named']);
+        $router->get('api/exports/ledger', [ExportStreamController::class, 'ledger']);
         $router->get('api/exports/moved', [ExportStreamController::class, 'moved']);
         $router->post('api/exports/finished', [ExportStreamController::class, 'finished']);
         $router->get('api/exports/latest', [ExportStreamController::class, 'latest']);
@@ -115,6 +122,8 @@ it('scripts what the real engine recovers from the fixture app’s same calls', 
     'new BinaryFileResponse($file, 206)' => ['report', 'StreamStatusController', 'constructedFile'],
     'response()->stream($cb, 200, $headers), the framework\'s own 200' => ['export', 'StreamStatusController', 'streamOk'],
     'response()->stream($cb, $request->integer(…))' => ['relay', 'StreamStatusController', 'unread'],
+    'response()->stream($cb, headers: $headers)' => ['named', 'FileDeliveryController', 'namedExport'],
+    'Response::streamDownload($cb, name: $name, headers: $headers)' => ['ledger', 'FileDeliveryController', 'namedLedger'],
     'redirect()->to($url, 301)' => ['moved', 'RedirectStatusController', 'to'],
     'back(303)' => ['finished', 'RedirectStatusController', 'back'],
     'redirect($url), the framework\'s 302' => ['latest', 'RedirectStatusController', 'plain'],

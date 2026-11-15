@@ -6,14 +6,15 @@ namespace Workbench\App\Http\Controllers;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Response;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedJsonResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Streams, files and redirects, each sent with the status its call names, beside one stream sent with the
- * framework's 200, one redirect with the framework's 302, and one of each whose status nothing can read.
- * Only ever analysed, never dispatched.
+ * framework's 200, one redirect with the framework's 302, one of each whose status nothing can read, and two
+ * streams whose headers and name are passed by argument name. Only ever analysed, never dispatched.
  */
 final class ExportStreamController
 {
@@ -81,5 +82,21 @@ final class ExportStreamController
     public function follow(Request $request): RedirectResponse
     {
         return redirect()->to('/api/exports/latest', $request->integer('status'));
+    }
+
+    /** Stream a CSV export as it is written. */
+    public function named(): StreamedResponse
+    {
+        return response()->stream(static function (): void {
+            echo "id,total\n";
+        }, headers: ['Content-Type' => 'text/csv']);
+    }
+
+    /** Download the ledger as CSV. */
+    public function ledger(): StreamedResponse
+    {
+        return Response::streamDownload(static function (): void {
+            echo "id,total\n";
+        }, name: 'ledger.csv', headers: ['Content-Type' => 'text/csv']);
     }
 }

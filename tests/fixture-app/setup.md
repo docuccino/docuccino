@@ -462,7 +462,8 @@ in the file being walked, and an array return is no type the trace follows:
 - `app/Http/Controllers/FileDeliveryController.php` — the rest of the framework response family, declared
   the way a real controller declares it: `BinaryFileResponse` from `response()->download()` and
   `response()->file()`, `StreamedResponse` from `response()->stream()`, `streamDownload()`,
-  `eventStream()` and `Storage::download()`, and the plain `Illuminate\Http\Response` from `response()`.
+  `eventStream()` and `Storage::download()` — two of them passing their headers and download name by
+  argument name, one through the `Response` facade — and the plain `Illuminate\Http\Response` from `response()`.
   Each is proof that the class the response guard names is one the engine really recovers — and, since
   the download and the inline file are the SAME class, that the call site is where the media type and the
   disposition really come from. `download()` wraps its path in `storage_path(...)`, which PHPStan does not

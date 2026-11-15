@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Response;
 use Illuminate\Http\StreamedEvent;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Response as ResponseFacade;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -46,6 +47,22 @@ final class FileDeliveryController
         return response()->streamDownload(static function (): void {
             echo "id,total\n";
         }, 'ledger.csv');
+    }
+
+    /** The CSV export again, its headers passed by name past the status it leaves at the default. */
+    public function namedExport(): StreamedResponse
+    {
+        return response()->stream(static function (): void {
+            echo "id,total\n";
+        }, headers: ['Content-Type' => 'text/csv']);
+    }
+
+    /** A streamed download through the facade, its name and media type both passed by name. */
+    public function namedLedger(): StreamedResponse
+    {
+        return ResponseFacade::streamDownload(static function (): void {
+            echo "id,total\n";
+        }, name: 'ledger.csv', headers: ['Content-Type' => 'text/csv']);
     }
 
     /** Server-sent events: Laravel merges its own `text/event-stream` over anything the caller passes. */

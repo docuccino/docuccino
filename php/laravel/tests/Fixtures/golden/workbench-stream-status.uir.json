@@ -19,7 +19,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ExportStreamController.php",
-                "line": 47,
+                "line": 48,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::export"
               }
             },
@@ -96,7 +96,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ExportStreamController.php",
-                "line": 69,
+                "line": 70,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::finished"
               }
             },
@@ -140,7 +140,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/ExportStreamController.php",
-                    "line": 69,
+                    "line": 70,
                     "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::finished"
                   }
                 }
@@ -174,7 +174,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ExportStreamController.php",
-                "line": 81,
+                "line": 82,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::follow"
               }
             },
@@ -218,7 +218,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/ExportStreamController.php",
-                    "line": 81,
+                    "line": 82,
                     "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::follow"
                   }
                 }
@@ -252,7 +252,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ExportStreamController.php",
-                "line": 75,
+                "line": 76,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::latest"
               }
             },
@@ -296,7 +296,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/ExportStreamController.php",
-                    "line": 75,
+                    "line": 76,
                     "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::latest"
                   }
                 }
@@ -317,6 +317,83 @@
         }
       }
     },
+    "/api/exports/ledger": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:jsgzhj7iwrul252q",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/ExportStreamController.php",
+                "line": 96,
+                "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::ledger"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ]
+        },
+        "operationId": "get.api.exports.ledger",
+        "summary": "Download the ledger as CSV.",
+        "tags": [
+          "ExportStream"
+        ],
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:gb67ufrxbhwkod7o",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "format",
+                          "type"
+                        ]
+                      }
+                    ]
+                  },
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/exports/moved": {
       "get": {
         "x-docuccino": {
@@ -330,7 +407,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ExportStreamController.php",
-                "line": 63,
+                "line": 64,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::moved"
               }
             },
@@ -374,7 +451,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/ExportStreamController.php",
-                    "line": 63,
+                    "line": 64,
                     "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::moved"
                   }
                 }
@@ -395,6 +472,83 @@
         }
       }
     },
+    "/api/exports/named": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:jxkato5kt52stasx",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/ExportStreamController.php",
+                "line": 88,
+                "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::named"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ]
+        },
+        "operationId": "get.api.exports.named",
+        "summary": "Stream a CSV export as it is written.",
+        "tags": [
+          "ExportStream"
+        ],
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:jcqa3tit3236h42s",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "format",
+                          "type"
+                        ]
+                      }
+                    ]
+                  },
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/exports/queue": {
       "post": {
         "x-docuccino": {
@@ -408,7 +562,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ExportStreamController.php",
-                "line": 21,
+                "line": 22,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::queue"
               }
             },
@@ -485,7 +639,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ExportStreamController.php",
-                "line": 55,
+                "line": 56,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::relay"
               }
             },
@@ -565,7 +719,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ExportStreamController.php",
-                "line": 41,
+                "line": 42,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::report"
               }
             },
@@ -642,7 +796,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ExportStreamController.php",
-                "line": 29,
+                "line": 30,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::rows"
               }
             },
@@ -704,7 +858,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ExportStreamController.php",
-                "line": 35,
+                "line": 36,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::slice"
               }
             },
@@ -778,7 +932,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "321ff4aa7faa12830fbf105b94fa42f69045073f077762165fd7fb2e377efdc9"
+      "contentHash": "8f08b6e0b85c2cb9b74b1fa848f207067dbf9ea98c33e063cec32781925f8c34"
     },
     "generator": {
       "name": "docuccino/laravel",
