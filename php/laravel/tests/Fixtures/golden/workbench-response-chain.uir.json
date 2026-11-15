@@ -281,9 +281,9 @@
           "ResponseChain"
         ],
         "responses": {
-          "default": {
+          "202": {
             "x-docuccino": {
-              "id": "res:v1:jpprm4f5qfn36alc",
+              "id": "res:v1:3s4itdei4c75lhzh",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -292,15 +292,37 @@
                     "description"
                   ]
                 }
-              ],
-              "facts": {
-                "statusUnplaced": true
-              }
+              ]
             },
-            "description": "Any status",
+            "description": "Accepted",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "queued": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "queued"
+                  ]
+                }
               }
             }
           }
@@ -1129,9 +1151,8 @@
           "ResponseChain"
         ],
         "responses": {
-          "default": {
+          "304": {
             "x-docuccino": {
-              "id": "res:v1:ldpoc6om2ldjey2v",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -1140,17 +1161,9 @@
                     "description"
                   ]
                 }
-              ],
-              "facts": {
-                "statusUnplaced": true
-              }
+              ]
             },
-            "description": "Any status",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+            "description": "Not Modified"
           }
         }
       }
@@ -1160,7 +1173,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "2b7b68f7105880e3c552b5d00d8198acc1e7312b3babe5b53458142d047a8307"
+      "contentHash": "590dc53319dc2bd6d58af232fe7f0d7696ebecad707b415b198f4a917a62a928"
     },
     "generator": {
       "name": "docuccino/laravel",
