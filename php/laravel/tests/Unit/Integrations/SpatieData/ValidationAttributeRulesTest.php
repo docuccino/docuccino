@@ -80,7 +80,7 @@ it('reads every validation attribute laravel-data ships to the rule laravel-data
             }
 
             $reflector = new DataClassReflector;
-            $read = [...$reflector->validationTokens($carrier, 'value'), ...$reflector->ruleObjects($carrier, 'value')];
+            $read = array_merge(...$reflector->attributeRules($carrier, 'value'));
 
             $compared[$short] = true;
             if (serialize($read) !== serialize($written)) {
@@ -105,10 +105,10 @@ it('reads a password the application registers as its default by its keyword alo
         $carrier = attributeCarrier('Spatie\\LaravelData\\Attributes\\Validation\\Password', 'default: true');
         $reflector = new DataClassReflector;
 
-        expect($reflector->validationTokens($carrier, 'value'))->toBe(['password'])
-            ->and($reflector->ruleObjects($carrier, 'value'))->toBe([])
+        expect($reflector->attributeRules($carrier, 'value')[0])->toBe(['password'])
+            ->and($reflector->attributeRules($carrier, 'value')[1])->toBe([])
             // A rule object it is given wins over the default, in laravel-data as here.
-            ->and((new DataClassReflector)->ruleObjects(attributeCarrier('Spatie\\LaravelData\\Attributes\\Validation\\Password', 'default: true, rule: new \Illuminate\Validation\Rules\Password(6)'), 'value'))
+            ->and((new DataClassReflector)->attributeRules(attributeCarrier('Spatie\\LaravelData\\Attributes\\Validation\\Password', 'default: true, rule: new \Illuminate\Validation\Rules\Password(6)'), 'value')[1])
             ->toEqual([new Password(6)]);
     } finally {
         Password::$defaultCallback = null;
@@ -122,8 +122,8 @@ it('reads a database rule whose table is a model\'s class by its keyword, never 
     $carrier = attributeCarrier('Spatie\\LaravelData\\Attributes\\Validation\\'.$attribute, $arguments);
     $reflector = new DataClassReflector;
 
-    expect($reflector->validationTokens($carrier, 'value'))->toBe([$keyword])
-        ->and($reflector->ruleObjects($carrier, 'value'))->toBe([])
+    expect($reflector->attributeRules($carrier, 'value')[0])->toBe([$keyword])
+        ->and($reflector->attributeRules($carrier, 'value')[1])->toBe([])
         ->and(CallRecorder::$calls)->toBe(0);
 })->with([
     '#[Exists(Model::class)]' => ['Exists', '\\'.RecordedModel::class.'::class', 'exists'],
@@ -134,7 +134,7 @@ it('reads a parameter as laravel-data writes it', function (string $attribute, s
     $class = 'Spatie\\LaravelData\\Attributes\\Validation\\'.explode('(', $attribute)[0];
     $carrier = attributeCarrier($class, substr($attribute, strlen(explode('(', $attribute)[0]) + 1, -1));
 
-    expect((new DataClassReflector)->validationTokens($carrier, 'value'))->toBe([$read]);
+    expect((new DataClassReflector)->attributeRules($carrier, 'value')[0])->toBe([$read]);
 })->with([
     // A case is the value Laravel compares, a bool is spelled out, and a null is left out.
     'a backed case' => ['RequiredIf("status", \Workbench\App\Enums\WidgetStatus::Published)', 'required_if:status,published'],
@@ -156,7 +156,7 @@ it('reads a field reference under the path laravel-data validates the declaring 
     $instance = (new ReflectionProperty($carrier, 'value'))->getAttributes()[0]->newInstance();
     $written = app(RuleDenormalizer::class)->execute($instance, ValidationPath::create(str_replace('*', $item, $path) ?: null));
 
-    $read = (new DataClassReflector)->validationTokens($carrier, 'value', $path);
+    $read = (new DataClassReflector)->attributeRules($carrier, 'value', $path)[0];
 
     expect(str_replace($path, str_replace('*', $item, $path), $read))->toBe($written);
 })->with([
@@ -172,5 +172,5 @@ it('reads a field reference under the path laravel-data validates the declaring 
 
 it('reads no rule from an attribute laravel-data cannot build either', function (): void {
     // laravel-data refuses this mode when it builds the rule, so every request carrying the field fails.
-    expect((new DataClassReflector)->validationTokens(attributeCarrier('Spatie\\LaravelData\\Attributes\\Validation\\Distinct', '"loose"'), 'value'))->toBe([]);
+    expect((new DataClassReflector)->attributeRules(attributeCarrier('Spatie\\LaravelData\\Attributes\\Validation\\Distinct', '"loose"'), 'value')[0])->toBe([]);
 });

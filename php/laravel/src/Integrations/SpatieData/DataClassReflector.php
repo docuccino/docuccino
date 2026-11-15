@@ -301,50 +301,42 @@ final class DataClassReflector
     }
 
     /**
-     * Laravel rule tokens recovered from a property's spatie validation attributes, each the rule string
-     * laravel-data writes for it ({@see attributeRule()}). {@see DataValidationRules} feeds them through the
-     * shared validation chain, so one the chain has no reader for degrades like any unknown string rule.
+     * What a property's spatie validation attributes hand Laravel: the rule strings laravel-data writes for
+     * them ({@see attributeRule()}), a `#[Rule(...)]`'s split as laravel-data splits them
+     * ({@see RuleParsing::dataPieces()}), and the rule OBJECTS — any a `#[Rule(...)]` carries, bare or inside
+     * an array, and the one any other attribute validates with ({@see handedObject()}).
      *
      * @param  string  $path  where the object declaring the property sits in the request (`range`,
      *                        `ranges.*`), empty at the root — what laravel-data resolves a field reference under
-     * @return list<string>
+     * @return array{0: list<string>, 1: list<object>}
      */
-    public function validationTokens(string $fqcn, string $property, string $path = ''): array
+    public function attributeRules(string $fqcn, string $property, string $path = ''): array
     {
-        $reflection = $this->property($fqcn, $property);
-        if ($reflection === null) {
-            return [];
-        }
-
-        $tokens = [];
-        foreach ($reflection->getAttributes() as $attribute) {
-            $name = $attribute->getName();
-            if (! str_starts_with($name, self::VALIDATION_NS)) {
-                continue;
-            }
-
-            // `#[Rule('max:10|min:1')]` is spatie's escape hatch — its arguments already ARE Laravel
-            // rule strings, so they pass through, split, rather than emit a junk `rule:…` token.
-            if ($name === self::RULE_ATTRIBUTE) {
-                foreach ($this->ruleAttributeTokens($attribute->getArguments()) as $token) {
-                    $tokens[] = $token;
-                }
+        [$tokens, $objects] = [[], []];
+        foreach ($this->property($fqcn, $property)?->getAttributes() ?? [] as $attribute) {
+            if ($attribute->getName() === self::RULE_ATTRIBUTE) {
+                $arguments = $attribute->getArguments();
+                array_walk_recursive($arguments, static function (mixed $value) use (&$tokens, &$objects): void {
+                    if (is_string($value)) {
+                        $tokens = [...$tokens, ...RuleParsing::dataPieces($value)];
+                    } elseif (is_object($value)) {
+                        $objects[] = $value;
+                    }
+                });
 
                 continue;
             }
 
-            // These validate with the rule object they build or are given ({@see ruleObjects()}).
-            if (self::handedObject($attribute) !== null) {
-                continue;
-            }
-
-            $rule = self::attributeRule($attribute, $path);
-            if ($rule !== null) {
+            $handed = self::handedObject($attribute);
+            $rule = $handed === null && str_starts_with($attribute->getName(), self::VALIDATION_NS) ? self::attributeRule($attribute, $path) : null;
+            if ($handed !== null) {
+                $objects[] = $handed;
+            } elseif ($rule !== null) {
                 $tokens[] = $rule;
             }
         }
 
-        return $tokens;
+        return [$tokens, $objects];
     }
 
     /**
@@ -382,45 +374,6 @@ final class DataClassReflector
         }
 
         return array_values(array_unique($files));
-    }
-
-    /**
-     * The rule OBJECTS a property's validation attributes hand Laravel: any a `#[Rule(...)]` carries, bare
-     * or inside an array, and the one any other attribute validates with ({@see handedObject()}).
-     *
-     * @return list<object>
-     */
-    public function ruleObjects(string $fqcn, string $property): array
-    {
-        $reflection = $this->property($fqcn, $property);
-        if ($reflection === null) {
-            return [];
-        }
-
-        $out = [];
-        foreach ($reflection->getAttributes() as $attribute) {
-            $handed = self::handedObject($attribute);
-            if ($handed !== null) {
-                $out[] = $handed;
-
-                continue;
-            }
-
-            if ($attribute->getName() !== self::RULE_ATTRIBUTE) {
-                continue;
-            }
-
-            // array_walk_recursive descends arrays and hands objects over as leaves, so a rule object
-            // is found whether it was written bare or inside an array argument.
-            $arguments = $attribute->getArguments();
-            array_walk_recursive($arguments, static function (mixed $value) use (&$out): void {
-                if (is_object($value)) {
-                    $out[] = $value;
-                }
-            });
-        }
-
-        return $out;
     }
 
     /**
@@ -540,25 +493,6 @@ final class DataClassReflector
         $given = $reflection->hasProperty('rule') ? $reflection->getProperty('rule')->getValue($instance) : null;
 
         return $given === null && $reflection->getProperty('default')->getValue($instance) === true && $rule::$defaultCallback !== null;
-    }
-
-    /**
-     * Every string in a `#[Rule(...)]` attribute's arguments, flattened and split into rules as laravel-data
-     * splits them ({@see RuleParsing::dataPieces()}), so `'string|max:3'` is two rules, bare or in a list.
-     *
-     * @param  array<array-key, mixed>  $arguments
-     * @return list<string>
-     */
-    private function ruleAttributeTokens(array $arguments): array
-    {
-        $out = [];
-        array_walk_recursive($arguments, static function (mixed $value) use (&$out): void {
-            if (is_string($value)) {
-                $out = [...$out, ...RuleParsing::dataPieces($value)];
-            }
-        });
-
-        return $out;
     }
 
     /**

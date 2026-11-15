@@ -60,13 +60,13 @@ use Workbench\App\Enums\WidgetStatus;
 
 /**
  * Coverage of the spatie validation-attribute → Laravel rule-token reading ({@see
- * DataClassReflector::validationTokens()}): attributes are recovered as the rule laravel-data writes
+ * DataClassReflector::attributeRules()}): attributes are recovered as the rule laravel-data writes
  * for them, and one the vocabulary has no reader for degrades with the same permissive + info-diagnostic contract
  * as an unknown string rule. The token is then shown to drive the SHARED validation chain to the
  * expected schema effect.
  */
 it('recovers the right Laravel rule token from every supported spatie validation attribute', function (string $property, string $expected): void {
-    expect((new DataClassReflector)->validationTokens(ValidatedData::class, $property))->toBe([$expected]);
+    expect((new DataClassReflector)->attributeRules(ValidatedData::class, $property)[0])->toBe([$expected]);
 })->with([
     'Required' => ['required', 'required'],
     'Nullable' => ['nullable', 'nullable'],
@@ -108,7 +108,7 @@ it('recovers the right Laravel rule token from every supported spatie validation
 it('recovers the rule an attribute names itself, not its class name', function (string $property, string $expected): void {
     // laravel-data writes each attribute's rule from its own keyword(), so `#[GreaterThan(5)]` is `gt:5`; its class
     // name snake-cased (`greater_than`) is a rule Laravel has never heard of.
-    expect((new DataClassReflector)->validationTokens(AttributeKeywordData::class, $property))->toBe([$expected]);
+    expect((new DataClassReflector)->attributeRules(AttributeKeywordData::class, $property)[0])->toBe([$expected]);
 })->with([
     'ListType' => ['items', 'list'],
     'GreaterThan' => ['above', 'gt:5'],
@@ -141,11 +141,11 @@ it('reads an #[In] or #[NotIn] as the rule laravel-data builds from it, as Larav
     [$parsed, $owed] = ValidationRuleParser::parse((string) $attribute->getRule(ValidationPath::create()));
 
     $read = [];
-    foreach ((new DataClassReflector)->ruleObjects($fqcn, $property) as $object) {
+    foreach ((new DataClassReflector)->attributeRules($fqcn, $property)[1] as $object) {
         $read = [...$read, ...(new ConstValueToRules)->fold(LiveRuleValue::of($object))];
     }
 
-    expect((new DataClassReflector)->validationTokens($fqcn, $property))->toBe([])
+    expect((new DataClassReflector)->attributeRules($fqcn, $property)[0])->toBe([])
         ->and(array_map(static fn (ValidationRule $rule): array => [$rule->name, $rule->parameters], $read))->toBe([[$name, $parameters]])
         ->and([Str::snake($parsed), $owed])->toBe([$name, $parameters]);
 })->with([
