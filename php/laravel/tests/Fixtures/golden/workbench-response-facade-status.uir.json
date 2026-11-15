@@ -244,9 +244,8 @@
           "ArchiveFacade"
         ],
         "responses": {
-          "200": {
+          "410": {
             "x-docuccino": {
-              "id": "res:v1:rvlo2d53ijf6gvoy",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -257,12 +256,7 @@
                 }
               ]
             },
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+            "description": "Gone"
           }
         }
       }
@@ -481,7 +475,23 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "422": {
+                "id": "res:v1:lhzdjbrwb76a3kad",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "description"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.archive-facade.refuse-in-real-time",
         "summary": "Refuse to change a locked archive, through a real-time facade.",
@@ -489,25 +499,8 @@
           "ArchiveFacade"
         ],
         "responses": {
-          "200": {
-            "x-docuccino": {
-              "id": "res:v1:463z4nlbuzcztdbe",
-              "provenance": [
-                {
-                  "producer": "fallback",
-                  "layer": "fallback",
-                  "fields": [
-                    "description"
-                  ]
-                }
-              ]
-            },
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+          "422": {
+            "$ref": "#/components/responses/Error422"
           }
         }
       }
@@ -767,7 +760,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "6423087257540e265647a3d4d7e5cc1be3a0e89a153a1ffe099ddfe6094cb7c8"
+      "contentHash": "932274bbc7e851b46d9369b617fb1f046caf7f4146d73625d078c06de533f9f1"
     },
     "generator": {
       "name": "docuccino/laravel",
