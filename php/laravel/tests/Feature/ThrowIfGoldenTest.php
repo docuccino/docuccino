@@ -18,6 +18,8 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
+use Workbench\App\Exceptions\ExportFaultException;
+use Workbench\App\Exceptions\ExportLockedException;
 use Workbench\App\Http\Controllers\ThrowIfController;
 
 /**
@@ -38,23 +40,34 @@ function throwIfAnalyses(): array
     $thrown = static fn (string $class, ?int $status, ThrowConfidence $confidence = ThrowConfidence::Certain): ThrownException => new ThrownException($class, $status, [], $confidence, ThrowDisposition::Signal);
     $http = 'Symfony\\Component\\HttpKernel\\Exception\\HttpException';
 
+    $locked = ExportLockedException::class;
+    $fault = ExportFaultException::class;
+
+    // Laravel throws what `throw_if()` is handed, builds a class it is named with the parameters after it,
+    // and makes a `RuntimeException` of a message, so each refuses with the status that `throw` would carry.
     return [
-        'ifInstance' => new ActionAnalysis(returns: [$ok]),
-        'unlessInstance' => new ActionAnalysis(returns: [$ok]),
-        'ifClassString' => new ActionAnalysis(returns: [$ok]),
-        'unlessClassString' => new ActionAnalysis(returns: [$ok]),
-        'ifNamedParameter' => new ActionAnalysis(returns: [$ok]),
-        'ifMessage' => new ActionAnalysis(returns: [$ok]),
-        'ifEnumInstance' => new ActionAnalysis(returns: [$ok]),
-        'ifEnumClassString' => new ActionAnalysis(returns: [$ok]),
-        'ifClosure' => new ActionAnalysis(returns: [$ok]),
-        'ifCarried' => new ActionAnalysis(returns: [$ok]),
-        'ifChosen' => new ActionAnalysis(returns: [$ok]),
-        'declaredGuard' => new ActionAnalysis(returns: [$ok], throws: [$thrown($http, null, ThrowConfidence::Declared)]),
+        'ifInstance' => new ActionAnalysis(returns: [$ok], throws: [$thrown($http, 409)]),
+        'unlessInstance' => new ActionAnalysis(returns: [$ok], throws: [$thrown($locked, 423)]),
+        'ifClassString' => new ActionAnalysis(returns: [$ok], throws: [$thrown($locked, 423)]),
+        'unlessClassString' => new ActionAnalysis(returns: [$ok], throws: [$thrown($http, 409)]),
+        'ifNamedParameter' => new ActionAnalysis(returns: [$ok], throws: [$thrown($locked, 423)]),
+        'ifMessage' => new ActionAnalysis(returns: [$ok], throws: [$thrown('RuntimeException', 500)]),
+        'ifEnumInstance' => new ActionAnalysis(returns: [$ok], throws: [$thrown($fault, 423)]),
+        'ifEnumClassString' => new ActionAnalysis(returns: [$ok], throws: [$thrown($fault, 410)]),
+        'ifClosure' => new ActionAnalysis(returns: [$ok], throws: [$thrown($http, 410)]),
+        // A response thrown for the framework to send is the response the request gets.
+        'ifCarried' => new ActionAnalysis(returns: [$ok, $at(new ClassT('Illuminate\\Http\\JsonResponse', [
+            new ArrayShapeT([new ArrayShapeField('error', new LiteralT('slow down'))]),
+            new LiteralT(429),
+        ]))]),
+        // An error all the same, at a status chosen at run time.
+        'ifChosen' => new ActionAnalysis(returns: [$ok], throws: [$thrown($http, null)]),
+        'declaredGuard' => new ActionAnalysis(returns: [$ok], throws: [$thrown($http, 409, ThrowConfidence::Declared)]),
+        // A guard handed the condition it never throws on refuses nothing.
         'ifFalse' => new ActionAnalysis(returns: [$ok]),
         'ifReadOnly' => new ActionAnalysis(returns: [$ok]),
-        'abortIfFalse' => new ActionAnalysis(returns: [$ok], throws: [$thrown($http, 403)]),
-        'abortIfReadOnly' => new ActionAnalysis(returns: [$ok], throws: [$thrown($http, 503)]),
+        'abortIfFalse' => new ActionAnalysis(returns: [$ok]),
+        'abortIfReadOnly' => new ActionAnalysis(returns: [$ok]),
         'reportIf' => new ActionAnalysis(returns: [$ok]),
     ];
 }

@@ -828,6 +828,17 @@ constructor whose helper the class being built overrides is not the body PHP run
    `strict_types` and is left as declared without it, since coercion decides. A class no value throws is
    dropped and one every value throws is `certain`; the enum's files join the dependency set either way.
    A runtime argument keeps both declarations, and `tryFrom()` declares neither.
+   **`throw_if()` and `throw_unless()` are read as the `throw` they stand for** (`HandedException`). Their
+   generic `@throws TException` names at most the class (nothing, for a class name), and the construction
+   that decides the status is the argument: an instance is `throw $it`, a class name is
+   `new $class(...$parameters)` with the arguments after it, names kept, a closure's returns are read the
+   same way, and any other string is `new RuntimeException($message)`. Each synthesised `throw` then goes
+   through the literal-throw path — status, carried response, catches, and the declaring-callee read — so
+   the grammar is the one a `throw` gets. Gated on the resolved callee as layer 2 is, and an argument that
+   cannot be read leaves the declaration standing. **A conditional thrower handed the condition it never
+   throws on throws nothing** (`GuardCondition`): `abort_if`/`throw_if` on a falsy condition,
+   `abort_unless`/`throw_unless` on a truthy one, read off the condition's NATIVE type, which PHP enforces —
+   a docblock that narrows it too far must not drop an error the request can get.
 2. `KnownThrowers` registry (engine-owned and `@internal` — NOT a user surface; §7 is the
    sanctioned escape hatch), keyed on the callee NAME and gated on the
    RESOLVED callee — **dual role**: (a) *enrich* explicit stubbed points with a status
