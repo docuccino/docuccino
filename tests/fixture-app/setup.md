@@ -491,7 +491,7 @@ in the file being walked, and an array return is no type the trace follows:
 - `app/Http/Controllers/ResponseChainController.php` and `app/Http/Responses/PinnedStatusJsonResponse.php` —
   fluent chains that set a response's content, data, JSONP callback, encoding, headers, a cookie, cache
   headers or the charset, remove a header, mark it not modified, or call a setter the chain reader does not
-  name, alone and two unreadable links together; chains on an
+  name, alone and two unreadable links together; a download's and a redirect's own setters; chains on an
   application's JSON, stream and redirect subclass and on one that overrides `setStatusCode()`; and a response built
   into a local by the factory, `new JsonResponse` and `new Response`, returned as it is or after its data or
   content is set.

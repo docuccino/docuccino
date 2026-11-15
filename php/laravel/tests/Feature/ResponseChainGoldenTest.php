@@ -21,7 +21,8 @@ use Workbench\App\Http\Controllers\ResponseChainController;
 
 /**
  * The document an application gets for a response a fluent chain changes after it is built — its content,
- * data, JSONP callback, encoding, a cookie or cache headers set, or a setter nothing documents called — for
+ * data, JSONP callback, encoding, a cookie or cache headers set, a download's or a redirect's own setters, or
+ * a setter nothing documents called — for
  * a chain on an application's response subclass, one of which overrides the status setter, and for a `new
  * JsonResponse` built into a local, returned as it is or after its data is set. Byte-locked, warm as well as
  * cold; the scripted returns are what the real engine recovers from the fixture app's same calls, which the
@@ -53,6 +54,9 @@ function responseChainReturns(): array
         'unchanged' => $sent(new VoidT, 304),
         // Cache headers change nothing documented.
         'cached' => $sent($queued, 202),
+        // A setter the chain reader does not name may have changed anything.
+        'export' => new ClassT('Symfony\\Component\\HttpFoundation\\BinaryFileResponse', [$unread, new UnknownT('status not folded')]),
+        'flash' => new ClassT('Illuminate\\Http\\RedirectResponse', [$unread, new UnknownT('status not folded')]),
         // `prepare()` may change anything for the request it is handed.
         'prepared' => new ClassT($json, [$unread, new UnknownT('status not folded')]),
         // A chain on an application's subclass is read over what its constructor hands the framework's.
@@ -89,6 +93,8 @@ function responseChainRoutes(): callable
         $router->post('api/chains/remember', [ResponseChainController::class, 'remember']);
         $router->get('api/chains/unchanged', [ResponseChainController::class, 'unchanged']);
         $router->post('api/chains/cached', [ResponseChainController::class, 'cached']);
+        $router->get('api/chains/export', [ResponseChainController::class, 'export']);
+        $router->post('api/chains/flash', [ResponseChainController::class, 'flash']);
         $router->post('api/chains/prepared', [ResponseChainController::class, 'prepared']);
         $router->get('api/chains/removed', [ResponseChainController::class, 'removed']);
         $router->get('api/chains/relocated', [ResponseChainController::class, 'relocated']);
@@ -129,6 +135,8 @@ it('scripts what the real engine recovers from the fixture app’s same calls', 
     'cookie(…)' => ['remember', 'cookie'],
     'setNotModified()' => ['unchanged', 'unknownLink'],
     'setMaxAge(60)->setEtag(…)->setPublic()' => ['cached', 'cached'],
+    'download(…)->deleteFileAfterSend()' => ['export', 'download'],
+    'redirect($url, 303)->with(…)->withErrors(…)->…' => ['flash', 'redirectFlash'],
     'prepare($request)' => ['prepared', 'prepared'],
     '(new GoneJsonResponse)->setStatusCode(404)' => ['removed', 'subclass'],
     '(new MovedResponse($url))->setStatusCode(308)' => ['relocated', 'subclassRedirect'],

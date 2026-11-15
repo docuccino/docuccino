@@ -5,15 +5,17 @@ declare(strict_types=1);
 namespace Workbench\App\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Workbench\App\Http\Responses\GoneJsonResponse;
 use Workbench\App\Http\Responses\MovedResponse;
 use Workbench\App\Http\Responses\PinnedStatusJsonResponse;
 
 /**
  * Fluent chains that set a response's content, data, callback, encoding, a cookie or cache headers, or call
- * a setter nothing documents; chains on an application's response subclass, one of which overrides the status
+ * a setter nothing documents; a download deleted once it is sent and a redirect flashing to the session; chains on an application's response subclass, one of which overrides the status
  * setter; and a response built with `new` into a local, returned as it is or after its data is set. Only
  * ever analysed, never dispatched.
  */
@@ -71,6 +73,18 @@ final class ResponseChainController
     public function cached(): JsonResponse
     {
         return response()->json(['queued' => true], 202)->setMaxAge(60)->setEtag('queued')->setPublic();
+    }
+
+    /** Download the latest export, deleted once it is sent. */
+    public function export(): BinaryFileResponse
+    {
+        return response()->download(storage_path('exports/latest.csv'), 'latest.csv')->deleteFileAfterSend();
+    }
+
+    /** Queue an export and see the export list. */
+    public function flash(): RedirectResponse
+    {
+        return redirect('/exports', 303)->with('status', 'queued');
     }
 
     /** Queue an export, prepared for the request. */
