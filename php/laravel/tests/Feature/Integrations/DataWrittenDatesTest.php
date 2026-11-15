@@ -72,6 +72,8 @@ function writtenDatesBuild(array $config = ['data.date_format' => ['d/m/Y', 'Y-m
                 new PropertyMetadata('bookedOn', $immutable),
                 new PropertyMetadata('syncedAt', $immutable),
                 new PropertyMetadata('pingedAt', UnionT::of([$immutable, new NullT])),
+                new PropertyMetadata('openedOn', $immutable),
+                new PropertyMetadata('closedAt', $immutable),
             ]),
         ],
         analysisOverrides: [
@@ -105,7 +107,7 @@ function writtenDatesWire(array $config): array
     $instant = CarbonImmutable::parse('2024-01-01 00:00:00', 'UTC');
     $entry = static fn (?Carbon $cleared, ?CarbonImmutable $pinged): LedgerEntryData => new LedgerEntryData(
         $instant, $cleared, new DateTimeImmutable('2024-01-01 00:00:00+00:00'), $instant, $instant, $instant,
-        $instant, $instant, $instant, $instant, $pinged,
+        $instant, $instant, $instant, $instant, $pinged, $instant, $instant,
     );
 
     return [
@@ -182,7 +184,7 @@ it('publishes a response date every value laravel-data writes for it satisfies',
     $properties = resolveSchema($document, $document['paths']['/api/zz-ledger-entries']['post']['responses']['201']['content']['application/json']['schema'])['properties'];
     $wire = writtenDatesWire($config);
 
-    expect(array_keys($properties))->toHaveCount(11);
+    expect(array_keys($properties))->toHaveCount(13);
     foreach ($properties as $name => $schema) {
         expect(writtenDatesAdmits($schema, $wire['values'][$name]))->toBeTrue($name.' = '.json_encode($wire['values'][$name]).' against '.json_encode($schema))
             ->and(writtenDatesAdmits($schema, $wire['nulls'][$name]))->toBeTrue($name.' = '.json_encode($wire['nulls'][$name]).' against '.json_encode($schema));

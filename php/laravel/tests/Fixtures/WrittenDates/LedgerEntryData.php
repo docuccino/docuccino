@@ -16,9 +16,9 @@ use Spatie\LaravelData\Data;
 use Spatie\LaravelData\Transformers\DateTimeInterfaceTransformer;
 
 /**
- * A Data class sent in a response, one date property per way laravel-data can be told how to write one:
- * nothing at all, a cast (which only reads input), the vendor transformer with and without its own format
- * or time zone, and an application's own transformer.
+ * A Data class taken and sent, one date property per way laravel-data can be told how to read or write one:
+ * nothing at all, the vendor cast with one format or a list of them, the vendor transformer with and without
+ * its own format or time zone, and an application's own cast and transformer.
  */
 final class LedgerEntryData extends Data
 {
@@ -41,5 +41,9 @@ final class LedgerEntryData extends Data
         public CarbonImmutable $syncedAt,
         #[WithTransformer(EpochTransformer::class)]
         public ?CarbonImmutable $pingedAt,
+        #[WithCast(DateTimeInterfaceCast::class, format: ['Y-m-d', 'd/m/Y'])]
+        public CarbonImmutable $openedOn,
+        #[WithCast(EpochTransformer::class)]
+        public CarbonImmutable $closedAt,
     ) {}
 }

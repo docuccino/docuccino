@@ -285,6 +285,10 @@
               "null"
             ]
           },
+          "closedAt": {
+            "description": "Serialized using the date format \"d/m/Y\".",
+            "type": "string"
+          },
           "dueOn": {
             "type": "string",
             "format": "date"
@@ -294,6 +298,10 @@
             "type": "string"
           },
           "localAt": {
+            "description": "Serialized using the date format \"d/m/Y\".",
+            "type": "string"
+          },
+          "openedOn": {
             "description": "Serialized using the date format \"d/m/Y\".",
             "type": "string"
           },
@@ -327,7 +335,9 @@
           "localAt",
           "bookedOn",
           "syncedAt",
-          "pingedAt"
+          "pingedAt",
+          "openedOn",
+          "closedAt"
         ]
       },
       "LedgerEntryDataRequest": {
@@ -354,6 +364,11 @@
             "format": "date-time",
             "example": "2024-01-01T00:00:00+00:00"
           },
+          "closedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-01T00:00:00+00:00"
+          },
           "dueOn": {
             "type": "string",
             "format": "date-time",
@@ -364,6 +379,11 @@
             "type": "integer"
           },
           "localAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-01T00:00:00+00:00"
+          },
+          "openedOn": {
             "type": "string",
             "format": "date-time",
             "example": "2024-01-01T00:00:00+00:00"
@@ -416,7 +436,9 @@
           "stampedAt",
           "localAt",
           "bookedOn",
-          "syncedAt"
+          "syncedAt",
+          "openedOn",
+          "closedAt"
         ]
       }
     }
@@ -425,7 +447,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "00f2adfda2a29db70f9dfb3be63240f82160aeda20bdc38c8cb4ccefccc54fee"
+      "contentHash": "2e094517fe0004c6cc5d5671cb384616baa9c4db30c8e10580ee64b3835caac2"
     },
     "generator": {
       "name": "docuccino/laravel",
