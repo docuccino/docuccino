@@ -85,6 +85,7 @@ it('builds nothing from a value it cannot read or a call it would not make, and 
     'a rule object handed a value nothing can read' => [static fn (): ?object => CastRuleObject::build(ConstValue::descriptor('Illuminate\\Validation\\Rules\\File::image', [])->withChainedCall('dimensions', [ConstValue::instance(OpaqueCheck::class, [])]))],
     // Each of these would run the application's code.
     'a macro' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::date', [], [['method' => 'recorded', 'args' => []]])],
+    'a macro called through __call()' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::date', [], [['method' => '__call', 'args' => [ConstValue::scalar('recorded'), ConstValue::array([])]]])],
     'a callable named by a string' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::string', [], [['method' => 'when', 'args' => [ConstValue::scalar(true), ConstValue::scalar(CallRecorder::class.'::record')]]])],
     'a model named as a table, with new' => [static fn (): ?array => CastRuleObject::fromNew('Illuminate\\Validation\\Rules\\Exists', [ConstValue::scalar(RecordedModel::class)], [])],
     'a model named as a table, by the factory' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::unique', [ConstValue::scalar(RecordedModel::class)], [])],
@@ -111,11 +112,14 @@ it('runs a callable that is no literal of the build: the guard is the reason non
     (new Date)->recorded();
     expect(CallRecorder::$calls)->toBe(1);
 
-    (new StringRule)->when(true, CallRecorder::class.'::record');
+    (new Date)->__call('recorded', []);
     expect(CallRecorder::$calls)->toBe(2);
 
+    (new StringRule)->when(true, CallRecorder::class.'::record');
+    expect(CallRecorder::$calls)->toBe(3);
+
     new Exists(RecordedModel::class);
-    expect(CallRecorder::$calls)->toBeGreaterThan(2);
+    expect(CallRecorder::$calls)->toBeGreaterThan(3);
 
     $calls = CallRecorder::$calls;
     Password::defaults(static fn (): Password => CallRecorder::record(Password::min(12)));

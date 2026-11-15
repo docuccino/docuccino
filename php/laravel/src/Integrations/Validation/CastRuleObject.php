@@ -223,9 +223,10 @@ final class CastRuleObject
     private static function chained(object $rule, array $chain): ?object
     {
         foreach ($chain as $call) {
-            // A method the class does not declare is a macro, which is the application's code.
+            // A method the class does not declare is a macro, which is the application's code, and so is what a
+            // magic method such as `__call()` dispatches to: none is a builder step.
             $reflection = new ReflectionClass($rule);
-            if (! $reflection->hasMethod($call['method'])) {
+            if (! $reflection->hasMethod($call['method']) || str_starts_with($call['method'], '__')) {
                 return null;
             }
 
