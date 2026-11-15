@@ -69,6 +69,36 @@
                   "$ref": "#/components/schemas/FleetVanData"
                 }
               }
+            },
+            "links": {
+              "get.api.plated-vans.@van": {
+                "operationId": "get.api.plated-vans.@van",
+                "parameters": {
+                  "van": "$response.body#/registration"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "get.api.vans.@van": {
+                "operationId": "get.api.vans.@van",
+                "parameters": {
+                  "van": "$response.body#/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              }
             }
           }
         }
@@ -135,6 +165,36 @@
                     ]
                   },
                   "$ref": "#/components/schemas/FleetVanData"
+                }
+              }
+            },
+            "links": {
+              "get.api.plated-vans.@van": {
+                "operationId": "get.api.plated-vans.@van",
+                "parameters": {
+                  "van": "$response.body#/registration"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "get.api.vans.@van": {
+                "operationId": "get.api.vans.@van",
+                "parameters": {
+                  "van": "$response.body#/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
                 }
               }
             }
@@ -345,6 +405,22 @@
                   "$ref": "#/components/schemas/VanData"
                 }
               }
+            },
+            "links": {
+              "get.api.vans.@van": {
+                "operationId": "get.api.vans.@van",
+                "parameters": {
+                  "van": "$response.body#/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              }
             }
           },
           "404": {
@@ -482,6 +558,36 @@
                     ]
                   },
                   "$ref": "#/components/schemas/VanData"
+                }
+              }
+            },
+            "links": {
+              "get.api.plated-vans.@van": {
+                "operationId": "get.api.plated-vans.@van",
+                "parameters": {
+                  "van": "$response.body#/plate"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              },
+              "get.api.vans.@van": {
+                "operationId": "get.api.vans.@van",
+                "parameters": {
+                  "van": "$response.body#/id"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
                 }
               }
             }
@@ -624,6 +730,22 @@
                   "$ref": "#/components/schemas/VanData"
                 }
               }
+            },
+            "links": {
+              "get.api.plated-vans.@van": {
+                "operationId": "get.api.plated-vans.@van",
+                "parameters": {
+                  "van": "$response.body#/plate"
+                },
+                "x-docuccino": {
+                  "provenance": [
+                    {
+                      "producer": "inference",
+                      "layer": "inference"
+                    }
+                  ]
+                }
+              }
             }
           },
           "404": {
@@ -747,7 +869,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "e049ac44920c29a39904f7f6714644d4f2f979649e7e7454aa74bb8884459d50"
+      "contentHash": "4d5978a270b21b44e95b418eede0261b878d020fe9f47544b22fcc54009f5c50"
     },
     "generator": {
       "name": "docuccino/laravel",
