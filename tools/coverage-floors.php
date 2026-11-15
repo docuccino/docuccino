@@ -114,11 +114,14 @@ const FLOORS = [
     // It rose to 59.03% when a facade's static call came to be read as the same call on the object it
     // resolves: what stands in for the call (`FacadeCall`) and the facade's return-type extension are
     // unit-tested in process. 59 is declined at 1.19 statements of margin, the hair-trigger again.
-    // Measured 59.03% (2750/4659): 58% of it is 2702.22 statements, 47.78 of margin.
+    // Re-recorded 59.03 → 58.74 when a response thrown for the framework to send came to be read as a
+    // return: the throw analysis that finds it runs only under real analysis, the fixture group's, and the
+    // refiner it reads the response through was already measured as far as it can be in process.
+    // Measured 58.74% (2907/4949): 58% of it is 2870.42 statements, 36.58 of margin.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads 3 statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 58, 'measured' => 59.03],
+    'inference-phpstan' => ['floor' => 58, 'measured' => 58.74],
 ];
 
 /*
