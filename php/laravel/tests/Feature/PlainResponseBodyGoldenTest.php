@@ -10,6 +10,7 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\ScalarT;
+use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
@@ -20,10 +21,10 @@ use Illuminate\Routing\Router;
 use Workbench\App\Http\Controllers\NoticeController;
 
 /**
- * The document an application gets for plain responses handed a string, nothing or an array, in every
- * spelling that makes one: `new Response()`, the `response()` helper, `response()->make()`, the `Response`
- * facade, Symfony's own response and a subclass handing its parent the content, with and without a
- * `Content-Type` header. Byte-locked, warm as well as cold; the scripted returns are what the real engine
+ * The document an application gets for plain responses handed a string, nothing, an array or content of no
+ * one kind, in every spelling that makes one: `new Response()`, the `response()` helper, `response()->make()`,
+ * the `Response` facade, Symfony's own response and a subclass handing its parent the content, with and
+ * without a `Content-Type` header. Byte-locked, warm as well as cold; the scripted returns are what the real engine
  * recovers from the fixture app's same calls, which the last test holds them to.
  *
  * @return array<string, DType> action → the response it returns
@@ -58,6 +59,13 @@ function plainResponseBodyReturns(): array
         'subclassArray' => $json($locked, 423),
         // A view is rendered, so the body is the HTML it renders.
         'helperView' => $json(new ClassT('Illuminate\\Contracts\\View\\View'), 410),
+        // Content of no one kind.
+        'helperCached' => $json(new UnknownT('payload not folded'), 410),
+        'helperCachedOk' => new ClassT('Illuminate\\Http\\Response'),
+        'constructedTextOrArray' => $json(new UnknownT('payload not folded'), 410),
+        'helperCachedCsv' => $json(new UnknownT('payload not folded'), 200, new LiteralT('text/csv')),
+        'helperFile' => $json(new UnknownT('payload not folded'), 200, new LiteralT('image/png')),
+        'symfonyCached' => $json(new UnknownT('payload not folded'), 410),
     ];
 }
 

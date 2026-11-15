@@ -504,7 +504,9 @@ in the file being walked, and an array return is no type the trace follows:
 - `app/Http/Controllers/PlainResponseBodyController.php` and `app/Http/Responses/LockedNoticeResponse.php` —
   plain responses handed a string, nothing or an array: constructed, through the `response()` helper, the
   factory, the `Response` facade, Symfony's own response and a subclass handing its parent the content,
-  with and without a `Content-Type` header, and a view handed to the helper.
+  with and without a `Content-Type` header, and a view handed to the helper; and content of no one kind —
+  what the cache holds, text or an array, a file's bytes or `false` — handed to the helper, `new Response`
+  and Symfony's own response, with and without a header.
 - `app/Http/Controllers/CarriedResponseController.php` — responses handed to the framework inside an
   exception: an `HttpResponseException` carrying a JSON response from the helper, the facade and `new`, a
   plain response, a redirect and a subclass, thrown at the action and from a helper, carrying a helper's
