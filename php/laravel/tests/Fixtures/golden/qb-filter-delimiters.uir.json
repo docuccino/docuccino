@@ -39,6 +39,57 @@
         "parameters": [
           {
             "x-docuccino": {
+              "id": "par:v1:msq5otn3nfzh5d7m",
+              "provenance": [
+                {
+                  "producer": "integration:query-builder",
+                  "layer": "integration",
+                  "fields": [
+                    "description",
+                    "explode",
+                    "required",
+                    "style"
+                  ],
+                  "source": {
+                    "file": "tests/Fixtures/QueryBuilder/FilterDelimitersController.php",
+                    "line": 22,
+                    "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\QueryBuilder\\FilterDelimitersController::index"
+                  }
+                }
+              ]
+            },
+            "name": "filter[commas]",
+            "in": "query",
+            "description": "Exact match on `commas`. Accepts a comma-separated list of values (matched as `whereIn`).",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "integration:query-builder",
+                    "layer": "integration",
+                    "fields": [
+                      "items",
+                      "type"
+                    ],
+                    "source": {
+                      "file": "tests/Fixtures/QueryBuilder/FilterDelimitersController.php",
+                      "line": 22,
+                      "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\QueryBuilder\\FilterDelimitersController::index"
+                    }
+                  }
+                ]
+              },
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/WidgetStatus"
+              }
+            }
+          },
+          {
+            "x-docuccino": {
               "id": "par:v1:awecm7kp4ifmgiky",
               "provenance": [
                 {
@@ -409,7 +460,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "29973579f36bbc0e83963b6a2bce374fa522769c214bcef50d0235a55ff676ea"
+      "contentHash": "7056b4f88d9a4050c6d043332ce1861224bb91d0565fb04c9c937ddc059d9b6a"
     },
     "generator": {
       "name": "docuccino/laravel",

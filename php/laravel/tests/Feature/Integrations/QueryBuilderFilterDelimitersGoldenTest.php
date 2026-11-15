@@ -11,9 +11,12 @@ use Illuminate\Routing\Router;
 
 /*
  * Query Builder filters with a separator of their own, locked in emitted bytes: every recorded filter
- * split on the configured delimiter.
+ * split on the configured delimiter. The second document is the same filters with
+ * `filter_value_splitting_enabled` turned off.
  */
-it('emits Query Builder filters with their own delimiter byte-identical to their committed golden', function (): void {
+it('emits Query Builder filters with their own delimiter byte-identical to their committed golden', function (bool $splitting, string $golden): void {
+    config()->set('query-builder.filter_value_splitting_enabled', $splitting);
+
     $engine = static fn (): TypeEngine => WorkbenchEngine::make(
         traceOverrides: [
             FilterDelimitersController::class.'::index' => TraceScript::forMethod(
@@ -30,5 +33,8 @@ it('emits Query Builder filters with their own delimiter byte-identical to their
         $engine,
     );
 
-    assertGolden('qb-filter-delimiters.uir.json', (new UirEmitter)->emit($result->document));
-});
+    assertGolden($golden, (new UirEmitter)->emit($result->document));
+})->with([
+    'splitting on' => [true, 'qb-filter-delimiters.uir.json'],
+    'splitting off' => [false, 'qb-filter-delimiters-unsplit.uir.json'],
+]);
