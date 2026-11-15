@@ -30,37 +30,68 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "500": {
-                "id": "res:v1:v5lxkb3zz4bq2ajl",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "component",
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/RelayedResponseController.php",
-                      "line": 47,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\RelayedResponseController::builtFromCase"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "post.api.relayed.builtFromCase",
         "tags": [
           "RelayedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "default": {
+            "x-docuccino": {
+              "id": "res:v1:varcwmn2uvqp7q2o",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ],
+              "facts": {
+                "statusUnplaced": true
+              }
+            },
+            "description": "Any status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "Gone"
+                        },
+                        {
+                          "type": "string",
+                          "const": "Locked"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -89,37 +120,56 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "500": {
-                "id": "res:v1:qrfehx7nxkcayd5c",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "component",
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/RelayedResponseController.php",
-                      "line": 32,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\RelayedResponseController::builtItself"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "post.api.relayed.builtItself",
         "tags": [
           "RelayedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "423": {
+            "x-docuccino": {
+              "id": "res:v1:y5s7zlhd7cy6krwm",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Locked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -151,21 +201,15 @@
           ],
           "uses": {
             "responses": {
-              "500": {
-                "id": "res:v1:ggqapbuunkgxkgvt",
+              "423": {
+                "id": "res:v1:k6thyidvaoaqoqjm",
                 "provenance": [
                   {
                     "producer": "fallback",
                     "layer": "fallback",
                     "fields": [
-                      "component",
                       "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/RelayedResponseController.php",
-                      "line": 52,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\RelayedResponseController::factory"
-                    }
+                    ]
                   }
                 ]
               }
@@ -177,8 +221,8 @@
           "RelayedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "423": {
+            "$ref": "#/components/responses/Error423"
           }
         }
       }
@@ -210,21 +254,15 @@
           ],
           "uses": {
             "responses": {
-              "500": {
-                "id": "res:v1:ymmmq5chp7hznbqy",
+              "423": {
+                "id": "res:v1:lf5ogt6yeuy7m3xo",
                 "provenance": [
                   {
                     "producer": "fallback",
                     "layer": "fallback",
                     "fields": [
-                      "component",
                       "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/RelayedResponseController.php",
-                      "line": 22,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\RelayedResponseController::handedOn"
-                    }
+                    ]
                   }
                 ]
               }
@@ -236,8 +274,8 @@
           "RelayedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "423": {
+            "$ref": "#/components/responses/Error423"
           }
         }
       }
@@ -269,21 +307,15 @@
           ],
           "uses": {
             "responses": {
-              "500": {
-                "id": "res:v1:6oxmguwpadfg5qpc",
+              "423": {
+                "id": "res:v1:fpdhmfyyv6ttfwvc",
                 "provenance": [
                   {
                     "producer": "fallback",
                     "layer": "fallback",
                     "fields": [
-                      "component",
                       "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/RelayedResponseController.php",
-                      "line": 27,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\RelayedResponseController::handedOnNamed"
-                    }
+                    ]
                   }
                 ]
               }
@@ -295,8 +327,8 @@
           "RelayedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "423": {
+            "$ref": "#/components/responses/Error423"
           }
         }
       }
@@ -325,37 +357,57 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "500": {
-                "id": "res:v1:piw5v5nhv3jd6otk",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "component",
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/RelayedResponseController.php",
-                      "line": 57,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\RelayedResponseController::staticFactory"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "post.api.relayed.staticFactory",
         "tags": [
           "RelayedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "410": {
+            "x-docuccino": {
+              "id": "res:v1:s2gj2flst4lyipfm",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Gone",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "gone"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -384,37 +436,57 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "500": {
-                "id": "res:v1:arti47y7nbrcm3rt",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "component",
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/RelayedResponseController.php",
-                      "line": 42,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\RelayedResponseController::twoLevelsBuilt"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "post.api.relayed.twoLevelsBuilt",
         "tags": [
           "RelayedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "429": {
+            "x-docuccino": {
+              "id": "res:v1:6n44cmlpp3j5wjzj",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "quota_exceeded"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -443,37 +515,57 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "500": {
-                "id": "res:v1:7kidpxidr4vdtgkm",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "component",
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/RelayedResponseController.php",
-                      "line": 37,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\RelayedResponseController::twoLevelsHandedOn"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "post.api.relayed.twoLevelsHandedOn",
         "tags": [
           "RelayedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "503": {
+            "x-docuccino": {
+              "id": "res:v1:isigsdt37xrkolvi",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "unavailable"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -481,28 +573,29 @@
   },
   "components": {
     "schemas": {
-      "InternalServerError": {
+      "Error423": {
         "x-docuccino": {
-          "id": "sch:v1:ymhinvqj233m43e2"
+          "id": "sch:v1:k7k6afasdgjizlok"
         },
         "type": "object",
         "properties": {
-          "message": {
-            "type": "string"
+          "error": {
+            "type": "string",
+            "const": "locked"
           }
         },
         "required": [
-          "message"
+          "error"
         ]
       }
     },
     "responses": {
-      "InternalServerError": {
-        "description": "Internal Server Error",
+      "Error423": {
+        "description": "Locked",
         "content": {
           "application/json": {
             "schema": {
-              "$ref": "#/components/schemas/InternalServerError"
+              "$ref": "#/components/schemas/Error423"
             }
           }
         }
@@ -513,7 +606,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "f8e0dda42d345123e1146127fc7d809a04d721f1524d00ce8500900eb557df33"
+      "contentHash": "d7aedbebd73ef933f2e748b173de7d1f6a7b6b48cacdb9cdd11aa02b008ef515"
     },
     "generator": {
       "name": "docuccino/laravel",
