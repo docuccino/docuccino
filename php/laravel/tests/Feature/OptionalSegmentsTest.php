@@ -393,6 +393,7 @@ it('publishes optional segments and constrained hosts byte-identical to its comm
         $router->get('api/zz-pages/{page?}', [OptionalSegmentController::class, 'first'])->name('pages.show');
         $router->get('api/zz-archive/{year?}/{month?}', [OptionalSegmentController::class, 'archive']);
         $router->get('api/zz-latest/{page?}', [OptionalSegmentController::class, 'page'])->defaults('page', 'latest');
+        $router->get('api/zz-described/{page?}', [OptionalSegmentController::class, 'described']);
         $router->domain('{tenant}.example.com')->get('api/zz-tenants', [ConstraintController::class, 'hosted'])->whereIn('tenant', ['acme', 'globex']);
         $router->domain('{region}.example.com')->get('api/zz-regions', [ConstraintController::class, 'hosted'])->where('region', '[a-z]{2}-[0-9]');
     });

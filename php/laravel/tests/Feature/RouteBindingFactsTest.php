@@ -6,6 +6,7 @@ use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Laravel\Config\BuildConfig;
 use Illuminate\Routing\Router;
 use Workbench\App\Http\Controllers\BindingController;
+use Workbench\App\Http\Controllers\DescribedBindingController;
 
 /**
  * What a route binding lets a path parameter tell a consumer, and — the harder half — what it does
@@ -51,6 +52,10 @@ function bindingFactRoutes(): callable
         $router->get('api/binding-articles/{article}', [BindingController::class, 'showArticle']);
         $router->get('api/binding-seasons/{season}', [BindingController::class, 'showSeason']);
         $router->get('api/binding-custom/{custom}', [BindingController::class, 'showBound']);
+        // Every note a binding writes, on segments their author described as well.
+        $router->get('api/binding-described/{ledger:reference}/entries/{entry}', [DescribedBindingController::class, 'showEntry'])
+            ->scopeBindings()
+            ->withTrashed();
     };
 }
 
