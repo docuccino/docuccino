@@ -5,14 +5,18 @@ declare(strict_types=1);
 use Docuccino\Core\Inference\ConstValue;
 use Docuccino\Laravel\Integrations\FormRequest\ConstValueToRules;
 use Docuccino\Laravel\Integrations\Validation\LiveRuleValue;
+use Docuccino\Laravel\Tests\Fixtures\Rules\RecordedUpload;
 use Docuccino\Laravel\Tests\Fixtures\Rules\TenantMember;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rules\ArrayRule;
 use Illuminate\Validation\Rules\Dimensions;
+use Illuminate\Validation\Rules\Email;
 use Illuminate\Validation\Rules\Enum;
 use Illuminate\Validation\Rules\ExcludeIf;
 use Illuminate\Validation\Rules\ExcludeUnless;
 use Illuminate\Validation\Rules\Exists;
+use Illuminate\Validation\Rules\File;
+use Illuminate\Validation\Rules\ImageFile;
 use Illuminate\Validation\Rules\In;
 use Illuminate\Validation\Rules\NotIn;
 use Illuminate\Validation\Rules\Password;
@@ -126,7 +130,9 @@ it('reads any other value as the constant it is', function (mixed $value, ConstV
     'a rule string' => ['required', ConstValue::scalar('required')],
     'null' => [null, ConstValue::scalar(null)],
     'a case' => [WidgetStatus::Draft, ConstValue::enumCase(WidgetStatus::class, 'Draft')],
-    'a keyed list' => [['a' => 'x', 'b' => 1], ConstValue::array([ConstValue::scalar('x'), ConstValue::scalar(1)])],
+    // Keys kept, as the fold of the array written out keeps them, for a constructor that reads them.
+    'a keyed list' => [['a' => 'x', 'b' => 1], ConstValue::array([ConstValue::scalar('x'), ConstValue::scalar(1)], ['a', 'b'])],
+    'a list' => [['x', 1], ConstValue::array([ConstValue::scalar('x'), ConstValue::scalar(1)])],
     // A class is all a `new` names for an object no fold reads by its arguments.
     'an application rule' => [new TenantMember, ConstValue::instance(TenantMember::class, [])],
     'a closure' => [static fn (): bool => true, ConstValue::instance(Closure::class, [])],
@@ -217,6 +223,17 @@ it('reads a conditional rule object on a closure without running the closure', f
     'ExcludeIf' => ['Illuminate\\Validation\\Rules\\ExcludeIf', 'exclude_if'],
     'ExcludeUnless' => ['Illuminate\\Validation\\Rules\\ExcludeUnless', 'exclude_unless'],
 ]);
+
+it('reads by its state each framework rule Laravel validates with the rules it holds, and no application rule', function (): void {
+    // Laravel's own password, file, image file and email rules, however the class is written; an application's
+    // subclass may build its rules any way it likes, and a dimensions rule is read by the string it casts to.
+    expect(LiveRuleValue::readsState(Password::class))->toBeTrue()
+        ->and(LiveRuleValue::readsState('\\'.File::class))->toBeTrue()
+        ->and(LiveRuleValue::readsState(ImageFile::class))->toBeTrue()
+        ->and(LiveRuleValue::readsState(Email::class))->toBeTrue()
+        ->and(LiveRuleValue::readsState(RecordedUpload::class))->toBeFalse()
+        ->and(LiveRuleValue::readsState(Dimensions::class))->toBeFalse();
+});
 
 it('reads a password as the rules Laravel validates it with first', function (Closure $live, bool $checks): void {
     $rule = $live();

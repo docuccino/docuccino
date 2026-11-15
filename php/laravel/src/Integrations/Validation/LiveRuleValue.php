@@ -6,6 +6,7 @@ namespace Docuccino\Laravel\Integrations\Validation;
 
 use Docuccino\Core\Inference\ConstValue;
 use Docuccino\Laravel\Integrations\FormRequest\ConstValueToRules;
+use ReflectionMethod;
 use ReflectionObject;
 use Stringable;
 use UnitEnum;
@@ -15,7 +16,8 @@ use UnitEnum;
  * `new` that built it folds to, so {@see ConstValueToRules} reads `#[Rule(new Enum(X::class))]` exactly as it
  * reads `new Enum(X::class)` in a rules array. A framework rule object keeps its constructor's arguments in
  * its own state, and is read back from there. One Laravel casts to a rule string ({@see CastRuleObject}) is that
- * string, and a `Password` the rules it runs; any other object is its class alone.
+ * string, and one it validates by its state ({@see readsState()}) the rules it runs; any other object is its
+ * class alone.
  */
 final class LiveRuleValue
 {
@@ -54,22 +56,49 @@ final class LiveRuleValue
     /** The checks a `Password` runs on the value after its own rules, none of which a schema states. */
     private const PASSWORD_CHECKS = ['mixedCase', 'letters', 'numbers', 'symbols', 'uncompromised'];
 
+    private const PASSWORD = self::RULES.'Password';
+
+    /**
+     * Framework rule objects that validate the value with the rule list their state builds, and nothing else,
+     * by the method that builds it.
+     */
+    private const BUILT_RULES = [
+        self::RULES.'File' => 'buildValidationRules',
+        self::RULES.'Email' => 'buildValidationRules',
+    ];
+
     public static function of(mixed $value): ConstValue
     {
         return match (true) {
             $value === null || is_scalar($value) => ConstValue::scalar($value),
             $value instanceof UnitEnum => ConstValue::enumCase($value::class, $value->name),
-            is_array($value) => ConstValue::array(array_map(self::of(...), array_values($value))),
+            is_array($value) => ConstValue::array(array_map(self::of(...), array_values($value)), array_is_list($value) ? null : array_keys($value)),
             is_object($value) => self::object($value),
             default => ConstValue::unknown('a value no rule list can hold'),
         };
     }
 
+    /**
+     * Whether Laravel validates with a framework rule object of this class by the rules its state holds, which
+     * this reads: a `Password`, or one that builds a rule list ({@see BUILT_RULES}).
+     */
+    public static function readsState(string $class): bool
+    {
+        $class = ltrim($class, '\\');
+
+        return $class === self::PASSWORD || self::builder($class) !== null;
+    }
+
     private static function object(object $rule): ConstValue
     {
         $class = $rule::class;
-        if ($class === self::RULES.'Password') {
+        if ($class === self::PASSWORD) {
             return self::password($rule);
+        }
+
+        $builder = self::builder($class);
+        if ($builder !== null) {
+            return self::built($rule, $builder);
         }
 
         if (! isset(self::ARGUMENTS[$class]) && $rule instanceof Stringable && CastRuleObject::casts($class)) {
@@ -115,13 +144,39 @@ final class LiveRuleValue
 
         foreach (self::PASSWORD_CHECKS as $check) {
             if (self::state($rule, $check)->scalar !== false) {
-                $items[] = ConstValue::instance($rule::class, []);
+                // Unbuildable, so the fold names it rather than reading it again.
+                $items[] = ConstValue::instance($rule::class, [ConstValue::unknown('the checks a password runs on the value')]);
 
                 break;
             }
         }
 
         return ConstValue::array($items);
+    }
+
+    /** The method one of Laravel's own rule classes builds its rule list with, or null where it builds none. */
+    private static function builder(string $class): ?string
+    {
+        foreach (self::BUILT_RULES as $parent => $method) {
+            if (str_starts_with($class, self::RULES) && is_a($class, $parent, true) && method_exists($class, $method)) {
+                return $method;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A rule object as the rules it validates the value with — `File::types(['pdf'])->max(1024)` as `file`,
+     * `mimes:pdf` and `max:1024` — built by its own method, so each reads as that rule string does.
+     */
+    private static function built(object $rule, string $builder): ConstValue
+    {
+        $rules = (new ReflectionMethod($rule, $builder))->invoke($rule);
+
+        return is_array($rules)
+            ? ConstValue::array(array_map(self::of(...), array_values($rules)))
+            : ConstValue::instance($rule::class, [ConstValue::unknown('a rule object whose rules this build cannot read')]);
     }
 
     /** One property of a rule object's state, or unknown where the installed class keeps no such property. */
