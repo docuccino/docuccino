@@ -33,26 +33,17 @@
           ],
           "uses": {
             "responses": {
-              "500": {
-                "id": "res:v1:aehos6w4tp43mbto",
+              "423": {
+                "id": "res:v1:2yajlx5x6melmrop",
                 "provenance": [
                   {
                     "producer": "fallback",
                     "layer": "fallback",
                     "fields": [
-                      "component",
                       "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/CarriedResponseController.php",
-                      "line": 75,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\CarriedResponseController::abortFacade"
-                    }
+                    ]
                   }
-                ],
-                "facts": {
-                  "statusUnplaced": true
-                }
+                ]
               }
             }
           }
@@ -62,8 +53,8 @@
           "CarriedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "423": {
+            "$ref": "#/components/responses/Error423"
           }
         }
       }
@@ -95,26 +86,17 @@
           ],
           "uses": {
             "responses": {
-              "500": {
-                "id": "res:v1:6wtutbil5pc7f4sx",
+              "423": {
+                "id": "res:v1:5jkq3irb5yzchzut",
                 "provenance": [
                   {
                     "producer": "fallback",
                     "layer": "fallback",
                     "fields": [
-                      "component",
                       "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/CarriedResponseController.php",
-                      "line": 80,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\CarriedResponseController::abortIf"
-                    }
+                    ]
                   }
-                ],
-                "facts": {
-                  "statusUnplaced": true
-                }
+                ]
               }
             }
           }
@@ -169,8 +151,8 @@
               }
             }
           },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "423": {
+            "$ref": "#/components/responses/Error423"
           }
         }
       }
@@ -202,26 +184,17 @@
           ],
           "uses": {
             "responses": {
-              "500": {
-                "id": "res:v1:6taqsigcmq7j5li3",
+              "423": {
+                "id": "res:v1:l55msyuba4umk3mi",
                 "provenance": [
                   {
                     "producer": "fallback",
                     "layer": "fallback",
                     "fields": [
-                      "component",
                       "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/CarriedResponseController.php",
-                      "line": 70,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\CarriedResponseController::abortJson"
-                    }
+                    ]
                   }
-                ],
-                "facts": {
-                  "statusUnplaced": true
-                }
+                ]
               }
             }
           }
@@ -231,8 +204,8 @@
           "CarriedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "423": {
+            "$ref": "#/components/responses/Error423"
           }
         }
       }
@@ -261,37 +234,68 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "500": {
-                "id": "res:v1:btdtbcp77no3alkr",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "component",
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/CarriedResponseController.php",
-                      "line": 63,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\CarriedResponseController::caseChosen"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "post.api.carried.caseChosen",
         "tags": [
           "CarriedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "default": {
+            "x-docuccino": {
+              "id": "res:v1:s5i4y2rgqqtyms2x",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ],
+              "facts": {
+                "statusUnplaced": true
+              }
+            },
+            "description": "Any status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "Gone"
+                        },
+                        {
+                          "type": "string",
+                          "const": "Locked"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -320,37 +324,57 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "500": {
-                "id": "res:v1:mxebbu27dbnl4eya",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "component",
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/CarriedResponseController.php",
-                      "line": 58,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\CarriedResponseController::caseHelper"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "post.api.carried.caseHelper",
         "tags": [
           "CarriedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "423": {
+            "x-docuccino": {
+              "id": "res:v1:pg5yeluhdek4uri3",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Locked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "Locked"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -382,21 +406,15 @@
           ],
           "uses": {
             "responses": {
-              "500": {
-                "id": "res:v1:qeejrc43mwctrpzg",
+              "423": {
+                "id": "res:v1:de2n2pqye2lk3lmb",
                 "provenance": [
                   {
                     "producer": "fallback",
                     "layer": "fallback",
                     "fields": [
-                      "component",
                       "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/CarriedResponseController.php",
-                      "line": 26,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\CarriedResponseController::facadeJson"
-                    }
+                    ]
                   }
                 ]
               }
@@ -408,8 +426,8 @@
           "CarriedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "423": {
+            "$ref": "#/components/responses/Error423"
           }
         }
       }
@@ -441,21 +459,15 @@
           ],
           "uses": {
             "responses": {
-              "500": {
-                "id": "res:v1:mvwwgmngdqrzxos4",
+              "423": {
+                "id": "res:v1:qbmxknazc2jizuaj",
                 "provenance": [
                   {
                     "producer": "fallback",
                     "layer": "fallback",
                     "fields": [
-                      "component",
                       "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/CarriedResponseController.php",
-                      "line": 21,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\CarriedResponseController::helperJson"
-                    }
+                    ]
                   }
                 ]
               }
@@ -467,8 +479,8 @@
           "CarriedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "423": {
+            "$ref": "#/components/responses/Error423"
           }
         }
       }
@@ -500,21 +512,15 @@
           ],
           "uses": {
             "responses": {
-              "500": {
-                "id": "res:v1:4q3jlq2oftrcnnul",
+              "423": {
+                "id": "res:v1:2giigbehfg6klfpk",
                 "provenance": [
                   {
                     "producer": "fallback",
                     "layer": "fallback",
                     "fields": [
-                      "component",
                       "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/CarriedResponseController.php",
-                      "line": 31,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\CarriedResponseController::newJson"
-                    }
+                    ]
                   }
                 ]
               }
@@ -526,8 +532,8 @@
           "CarriedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "423": {
+            "$ref": "#/components/responses/Error423"
           }
         }
       }
@@ -556,37 +562,48 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "500": {
-                "id": "res:v1:6njkcsc33cydpoyi",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "component",
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/CarriedResponseController.php",
-                      "line": 41,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\CarriedResponseController::redirect"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "post.api.carried.redirect",
         "tags": [
           "CarriedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "3XX": {
+            "x-docuccino": {
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                },
+                {
+                  "producer": "inference",
+                  "layer": "inference",
+                  "fields": [
+                    "headers"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/CarriedResponseController.php",
+                    "line": 41,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\CarriedResponseController::redirect"
+                  }
+                }
+              ]
+            },
+            "description": "Redirect",
+            "headers": {
+              "Location": {
+                "description": "The URL to follow.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                }
+              }
+            }
           }
         }
       }
@@ -615,37 +632,57 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "500": {
-                "id": "res:v1:x7kxsxszxf27xjaw",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "component",
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/CarriedResponseController.php",
-                      "line": 46,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\CarriedResponseController::subclass"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "post.api.carried.subclass",
         "tags": [
           "CarriedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "410": {
+            "x-docuccino": {
+              "id": "res:v1:2flcxxhxznnkj5rd",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Gone",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "const": "This resource is gone."
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -674,37 +711,48 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "500": {
-                "id": "res:v1:qighmotxdowes5ub",
-                "provenance": [
-                  {
-                    "producer": "fallback",
-                    "layer": "fallback",
-                    "fields": [
-                      "component",
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/CarriedResponseController.php",
-                      "line": 36,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\CarriedResponseController::text"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "post.api.carried.text",
         "tags": [
           "CarriedResponse"
         ],
         "responses": {
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "409": {
+            "x-docuccino": {
+              "id": "res:v1:eo64ajqmlmwexnij",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Conflict",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "const",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "string",
+                  "const": "Already submitted."
+                }
+              }
+            }
           }
         }
       }
@@ -736,21 +784,15 @@
           ],
           "uses": {
             "responses": {
-              "500": {
-                "id": "res:v1:zqarw52kayqjzxys",
+              "423": {
+                "id": "res:v1:ih62v3vohoen2uom",
                 "provenance": [
                   {
                     "producer": "fallback",
                     "layer": "fallback",
                     "fields": [
-                      "component",
                       "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/CarriedResponseController.php",
-                      "line": 51,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\CarriedResponseController::viaHelper"
-                    }
+                    ]
                   }
                 ]
               }
@@ -807,8 +849,8 @@
               }
             }
           },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
+          "423": {
+            "$ref": "#/components/responses/Error423"
           }
         }
       }
@@ -816,28 +858,29 @@
   },
   "components": {
     "schemas": {
-      "InternalServerError": {
+      "Error423": {
         "x-docuccino": {
-          "id": "sch:v1:ymhinvqj233m43e2"
+          "id": "sch:v1:k7k6afasdgjizlok"
         },
         "type": "object",
         "properties": {
-          "message": {
-            "type": "string"
+          "error": {
+            "type": "string",
+            "const": "locked"
           }
         },
         "required": [
-          "message"
+          "error"
         ]
       }
     },
     "responses": {
-      "InternalServerError": {
-        "description": "Internal Server Error",
+      "Error423": {
+        "description": "Locked",
         "content": {
           "application/json": {
             "schema": {
-              "$ref": "#/components/schemas/InternalServerError"
+              "$ref": "#/components/schemas/Error423"
             }
           }
         }
@@ -848,7 +891,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "8a629282d686b9f67ad29719c407b48a7a63e75de80b0f0f0af7847a778e6978"
+      "contentHash": "ea19fe16580ab9f1101cbb8eacc761168b41aab0c0cf02a6253da309697ed965"
     },
     "generator": {
       "name": "docuccino/laravel",
