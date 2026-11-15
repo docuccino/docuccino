@@ -7,7 +7,11 @@ namespace Docuccino\Inference\PhpStan\Throwing;
 use Closure;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Extensions\Schema\DeclarationFiles;
+use Docuccino\Core\Inference\ArgumentSlots;
+use Docuccino\Core\Inference\ComponentDeclaration;
+use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\Frame;
+use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
@@ -59,6 +63,10 @@ use Throwable;
  * "not an HTTP error at all" — which is the fallback {@see ThrowSignal} reads to tell an API error from
  * vendor plumbing.
  *
+ * An `HttpResponseException` the code builds, and a response handed to `abort()`, are not errors to render:
+ * the framework sends the response they carry as it is, so that response is read as a return of the body
+ * the throw is written in would be ({@see carriedResponses()}) and no exception is reported for it.
+ *
  * Result identity is `(fqcn, httpStatusHint)` — two aborts (403/404) are two responses, so never dedupe by
  * FQCN alone. Vendor-declared 500-class exceptions are demoted to `internal`; dropped bare-`Throwable`
  * noise is discarded silently — how much of it there was says nothing about the API, and nothing the
@@ -70,8 +78,13 @@ use Throwable;
  */
 final class ThrowAnalyzer
 {
+    private const HTTP_RESPONSE_EXCEPTION = 'Illuminate\\Http\\Exceptions\\HttpResponseException';
+
     /** @var array<string, true> */
     private array $visitedFiles = [];
+
+    /** @var list<ReturnSite> the responses thrown for the framework to send as they are */
+    private array $carried = [];
 
     /** Throws whose status did not fold, and the notices they publish. */
     private UnreadStatuses $unreadStatuses;
@@ -106,6 +119,9 @@ final class ThrowAnalyzer
         // was dead — the one construction always passes the config's — and it read as the real one, so
         // changing it moved nothing while looking like it had.
         private readonly int $maxDepth,
+        // How a returned expression is read as the response it is, so a carried one is read the same way.
+        /** @var Closure(Node\Expr, Scope): list<array{type: DType, component: ComponentDeclaration|null}> */
+        private readonly Closure $responseShapes,
     ) {
         $this->unreadStatuses = new UnreadStatuses;
         $this->skippedDescents = new SkippedDescents($this->declaredFilter);
@@ -147,6 +163,7 @@ final class ThrowAnalyzer
     private function begin(): void
     {
         $this->visitedFiles = [];
+        $this->carried = [];
         $this->unreadStatuses = new UnreadStatuses;
         $this->skippedDescents = new SkippedDescents($this->declaredFilter);
     }
@@ -186,6 +203,18 @@ final class ThrowAnalyzer
         }
 
         return $results;
+    }
+
+    /**
+     * The responses {@see analyze()} found thrown for the framework to send as they are, each read as a return
+     * written at its `throw`. Laravel renders an `HttpResponseException` by sending the response it carries,
+     * and `abort()` handed a response throws one, so the server answers with that response's status and body.
+     *
+     * @return list<ReturnSite>
+     */
+    public function carriedResponses(): array
+    {
+        return $this->carried;
     }
 
     /**
@@ -480,6 +509,16 @@ final class ThrowAnalyzer
             return null;
         }
 
+        // `abort()` handed a response rather than a status throws an `HttpResponseException` carrying it.
+        $response = $thrower->foldsStatusFromArgument() ? $this->handedResponse($node, $scope, $thrower->statusArgIndex) : null;
+        if ($response !== null) {
+            if (! $this->isCaught(self::HTTP_RESPONSE_EXCEPTION, $caught)) {
+                $this->carry($response, $scope, $frame);
+            }
+
+            return [];
+        }
+
         if ($this->isCaught($thrower->exceptionFqcn, $caught)) {
             return [];
         }
@@ -587,6 +626,10 @@ final class ThrowAnalyzer
         $results = [];
         foreach ($this->concreteClasses($type) as $class) {
             if ($this->isCaught($class, $caught)) {
+                continue;
+            }
+
+            if ($this->carriesResponse($class, $node, $scope, $frame)) {
                 continue;
             }
 
@@ -1241,6 +1284,61 @@ final class ThrowAnalyzer
             : ($this->fileAnalyzer->localAssignments($scope->getFile())[$key][$expr->name] ?? null);
 
         return $assigned === null ? [$expr, $scope] : $assigned;
+    }
+
+    /**
+     * Whether this `throw` builds an `HttpResponseException` whose response can be read, which it then
+     * carries. Only the framework's own class: a subclass's constructor need not hand its first argument on.
+     */
+    private function carriesResponse(string $fqcn, Node $node, Scope $scope, Frame $frame): bool
+    {
+        if ($fqcn !== self::HTTP_RESPONSE_EXCEPTION || ! $node instanceof Node\Expr\Throw_) {
+            return false;
+        }
+
+        [$thrown, $scope] = $this->localValue($node->expr, $scope);
+        $construction = $this->construction($thrown, $fqcn, $scope);
+        $response = $construction === null ? null : ArgumentSlots::of($construction->getArgs(), ['response'])->at(0);
+        if ($response === null) {
+            return false;
+        }
+
+        $this->carry($response, $scope, $frame);
+
+        return true;
+    }
+
+    /**
+     * The response an `abort()`-style call is handed where its status goes, or null where that argument
+     * is a status. The call is the normalized one, as {@see foldStatusArg()} reads it.
+     */
+    private function handedResponse(Node $node, Scope $scope, ?int $argIndex): ?Node\Expr
+    {
+        if ($argIndex === null || ! $node instanceof Node\Expr\CallLike || $node->isFirstClassCallable()) {
+            return null;
+        }
+
+        $argument = ArgumentSlots::of($node->getArgs())->at($argIndex);
+        if ($argument === null) {
+            return null;
+        }
+
+        $type = $scope->getType($argument);
+        foreach (['Symfony\\Component\\HttpFoundation\\Response', 'Illuminate\\Contracts\\Support\\Responsable'] as $handed) {
+            if ((new ObjectType($handed))->isSuperTypeOf($type)->yes()) {
+                return $argument;
+            }
+        }
+
+        return null;
+    }
+
+    /** Records the response a `throw` carries, read as a return written where the throw is. */
+    private function carry(Node\Expr $response, Scope $scope, Frame $frame): void
+    {
+        foreach (($this->responseShapes)($response, $scope) as $shape) {
+            $this->carried[] = new ReturnSite($shape['type'], $frame->location, $shape['component']);
+        }
     }
 
     /** The `new X(...)` a thrown expression is, where X is the exception the status is wanted for. */

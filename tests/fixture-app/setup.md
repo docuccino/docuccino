@@ -450,8 +450,9 @@ in the file being walked, and an array return is no type the trace follows:
 - `app/Http/Controllers/CarriedResponseController.php` — responses handed to the framework inside an
   exception: an `HttpResponseException` carrying a JSON response from the helper, the facade and `new`, a
   plain response, a redirect and a subclass, thrown at the action and from a helper, carrying a helper's
-  response built from an enum case and one whose case is chosen at run time; and a response handed to
-  `abort()` through the helper and the facade, and to `abort_if()`.
+  response built from an enum case and one whose case is chosen at run time; a response handed to
+  `abort()` through the helper and the facade, and to `abort_if()`; one a catch takes, one handed to
+  `abort()` inside a catch for `HttpException`, and `abort()` handed a status.
 - `app/Http/Controllers/DashboardPageController.php` — a Blade page: `view('…')` behind a declared
   `: View` (the contract) and behind no return type at all. Proof that the engine hands back the CONCRETE
   `Illuminate\View\View` either way, so recognising only the contract would miss every real app.

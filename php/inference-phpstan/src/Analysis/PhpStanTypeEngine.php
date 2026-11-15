@@ -209,6 +209,8 @@ final class PhpStanTypeEngine implements TypeEngine
 
         $throwAnalyzer = $this->makeThrowAnalyzer();
         $throws = $throwAnalyzer->analyze($body, $this->selfLabel($action));
+        // A response thrown for the framework to send as it is answers the request as a returned one does.
+        $returns = [...$returns, ...$throwAnalyzer->carriedResponses()];
 
         $truncation = $this->refinerTruncation($this->label($action));
         $diagnostics = $throwAnalyzer->diagnostics();
@@ -976,6 +978,7 @@ final class PhpStanTypeEngine implements TypeEngine
             $cases,
             $this->labels,
             $this->config->throwDepth,
+            $this->siteShapes(...),
         );
     }
 

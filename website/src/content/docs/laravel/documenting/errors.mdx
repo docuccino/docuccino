@@ -614,6 +614,31 @@ case maps to the same status, that's the status; otherwise no single number is t
 under the [stand-in status](#when-a-500-is-a-stand-in) with an
 [`inference.http-exception-status-unread`](/laravel/reference/diagnostics/) notice naming the `throw`.
 
+### Responses you throw
+
+An `HttpResponseException` is not an error for Laravel to render: it sends the response the exception
+carries exactly as it is. So Docuccino documents that response the way it documents one your action
+returns, with its status, its body and its media type:
+
+```php
+public function store(Request $request, Order $order): JsonResponse
+{
+    if ($order->isLocked()) {
+        throw new HttpResponseException(response()->json(['error' => 'Order is locked.'], 423));
+    }
+
+    // …
+}
+```
+
+That endpoint documents a `423` with an `{ "error": string }` body, not a `500`. Every way of building
+the response reads: `response()->json()`, the `Response` facade, `new JsonResponse`, a plain
+`response('…', 409)` sent as text, a redirect, your own response subclass, or a helper of yours that
+builds it, and the `throw` can sit in a helper the action calls. A status chosen at run time is
+documented under `default`, as it is for a response you return. Handing a response to `abort()`,
+`abort_if()` or `abort_unless()` throws the same exception, so `abort(response()->json([…], 423))` is
+documented the same way.
+
 ### When a `500` is a stand-in
 
 A `500` in your document is not one fact. It is the right answer when your code says so, and it is the

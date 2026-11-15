@@ -10,11 +10,13 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Response;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * Responses an action hands the framework inside an exception rather than returning them: thrown in an
- * `HttpResponseException` built each way a response is, thrown from a helper, and handed to `abort()`. The
- * framework sends each carried response as it is. Only ever analysed, never dispatched.
+ * `HttpResponseException` built each way a response is, thrown from a helper, and handed to `abort()`; one a
+ * catch takes, and one handed to `abort()` inside a catch for the `HttpException` it is not. The framework
+ * sends each carried response as it is. Only ever analysed, never dispatched.
  */
 class CarriedResponseController extends Controller
 {
@@ -82,6 +84,29 @@ class CarriedResponseController extends Controller
         abort_if($request->boolean('locked'), response()->json(['error' => 'locked'], 423));
 
         return response()->json(['ok' => true]);
+    }
+
+    public function caught(): JsonResponse
+    {
+        try {
+            throw new HttpResponseException(response()->json(['error' => 'locked'], 423));
+        } catch (HttpResponseException) {
+            return response()->json(['ok' => true]);
+        }
+    }
+
+    public function abortCaughtAsHttp(): JsonResponse
+    {
+        try {
+            abort(response()->json(['error' => 'locked'], 423));
+        } catch (HttpException) {
+            return response()->json(['ok' => true]);
+        }
+    }
+
+    public function abortStatus(): JsonResponse
+    {
+        abort(423);
     }
 
     protected function refuse(): void

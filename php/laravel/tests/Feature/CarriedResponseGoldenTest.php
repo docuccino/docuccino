@@ -7,10 +7,12 @@ use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\UnionT;
+use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
-use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TypeEngine;
@@ -30,39 +32,42 @@ use Workbench\App\Http\Controllers\CarriedResponseController;
  */
 function carriedResponseAnalyses(): array
 {
-    $location = new SourceLocation('');
-    $carried = static fn (): ThrownException => new ThrownException(
-        'Illuminate\\Http\\Exceptions\\HttpResponseException',
-        500,
-        [],
-        ThrowConfidence::Certain,
-        ThrowDisposition::Signal,
-    );
-    $aborted = static fn (): ThrownException => new ThrownException(
-        'Symfony\\Component\\HttpKernel\\Exception\\HttpException',
-        null,
-        [],
-        ThrowConfidence::Certain,
-        ThrowDisposition::Signal,
-    );
-    $ok = new ReturnSite(new ClassT('Illuminate\\Http\\JsonResponse', [
-        new ArrayShapeT([new ArrayShapeField('ok', new LiteralT(true))]),
-        new LiteralT(200),
-    ]), $location);
+    $at = static fn (DType $type): ReturnSite => new ReturnSite($type, new SourceLocation(''));
+    $json = static fn (DType $body, DType $status): ClassT => new ClassT('Illuminate\\Http\\JsonResponse', [$body, $status]);
+    $error = static fn (DType $value): ArrayShapeT => new ArrayShapeT([new ArrayShapeField('error', $value)]);
+
+    $locked = $at($json($error(new LiteralT('locked')), new LiteralT(423)));
+    $ok = $at($json(new ArrayShapeT([new ArrayShapeField('ok', new LiteralT(true))]), new LiteralT(200)));
 
     return [
-        'helperJson' => new ActionAnalysis(throws: [$carried()]),
-        'facadeJson' => new ActionAnalysis(throws: [$carried()]),
-        'newJson' => new ActionAnalysis(throws: [$carried()]),
-        'text' => new ActionAnalysis(throws: [$carried()]),
-        'redirect' => new ActionAnalysis(throws: [$carried()]),
-        'subclass' => new ActionAnalysis(throws: [$carried()]),
-        'viaHelper' => new ActionAnalysis(returns: [$ok], throws: [$carried()]),
-        'caseHelper' => new ActionAnalysis(throws: [$carried()]),
-        'caseChosen' => new ActionAnalysis(throws: [$carried()]),
-        'abortJson' => new ActionAnalysis(throws: [$aborted()]),
-        'abortFacade' => new ActionAnalysis(throws: [$aborted()]),
-        'abortIf' => new ActionAnalysis(returns: [$ok], throws: [$aborted()]),
+        // The framework sends the response an HttpResponseException carries as it is, so each is the
+        // response the request is answered with, however it was built: its status, body and media type.
+        'helperJson' => new ActionAnalysis(returns: [$locked]),
+        'facadeJson' => new ActionAnalysis(returns: [$locked]),
+        'newJson' => new ActionAnalysis(returns: [$locked]),
+        'text' => new ActionAnalysis(returns: [$at(new ClassT('Illuminate\\Http\\JsonResponse', [
+            new LiteralT('Already submitted.'),
+            new LiteralT(409),
+            new LiteralT('text/html'),
+        ]))]),
+        'redirect' => new ActionAnalysis(returns: [$at(new ClassT('Illuminate\\Http\\RedirectResponse'))]),
+        'subclass' => new ActionAnalysis(returns: [$at($json(
+            new ArrayShapeT([new ArrayShapeField('message', new LiteralT('This resource is gone.'))]),
+            new LiteralT(410),
+        ))]),
+        // Thrown from a helper, beside the response the action returns when it is not.
+        'viaHelper' => new ActionAnalysis(returns: [$ok, $locked]),
+        // A helper handed the case builds the carried response, and that case's value is its status.
+        'caseHelper' => new ActionAnalysis(returns: [$at($json($error(new LiteralT('Locked')), new LiteralT(423)))]),
+        // Gone answers 410 and Locked 423: no one code is true of every request, so none is read.
+        'caseChosen' => new ActionAnalysis(returns: [$at($json(
+            $error(UnionT::of([new LiteralT('Gone'), new LiteralT('Locked')])),
+            new UnknownT('status not folded'),
+        ))]),
+        // `abort()` handed a response throws an HttpResponseException carrying it.
+        'abortJson' => new ActionAnalysis(returns: [$locked]),
+        'abortFacade' => new ActionAnalysis(returns: [$locked]),
+        'abortIf' => new ActionAnalysis(returns: [$ok, $locked]),
     ];
 }
 
