@@ -683,12 +683,24 @@
                     "line": 66,
                     "symbol": "Workbench\\App\\Http\\Controllers\\PagedListController::overBound"
                   }
+                },
+                {
+                  "producer": "integration:page-size",
+                  "layer": "integration",
+                  "fields": [
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/PagedListController.php",
+                    "line": 66,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\PagedListController::overBound"
+                  }
                 }
               ]
             },
             "name": "per_page",
             "in": "query",
-            "description": "Number of items per page.",
+            "description": "Number of items per page.\n\nDefaults to `50`.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -697,7 +709,6 @@
                     "producer": "integration:api-resources",
                     "layer": "integration",
                     "fields": [
-                      "default",
                       "type"
                     ],
                     "source": {
@@ -719,11 +730,26 @@
                       "line": 66,
                       "symbol": "Workbench\\App\\Http\\Controllers\\PagedListController::overBound"
                     }
+                  },
+                  {
+                    "producer": "integration:page-size",
+                    "layer": "integration",
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/PagedListController.php",
+                      "line": 66,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\PagedListController::overBound"
+                    },
+                    "overrode": [
+                      {
+                        "field": "default",
+                        "value": 50,
+                        "producer": "integration:api-resources"
+                      }
+                    ]
                   }
                 ]
               },
               "type": "integer",
-              "default": 50,
               "maximum": 20,
               "minimum": 1,
               "example": 1
@@ -1386,7 +1412,7 @@
     "document": {
       "id": "doc:page-size",
       "configHash": "0902620ee05e979fb634964a8073c35becef86a216e111fc8b3a10b9f3472468",
-      "contentHash": "8b19bf9eff67ca5cdcf8e40f79ef085142b073f1a699b0bb1c40ccaadb28f9af"
+      "contentHash": "1d137f6e3fc97db792d139fcbbebd2b232d1c9d07676a0f20e3c59aa31efdbf6"
     },
     "generator": {
       "name": "docuccino/laravel",
