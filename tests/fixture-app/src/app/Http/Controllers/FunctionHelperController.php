@@ -9,16 +9,20 @@ use App\Http\Controllers\Concerns\RefusesRequests;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 use function App\Support\fault;
 use function App\Support\gone;
 use function App\Support\neverNested;
+use function App\Support\noteFailure;
 
 /**
  * Helpers an application writes as functions, global ones from its own `helpers.php` and namespaced ones
  * from `App\Support`, beside the same bodies written as methods: guards refusing a request the action
- * otherwise answers with a 200, and responses an action returns. The guard's method twin comes from a trait,
- * so the controller raises no error itself and stays outside the throw corpus.
+ * otherwise answers with a 200, responses an action returns, and a catch handing what it took to a helper
+ * that only logs its message. The guard's method twin comes from a trait, so the controller raises no error
+ * itself and stays outside the throw corpus.
  */
 class FunctionHelperController extends Controller
 {
@@ -126,6 +130,28 @@ class FunctionHelperController extends Controller
         return $this->fault(ExportFault::Locked);
     }
 
+    public function caughtNotedByFunction(Request $request): JsonResponse
+    {
+        try {
+            $this->sharedVoidHttp();
+        } catch (HttpException $e) {
+            noteFailure($e);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function caughtNotedByMethod(Request $request): JsonResponse
+    {
+        try {
+            $this->sharedVoidHttp();
+        } catch (HttpException $e) {
+            $this->note($e);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
     private function throttled(): void
     {
         throw new HttpResponseException(response()->json(['error' => 'slow down'], 429));
@@ -139,5 +165,10 @@ class FunctionHelperController extends Controller
     private function fault(ExportFault $fault): JsonResponse
     {
         return new JsonResponse(['error' => $fault->name], $fault->value);
+    }
+
+    private function note(\Throwable $e): void
+    {
+        Log::warning($e->getMessage());
     }
 }

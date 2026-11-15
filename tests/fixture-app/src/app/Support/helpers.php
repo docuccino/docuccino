@@ -99,3 +99,9 @@ function fault(ExportFault $fault): JsonResponse
 {
     return new JsonResponse(['error' => $fault->name], $fault->value);
 }
+
+/** Logs the message of the exception it is handed, and nothing else: the exception goes no further. */
+function noteFailure(\Throwable $e): void
+{
+    \Illuminate\Support\Facades\Log::warning($e->getMessage());
+}

@@ -349,7 +349,8 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
 1. **Helper-indirection descent.** At each harvested return site whose translated type is a bare
    response class: fold `new JsonResponse($body, $status, [headers])` arguments directly; read an
    already-resolved generic (`response()->json([...], 422)`) straight off the type; or resolve the
-   callee and analyse ITS return sites, first documentable return winning. A `return null`/void arm is
+   callee — a method or an application function — and analyse ITS return sites, first documentable
+   return winning. A `return null`/void arm is
    FRAMEWORK DELEGATION — neither a response nor a fold failure.
 
    A return site may also NAME the response first (`$r = Problem::make(…); $r->headers->add(…); return $r;`
@@ -812,7 +813,7 @@ constructor whose helper the class being built overrides is not the body PHP run
    catch that HANDS its variable on — to a call (`$this->fail($e)`, `report($e)`, `throw_if($x, $e)`) or
    into an assignment — is read the same way, since a helper that rethrows is as common as a `throw $e`;
    a `new` is not a hand-off (`throw new B(previous: $e)` lets out B). The one exception is a hand-off the
-   build can prove harmless: an application method whose body reads the parameter only through
+   build can prove harmless: an application method or function whose body reads the parameter only through
    `Throwable`'s final accessors (`getMessage()`, `getCode()`, …), by the same grammar
    (`EnclosingCatches::readsWhole()`); anything it cannot read, vendor `report()` included, lets it out.
    Where the analyser left such a call or `throw` no point, because the catch took all it could name, the point
@@ -843,7 +844,11 @@ constructor whose helper the class being built overrides is not the body PHP run
    own exception is that exception, never a 422 `ValidationException`.
 3. Bounded descent into project-code callees lacking `@throws` (**depth 3** — observed max
    real depth 2; the vendor-file gate, not depth, does the real containment), memoized,
-   cycle-guarded; vendor never descended. **Trap: descent targets must be added to the
+   cycle-guarded; vendor never descended. A callee is a method or a FUNCTION: `CalleeResolver::resolve()`
+   answers an application function by its name and file, `FileAnalyzer` harvests its
+   `FunctionReturnStatementsNode` beside the methods, and the function's file joins the dependency set as a
+   method's does, so a guard or response helper written in `helpers.php` reads as the same body written as
+   a method. **Trap: descent targets must be added to the
    analysed set on BOTH parser+resolver BEFORE first parse**, or CachedParser caches a
    body-stripped copy and descent silently reads zero throw points.
 

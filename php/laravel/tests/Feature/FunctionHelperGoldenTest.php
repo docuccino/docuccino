@@ -11,12 +11,14 @@ use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
+use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
+use Workbench\App\Exceptions\ExportLockedException;
 use Workbench\App\Http\Controllers\FunctionHelperController;
 
 /**
@@ -36,19 +38,27 @@ function functionHelperAnalyses(): array
     ]);
 
     $ok = $at($json('ok', new LiteralT(true), 200));
-    $bare = $at(new ClassT('Illuminate\\Http\\JsonResponse'));
+    $thrown = static fn (string $class, int $status): ThrownException => new ThrownException($class, $status, [], ThrowConfidence::Certain, ThrowDisposition::Signal);
+    $http = 'Symfony\\Component\\HttpKernel\\Exception\\HttpException';
+    $locked = static fn (): ThrownException => $thrown(ExportLockedException::class, 423);
 
+    // PHP runs a function's body at the call exactly as it runs a method's, so a helper written as a
+    // function refuses or answers with what its body throws or returns, as the same body written as a
+    // method does: the guard's error beside the 200, the response the helper builds rather than a 200.
     return [
-        'globalHttp' => new ActionAnalysis(returns: [$ok]),
-        'globalAbort' => new ActionAnalysis(returns: [$ok]),
-        'globalCustom' => new ActionAnalysis(returns: [$ok]),
-        'globalValidation' => new ActionAnalysis(returns: [$ok]),
-        'globalCarried' => new ActionAnalysis(returns: [$ok]),
-        'globalGone' => new ActionAnalysis(returns: [$bare]),
-        'globalFault' => new ActionAnalysis(returns: [$bare]),
-        'namespacedNested' => new ActionAnalysis(returns: [$ok]),
-        'namespacedGone' => new ActionAnalysis(returns: [$bare]),
-        'namespacedFault' => new ActionAnalysis(returns: [$bare]),
+        'globalHttp' => new ActionAnalysis(returns: [$ok], throws: [$thrown($http, 409)]),
+        'globalAbort' => new ActionAnalysis(returns: [$ok], throws: [$thrown($http, 404)]),
+        'globalCustom' => new ActionAnalysis(returns: [$ok], throws: [$locked()]),
+        'globalValidation' => new ActionAnalysis(returns: [$ok], throws: [$thrown('Illuminate\\Validation\\ValidationException', 422)]),
+        // A response thrown for the framework to send is the response the request gets.
+        'globalCarried' => new ActionAnalysis(returns: [$ok, $at($json('error', new LiteralT('slow down'), 429))]),
+        'globalGone' => new ActionAnalysis(returns: [$at($json('error', new LiteralT('gone'), 410))]),
+        // The function's parameter may be any case; the call names one, and its backing value is the status.
+        'globalFault' => new ActionAnalysis(returns: [$at($json('error', new LiteralT('Gone'), 410))]),
+        // A guard that calls another refuses with what that one throws.
+        'namespacedNested' => new ActionAnalysis(returns: [$ok], throws: [$locked()]),
+        'namespacedGone' => new ActionAnalysis(returns: [$at($json('error', new LiteralT('gone'), 410))]),
+        'namespacedFault' => new ActionAnalysis(returns: [$at($json('error', new LiteralT('Locked'), 423))]),
     ];
 }
 

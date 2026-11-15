@@ -353,15 +353,16 @@ in the file being walked, and an array return is no type the trace follows:
   under a catch of their own: swallowing it with its message logged, reporting and rethrowing it, handing
   it to a method that rethrows, taking one class, retrying from the catch — and `relay()`, which hands the
   work on to another helper, so its own body names no place the work runs. Also guard functions, each
-  written to return `never` and `void`, one that calls another, and two response functions: one answering
-  with its own status, one with the backing value of the enum case it is handed.
+  written to return `never` and `void`, one that calls another, two response functions — one answering
+  with its own status, one with the backing value of the enum case it is handed — and `noteFailure()`,
+  which only logs the message of the exception a catch hands it.
 - `app/helpers.php` + `app/Http/Controllers/FunctionHelperController.php` — the application's GLOBAL
   helpers, each declared inside `if (! function_exists(…))` as a Laravel application writes them: guards
   refusing with an `HttpException`, `abort(404)`, an exception with its own status, a `ValidationException`
   and an `HttpResponseException` carrying a response, and the two response functions. The controller
   calls them, and the namespaced ones from `app/Support/helpers.php`, beside the same bodies written as
   methods — the guard's taken from `RefusesRequests`, so the controller raises no error itself and stays
-  outside the throw corpus.
+  outside the throw corpus — and hands what a catch took to `noteFailure()` beside a method doing the same.
 - `app/Http/Controllers/NeverGuardController.php` + `app/Http/Controllers/Concerns/RefusesRequests.php` +
   `app/Services/RequestGuard.php` + `app/Http/Requests/RefusableRequest.php` — guard helpers written
   outside the controller that refuse a request by throwing an `HttpException`, calling `abort(404)`,
