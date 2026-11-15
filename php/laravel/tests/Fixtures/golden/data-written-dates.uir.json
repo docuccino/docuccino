@@ -252,6 +252,7 @@
             "type": "string"
           },
           "settled_at": {
+            "description": "Unix timestamp (seconds).",
             "type": "integer"
           },
           "updated_at": {
@@ -275,54 +276,45 @@
         "properties": {
           "bookedOn": {
             "type": "string",
-            "format": "date-time"
+            "format": "date"
           },
           "clearedAt": {
+            "description": "Serialized using the date format \"d/m/Y\".",
             "type": [
               "string",
               "null"
-            ],
-            "format": "date-time"
+            ]
           },
           "dueOn": {
             "type": "string",
-            "format": "date-time"
+            "format": "date"
           },
           "expiresAt": {
-            "description": "Unix timestamp (seconds).",
-            "type": "integer"
+            "description": "Serialized using the date format \"d/m/Y\".",
+            "type": "string"
           },
           "localAt": {
-            "type": "string",
-            "format": "date-time"
+            "description": "Serialized using the date format \"d/m/Y\".",
+            "type": "string"
           },
-          "pingedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
+          "pingedAt": {},
           "postedAt": {
-            "type": "string",
-            "format": "date-time"
+            "description": "Serialized using the date format \"d/m/Y\".",
+            "type": "string"
           },
           "recordedAt": {
-            "type": "string",
-            "format": "date-time"
+            "description": "Serialized using the date format \"d/m/Y\".",
+            "type": "string"
           },
           "seenAt": {
-            "type": "string",
-            "format": "date-time"
+            "description": "Serialized using the date format \"d/m/Y\".",
+            "type": "string"
           },
           "stampedAt": {
-            "type": "string",
-            "format": "date-time"
+            "description": "Serialized using the date format \"U\".",
+            "type": "string"
           },
-          "syncedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
+          "syncedAt": {}
         },
         "required": [
           "postedAt",
@@ -433,7 +425,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "d38bf2f92dc535eaa05b57cecccdc24d908635e1cec1b3f3265fd8d91bf4ab82"
+      "contentHash": "00f2adfda2a29db70f9dfb3be63240f82160aeda20bdc38c8cb4ccefccc54fee"
     },
     "generator": {
       "name": "docuccino/laravel",
