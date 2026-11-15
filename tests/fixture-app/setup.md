@@ -378,6 +378,13 @@ in the file being walked, and an array return is no type the trace follows:
   `abort_if()` and `abort_unless()` among them, handed a condition they never throw on — a literal or a
   `false` class constant — and one only a docblock calls `false`, beside `report_if()`, which throws
   nothing. A controller of its own, outside the throw corpus.
+- `app/Http/Requests/Failures/` + `app/Exceptions/SubmissionMalformedException.php` — form requests that
+  answer a failed validation or authorization their own way: `failedValidation()` throwing an
+  `HttpResponseException` carrying a JSON envelope with the validator's errors in it, written on the request
+  and on the abstract `ApiRequest` a request extends; throwing `ValidationException::withMessages()` with a
+  bag and a redirect; throwing an exception of the application's whose constructor states a 400; calling
+  `parent::failedValidation()`; and throwing whichever class configuration names. `failedAuthorization()`
+  throwing an `AuthorizationException` with a message, and an `HttpResponseException` carrying a 404.
 
 ### Data + Eloquent model reflection
 
