@@ -9,7 +9,6 @@ use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
-use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
@@ -46,9 +45,9 @@ function responseFacadeStatusReturns(): array
         'refuseAliased' => $sent($error('locked'), 422),
         'purgeAliased' => $sent(new VoidT, 410),
         'refuseByReply' => $sent($error('locked'), 422),
-        // A real-time facade of the factory: the analysis of the file naming it fails.
-        'refuseInRealTime' => new UnknownT('analysis failed'),
-        'purgeInRealTime' => new UnknownT('analysis failed'),
+        // A real-time facade of the factory is a facade of it too.
+        'refuseInRealTime' => $sent($error('locked'), 422),
+        'purgeInRealTime' => $sent(new VoidT, 410),
     ];
 }
 
@@ -107,4 +106,20 @@ it('scripts what the real engine recovers from the fixture app’s same calls', 
     '\\Response::json($body, 422)' => ['refuseAliased', 'alias'],
     '\\Response::make(\'\', 410)' => ['purgeAliased', 'aliasMade'],
     '\\Reply::json($body, 422), the application\'s own alias' => ['refuseByReply', 'appAlias'],
+])->group('fixture');
+
+it('scripts what the real engine recovers from the fixture app’s calls through a real-time facade', function (string $action, string $fixtureMethod): void {
+    ensureFixtureAvailable(FixtureRunner::available());
+
+    $real = ActionAnalysis::fromArray(FixtureRunner::analyze(
+        'app/Http/Controllers/RealTimeFacadeController.php',
+        'App\\Http\\Controllers\\RealTimeFacadeController',
+        $fixtureMethod,
+    ));
+
+    expect(array_map(static fn (ReturnSite $site): DType => $site->type, $real->returns))
+        ->toEqual([responseFacadeStatusReturns()[$action]]);
+})->with([
+    'ResponseFactory::json($body, 422)' => ['refuseInRealTime', 'json'],
+    '\\Facades\\…\\ResponseFactory::make(\'\', 410)' => ['purgeInRealTime', 'make'],
 ])->group('fixture');

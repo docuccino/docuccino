@@ -14,6 +14,7 @@ use Docuccino\Inference\PhpStan\Extensions\ResponseJsonReturnTypeExtension;
 use Docuccino\Inference\PhpStan\Runtime\BootFailedException;
 use Docuccino\Inference\PhpStan\Runtime\FacadeAliases;
 use Docuccino\Inference\PhpStan\Runtime\PhpDocParserCopy;
+use Docuccino\Inference\PhpStan\Runtime\RealTimeFacades;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter as RuntimeAdapterContract;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeConfig;
 use FilesystemIterator;
@@ -134,6 +135,7 @@ final class RuntimeAdapter implements RuntimeAdapterContract
 
         // After the app booted, so every alias it registers is known; before anything is analysed.
         FacadeAliases::declare();
+        RealTimeFacades::serve();
 
         $this->nodeScopeResolver = $container->getByType(NodeScopeResolver::class);
         $this->scopeFactory = $container->getByType(ScopeFactory::class);
