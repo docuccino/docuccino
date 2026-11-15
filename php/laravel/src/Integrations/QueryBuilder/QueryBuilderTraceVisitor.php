@@ -48,6 +48,8 @@ use PhpParser\Node;
  * until the engine folds the return. Anything still un-foldable lands on
  * {@see QueryBuilderFacts::$unresolved} with its source location, so a dynamic chain becomes a named
  * diagnostic rather than a silent omission.
+ *
+ * @phpstan-import-type FilterDefault from QbEntry
  */
 final class QueryBuilderTraceVisitor implements FollowsReturnType, TraceVisitor
 {
@@ -567,7 +569,7 @@ final class QueryBuilderTraceVisitor implements FollowsReturnType, TraceVisitor
 
             $default = $call['method'] === 'default' && isset($call['args'][0]) ? $this->defaultValue($call['args'][0]) : null;
             if ($default !== null) {
-                $modifiers = $modifiers->merge(new QbModifiers(true, $default[0]));
+                $modifiers = $modifiers->merge(QbModifiers::defaulting($default[0]));
             }
         }
 
@@ -692,7 +694,7 @@ final class QueryBuilderTraceVisitor implements FollowsReturnType, TraceVisitor
             if ($modifier === 'default') {
                 $folded = $this->foldDefault($base, $scope);
                 if ($folded !== null) {
-                    $modifiers = $modifiers->merge(new QbModifiers(true, $folded[0]));
+                    $modifiers = $modifiers->merge(QbModifiers::defaulting($folded[0]));
                 }
                 $base = $base->var;
 
@@ -706,9 +708,9 @@ final class QueryBuilderTraceVisitor implements FollowsReturnType, TraceVisitor
     }
 
     /**
-     * A `->default(<value>)` argument folded to a scalar, or null when absent / non-constant.
+     * A `->default(<value>)` argument folded, or null when absent / non-constant.
      *
-     * @return array{0: string|int|float|bool|null}|null
+     * @return array{0: FilterDefault}|null
      */
     private function foldDefault(Node\Expr\MethodCall $node, TypeScope $scope): ?array
     {
@@ -721,10 +723,39 @@ final class QueryBuilderTraceVisitor implements FollowsReturnType, TraceVisitor
     /**
      * A default as a request would send it. Spatie filters on the default as if it had been sent, and the
      * query binds an enum case as its value ({@see EnumCaseValue}), so a case is the value it stands for.
+     * A list is a list of those; an empty one applies nothing, and a keyed one or one holding a `null` is
+     * not a value set a request could send, so neither is a default.
+     *
+     * @return array{0: FilterDefault}|null
+     */
+    private function defaultValue(ConstValue $value): ?array
+    {
+        if (! $value->isArray()) {
+            return $this->defaultMember($value);
+        }
+
+        if ($value->items === [] || ($value->keys !== null && $value->keys !== array_keys($value->items))) {
+            return null;
+        }
+
+        $list = [];
+        foreach ($value->items as $item) {
+            $member = $this->defaultMember($item);
+            if ($member === null || $member[0] === null) {
+                return null;
+            }
+            $list[] = $member[0];
+        }
+
+        return [$list];
+    }
+
+    /**
+     * One scalar or case of a default, or null where it is neither.
      *
      * @return array{0: string|int|float|bool|null}|null
      */
-    private function defaultValue(ConstValue $value): ?array
+    private function defaultMember(ConstValue $value): ?array
     {
         if ($value->isCase()) {
             $case = EnumCaseValue::of($value);

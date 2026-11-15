@@ -266,6 +266,30 @@ it('reads an enum case default as the value its query binds, at the call site an
     'pure' => ['\\Workbench\\App\\Enums\\FormChannel::Post', 'Post'],
 ]);
 
+/**
+ * Spatie applies a default as if it had been sent: a list is matched as `whereIn`, an empty one applies
+ * nothing, and `->default(null)` makes the filter nullable too, so the `null` it applies is accepted. A
+ * keyed array or one holding a `null` is not a value set any request could send, so it is no default.
+ */
+it('reads a list default, and a null one as making the filter nullable', function (string $default, bool $hasDefault, mixed $value, bool $nullable): void {
+    $filter = traceQbSnippet(
+        "QueryBuilder::for(App\\Models\\User::class)->allowedFilters([AllowedFilter::exact('status')->default({$default})])"
+    )->facts->filters[0];
+
+    expect($filter->hasDefault)->toBe($hasDefault)
+        ->and($filter->default)->toBe($value)
+        ->and($filter->nullable)->toBe($nullable);
+})->with([
+    'a list of values' => ["['draft', 'published']", true, ['draft', 'published'], false],
+    'a list of cases is the values they bind' => ['[\\Workbench\\App\\Enums\\WidgetStatus::Draft, \\Workbench\\App\\Enums\\WidgetStatus::Published]', true, ['draft', 'published'], false],
+    'a list written with its own keys' => ["[0 => 'draft', 1 => 'published']", true, ['draft', 'published'], false],
+    'null' => ['null', true, null, true],
+    'an empty list applies nothing' => ['[]', false, null, false],
+    'a keyed array' => ["['state' => 'draft']", false, null, false],
+    'a list holding null' => ["['draft', null]", false, null, false],
+    'a list holding a value that does not fold' => ["['draft', \$dynamic]", false, null, false],
+]);
+
 it('degrades a non-constant ->default() to no default without dropping the entry', function (): void {
     $facts = traceQbSnippet(
         "QueryBuilder::for(App\\Models\\User::class)->allowedFilters([AllowedFilter::exact('status')->default(\$dynamic)])"

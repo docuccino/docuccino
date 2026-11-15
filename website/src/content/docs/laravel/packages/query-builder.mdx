@@ -705,6 +705,14 @@ Chained modifiers are recovered too:
 AllowedFilter::exact('status')->default('sent')->nullable();
 ```
 
+Spatie applies a default exactly as if it had been sent, and a `default` must be a value its schema
+allows, so the default takes the parameter's shape. On an enum filter's
+[array](#typed-filters-from-your-model) it is a list: `->default(Status::Sent)` documents `["sent"]`,
+and `->default('draft,sent')` and `->default([Status::Draft, Status::Sent])` both document
+`["draft", "sent"]`. Where the schema has no room for the value, the description states it instead
+(*"Defaults to `10`, `20`."*). That covers a list on a filter that takes one value, a string on an
+integer column, and `->default(null)`, which also makes the filter nullable, as it does in Spatie.
+
 ### Custom filter classes
 
 For a `custom` filter, Docuccino reads the column from a single `$query->where(...)` in the class's
