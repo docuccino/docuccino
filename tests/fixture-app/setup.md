@@ -347,7 +347,16 @@ in the file being walked, and an array return is no type the trace follows:
 - `app/Support/Attempts.php` + `app/Support/helpers.php` — helpers that run the work an action hands them
   under a catch of their own: swallowing it with its message logged, reporting and rethrowing it, handing
   it to a method that rethrows, taking one class, retrying from the catch — and `relay()`, which hands the
-  work on to another helper, so its own body names no place the work runs.
+  work on to another helper, so its own body names no place the work runs. Also guard functions, each
+  written to return `never` and `void`.
+- `app/Http/Controllers/NeverGuardController.php` + `app/Http/Controllers/Concerns/RefusesRequests.php` +
+  `app/Services/RequestGuard.php` + `app/Http/Requests/RefusableRequest.php` — guard helpers written
+  outside the controller that refuse a request by throwing an `HttpException`, calling `abort(404)`,
+  throwing an exception with its own status, a `ValidationException` or an `HttpResponseException`
+  carrying a response, each written to return `never` and `void`: as a trait method, a method on an
+  injected service, a function from `helpers.php` and a method on the form request. The carried response is
+  also thrown from a private and a static method of the controller, which is all the controller throws
+  itself.
 
 ### Data + Eloquent model reflection
 
