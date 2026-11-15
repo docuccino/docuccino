@@ -161,7 +161,11 @@
             "type": "string"
           },
           "company": {
+            "description": "Required when vat is present.",
             "type": "string"
+          },
+          "contract": {
+            "description": "Must be accepted when kind is business or charity."
           },
           "email": {
             "type": "string"
@@ -169,21 +173,44 @@
           "kind": {
             "type": "string"
           },
+          "marketing": {
+            "description": "Must be declined when kind is business."
+          },
           "newsletter": {
             "type": "boolean",
             "example": true
           },
           "nickname": {
+            "description": "Sending this field requires alias to be absent.",
             "type": "string"
           },
           "office": {
+            "description": "Required when any of vat, company is present.",
             "type": "string"
+          },
+          "reference": {
+            "type": "string",
+            "format": "uuid",
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           },
           "referral": {
             "type": "string"
           },
+          "terms": {
+            "description": "Must be accepted when kind is business."
+          },
           "vat": {
             "type": "string"
+          },
+          "website": {
+            "type": "string",
+            "format": "uri",
+            "example": "https://example.com"
+          },
+          "zone": {
+            "description": "Must be a valid timezone identifier.",
+            "type": "string",
+            "example": "UTC"
           }
         }
       }
@@ -193,7 +220,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "14f7458f656f4012e7ffa96cc4dba90d149650feea5d66753555d5bb2d8d2f4e"
+      "contentHash": "3edea95593227699c224b6897b656fa85b9a5f9e9bcba5fb3fccba18072ea735"
     },
     "generator": {
       "name": "docuccino/laravel",

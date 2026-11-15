@@ -158,17 +158,35 @@
         },
         "type": "object",
         "properties": {
-          "code": {},
-          "delivery": {},
+          "code": {
+            "type": "string",
+            "pattern": "^(?:[a-zA-Z0-9_-]|[^\\x00-\\x7F])+$",
+            "example": "example"
+          },
+          "delivery": {
+            "description": "Expected format: Y-m-d Must be a date after today.",
+            "type": "string",
+            "format": "date"
+          },
           "labels": {
             "type": [
               "array",
               "object"
             ]
           },
-          "name": {},
+          "name": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 2,
+            "example": "example"
+          },
           "note": {},
-          "quantity": {},
+          "quantity": {
+            "type": "integer",
+            "maximum": 99,
+            "minimum": 1,
+            "example": 1
+          },
           "tags": {
             "type": [
               "array",
@@ -190,7 +208,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "a6ac7a034f1c766dee633d75c76232bd2f43906e9a022c831e10a3af51ef8bca"
+      "contentHash": "b8ba7c096ff6ae96df7acccf360a3a4fdda6f9cc19e519bc96a79a68ff83ce9f"
     },
     "generator": {
       "name": "docuccino/laravel",
