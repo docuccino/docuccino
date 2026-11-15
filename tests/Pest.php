@@ -2367,31 +2367,74 @@ function phpRaisesThrow(string $source): bool
 }
 
 /**
- * Whether one PHP source raises an ERROR: a throw of any shape ({@see phpRaisesThrow()}) bar one that builds
- * an `HttpResponseException`, which hands the framework a response to send as it is rather than an error to
- * render.
+ * Whether one PHP source raises an ERROR: a throw of any shape ({@see phpRaisesThrow()}) bar one that hands the
+ * framework a response to send as it is rather than an error to render — a `new` of `HttpResponseException` or
+ * of a class extending it, or a static factory on such a class. `$parentOf` names a class's parent, and by
+ * default reads the fixture overlay, where every class a fixture throws is written.
+ *
+ * @param  (callable(string): ?string)|null  $parentOf
  */
-function phpRaisesError(string $source): bool
+function phpRaisesError(string $source, ?callable $parentOf = null): bool
 {
     $ast = phpParsedSource($source);
     if ($ast === null) {
         return false;
     }
 
-    $finder = new FindingVisitor(static function (Node $node): bool {
+    $parentOf ??= fixtureOverlayParent(...);
+    $finder = new FindingVisitor(static function (Node $node) use ($parentOf): bool {
         if (! $node instanceof Node\Stmt\Throw_ && ! $node instanceof Node\Expr\Throw_) {
             return false;
         }
 
         $thrown = $node->expr;
+        $class = ($thrown instanceof Node\Expr\New_ || $thrown instanceof Node\Expr\StaticCall) && $thrown->class instanceof Node\Name
+            ? $thrown->class->toString()
+            : null;
 
-        return ! ($thrown instanceof Node\Expr\New_
-            && $thrown->class instanceof Node\Name
-            && $thrown->class->toString() === 'Illuminate\\Http\\Exceptions\\HttpResponseException');
+        return $class === null || ! phpExtendsResponseException($class, $parentOf);
     });
     (new NodeTraverser($finder))->traverse($ast);
 
     return $finder->getFoundNodes() !== [];
+}
+
+/**
+ * Whether a class is Laravel's `HttpResponseException` or extends it, up the parents `$parentOf` names.
+ *
+ * @param  callable(string): ?string  $parentOf
+ */
+function phpExtendsResponseException(string $class, callable $parentOf): bool
+{
+    for ($seen = []; $class !== null && ! isset($seen[$class]); $class = $parentOf($class)) {
+        if ($class === 'Illuminate\\Http\\Exceptions\\HttpResponseException') {
+            return true;
+        }
+
+        $seen[$class] = true;
+    }
+
+    return false;
+}
+
+/** The parent a class written in the fixture overlay declares, or null for one the overlay does not hold. */
+function fixtureOverlayParent(string $class): ?string
+{
+    foreach (['App\\' => 'app/', 'Modules\\' => 'modules/'] as $namespace => $root) {
+        $path = fixtureSourcePath($root.str_replace('\\', '/', substr($class, strlen($namespace))).'.php');
+        if (! str_starts_with($class, $namespace) || ! is_file($path)) {
+            continue;
+        }
+
+        $finder = new FindingVisitor(static fn (Node $node): bool => $node instanceof Node\Stmt\Class_
+            && $node->namespacedName?->toString() === $class);
+        (new NodeTraverser($finder))->traverse(phpParsedSource((string) file_get_contents($path)) ?? []);
+        $declaration = $finder->getFoundNodes()[0] ?? null;
+
+        return $declaration instanceof Node\Stmt\Class_ ? $declaration->extends?->toString() : null;
+    }
+
+    return null;
 }
 
 /**
