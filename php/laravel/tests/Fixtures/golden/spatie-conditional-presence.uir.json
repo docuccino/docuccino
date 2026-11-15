@@ -158,6 +158,17 @@
         },
         "type": "object",
         "properties": {
+          "billing": {
+            "type": "object",
+            "properties": {
+              "line": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "line"
+            ]
+          },
           "email": {
             "type": "string"
           },
@@ -176,6 +187,9 @@
             "type": "string"
           },
           "name": {
+            "type": "string"
+          },
+          "nickname": {
             "type": "string"
           },
           "office": {
@@ -204,7 +218,6 @@
         "required": [
           "name",
           "email",
-          "phone",
           "home",
           "office"
         ]
@@ -215,7 +228,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "74b1075f6f2a8b7504272eb3c13e5e66b56fa0be09bb9063f97235af0e45e176"
+      "contentHash": "5085f7a0efea0e477c1e81312d68bc1331685aa65f43eb5ebbd6fff376d6f975"
     },
     "generator": {
       "name": "docuccino/laravel",
