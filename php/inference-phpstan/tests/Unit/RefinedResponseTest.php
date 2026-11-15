@@ -448,6 +448,29 @@ it('claims no body where something the build cannot read may have rewritten it',
         ->and($built->component)->toBe($declaration);
 });
 
+it('documents the body something replaced it with, and nothing read off the one before', function (): void {
+    // `->setData($rows)` after the response was built: the members, the status echoes and the component that
+    // named the old body are gone, while the status and media type it was sent with stay.
+    $declaration = new ComponentDeclaration('Queued', 'X::y');
+    $rows = new ArrayShapeT([new ArrayShapeField('accepted', new LiteralT(true))]);
+    $replaced = withMembers(['type'], ['type' => ParamAccessor::identity('type')])
+        ->withBoundStatus(new LiteralT(202))
+        ->withContentType('application/problem+json')
+        ->withComponent($declaration)
+        ->withBody($rows);
+
+    expect($replaced->payload)->toBe($rows)
+        ->and($replaced->payloadMembers)->toBeNull()
+        ->and($replaced->payloadParamProvenance)->toBe([])
+        ->and($replaced->component)->toBeNull()
+        ->and($replaced->toClassT(ResponseShapeRefiner::CANONICAL_RESPONSE)?->typeArgs)
+        ->toEqual([$rows, new LiteralT(202), new LiteralT('application/problem+json')])
+        // A status the old body decided was the old body's to decide, and nothing the new one says.
+        ->and(RefinedResponse::renderedBy(new ClassT('App\\Http\\Resources\\WidgetResource'))->withBody($rows)->toClassT(ResponseShapeRefiner::CANONICAL_RESPONSE)?->typeArgs)
+        ->toEqual([$rows, new UnknownT('status not folded')])
+        ->and(RefinedResponse::transported('Illuminate\\Http\\RedirectResponse', null, null)->withBody($rows)->transport)->toBe('Illuminate\\Http\\RedirectResponse');
+});
+
 it('marks a table read at the status accessor as its reason phrase, and leaves one at any other key as read', function (): void {
     $source = new ParamAccessor('response', AccessorKind::Method, 'getStatusCode');
     $payload = new ArrayShapeT([

@@ -758,14 +758,14 @@ it('reads a status it cannot fold as unknown, never as the one the body-builder 
     ])->and($type instanceof ClassT ? $type->typeArgs[1] ?? null : null)->toBeInstanceOf(UnknownT::class);
 })->group('fixture');
 
-it('refuses a whole chain when a link may have rewritten the body', function (): void {
-    // `->setData(...)` returns `static` exactly as `->setStatusCode()` does, so passing the receiver's
-    // payload through would publish a body the endpoint replaced. The guard is the same function as the
-    // fold: a mutation of a response it does not model takes the chain with it, status included.
+it('reads the body a link replaced, and the status a later link set', function (): void {
+    // `(new JsonResponse)->setData(['digest' => 'ok'])->setStatusCode(202)` sends `{"digest": "ok"}` with a
+    // 202: `setData()` replaces the body and nothing else, so neither the empty body the response was built
+    // with nor the 200 it would have been sent with is what goes out.
     expect(fluentShape('digest'))->toBe([
-        'status' => null,
+        'status' => 202,
         'contentType' => null,
-        'keys' => [],
+        'keys' => ['digest'],
     ]);
 })->group('fixture');
 

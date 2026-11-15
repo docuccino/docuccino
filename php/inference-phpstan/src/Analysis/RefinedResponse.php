@@ -152,6 +152,15 @@ final readonly class RefinedResponse
     }
 
     /**
+     * The body once something replaced it with one this read: nothing read off the one before — its members,
+     * what they echoed, the component naming it, or a status it decided — stands.
+     */
+    public function withBody(DType $payload): self
+    {
+        return new self($payload, $this->status, $this->statusSource, $this->contentType, $this->delegates, transport: $this->transport, statusUnread: $this->statusUnread || $this->statusOfPayload);
+    }
+
+    /**
      * The body once something this cannot read may have rewritten it: nothing of the one it was built with
      * stands, so none is claimed.
      */

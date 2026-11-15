@@ -60,6 +60,11 @@ class ResponseChainController extends Controller
         return response()->json(['queued' => true], 202)->withCookie(cookie('queued', '1'));
     }
 
+    public function withoutCookie(): JsonResponse
+    {
+        return response()->json(['queued' => true], 202)->withoutCookie('queued');
+    }
+
     public function pretty(): JsonResponse
     {
         return response()->json(['queued' => true], 202)->setEncodingOptions(JSON_PRETTY_PRINT);

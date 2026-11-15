@@ -9,7 +9,6 @@ use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
-use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
@@ -34,22 +33,31 @@ function responseChainReturns(): array
     $json = 'Illuminate\\Http\\JsonResponse';
     $responses = 'Workbench\\App\\Http\\Responses\\';
     $queued = new ArrayShapeT([new ArrayShapeField('queued', new LiteralT(true))]);
+    $accepted = new ArrayShapeT([new ArrayShapeField('accepted', new LiteralT(true))]);
     $sent = static fn (DType $body, int $status): ClassT => new ClassT($json, [$body, new LiteralT($status)]);
+    $unread = new UnknownT('payload not folded');
 
     return [
-        'note' => new ClassT('Illuminate\\Http\\Response'),
-        'accept' => $sent($queued, 202),
-        'settle' => $sent($queued, 200),
-        'padded' => $sent($queued, 202),
-        'batch' => $sent(new ArrayShapeT([new ArrayShapeField('ids', new ArrayShapeT([], isList: true))]), 202),
+        // A link replacing the body leaves the status: the 202 the response was built with is the one sent.
+        'note' => new ClassT($json, [new LiteralT('accepted'), new LiteralT(202), new LiteralT('text/html')]),
+        'accept' => $sent($accepted, 202),
+        'settle' => $sent($accepted, 202),
+        // A JSONP callback, or an encoding that sends `[]` as `{}`, leaves no body that can be named.
+        'padded' => $sent($unread, 202),
+        'batch' => $sent($unread, 202),
+        // A pretty-printed encoding or a cookie changes nothing documented.
         'pretty' => $sent($queued, 202),
         'remember' => $sent($queued, 202),
-        'unchanged' => $sent($queued, 202),
-        'removed' => new ClassT($responses.'GoneJsonResponse'),
-        'relocated' => new ClassT($responses.'MovedResponse'),
-        'locked' => new ClassT($responses.'PinnedStatusJsonResponse'),
-        'built' => new ClassT($json, [new UnknownT('mixed'), ScalarT::int(), ScalarT::string()]),
-        'refilled' => new ClassT($json, [new UnknownT('payload not folded'), new UnknownT('status not folded')]),
+        // A setter nobody named may have changed anything.
+        'unchanged' => new ClassT($json, [$unread, new UnknownT('status not folded')]),
+        // A chain on an application's subclass is read over what its constructor hands the framework's.
+        'removed' => $sent(new ArrayShapeT([new ArrayShapeField('message', new LiteralT('This resource is gone.'))]), 404),
+        'relocated' => new ClassT($responses.'MovedResponse', [$unread, new LiteralT(308)]),
+        // …unless it overrides the setter, which may do anything.
+        'locked' => new ClassT($json, [$unread, new UnknownT('status not folded')]),
+        // A local holding `new JsonResponse` is the response it was built with.
+        'built' => $sent($queued, 202),
+        'refilled' => $sent($accepted, 202),
     ];
 }
 
