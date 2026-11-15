@@ -917,7 +917,9 @@ halves are read from the code:
 - **What a route takes.** An implicit binding — a type-hinted model — or a `Route::model()` one, matched
   on the model's route key: its primary key, or the column its `getRouteKeyName()` returns. An implicit
   binding can also name its column, as in `{order:reference}`.
-- **What a response gives.** A model returned as it is sends each column under its own name. A resource
+- **What a response gives.** A model returned as it is sends each column under its own name, unless it
+  writes its own serialised form (`toArray()`, `jsonSerialize()` and the like), which may send anything
+  under any name. A resource
   sends the columns its `toArray()` writes as `$this->column` (or `$this->getRouteKey()`). Docuccino reads which model a resource wraps from where
   your action builds it — `new OrderResource($order)` — or from the resource's `@mixin`.
 

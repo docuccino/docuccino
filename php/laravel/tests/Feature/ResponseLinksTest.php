@@ -28,6 +28,8 @@ use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\PalletResource;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Parcel;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ParcelController;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ParcelResource;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Reel;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ReelController;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Scan;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ScanController;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\ScanResource;
@@ -328,6 +330,41 @@ it('writes no link to a model that resolves its bindings itself', function (): v
     expect($paths['/api/crates']['post']['responses']['200']['links'])->toHaveKey('get.api.crates.@crate')
         ->and($paths['/api/tokens']['post']['responses']['200'])->not->toHaveKey('links')
         ->and($paths['/api/tokens/{token}']['get']['responses']['200'])->not->toHaveKey('links');
+});
+
+/**
+ * A model returned as it is sends its columns under their own names only while the framework writes its
+ * serialised form. One that writes its own may send anything under a column's name — here its uuid under
+ * `id` — so no member is known to hold the value a route looks the model up by.
+ */
+it('writes no link from a model that writes its own serialised form', function (): void {
+    $routes = static function (Router $router): void {
+        $router->post('api/reels', [ReelController::class, 'store']);
+        $router->get('api/reels/{reel}', [ReelController::class, 'show']);
+        $router->post('api/crates', [CrateController::class, 'store']);
+        $router->get('api/crates/{crate}', [CrateController::class, 'show']);
+    };
+    $engine = static function (): TypeEngine {
+        $returns = static fn (string $fqcn): ActionAnalysis => new ActionAnalysis(returns: [new ReturnSite(new ClassT($fqcn), new SourceLocation(''))]);
+
+        return WorkbenchEngine::make(
+            classOverrides: [
+                Reel::class => new ClassMetadata(Reel::class, [new PropertyMetadata('id', ScalarT::int()), new PropertyMetadata('uuid', ScalarT::string())]),
+                Crate::class => new ClassMetadata(Crate::class, [new PropertyMetadata('id', ScalarT::int())]),
+            ],
+            analysisOverrides: [
+                ReelController::class.'::store' => $returns(Reel::class),
+                ReelController::class.'::show' => $returns(Reel::class),
+                CrateController::class.'::store' => $returns(Crate::class),
+                CrateController::class.'::show' => $returns(Crate::class),
+            ],
+        );
+    };
+
+    $paths = emittedArray(localityBuild($routes, $engine))['paths'];
+
+    expect($paths['/api/crates']['post']['responses']['200']['links'])->toHaveKey('get.api.crates.@crate')
+        ->and($paths['/api/reels']['post']['responses']['200'])->not->toHaveKey('links');
 });
 
 /**

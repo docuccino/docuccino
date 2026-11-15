@@ -58,7 +58,8 @@ final class BodyColumns
 
         $members = [];
         if ($class === $model) {
-            $members = array_combine($published, $published);
+            // A model that writes its own serialised form may send anything under a column's name.
+            $members = EloquentModelReflector::serialisesItself($model) ? [] : array_combine($published, $published);
         } else {
             $context->recordDependencyFiles(DeclarationFiles::of($class));
             $members = $this->resourceMembers($class);

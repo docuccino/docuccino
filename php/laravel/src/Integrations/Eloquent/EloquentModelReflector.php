@@ -44,6 +44,9 @@ final class EloquentModelReflector
     /** The methods the framework resolves a model's own binding through, or hands its route key out by. */
     private const OWN_BINDING = ['getRouteKey', 'resolveRouteBinding', 'resolveSoftDeletableRouteBinding', 'resolveRouteBindingQuery'];
 
+    /** The methods a model is serialised through, from the whole body down to the attributes it sends. */
+    private const SERIALISATION = ['toJson', 'jsonSerialize', 'toArray', 'attributesToArray', 'getArrayableAttributes'];
+
     /** The methods a scope parent resolves its children through. */
     private const CHILD_BINDING = ['resolveChildRouteBinding', 'resolveSoftDeletableChildRouteBinding', 'resolveChildRouteBindingQuery'];
 
@@ -148,6 +151,15 @@ final class EloquentModelReflector
     public static function resolvesOwnBinding(string $fqcn): bool
     {
         return self::overridesAny($fqcn, [...self::OWN_BINDING, ...self::CHILD_BINDING]);
+    }
+
+    /**
+     * Whether the model writes its own serialised form, in which case no member of it is known to be the
+     * column it is named for.
+     */
+    public static function serialisesItself(string $fqcn): bool
+    {
+        return self::overridesAny($fqcn, self::SERIALISATION);
     }
 
     /** Whether the model finds the children scoped to it in code of its own. */
