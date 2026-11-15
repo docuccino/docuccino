@@ -139,6 +139,17 @@ final class DataClassReflector
 
     private const PASSWORD_RULE = 'Illuminate\\Validation\\Rules\\Password';
 
+    /**
+     * The attributes whose rule is a `DatabaseRule`, by the parameter naming its table. Laravel resolves a table
+     * written as a model's class by constructing the model, which is application code.
+     */
+    private const DATABASE_ATTRIBUTES = [
+        'Spatie\\LaravelData\\Attributes\\Validation\\Exists' => 'table',
+        'Spatie\\LaravelData\\Attributes\\Validation\\Unique' => 'table',
+    ];
+
+    private const MODEL = 'Illuminate\\Database\\Eloquent\\Model';
+
     private const VALIDATION_PATH = 'Spatie\\LaravelData\\Support\\Validation\\ValidationPath';
 
     /**
@@ -468,8 +479,9 @@ final class DataClassReflector
      * What an object attribute validates with — the rule string or object its own `getRule()` builds, as
      * laravel-data builds it — or null for any other attribute, or where the rule cannot be built: an argument
      * this version does not take, or a reference only a request can resolve. A `#[Password(default: true)]` is
-     * the default the application registers at boot, which no file this build keys on states, so it is read as
-     * its bare keyword instead.
+     * the default the application registers at boot, which no file this build keys on states, and a database
+     * rule whose table is a model's class is resolved by constructing the model, so each is read as its bare
+     * keyword instead.
      *
      * @param  ReflectionAttribute<object>  $attribute
      */
@@ -477,6 +489,12 @@ final class DataClassReflector
     {
         if (! is_a($attribute->getName(), self::OBJECT_ATTRIBUTE, true)) {
             return null;
+        }
+
+        if (self::tableIsModel($attribute)) {
+            $class = $attribute->getName();
+
+            return $class::keyword();
         }
 
         try {
@@ -493,6 +511,20 @@ final class DataClassReflector
         }
 
         return is_object($rule) || is_string($rule) ? $rule : null;
+    }
+
+    /**
+     * Whether a database rule's table is written as a model's class, which `DatabaseRule` resolves as Laravel does.
+     *
+     * @param  ReflectionAttribute<object>  $attribute
+     */
+    private static function tableIsModel(ReflectionAttribute $attribute): bool
+    {
+        $parameter = self::DATABASE_ATTRIBUTES[$attribute->getName()] ?? null;
+        $arguments = $attribute->getArguments();
+        $table = $parameter === null ? null : ($arguments[$parameter] ?? $arguments[0] ?? null);
+
+        return is_string($table) && str_contains($table, '\\') && is_a($table, self::MODEL, true);
     }
 
     /** Whether a `#[Password]` validates with the default the application registered rather than its own arguments. */
