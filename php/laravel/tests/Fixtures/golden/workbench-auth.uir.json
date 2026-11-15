@@ -610,6 +610,88 @@
         }
       }
     },
+    "/api/wave-d/partner-own-alias": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:yydtthtq5zl2xhzz",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/FormController.php",
+                "line": 25,
+                "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "description",
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ]
+        },
+        "operationId": "get.api.wave-d.partner-own-alias",
+        "summary": "List forms.",
+        "description": "Returns the collection of forms visible to the caller.",
+        "tags": [
+          "Forms"
+        ],
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:6boaqpzjcndytl73",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "items",
+                          "type"
+                        ],
+                        "confidence": 0.9
+                      }
+                    ]
+                  },
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FormData"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/wave-d/publish": {
       "post": {
         "x-docuccino": {
@@ -888,6 +970,88 @@
           }
         ]
       }
+    },
+    "/api/wave-d/token-own-alias": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:rgmhoh4ztr7wmn3e",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/FormController.php",
+                "line": 25,
+                "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "description",
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ]
+        },
+        "operationId": "get.api.wave-d.token-own-alias",
+        "summary": "List forms.",
+        "description": "Returns the collection of forms visible to the caller.",
+        "tags": [
+          "Forms"
+        ],
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:pmfwxqlznlv6xtzs",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "items",
+                          "type"
+                        ],
+                        "confidence": 0.9
+                      }
+                    ]
+                  },
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FormData"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -951,7 +1115,7 @@
     "document": {
       "id": "doc:wave-d-auth",
       "configHash": "8547b39dbe461c3bd22293a7d4d22e89f6281fe06c7f02efb8f7fd1ef40c8c60",
-      "contentHash": "a31218475337187ea270be419d40e65261d2ba0c7ded1c06eaaae721b57d352c"
+      "contentHash": "4f8f553a044f1ff6c89c0ded1cc7dac8dd2d9bd9cc05cd2f7bc9a966d223d7b9"
     },
     "generator": {
       "name": "docuccino/laravel",
