@@ -230,9 +230,7 @@
                   "layer": "integration",
                   "fields": [
                     "description",
-                    "explode",
-                    "required",
-                    "style"
+                    "required"
                   ],
                   "source": {
                     "file": "tests/Fixtures/QueryBuilder/FilterDelimitersController.php",
@@ -244,10 +242,8 @@
             },
             "name": "filter[status]",
             "in": "query",
-            "description": "Exact match on `status`. Accepts a comma-separated list of values (matched as `whereIn`).",
+            "description": "Exact match on `status`.",
             "required": false,
-            "style": "form",
-            "explode": false,
             "schema": {
               "x-docuccino": {
                 "provenance": [
@@ -255,8 +251,7 @@
                     "producer": "integration:query-builder",
                     "layer": "integration",
                     "fields": [
-                      "items",
-                      "type"
+                      "$ref"
                     ],
                     "source": {
                       "file": "tests/Fixtures/QueryBuilder/FilterDelimitersController.php",
@@ -266,10 +261,7 @@
                   }
                 ]
               },
-              "type": "array",
-              "items": {
-                "$ref": "#/components/schemas/WidgetStatus"
-              }
+              "$ref": "#/components/schemas/WidgetStatus"
             }
           },
           {
@@ -460,7 +452,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "7056b4f88d9a4050c6d043332ce1861224bb91d0565fb04c9c937ddc059d9b6a"
+      "contentHash": "2bbb57b4cbdd4edd493af80df04a1a4f634c308d690629a6b6a0f9bcd2af909d"
     },
     "generator": {
       "name": "docuccino/laravel",
