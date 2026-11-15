@@ -20,11 +20,11 @@ use Workbench\App\Http\Controllers\ResponseChainController;
 
 /**
  * The document an application gets for a response a fluent chain changes after it is built — its content,
- * data, JSONP callback, encoding or a cookie set, or a setter nothing documents called — for a chain on an
- * application's response subclass, one of which overrides the status setter, and for a `new JsonResponse`
- * built into a local, returned as it is or after its data is set. Byte-locked, warm as well as cold; the
- * scripted returns are what the real engine recovers from the fixture app's same calls, which the last test
- * holds them to.
+ * data, JSONP callback, encoding, a cookie or cache headers set, or a setter nothing documents called — for
+ * a chain on an application's response subclass, one of which overrides the status setter, and for a `new
+ * JsonResponse` built into a local, returned as it is or after its data is set. Byte-locked, warm as well as
+ * cold; the scripted returns are what the real engine recovers from the fixture app's same calls, which the
+ * last test holds them to.
  *
  * @return array<string, DType> action → the response it returns
  */
@@ -50,6 +50,8 @@ function responseChainReturns(): array
         'remember' => $sent($queued, 202),
         // A setter nobody named may have changed anything.
         'unchanged' => new ClassT($json, [$unread, new UnknownT('status not folded')]),
+        'cached' => new ClassT($json, [$unread, new UnknownT('status not folded')]),
+        'prepared' => new ClassT($json, [$unread, new UnknownT('status not folded')]),
         // A chain on an application's subclass is read over what its constructor hands the framework's.
         'removed' => $sent(new ArrayShapeT([new ArrayShapeField('message', new LiteralT('This resource is gone.'))]), 404),
         'relocated' => new ClassT($responses.'MovedResponse', [$unread, new LiteralT(308)]),
@@ -83,6 +85,8 @@ function responseChainRoutes(): callable
         $router->post('api/chains/pretty', [ResponseChainController::class, 'pretty']);
         $router->post('api/chains/remember', [ResponseChainController::class, 'remember']);
         $router->get('api/chains/unchanged', [ResponseChainController::class, 'unchanged']);
+        $router->post('api/chains/cached', [ResponseChainController::class, 'cached']);
+        $router->post('api/chains/prepared', [ResponseChainController::class, 'prepared']);
         $router->get('api/chains/removed', [ResponseChainController::class, 'removed']);
         $router->get('api/chains/relocated', [ResponseChainController::class, 'relocated']);
         $router->get('api/chains/locked', [ResponseChainController::class, 'locked']);
@@ -121,6 +125,8 @@ it('scripts what the real engine recovers from the fixture app’s same calls', 
     'setEncodingOptions(JSON_PRETTY_PRINT)' => ['pretty', 'pretty'],
     'cookie(…)' => ['remember', 'cookie'],
     'setNotModified()' => ['unchanged', 'unknownLink'],
+    'setMaxAge(60)->setEtag(…)->setPublic()' => ['cached', 'cached'],
+    'prepare($request)' => ['prepared', 'prepared'],
     '(new GoneJsonResponse)->setStatusCode(404)' => ['removed', 'subclass'],
     '(new MovedResponse($url))->setStatusCode(308)' => ['relocated', 'subclassRedirect'],
     'setStatusCode(404) on a subclass overriding it' => ['locked', 'overridden'],

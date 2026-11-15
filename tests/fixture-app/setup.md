@@ -481,8 +481,9 @@ in the file being walked, and an array return is no type the trace follows:
   set by a helper handed the response or from the request, statements setting the content or a header, and
   statements that only read the response.
 - `app/Http/Controllers/ResponseChainController.php` and `app/Http/Responses/PinnedStatusJsonResponse.php` —
-  fluent chains that set a response's content, data, JSONP callback, encoding, headers or a cookie, or call
-  a setter the chain reader does not name, alone and two unreadable links together; chains on an
+  fluent chains that set a response's content, data, JSONP callback, encoding, headers, a cookie, cache
+  headers or the charset, remove a header, mark it not modified, or call a setter the chain reader does not
+  name, alone and two unreadable links together; chains on an
   application's JSON, stream and redirect subclass and on one that overrides `setStatusCode()`; and a response built
   into a local by the factory, `new JsonResponse` and `new Response`, returned as it is or after its data or
   content is set.

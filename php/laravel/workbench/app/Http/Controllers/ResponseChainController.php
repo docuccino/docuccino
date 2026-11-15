@@ -12,8 +12,8 @@ use Workbench\App\Http\Responses\MovedResponse;
 use Workbench\App\Http\Responses\PinnedStatusJsonResponse;
 
 /**
- * Fluent chains that set a response's content, data, callback, encoding or a cookie, or call a setter
- * nothing documents; chains on an application's response subclass, one of which overrides the status
+ * Fluent chains that set a response's content, data, callback, encoding, a cookie or cache headers, or call
+ * a setter nothing documents; chains on an application's response subclass, one of which overrides the status
  * setter; and a response built with `new` into a local, returned as it is or after its data is set. Only
  * ever analysed, never dispatched.
  */
@@ -65,6 +65,18 @@ final class ResponseChainController
     public function unchanged(): JsonResponse
     {
         return response()->json(['queued' => true], 202)->setNotModified();
+    }
+
+    /** Queue an export, cacheable for a minute. */
+    public function cached(): JsonResponse
+    {
+        return response()->json(['queued' => true], 202)->setMaxAge(60)->setEtag('queued')->setPublic();
+    }
+
+    /** Queue an export, prepared for the request. */
+    public function prepared(Request $request): JsonResponse
+    {
+        return response()->json(['queued' => true], 202)->prepare($request);
     }
 
     /** Look up a removed export. */

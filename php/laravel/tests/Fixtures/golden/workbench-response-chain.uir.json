@@ -168,7 +168,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 89,
+                "line": 101,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::built"
               }
             },
@@ -242,6 +242,71 @@
         }
       }
     },
+    "/api/chains/cached": {
+      "post": {
+        "x-docuccino": {
+          "id": "op:v1:5s6tcfupq4kvxdy3",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/ResponseChainController.php",
+                "line": 71,
+                "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::cached"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ]
+        },
+        "operationId": "post.api.chains.cached",
+        "summary": "Queue an export, cacheable for a minute.",
+        "tags": [
+          "ResponseChain"
+        ],
+        "responses": {
+          "default": {
+            "x-docuccino": {
+              "id": "res:v1:jpprm4f5qfn36alc",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ],
+              "facts": {
+                "statusUnplaced": true
+              }
+            },
+            "description": "Any status",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/chains/locked": {
       "get": {
         "x-docuccino": {
@@ -255,7 +320,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 83,
+                "line": 95,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::locked"
               }
             },
@@ -447,6 +512,71 @@
         }
       }
     },
+    "/api/chains/prepared": {
+      "post": {
+        "x-docuccino": {
+          "id": "op:v1:6m5czrtztohzceum",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/ResponseChainController.php",
+                "line": 77,
+                "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::prepared"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ]
+        },
+        "operationId": "post.api.chains.prepared",
+        "summary": "Queue an export, prepared for the request.",
+        "tags": [
+          "ResponseChain"
+        ],
+        "responses": {
+          "default": {
+            "x-docuccino": {
+              "id": "res:v1:4wvi6wkols3j3m5d",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ],
+              "facts": {
+                "statusUnplaced": true
+              }
+            },
+            "description": "Any status",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/chains/pretty": {
       "post": {
         "x-docuccino": {
@@ -547,7 +677,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 97,
+                "line": 109,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::refilled"
               }
             },
@@ -634,7 +764,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 77,
+                "line": 89,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::relocated"
               }
             },
@@ -678,7 +808,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                    "line": 77,
+                    "line": 89,
                     "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::relocated"
                   }
                 }
@@ -799,7 +929,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 71,
+                "line": 83,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::removed"
               }
             },
@@ -1030,7 +1160,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "0a96db010924c683663addda62f8e0350bade5bc09dd05bac241db2e5d197266"
+      "contentHash": "2b7b68f7105880e3c552b5d00d8198acc1e7312b3babe5b53458142d047a8307"
     },
     "generator": {
       "name": "docuccino/laravel",

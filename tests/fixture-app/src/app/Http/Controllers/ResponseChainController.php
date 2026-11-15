@@ -90,6 +90,31 @@ class ResponseChainController extends Controller
         return response()->json(['queued' => true], 202)->setNotModified();
     }
 
+    public function cached(): JsonResponse
+    {
+        return response()->json(['queued' => true], 202)->setMaxAge(60)->setEtag('queued')->setPublic();
+    }
+
+    public function charset(): Response
+    {
+        return response('queued', 202)->setCharset('ISO-8859-1');
+    }
+
+    public function withoutHeader(): JsonResponse
+    {
+        return response()->json(['queued' => true], 202)->withoutHeader(['X-Queue', 'X-Debug']);
+    }
+
+    public function withoutContentType(): JsonResponse
+    {
+        return response()->json(['queued' => true], 202)->withoutHeader('Content-Type');
+    }
+
+    public function prepared(Request $request): JsonResponse
+    {
+        return response()->json(['queued' => true], 202)->prepare($request);
+    }
+
     public function twoUnread(Request $request): Response
     {
         return response('queued', 202)->setContent($request->input('body'))->withHeaders($request->input('headers'));
