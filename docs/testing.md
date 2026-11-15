@@ -281,6 +281,20 @@ Consequences:
   unit tests for its pure classes (translators, registries, config objects) — not more
   subprocess fixture tests.
 
+### Why the fixture script does not fail on an empty suite
+
+Run alone, the fixture group can fail with `Tests: 1091 passed` and nothing else printed. PHPUnit fails an
+empty test suite by default, and under `--parallel` Pest decides emptiness from each worker's result,
+which counts the tests of the last file that worker ran, after the group filter. Pest also queues every
+test file, not only those with a `fixture` test, and the queue ends in `tests/tools/`, which has none. So
+the run is "empty" whenever every worker happens to finish on such a file: a race between the slowest
+fixture file and the rest of the queue. In CI's PHP 8.3 image, five of eight runs of one tree lost it.
+
+So the script passes `--do-not-fail-on-empty-test-suite`. That turns off only this verdict: a failure, an
+error or a PHPUnit warning still fails the run, and so does a missing fixture app, through
+`DOCUCCINO_REQUIRE_FIXTURE=1`. The unfiltered and `--exclude-group` runs keep the default, because their
+queues end in files that run tests.
+
 ### Why the coverage gate shares test ids
 
 A parallel coverage run merges every worker's coverage in the parent, all of it in memory at once, and

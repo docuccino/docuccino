@@ -93,7 +93,7 @@
         ],
         "test:inference-fixture": [
             "@php tools/fixture-app-drift.php",
-            "pest --parallel --group=fixture"
+            "pest --parallel --group=fixture --do-not-fail-on-empty-test-suite"
         ],
         "test:coverage": [
             "@php -r \"@mkdir('build', 0755, true);\"",
