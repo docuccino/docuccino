@@ -95,6 +95,7 @@
                   "producer": "integration:api-resources",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "explode",
                     "required",
                     "style"
@@ -109,7 +110,7 @@
             },
             "name": "fields",
             "in": "query",
-            "description": "The attributes to return, per type.",
+            "description": "The attributes to return, per type.\n\nEach type's fields are separated by `,`.",
             "required": false,
             "style": "deepObject",
             "explode": true,
@@ -164,6 +165,7 @@
                   "producer": "integration:api-resources",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "required"
                   ],
                   "source": {
@@ -176,7 +178,7 @@
             },
             "name": "include",
             "in": "query",
-            "description": "Related records to embed.",
+            "description": "Related records to embed.\n\nValues are separated by `,`.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -546,6 +548,7 @@
                   "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "explode",
                     "required",
                     "style"
@@ -560,7 +563,7 @@
             },
             "name": "fields",
             "in": "query",
-            "description": "The gadget columns to return.",
+            "description": "The gadget columns to return.\n\nFields to return: id, score.",
             "required": false,
             "style": "form",
             "explode": false,
@@ -627,6 +630,7 @@
                   "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "explode",
                     "required",
                     "style"
@@ -641,7 +645,7 @@
             },
             "name": "fields[beacon]",
             "in": "query",
-            "description": "The beacon columns to return.",
+            "description": "The beacon columns to return.\n\nFields to return: id.",
             "required": false,
             "style": "form",
             "explode": false,
@@ -705,6 +709,7 @@
                   "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "explode",
                     "required",
                     "style"
@@ -719,7 +724,7 @@
             },
             "name": "include",
             "in": "query",
-            "description": "Related records to embed.",
+            "description": "Related records to embed.\n\nInclude related resources: beacon.",
             "required": false,
             "style": "form",
             "explode": false,
@@ -846,6 +851,7 @@
                   "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "explode",
                     "required",
                     "style"
@@ -860,7 +866,7 @@
             },
             "name": "sort",
             "in": "query",
-            "description": "How to order the list.",
+            "description": "How to order the list.\n\nSort by: starts_at, score (prefix `-` for descending).",
             "required": false,
             "style": "form",
             "explode": false,
@@ -1452,6 +1458,7 @@
                   "producer": "integration:signed-url",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "required"
                   ],
                   "source": {
@@ -1464,7 +1471,7 @@
             },
             "name": "signature",
             "in": "query",
-            "description": "Proof the link came from us.",
+            "description": "Proof the link came from us.\n\nSend it, and the link's other query parameters, as the link carries them.",
             "required": true,
             "schema": {
               "x-docuccino": {
@@ -1730,6 +1737,7 @@
                   "producer": "integration:spatie-data",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "required"
                   ],
                   "source": {
@@ -1742,7 +1750,7 @@
             },
             "name": "include",
             "in": "query",
-            "description": "Optional properties to add.",
+            "description": "Optional properties to add.\n\nValues are separated by `,`.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -1791,6 +1799,7 @@
                   "producer": "integration:spatie-data",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "required"
                   ],
                   "source": {
@@ -1803,7 +1812,7 @@
             },
             "name": "only",
             "in": "query",
-            "description": "The only properties to return.",
+            "description": "The only properties to return.\n\nValues are separated by `,`.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -2174,7 +2183,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "27793322f20403b28063ce0c0c0a8740f5c71a9d32363fc64dd7eab3eafe81b3"
+      "contentHash": "43295aefb1663f54a87e242c2528cd0ffe294c824b1b3fe97d169c9ced42be81"
     },
     "generator": {
       "name": "docuccino/laravel",

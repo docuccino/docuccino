@@ -86,6 +86,7 @@
                   "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "required"
                   ],
                   "source": {
@@ -98,7 +99,7 @@
             },
             "name": "fields",
             "in": "query",
-            "description": "The gadget columns to return.",
+            "description": "The gadget columns to return.\n\nFields to return: id, score. Values are separated by `|`.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -147,6 +148,7 @@
                   "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "required"
                   ],
                   "source": {
@@ -159,7 +161,7 @@
             },
             "name": "fields[beacon]",
             "in": "query",
-            "description": "The beacon columns to return.",
+            "description": "The beacon columns to return.\n\nFields to return: id. Values are separated by `|`.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -208,6 +210,7 @@
                   "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "required"
                   ],
                   "source": {
@@ -220,7 +223,7 @@
             },
             "name": "include",
             "in": "query",
-            "description": "Related records to embed.",
+            "description": "Related records to embed.\n\nInclude related resources: beacon. Values are separated by `|`.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -316,6 +319,7 @@
                   "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
+                    "description",
                     "required"
                   ],
                   "source": {
@@ -328,7 +332,7 @@
             },
             "name": "sort",
             "in": "query",
-            "description": "How to order the list.",
+            "description": "How to order the list.\n\nSort by: starts_at, score (prefix `-` for descending). Values are separated by `|`. Defaults to `-starts_at`.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -673,7 +677,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "73b39e58b2d911942a37753ad38ae9df600a26c24d51434e1e27f391dfbe5f2a"
+      "contentHash": "b665eaa57cb37e3ddb06623798fd1dc724e3a05162be72b3ce00f32f05f1c1b6"
     },
     "generator": {
       "name": "docuccino/laravel",
