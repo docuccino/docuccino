@@ -19,7 +19,9 @@ use PHPStan\Type\UnionType;
  * What a plain response sends for the content it is handed, as Laravel's `Response::setContent()` decides:
  * nothing (`''`, `null`, omitted) is no body; an array or anything Laravel morphs to JSON is JSON, labelled
  * `application/json` over any header; a view or other Renderable is rendered; any other scalar is sent as it
- * is, labelled `text/html` unless a header says otherwise. Symfony's own response morphs nothing. Every
+ * is, labelled `text/html` unless a header says otherwise. Symfony's own response morphs nothing. Content of
+ * no one kind that may be morphed may be sent as either, so under any media type; any other is labelled as
+ * text is. Every
  * spelling of a plain response — constructed, made by the factory, the helper or a facade, or handed to a
  * subclass's parent — reads its content here.
  *
@@ -40,6 +42,9 @@ final class PlainContent
 
     /** What Symfony labels a body nobody gave a `Content-Type`. */
     public const DEFAULT_MEDIA_TYPE = 'text/html';
+
+    /** The label of content that may be sent as JSON or as text: any media type at all. */
+    public const ANY_MEDIA_TYPE = '*/*';
 
     /** What `Response::shouldBeJson()` morphs, besides an array. */
     private const MORPHED = [
@@ -80,6 +85,29 @@ final class PlainContent
         $scalar = new UnionType([new StringType, new IntegerType, new FloatType]);
 
         return $scalar->isSuperTypeOf(TypeCombinator::removeNull($content))->yes() ? self::TEXT : self::UNREAD;
+    }
+
+    /**
+     * Whether content of this type may be morphed to JSON, which Laravel relabels `application/json` over any
+     * header stated; null is content nothing can see.
+     */
+    public static function mayBeJson(?Type $content, bool $morphs): bool
+    {
+        if (! $morphs || $content === null) {
+            return $morphs;
+        }
+
+        if (! $content->isArray()->no()) {
+            return true;
+        }
+
+        foreach (self::MORPHED as $class) {
+            if (! (new ObjectType($class))->isSuperTypeOf($content)->no()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** Whether content of this type is provably nothing — `''` or `null`, whichever it is. */

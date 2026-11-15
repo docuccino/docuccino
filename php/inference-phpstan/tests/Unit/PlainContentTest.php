@@ -10,6 +10,7 @@ use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\Reflection\ReflectionProviderStaticAccessor;
 use PHPStan\Type\ArrayType;
 use PHPStan\Type\Constant\ConstantArrayType;
+use PHPStan\Type\Constant\ConstantBooleanType;
 use PHPStan\Type\Constant\ConstantFloatType;
 use PHPStan\Type\Constant\ConstantIntegerType;
 use PHPStan\Type\Constant\ConstantStringType;
@@ -29,13 +30,24 @@ use PHPStan\Type\UnionType;
  */
 function plainContentOf(?Type $content, bool $morphs = true): string
 {
+    return plainContentReading(static fn (): string => PlainContent::of($content, $morphs));
+}
+
+/**
+ * @template T
+ *
+ * @param  Closure(): T  $read
+ * @return T
+ */
+function plainContentReading(Closure $read): mixed
+{
     // Comparing object types asks PHPStan's static reflection, which only a booted analyser registers; one
     // reading no class still knows a class is itself.
     $accessor = new ReflectionProperty(ReflectionProviderStaticAccessor::class, 'instance');
     $previous = $accessor->getValue();
     ReflectionProviderStaticAccessor::registerInstance(test()->createStub(ReflectionProvider::class));
     try {
-        return PlainContent::of($content, $morphs);
+        return $read();
     } finally {
         $accessor->setValue(null, $previous);
     }
@@ -94,4 +106,21 @@ it('sends text as the one string it folds to, or as any string', function (Type 
     'any int' => [new IntegerType, ScalarT::string()],
     // Content that may be null may be no body at all, so no one string is what it always sends.
     'a string or nothing' => [new UnionType([new ConstantStringType('archived'), new NullType]), ScalarT::string()],
+]);
+
+it('reads content of no one kind as possibly JSON only where Laravel may morph it', function (?Type $content, bool $morphs, bool $json): void {
+    expect(plainContentReading(static fn (): bool => PlainContent::mayBeJson($content, $morphs)))->toBe($json);
+})->with([
+    // `setContent()` morphs an array or anything `shouldBeJson()` names, relabelling it `application/json`
+    // over a stated header; content that may be one of those may be sent as JSON or as text.
+    'mixed' => [new MixedType, true, true],
+    'a string or an array' => [new UnionType([new StringType, new ArrayType(new MixedType, new MixedType)]), true, true],
+    'a string or a JsonSerializable' => [new UnionType([new StringType, new ObjectType('JsonSerializable')]), true, true],
+    'content a spread holds' => [null, true, true],
+    // Content that can be none of them is never morphed, so it keeps the label it is sent with.
+    'a string or false' => [new UnionType([new StringType, new ConstantBooleanType(false)]), true, false],
+    'a string, false or nothing' => [new UnionType([new StringType, new ConstantBooleanType(false), new NullType]), true, false],
+    // Symfony's own response takes only a string, so nothing it sends is JSON.
+    'mixed, to Symfony' => [new MixedType, false, false],
+    'content a spread holds, to Symfony' => [null, false, false],
 ]);

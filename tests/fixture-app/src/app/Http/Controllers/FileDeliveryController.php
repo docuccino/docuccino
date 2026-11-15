@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Contracts\HealthReporter;
 use Illuminate\Http\Response;
 use Illuminate\Http\StreamedEvent;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Response as ResponseFacade;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -85,9 +85,9 @@ final class FileDeliveryController
         return response('ok');
     }
 
-    /** A body whose type nothing states — the base `Illuminate\Http\Response`, with nothing read of it. */
-    public function cached(): Response
+    /** A collaborator's response relayed through a contract — the base `Illuminate\Http\Response`, with nothing read of it. */
+    public function relayed(HealthReporter $reporter): Response
     {
-        return response(Cache::get('health.report'));
+        return $reporter->report();
     }
 }
