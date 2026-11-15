@@ -358,7 +358,7 @@
         "responses": {
           "200": {
             "x-docuccino": {
-              "id": "res:v1:gb67ufrxbhwkod7o",
+              "id": "res:v1:5scffolf6tnb7rlo",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -366,12 +366,33 @@
                   "fields": [
                     "description"
                   ]
+                },
+                {
+                  "producer": "inference",
+                  "layer": "inference",
+                  "fields": [
+                    "headers"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/ExportStreamController.php",
+                    "line": 96,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\ExportStreamController::ledger"
+                  }
                 }
               ]
             },
             "description": "OK",
+            "headers": {
+              "Content-Disposition": {
+                "description": "Asks the client to save the body as a file rather than display it.",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "attachment; filename=\"ledger.csv\""
+              }
+            },
             "content": {
-              "*/*": {
+              "text/csv": {
                 "schema": {
                   "x-docuccino": {
                     "provenance": [
@@ -513,7 +534,7 @@
         "responses": {
           "200": {
             "x-docuccino": {
-              "id": "res:v1:jcqa3tit3236h42s",
+              "id": "res:v1:xzgrg2cmnwnjj2vq",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -526,7 +547,7 @@
             },
             "description": "OK",
             "content": {
-              "*/*": {
+              "text/csv": {
                 "schema": {
                   "x-docuccino": {
                     "provenance": [
@@ -932,7 +953,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "8f08b6e0b85c2cb9b74b1fa848f207067dbf9ea98c33e063cec32781925f8c34"
+      "contentHash": "86b92c8cf628e1c431831c953b4bfc3d3addc40addb7c2d7b72bbda14811fc6f"
     },
     "generator": {
       "name": "docuccino/laravel",
