@@ -371,6 +371,13 @@ in the file being walked, and an array return is no type the trace follows:
   injected service, a function from `helpers.php` and a method on the form request; and a trait method
   declaring `@throws \Throwable`. The carried response is also thrown from a private and a static method of
   the controller, which is all the controller throws itself.
+- `app/Http/Controllers/ThrowIfController.php` — requests refused through `throw_if()` and `throw_unless()`
+  handed an exception instance, a class name with the constructor's parameters after it (one by name), a
+  message, a closure, an enum case, a static factory, a local, a carried response and a status chosen at
+  run time; one inside a `try` that takes it, one in a private guard declaring `@throws`; and guards,
+  `abort_if()` and `abort_unless()` among them, handed a condition they never throw on — a literal or a
+  `false` class constant — and one only a docblock calls `false`, beside `report_if()`, which throws
+  nothing. A controller of its own, outside the throw corpus.
 
 ### Data + Eloquent model reflection
 
