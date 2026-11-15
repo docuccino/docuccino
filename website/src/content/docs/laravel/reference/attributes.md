@@ -210,7 +210,8 @@ Each of `parameters` is one of the target's parameters — qualify it by locatio
 [runtime expression](https://spec.openapis.org/oas/v3.2.0.html#runtime-expressions) or a literal value.
 `status` picks the response the link sits on; leave it out for the operation's first success response.
 `name` defaults to the target's `operationId`, and a declared link replaces one Docuccino worked out under
-the same name.
+the same name. A declared link may lead to an [`#[Internal]`](#internal) operation, which Docuccino never
+links to on its own from a public one: you've chosen to name it.
 
 A declared link is checked against the document. A target it does not publish, a status it does not
 document, a parameter the target does not declare, or a `$response.body#/…` pointer the response doesn't
