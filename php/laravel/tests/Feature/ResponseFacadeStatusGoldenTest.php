@@ -9,7 +9,6 @@ use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
-use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
@@ -42,10 +41,10 @@ function responseFacadeStatusReturns(): array
         // The status and the body member the helper reads off the case are the call site's.
         'expire' => $sent($error('Gone'), 410),
         'status' => $sent(new ArrayShapeT([new ArrayShapeField('ok', new LiteralT(true))]), 200),
-        // The root-namespace aliases, the framework's and the application's own.
-        'refuseAliased' => new UnknownT('mixed'),
-        'purgeAliased' => new UnknownT('mixed'),
-        'refuseByReply' => new UnknownT('mixed'),
+        // A root-namespace alias, the framework's or the application's own, is the facade it names.
+        'refuseAliased' => $sent($error('locked'), 422),
+        'purgeAliased' => $sent(new VoidT, 410),
+        'refuseByReply' => $sent($error('locked'), 422),
     ];
 }
 
