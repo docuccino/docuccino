@@ -90,10 +90,14 @@ it('lists only the bearer token publicly but both modes internally', function ()
     expect($public['components']['securitySchemes'])->not->toHaveKey('sanctumStateful')
         ->and($public['paths']['/api/secure/dual']['get']['security'])->toBe([['sanctumToken' => []]])
         // The class-name spelling of the authenticator is the same route: same modes, same schemes.
-        ->and($public['paths']['/api/secure/dual-by-class']['get']['security'])->toBe([['sanctumToken' => []]]);
+        ->and($public['paths']['/api/secure/dual-by-class']['get']['security'])->toBe([['sanctumToken' => []]])
+        // A cookie-only route has nothing a token-only document may list.
+        ->and($public['paths']['/api/secure/session-own-authenticator']['get'])->not->toHaveKey('security');
 
     expect($internal['components']['securitySchemes'])->toHaveKeys(['sanctumToken', 'sanctumStateful'])
         ->and($internal['paths']['/api/secure/dual']['get']['security'])->toBe([['sanctumToken' => []], ['sanctumStateful' => []]])
         ->and($internal['paths']['/api/secure/dual-by-class']['get']['security'])->toBe([['sanctumToken' => []], ['sanctumStateful' => []]])
+        // The application's own authenticator reads the session as `auth` does, so its route takes the cookie.
+        ->and($internal['paths']['/api/secure/session-own-authenticator']['get']['security'])->toBe([['sanctumStateful' => []]])
         ->and($internal['paths']['/api/secure/scoped']['get']['security'])->toBe([['passport' => ['read', 'write']]]);
 });

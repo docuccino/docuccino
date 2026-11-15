@@ -13,6 +13,7 @@ use Docuccino\Core\Examples\RecordedExampleAudit;
 use Docuccino\Core\Extensions\BuiltIn\AttributeExamplesExtension;
 use Docuccino\Core\Extensions\BuiltIn\AttributeOverridesExtension;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Lint\ExampleSchemaLint;
 use Docuccino\Core\Lint\LintRuleOptions;
@@ -65,6 +66,7 @@ use Docuccino\Laravel\Integrations\Passport\PassportSecurityExtension;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfig;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfigDigestContributor;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParametersExtension;
+use Docuccino\Laravel\Integrations\Sanctum\SanctumSecurityExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
@@ -426,6 +428,20 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             $config = $app->make('config');
 
             return new PassportSecurityExtension($config, self::passportRuntime());
+        });
+
+        // Sanctum's stateful mode needs the route to authenticate a user: the framework's authenticators
+        // and the document's pattern, by class through the alias map. A package's token middleware is
+        // not a session guard, so the integrations' own authenticators are left out.
+        $this->app->bind(SanctumSecurityExtension::class, static function (Application $app): SanctumSecurityExtension {
+            $authentication = new RouteAuthentication($app->make(MiddlewareClasses::class));
+            /** @var Repository $config */
+            $config = $app->make('config');
+
+            return new SanctumSecurityExtension(
+                static fn (RouteContext $context): bool => $authentication->refusal($context) !== null,
+                $config,
+            );
         });
 
         $this->app->bind(PassportDigestContributor::class, function (Application $app): PassportDigestContributor {
