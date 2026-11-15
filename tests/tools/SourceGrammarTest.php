@@ -151,6 +151,20 @@ it('hears a throw however the thrown thing is built', function (string $statemen
     'nothing thrown at all' => ["\$x = 'throw new Nope';", false],
 ]);
 
+it('hears an error in any throw but one handing the framework a response', function (string $statement, bool $raises): void {
+    $source = "<?php\n\nuse Illuminate\\Http\\Exceptions\\HttpResponseException;\n\nfinal class Raiser\n{\n    public function run(): void\n    {\n        ".$statement."\n    }\n}\n";
+
+    // Laravel sends the response an HttpResponseException carries as it is, so throwing one is no error.
+    expect(phpRaisesError($source))->toBe($raises)
+        ->and(phpRaisesThrow($source))->toBeTrue();
+})->with([
+    'a carried response' => ['throw new HttpResponseException(response()->json([], 423));', false],
+    'a carried response, fully qualified' => ['throw new \\Illuminate\\Http\\Exceptions\\HttpResponseException(response("", 409));', false],
+    'an error beside it' => ['throw new HttpResponseException(response("", 409)); throw new \\RuntimeException;', true],
+    'a carried response held in a variable' => ['$e = new HttpResponseException(response("", 409)); throw $e;', true],
+    'an error' => ['throw new \\RuntimeException;', true],
+]);
+
 it('counts a call once per site, whatever surrounds it', function (): void {
     $source = "<?php\n\nfinal class Branchy\n{\n    public function run(): void\n    {\n"
         ."        \$a = \$this->resolvePolicy(1);\n"
