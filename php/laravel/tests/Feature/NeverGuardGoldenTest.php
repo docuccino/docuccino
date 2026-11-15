@@ -42,17 +42,23 @@ function neverGuardAnalyses(): array
     $ok = $at($json('ok', new LiteralT(true), 200));
     $slowDown = $at($json('error', new LiteralT('slow down'), 429));
 
+    $locked = static fn (): ThrownException => $thrown(ExportLockedException::class, 423);
+
+    // A helper refusing the request answers it with what the helper throws, whether the helper returns
+    // `never` or `void`: the framework runs the same `throw` either way, so each `never` route documents
+    // what its `void` twin beside it does.
     return [
-        'traitNeverHttp' => new ActionAnalysis(returns: [$ok]),
-        'traitNeverAbort' => new ActionAnalysis(returns: [$ok]),
-        'traitNeverCustom' => new ActionAnalysis(returns: [$ok]),
-        'traitNeverValidation' => new ActionAnalysis(returns: [$ok]),
-        'traitNeverCarried' => new ActionAnalysis(returns: [$ok]),
-        'traitVoidCustom' => new ActionAnalysis(returns: [$ok], throws: [$thrown(ExportLockedException::class, 423)]),
+        'traitNeverHttp' => new ActionAnalysis(returns: [$ok], throws: [$thrown('Symfony\\Component\\HttpKernel\\Exception\\HttpException', 409)]),
+        'traitNeverAbort' => new ActionAnalysis(returns: [$ok], throws: [$thrown('Symfony\\Component\\HttpKernel\\Exception\\HttpException', 404)]),
+        'traitNeverCustom' => new ActionAnalysis(returns: [$ok], throws: [$locked()]),
+        'traitNeverValidation' => new ActionAnalysis(returns: [$ok], throws: [$thrown('Illuminate\\Validation\\ValidationException', 422)]),
+        // A response thrown for the framework to send is the response the request gets.
+        'traitNeverCarried' => new ActionAnalysis(returns: [$ok, $slowDown]),
+        'traitVoidCustom' => new ActionAnalysis(returns: [$ok], throws: [$locked()]),
         'traitVoidCarried' => new ActionAnalysis(returns: [$ok, $slowDown]),
-        'serviceNeverCustom' => new ActionAnalysis(returns: [$ok]),
-        'privateNeverCarried' => new ActionAnalysis(returns: [$ok]),
-        'staticNeverCarried' => new ActionAnalysis(returns: [$ok]),
+        'serviceNeverCustom' => new ActionAnalysis(returns: [$ok], throws: [$locked()]),
+        'privateNeverCarried' => new ActionAnalysis(returns: [$ok, $slowDown]),
+        'staticNeverCarried' => new ActionAnalysis(returns: [$ok, $slowDown]),
     ];
 }
 

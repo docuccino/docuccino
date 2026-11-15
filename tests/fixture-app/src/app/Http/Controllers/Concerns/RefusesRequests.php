@@ -61,4 +61,20 @@ trait RefusesRequests
     {
         throw new HttpResponseException(response()->json(['error' => 'slow down'], 429));
     }
+
+    /**
+     * @throws \Throwable
+     */
+    protected function sharedNeverAnything(): never
+    {
+        throw new ExportLockedException(423, 'The export is locked.');
+    }
+
+    /**
+     * @throws \Throwable
+     */
+    protected function sharedVoidAnything(): void
+    {
+        throw new ExportLockedException(423, 'The export is locked.');
+    }
 }

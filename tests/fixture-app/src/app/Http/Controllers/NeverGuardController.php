@@ -26,8 +26,9 @@ use function App\Support\voidValidation;
  * Guard helpers written outside the controller, refusing a request the action otherwise answers with a 200.
  * Each is written twice, returning `never` and returning `void`, as a trait method, a method on an injected
  * service, a function and a method on the form request; and a helper throwing a response for the framework
- * to send, which this controller also writes as a private and a static method. The framework answers the
- * same either way, so each pair documents the same responses. Only ever analysed, never dispatched.
+ * to send, which this controller also writes as a private and a static method; and a trait method declaring
+ * it may throw anything. The framework answers the same either way, so each pair documents the same
+ * responses. Only ever analysed, never dispatched.
  */
 class NeverGuardController extends Controller
 {
@@ -334,6 +335,24 @@ class NeverGuardController extends Controller
     {
         if ($request->boolean('refuse')) {
             self::staticallyVoidCarried();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function traitNeverAnything(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->sharedNeverAnything();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function traitVoidAnything(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->sharedVoidAnything();
         }
 
         return response()->json(['ok' => true]);

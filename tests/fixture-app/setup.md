@@ -292,7 +292,11 @@ in the file being walked, and an array return is no type the trace follows:
   local first, in an arrow function, which is one boundary the hop stops at, and nested past the descent
   budget, which is the other — the last of those writing its counted throw ahead of the closure it
   measures against, because `transaction()` is generic over its callback from Laravel 13 on and a closure
-  that only throws makes everything after the call dead code.
+  that only throws makes everything after the call dead code. And guard helpers the controller writes
+  itself, refusing with an `HttpException`, `abort(404)`, a status written at the `throw` and a
+  `ValidationException`, each as a private and a static method returning `never` and `void`; a `never`
+  helper throwing one of two errors by branch (with its `void` twin), one calling another, one declaring
+  what it throws, three saying `never` only in a docblock, and one inside a catch taking one of its two.
 - `app/Services/OrderService.php` — `place()` / `placeDeclared()` / `reserve()`, the 2-level
   throw chain descended by the exception-flow layer; `placeLeniently()`, the same chain with its second
   level caught inside the callee; `placeUnknown()`, which throws a class no file declares; and `failWith()` /
@@ -354,9 +358,9 @@ in the file being walked, and an array return is no type the trace follows:
   outside the controller that refuse a request by throwing an `HttpException`, calling `abort(404)`,
   throwing an exception with its own status, a `ValidationException` or an `HttpResponseException`
   carrying a response, each written to return `never` and `void`: as a trait method, a method on an
-  injected service, a function from `helpers.php` and a method on the form request. The carried response is
-  also thrown from a private and a static method of the controller, which is all the controller throws
-  itself.
+  injected service, a function from `helpers.php` and a method on the form request; and a trait method
+  declaring `@throws \Throwable`. The carried response is also thrown from a private and a static method of
+  the controller, which is all the controller throws itself.
 
 ### Data + Eloquent model reflection
 
