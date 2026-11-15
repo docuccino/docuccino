@@ -12,7 +12,7 @@ use Workbench\App\Enums\ExportFault;
 /**
  * Responses made through the `Response` facade, each sent with the status its call names: JSON, no-content,
  * plain and view responses, one whose status a helper reads off the case it is handed, and one sent with
- * the framework's 200.
+ * the framework's 200; and the same calls through the facade's root-namespace alias and an application's own.
  */
 final class ArchiveFacadeController
 {
@@ -50,6 +50,24 @@ final class ArchiveFacadeController
     public function status(): JsonResponse
     {
         return Response::json(['ok' => true]);
+    }
+
+    /** Refuse to change a locked archive, through the root-namespace alias. */
+    public function refuseAliased(): JsonResponse
+    {
+        return \Response::json(['error' => 'locked'], 422);
+    }
+
+    /** Purge an archived entry, through the root-namespace alias. */
+    public function purgeAliased(): HttpResponse
+    {
+        return \Response::make('', 410);
+    }
+
+    /** Refuse to change a locked archive, through the application's own alias. */
+    public function refuseByReply(): JsonResponse
+    {
+        return \Reply::json(['error' => 'locked'], 422);
     }
 
     private function faulted(ExportFault $fault): JsonResponse

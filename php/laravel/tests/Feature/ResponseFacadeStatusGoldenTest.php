@@ -9,6 +9,7 @@ use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
@@ -21,7 +22,8 @@ use Workbench\App\Http\Controllers\ArchiveFacadeController;
 /**
  * The document an application gets for responses made through the `Response` facade — JSON, no-content,
  * plain and view responses with a status of their own, one whose status a helper reads off the case it is
- * handed, and one sent with the framework's 200. Byte-locked, warm as well as cold; the scripted returns
+ * handed, and one sent with the framework's 200 — and through its root-namespace alias and an application's
+ * own. Byte-locked, warm as well as cold; the scripted returns
  * are what the real engine recovers from the fixture app's same calls, which the last test holds them to.
  *
  * @return array<string, DType> action → the response it returns
@@ -40,6 +42,10 @@ function responseFacadeStatusReturns(): array
         // The status and the body member the helper reads off the case are the call site's.
         'expire' => $sent($error('Gone'), 410),
         'status' => $sent(new ArrayShapeT([new ArrayShapeField('ok', new LiteralT(true))]), 200),
+        // The root-namespace aliases, the framework's and the application's own.
+        'refuseAliased' => new UnknownT('mixed'),
+        'purgeAliased' => new UnknownT('mixed'),
+        'refuseByReply' => new UnknownT('mixed'),
     ];
 }
 
@@ -63,6 +69,9 @@ function responseFacadeStatusRoutes(): callable
         $router->get('api/archive-facade/tombstone', [ArchiveFacadeController::class, 'tombstone']);
         $router->post('api/archive-facade/expire', [ArchiveFacadeController::class, 'expire']);
         $router->get('api/archive-facade/status', [ArchiveFacadeController::class, 'status']);
+        $router->post('api/archive-facade/refuse-aliased', [ArchiveFacadeController::class, 'refuseAliased']);
+        $router->delete('api/archive-facade/purge-aliased', [ArchiveFacadeController::class, 'purgeAliased']);
+        $router->post('api/archive-facade/refuse-by-reply', [ArchiveFacadeController::class, 'refuseByReply']);
     };
 }
 
@@ -90,4 +99,7 @@ it('scripts what the real engine recovers from the fixture app’s same calls', 
     'Response::view($view, [], 410)' => ['tombstone', 'view'],
     '$this->faulted(Case), reading $fault->value' => ['expire', 'helperCase'],
     'Response::json($body), the framework\'s 200' => ['status', 'jsonOk'],
+    '\\Response::json($body, 422)' => ['refuseAliased', 'alias'],
+    '\\Response::make(\'\', 410)' => ['purgeAliased', 'aliasMade'],
+    '\\Reply::json($body, 422), the application\'s own alias' => ['refuseByReply', 'appAlias'],
 ])->group('fixture');

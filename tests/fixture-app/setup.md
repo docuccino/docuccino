@@ -690,7 +690,10 @@ importantly, NOT followed where the key only chose between sizes.
   Laravel-11 skeleton default `api` arrow limiter (`fn ($r) => Limit::perMinute(60)->by(…)`), a
   full-closure `uploads` limiter on a per-hour window, and a conditional `dynamic` one. The engine's
   closure trace (via `trace-rate-limiter`, located by line) folds the first two to concrete numbers
-  and leaves the conditional one numberless (small-integrations §1, Wave D item 4).
+  and leaves the conditional one numberless (small-integrations §1, Wave D item 4). It also aliases the
+  application's own response-factory facade (`app/Support/Facades/Reply.php`) as `\Reply`, which
+  `app/Http/Controllers/ResponseFacadeStatusController.php` calls beside the framework's root aliases
+  `\Response`, `\DB` and `\Auth`.
 - `app/Http/Requests/StoreListingRequest.php` — a FormRequest whose `rules()` mixes a pipe-string
   rule, a `Rule::enum(ListingStatus::class)` factory descriptor, and a closure rule, so the real
   `RulesMethodVisitor` proves descriptor folding inside a FormRequest (enum backing values + FQCN)
