@@ -41,11 +41,14 @@ final class StateKeepingCalls
     /** Nothing the body runs changes the object, and the body returns it. */
     private const HANDED_BACK = 2;
 
-    /** @var array<string, array{self::CHANGED|self::KEPT|self::HANDED_BACK, list<string>}> a whole answer by `class::method#variable@held`, with the files it was read out of */
+    /** @var array<string, array{self::CHANGED|self::KEPT|self::HANDED_BACK, list<string>}> an answer by `class::method#variable@held^depth`, with the files it was read out of */
     private array $memo = [];
 
     /** @var array<string, bool> the bodies being read, which a call back into adds nothing to, by whether one did */
     private array $reading = [];
+
+    /** @var list<string> the bodies a call back into was answered for while they were being read */
+    private array $assumed = [];
 
     /** @var list<string> the files the answer in flight has read, whatever it turns out to be */
     private array $read = [];
@@ -103,14 +106,16 @@ final class StateKeepingCalls
     private function keeps(ReflectionMethod $method, string $variable, string $held, int $depth): int
     {
         $key = $method->class.'::'.$method->name.'#'.$variable.'@'.$held;
-        // Only a whole answer is remembered: one read below the first call had less depth left to spend.
-        if ($depth === 0 && isset($this->memo[$key])) {
-            $this->read = [...$this->read, ...$this->memo[$key][1]];
+        // A body reached by many paths is read once for each depth it is reached at, which bounds what it can follow.
+        $remembered = $key.'^'.$depth;
+        if (isset($this->memo[$remembered])) {
+            array_push($this->read, ...$this->memo[$remembered][1]);
 
-            return $this->memo[$key][0];
+            return $this->memo[$remembered][0];
         }
         if (isset($this->reading[$key])) {
             $this->reading[$key] = true;
+            $this->assumed[] = $key;
 
             return self::KEPT;
         }
@@ -120,6 +125,7 @@ final class StateKeepingCalls
 
         $this->reading[$key] = false;
         $from = count($this->read);
+        $assumedFrom = count($this->assumed);
 
         try {
             $kept = $this->body($method, $variable, $held, $depth);
@@ -129,8 +135,16 @@ final class StateKeepingCalls
             unset($this->reading[$key]);
         }
 
-        if ($depth === 0) {
-            $this->memo[$key] = [$kept, array_slice($this->read, $from)];
+        // An answer resting on what a call back into a body still being read was taken to do is not its own.
+        $own = true;
+        foreach (array_slice($this->assumed, $assumedFrom) as $on) {
+            $own = $own && ! isset($this->reading[$on]);
+        }
+        if ($own) {
+            $this->memo[$remembered] = [$kept, array_slice($this->read, $from)];
+        }
+        if ($this->reading === []) {
+            $this->assumed = [];
         }
 
         return $kept;
@@ -337,7 +351,7 @@ final class StateKeepingCalls
         }
 
         // Which declaration answers the name is the hierarchy's to say.
-        $this->read = [...$this->read, ...DeclarationFiles::of($class)];
+        array_push($this->read, ...DeclarationFiles::of($class));
 
         try {
             return (new ReflectionClass($class))->getMethod($name);

@@ -119,3 +119,44 @@ it('records every file the answer was read out of, a no as well, each time it is
         // Which `counted()` the helper runs is the hierarchy's to say, so the parent's file keys it too.
         ->and($files(keptAt($keeping, $scope, '$kept->handedOn(1)')))->toBe(['Kept.php', 'KeptBase.php', 'KeptReader.php']);
 });
+
+/**
+ * A class of helpers handing a {@see Kept} on in five layers of `$width`, each to every helper of the next, the
+ * last only testing its class; written to a temp file named for the process and the width, kept until the
+ * process ends. Its name.
+ */
+function keptLayers(int $width): string
+{
+    $namespace = 'Docuccino\\Inference\\PhpStan\\Tests\\Runtime\\Layers'.$width;
+    $source = "<?php\nnamespace {$namespace};\nuse ".Kept::class.";\nfinal class Helpers {\n";
+    for ($layer = 0; $layer < 5; $layer++) {
+        for ($helper = 0; $helper < $width; $helper++) {
+            $source .= "    public static function h{$layer}_{$helper}(Kept \$kept): void {\n";
+            for ($next = 0; $layer < 4 && $next < $width; $next++) {
+                $source .= '        self::h'.($layer + 1)."_{$next}(\$kept);\n";
+            }
+            $source .= $layer === 4 ? "        if (\$kept instanceof Kept) { return; }\n    }\n" : "    }\n";
+        }
+    }
+
+    $file = sys_get_temp_dir().'/docuccino-kept-layers-'.getmypid().'-'.$width.'.php';
+    file_put_contents($file, $source."}\n");
+    // Kept until the process ends: the reader under test parses the class's file.
+    register_shutdown_function(static fn () => @unlink($file));
+    require_once $file;
+
+    return $namespace.'\\Helpers';
+}
+
+it('reads each helper once for each depth it is reached at, however many paths reach it', function (): void {
+    // Twelve helpers to a layer: 12^4 paths reach the last layer, but there are only sixty helpers to read.
+    // Reading one once per path took over a minute here.
+    $helpers = keptLayers(12);
+
+    $started = hrtime(true);
+    $kept = keptAt(new StateKeepingCalls, keptScope($this->createStub(Scope::class)), '\\'.$helpers.'::h0_0($kept)');
+    $seconds = (hrtime(true) - $started) / 1e9;
+
+    expect($kept)->toBe([true, [(string) (new ReflectionClass($helpers))->getFileName()]])
+        ->and($seconds)->toBeLessThan(5.0);
+});
