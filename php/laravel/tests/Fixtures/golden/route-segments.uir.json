@@ -293,19 +293,21 @@
                       "field": "required",
                       "value": true,
                       "producer": "fallback"
-                    },
-                    {
-                      "field": "description",
-                      "value": "Leaving it off is the same as sending `first`.",
-                      "producer": "fallback"
                     }
+                  ]
+                },
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
                   ]
                 }
               ]
             },
             "name": "page",
             "in": "path",
-            "description": "The page to open.",
+            "description": "The page to open.\n\nLeaving it off is the same as sending `first`.",
             "required": true,
             "schema": {
               "x-docuccino": {
@@ -660,7 +662,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "6ff4a9039be0b23266f6087e09c0c041640179a4d15896f9d9fc6653e3c18e84"
+      "contentHash": "4500ade1068ec73e1937736babaec69384314f3d1f2eb7d68ccd6e0d9cc9dae5"
     },
     "generator": {
       "name": "docuccino/laravel",

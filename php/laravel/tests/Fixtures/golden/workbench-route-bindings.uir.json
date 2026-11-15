@@ -451,13 +451,20 @@
                       "field": "required",
                       "value": true,
                       "producer": "inference"
-                    },
-                    {
-                      "field": "description",
-                      "value": "Matched on the resource's `id`. Scoped to `{ledger}`: only values belonging to it match. Resolves soft-deleted (trashed) records as well as active ones.",
-                      "producer": "inference"
                     }
                   ]
+                },
+                {
+                  "producer": "inference",
+                  "layer": "inference",
+                  "fields": [
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/DescribedBindingController.php",
+                    "line": 23,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\DescribedBindingController::showEntry"
+                  }
                 }
               ],
               "facts": {
@@ -470,7 +477,7 @@
             },
             "name": "entry",
             "in": "path",
-            "description": "The entry to show.",
+            "description": "The entry to show.\n\nMatched on the resource's `id`. Scoped to `{ledger}`: only values belonging to it match. Resolves soft-deleted (trashed) records as well as active ones.",
             "required": true,
             "schema": {
               "x-docuccino": {
@@ -513,13 +520,20 @@
                       "field": "required",
                       "value": true,
                       "producer": "inference"
-                    },
-                    {
-                      "field": "description",
-                      "value": "Matched on the resource's `reference`. Resolves soft-deleted (trashed) records as well as active ones.",
-                      "producer": "inference"
                     }
                   ]
+                },
+                {
+                  "producer": "inference",
+                  "layer": "inference",
+                  "fields": [
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/DescribedBindingController.php",
+                    "line": 23,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\DescribedBindingController::showEntry"
+                  }
                 }
               ],
               "facts": {
@@ -531,7 +545,7 @@
             },
             "name": "ledger",
             "in": "path",
-            "description": "The ledger the entry was filed against.",
+            "description": "The ledger the entry was filed against.\n\nMatched on the resource's `reference`. Resolves soft-deleted (trashed) records as well as active ones.",
             "required": true,
             "schema": {
               "x-docuccino": {
@@ -1839,7 +1853,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "328af6ed052939e1af91c0700b741bf766d776896c9be750e79369e7884105b8"
+      "contentHash": "e511051cf7761354d519463aafe8ef29d160ff150b90bf119ecd3218225e964a"
     },
     "generator": {
       "name": "docuccino/laravel",
