@@ -20,7 +20,8 @@ use Docuccino\Core\Provenance\ProvenanceRecord;
  * body, or the link says nothing a client did not already send. A scoped child is filled from the body
  * only by an operation on its own collection or its own path, so the parent it must belong to is the one
  * in the request. Nothing is matched by name, and a target whose operationId is not the document's only
- * one is not linked, since that is all a link can name it by.
+ * one is not linked, since that is all a link can name it by. Nor is an `x-internal` target from a public
+ * source: filters cut the target from public output and would leave the link pointing at nothing.
  *
  * A declared link is checked against the document and reported where it cannot be written: an operation
  * the document does not publish, a status it does not document, a parameter the target does not declare,
@@ -98,6 +99,7 @@ final class ResponseLinks
     private static function derived(string $signature, array $site, OperationLinks $source, array $facts, array $sites, array $doc): array
     {
         $ids = self::uniqueOperationIds($sites);
+        $internal = self::internal($site['operation']);
         $out = [];
 
         foreach (self::givesByStatus($source->gives, $site['operation'], $doc) as $status => $gives) {
@@ -105,6 +107,11 @@ final class ResponseLinks
                 $targetSite = $sites[$targetSignature] ?? null;
                 $operationId = $targetSite['operationId'] ?? null;
                 if ($targetSignature === $signature || $targetSite === null || $operationId === null || ! isset($ids[$operationId])) {
+                    continue;
+                }
+
+                // An internal operation is cut from public output, so a public one never leads there unasked.
+                if (! $internal && self::internal($targetSite['operation'])) {
                     continue;
                 }
 
@@ -471,6 +478,16 @@ final class ResponseLinks
         }
 
         return $sites;
+    }
+
+    /**
+     * Whether an operation is flagged `x-internal`, the mark public filters cut it from the document by.
+     *
+     * @param  array<string, mixed>  $operation
+     */
+    private static function internal(array $operation): bool
+    {
+        return ($operation['x-internal'] ?? false) === true;
     }
 
     /**

@@ -33,6 +33,7 @@ beforeEach(function (): void {
             }
             $paths[$path][strtolower($method)] = [
                 'operationId' => $operation['operationId'],
+                ...(($operation['internal'] ?? false) ? ['x-internal' => true] : []),
                 ...($parameters === [] ? [] : ['parameters' => $parameters]),
                 'responses' => [($operation['status'] ?? '200') => ['description' => 'OK', 'content' => ['application/json' => ['schema' => [
                     'type' => 'object',
@@ -153,6 +154,35 @@ it('writes no link where a segment cannot be filled from what the code proved', 
     'a pointer the response contradicts' => ['undocumented', ['post' => new BindingTake('App\Post', 'id')], [new BodyGive('200', 'App\Post', 'id', '/data/uuid')], 'GET /posts/{post}'],
     'a status the response does not document' => ['status', ['post' => new BindingTake('App\Post', 'id')], [new BodyGive('201', 'App\Post', 'id', '/data/id')], 'GET /posts/{post}'],
 ]);
+
+/**
+ * `x-internal` is the mark SDK generators and public-doc filters cut an operation by. A public operation
+ * linking to one would, once filtered, name an endpoint the reader was never meant to see, through a link
+ * that leads nowhere. An internal operation is cut with its links, so it may lead anywhere; and a link an
+ * author declared is their choice.
+ */
+it('does not lead a public operation to an internal one unless declared', function (): void {
+    $doc = ($this->doc)([
+        'POST /posts' => ['operationId' => 'posts.store', 'status' => '201'],
+        'GET /posts/{post}' => ['operationId' => 'posts.show'],
+        'GET /posts/{post}/audit' => ['operationId' => 'posts.audit', 'internal' => true],
+        'POST /posts/{post}/reindex' => ['operationId' => 'posts.reindex', 'internal' => true],
+    ]);
+    $bound = new OperationLinks(takes: ['post' => $this->post], gives: [($this->gives)()]);
+
+    [$out] = ResponseLinks::write($doc, [
+        'POST /posts' => new OperationLinks(
+            gives: [($this->gives)('201')],
+            declared: [new DeclaredLink('posts.reindex', ['post' => '$response.body#/data/id'])],
+        ),
+        'GET /posts/{post}' => new OperationLinks(takes: ['post' => $this->post]),
+        'GET /posts/{post}/audit' => $bound,
+        'POST /posts/{post}/reindex' => $bound,
+    ]);
+
+    expect(array_keys($out['paths']['/posts']['post']['responses']['201']['links']))->toBe(['posts.reindex', 'posts.show'])
+        ->and(array_keys($out['paths']['/posts/{post}/audit']['get']['responses']['200']['links']))->toBe(['posts.reindex', 'posts.show']);
+});
 
 it('does not link to an operation its operationId cannot name alone', function (): void {
     $doc = ($this->doc)([
