@@ -49,7 +49,8 @@ function statementStatusReturns(): array
         'restart' => $sent(new ArrayShapeT([new ArrayShapeField('created', new LiteralT(true))]), 201),
         // A helper the build does not follow may have changed anything, so nothing it was built with stands.
         'hand' => new ClassT($json, [new UnknownT('payload not folded'), new UnknownT('status not folded')]),
-        'stamp' => new ClassT($json, [new UnknownT('payload not folded'), new UnknownT('status not folded')]),
+        // A helper that sets only a header leaves the status and the body it was built with.
+        'stamp' => $sent($queued(true), 202),
         'relay' => new ClassT($json, [$queued(true), new UnknownT('status not folded')]),
         'csv' => new ClassT($json, [new LiteralT('id,total'), new LiteralT(202), new LiteralT('text/csv')]),
         'refuse' => $sent($queued(false), 409),

@@ -71,6 +71,11 @@ it('keeps the object where nothing the call runs writes one of its own propertie
     'handed as an argument to a reader' => ['\\'.KeptReader::class.'::read($kept, 1)', true],
     'handed by name' => ['\\'.KeptReader::class.'::read(floor: 1, kept: $kept)', true],
     'handed to a reader on another object' => ['$reader->inspect($kept, 1)', true],
+    // A setter handing the object back, `->header()` among them, returns what it was called on: nothing new
+    // holds it where the caller drops that, or returns it to a caller that does.
+    'a setter handing it back, what it returns dropped' => ['$kept->chainedDropped(1)', true],
+    'handed to a helper calling such a setter' => ['\\'.KeptReader::class.'::stamp($kept, 1)', true],
+    'handed to a helper returning what such a setter returns, dropped' => ['\\'.KeptReader::class.'::stampOnward($kept, 1)', true],
 
     'a property assigned' => ['$kept->restated(503)', false],
     'a property assigned through an operator' => ['$kept->bumped(1)', false],
@@ -82,7 +87,10 @@ it('keeps the object where nothing the call runs writes one of its own propertie
     'a property a loop writes into' => ['$kept->loopedInto([1])', false],
     'a property handed to a by-reference parameter' => ['$kept->sorted(0)', false],
     'a property handed to a callee nothing names' => ['$kept->handedProperty($other)', false],
+    // What the call made in analysed code returns is that code's own to keep, which is not followed.
     'the object returned' => ['$kept->returned(1)', false],
+    'a setter handing it back, what it returns held and changed' => ['$kept->chainedKept(503)', false],
+    'the object returned from a closure the call makes' => ['$kept->returnedLater(1)', false],
     'the object assigned to another variable' => ['$kept->aliased(1)', false],
     'the object handed to a function' => ['$kept->encoded(0)', false],
     'a method of it made a callable' => ['$kept->callable(1)', false],

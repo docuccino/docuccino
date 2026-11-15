@@ -21,7 +21,9 @@ use Throwable;
  * object's own properties. Read off the bodies the call reaches, so a reader taking arguments
  * (`$response->getData(true)`), or a helper handed the object that only reads it, keeps what was read off
  * the object before. A body this cannot read, a callee it cannot name, or the object kept or handed where it
- * cannot follow, may have changed it.
+ * cannot follow, may have changed it. A callee that returns the object hands it back to its caller, so its
+ * call keeps it only where the caller drops what it returns or returns that in turn (`->header()` written as
+ * a statement of its own).
  *
  * @internal
  */
@@ -30,10 +32,19 @@ final class StateKeepingCalls
     /** How many calls below the first a body is still followed. */
     private const DEPTH = 4;
 
-    /** @var array<string, array{bool, list<string>}> a whole answer by `class::method#variable@held`, with the files it was read out of */
+    /** Something the body runs may have changed the object, or keeps it somewhere this does not follow. */
+    private const CHANGED = 0;
+
+    /** Nothing the body runs changes the object. */
+    private const KEPT = 1;
+
+    /** Nothing the body runs changes the object, and the body returns it. */
+    private const HANDED_BACK = 2;
+
+    /** @var array<string, array{self::CHANGED|self::KEPT|self::HANDED_BACK, list<string>}> a whole answer by `class::method#variable@held`, with the files it was read out of */
     private array $memo = [];
 
-    /** @var array<string, true> the bodies being read, which a call back into adds nothing to */
+    /** @var array<string, bool> the bodies being read, which a call back into adds nothing to, by whether one did */
     private array $reading = [];
 
     /** @var list<string> the files the answer in flight has read, whatever it turns out to be */
@@ -73,7 +84,8 @@ final class StateKeepingCalls
 
             foreach ($targets as $method) {
                 $parameter = $argument === null ? 'this' : self::handedTo($method, $call, $argument);
-                if ($parameter === null || ! $this->keeps($method, $parameter, $class, 0)) {
+                // What the call returns is the analysed code's own to keep, which this does not follow.
+                if ($parameter === null || $this->keeps($method, $parameter, $class, 0) !== self::KEPT) {
                     return false;
                 }
             }
@@ -82,8 +94,13 @@ final class StateKeepingCalls
         return true;
     }
 
-    /** Whether every mention of `$variable` in the method's body leaves the `$held` object it holds as it was. */
-    private function keeps(ReflectionMethod $method, string $variable, string $held, int $depth): bool
+    /**
+     * Whether every mention of `$variable` in the method's body leaves the `$held` object it holds as it was,
+     * and whether the body returns it.
+     *
+     * @return self::CHANGED|self::KEPT|self::HANDED_BACK
+     */
+    private function keeps(ReflectionMethod $method, string $variable, string $held, int $depth): int
     {
         $key = $method->class.'::'.$method->name.'#'.$variable.'@'.$held;
         // Only a whole answer is remembered: one read below the first call had less depth left to spend.
@@ -93,17 +110,21 @@ final class StateKeepingCalls
             return $this->memo[$key][0];
         }
         if (isset($this->reading[$key])) {
-            return true;
+            $this->reading[$key] = true;
+
+            return self::KEPT;
         }
         if ($depth > self::DEPTH) {
-            return false;
+            return self::CHANGED;
         }
 
-        $this->reading[$key] = true;
+        $this->reading[$key] = false;
         $from = count($this->read);
 
         try {
             $kept = $this->body($method, $variable, $held, $depth);
+            // A call back into a body that hands the object back hands it back too, wherever that call sits.
+            $kept = $kept === self::HANDED_BACK && $this->reading[$key] ? self::CHANGED : $kept;
         } finally {
             unset($this->reading[$key]);
         }
@@ -115,12 +136,17 @@ final class StateKeepingCalls
         return $kept;
     }
 
-    private function body(ReflectionMethod $method, string $variable, string $held, int $depth): bool
+    /**
+     * @return self::CHANGED|self::KEPT|self::HANDED_BACK
+     *
+     * @phpstan-impure
+     */
+    private function body(ReflectionMethod $method, string $variable, string $held, int $depth): int
     {
         $file = $method->getFileName();
         $body = $this->files->body($method);
         if ($file === false || $body === null) {
-            return false;
+            return self::CHANGED;
         }
 
         $this->read[] = $file;
@@ -132,11 +158,19 @@ final class StateKeepingCalls
         }
 
         $calls = [];
+        $dropped = [];
+        $returned = [];
         foreach ($finder->find($body, static fn (Node $node): bool => true) as $node) {
             foreach (self::writeTargets($node) as $target) {
                 if (self::names(self::root($target), $variable)) {
-                    return false; // a property of the object, or the variable, written here
+                    return self::CHANGED; // a property of the object, or the variable, written here
                 }
+            }
+
+            if ($node instanceof Node\Stmt\Expression) {
+                $dropped[spl_object_id($node->expr)] = true;
+            } elseif ($node instanceof Node\Stmt\Return_ && $node->expr !== null) {
+                $returned[spl_object_id($node->expr)] = $node->expr;
             }
 
             $read = $node instanceof Node\Expr\Instanceof_ ? $node->expr : ($node instanceof Node\Expr\PropertyFetch || $node instanceof Node\Expr\NullsafePropertyFetch ? $node->var : null);
@@ -146,6 +180,23 @@ final class StateKeepingCalls
 
             if ($node instanceof Node\Expr\CallLike && ! $node->isFirstClassCallable()) {
                 $calls[] = $node; // a first-class callable may run later, anywhere: a mention in it stays unconsumed
+            }
+        }
+
+        // What a closure or a class declared in the body returns is not what the body does.
+        foreach ($finder->find($body, static fn (Node $node): bool => $node instanceof Node\FunctionLike || $node instanceof Node\Stmt\ClassLike) as $nested) {
+            foreach ($finder->findInstanceOf([$nested], Node\Stmt\Return_::class) as $return) {
+                if ($return->expr !== null) {
+                    unset($returned[spl_object_id($return->expr)]);
+                }
+            }
+        }
+
+        $handsBack = false;
+        foreach ($returned as $expr) {
+            if (self::names($expr, $variable)) {
+                unset($mentions[spl_object_id($expr)]);
+                $handsBack = true;
             }
         }
 
@@ -171,26 +222,33 @@ final class StateKeepingCalls
                     foreach ($this->rawCallees($call, $declaring, $held, $variable) ?? [] as $callee) {
                         $parameter = self::handedTo($callee, $call, $arg);
                         if ($parameter === null) {
-                            return false;
+                            return self::CHANGED;
                         }
                         $followed[] = [$callee, $parameter];
                         unset($mentions[spl_object_id($arg->value)]);
                     }
                 } elseif ($arg->value !== $root && self::names($root, $variable) && $this->mayWriteThrough($call, $arg, $declaring, $held, $variable)) {
-                    return false; // a property handed to a by-reference parameter, or to a callee this cannot name
+                    return self::CHANGED; // a property handed to a by-reference parameter, or to a callee this cannot name
                 }
             }
 
             foreach ($followed as [$callee, $parameter]) {
-                if (! $this->keeps($callee, $parameter, $held, $depth + 1)) {
-                    return false;
+                $kept = $this->keeps($callee, $parameter, $held, $depth + 1);
+                if ($kept === self::HANDED_BACK && isset($returned[spl_object_id($call)])) {
+                    $handsBack = true;
+                } elseif ($kept === self::CHANGED || ($kept === self::HANDED_BACK && ! isset($dropped[spl_object_id($call)]))) {
+                    return self::CHANGED; // changed, or handed back to be kept where this does not follow
                 }
             }
         }
 
-        // Returned, assigned, captured, compared, or handed to a callee this cannot name: kept somewhere this
-        // does not follow.
-        return $mentions === [];
+        // Assigned, captured, compared, or handed to a callee this cannot name: kept somewhere this does not
+        // follow.
+        if ($mentions !== []) {
+            return self::CHANGED;
+        }
+
+        return $handsBack ? self::HANDED_BACK : self::KEPT;
     }
 
     /**

@@ -31,7 +31,7 @@ function statementStatusAnalyses(): array
     return $analyses ??= FixtureRunner::analyzeMany(
         'app/Http/Controllers/StatementStatusController.php',
         'App\\Http\\Controllers\\StatementStatusController',
-        ['json', 'plain', 'stream', 'redirect', 'constructed', 'subclass', 'branch', 'twice', 'replaced', 'helper', 'chainedStatement', 'unread', 'content', 'header', 'headerBag', 'reads', 'thrown'],
+        ['json', 'plain', 'stream', 'redirect', 'constructed', 'subclass', 'branch', 'twice', 'replaced', 'helper', 'helperHeader', 'chainedStatement', 'unread', 'content', 'header', 'headerBag', 'reads', 'thrown'],
     );
 }
 
@@ -109,9 +109,10 @@ it('documents the media type a header statement sets', function (): void {
 })->group('fixture');
 
 it('leaves the response as it was built where a statement only reads it', function (string $method): void {
-    // Reading the status or the data, or setting a header that is not the media type, changes nothing sent.
+    // Reading the status or the data, or setting a header that is not the media type, changes nothing sent —
+    // in a helper handed the response too, where `header()` handing the response back to it is no escape.
     expect(statementStatusReturn($method))->toEqual(new ClassT(STATEMENT_STATUS_JSON, [
         new ArrayShapeT([new ArrayShapeField('queued', new LiteralT(true))]),
         new LiteralT(202),
     ]));
-})->with(['headerBag', 'reads'])->group('fixture');
+})->with(['headerBag', 'reads', 'helperHeader'])->group('fixture');
