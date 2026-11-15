@@ -12,6 +12,7 @@ use Docuccino\Inference\PhpStan\Extensions\ResourceCollectionTransformReturnType
 use Docuccino\Inference\PhpStan\Extensions\ResponseFactoryFacadeReturnTypeExtension;
 use Docuccino\Inference\PhpStan\Extensions\ResponseJsonReturnTypeExtension;
 use Docuccino\Inference\PhpStan\Runtime\BootFailedException;
+use Docuccino\Inference\PhpStan\Runtime\PhpDocParserCopy;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter as RuntimeAdapterContract;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeConfig;
 use FilesystemIterator;
@@ -103,6 +104,9 @@ final class RuntimeAdapter implements RuntimeAdapterContract
 
         // Larastan boots the app from getcwd()/bootstrap/app.php — cwd must be the app root first.
         chdir($this->config->projectRoot);
+
+        // Before the container loads PHPStan's first scoped class, which registers the phar's autoloader.
+        PhpDocParserCopy::complete();
 
         $factory = new ContainerFactory($this->config->projectRoot);
         $container = $factory->create(
