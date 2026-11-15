@@ -30,7 +30,23 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "429": {
+                "id": "res:v1:sa4hbadintbw2rui",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "description"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.guarded.privateNeverCarried",
         "tags": [
@@ -81,6 +97,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
           }
         }
       }
@@ -109,7 +128,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "423": {
+                "id": "res:v1:jpedc22iueiu4vhi",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/NeverGuardController.php",
+                      "line": 86,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\NeverGuardController::serviceNeverCustom"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.guarded.serviceNeverCustom",
         "tags": [
@@ -160,6 +201,9 @@
                 }
               }
             }
+          },
+          "423": {
+            "$ref": "#/components/responses/Locked"
           }
         }
       }
@@ -188,7 +232,23 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "429": {
+                "id": "res:v1:onsvslo5znx6pixq",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "description"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.guarded.staticNeverCarried",
         "tags": [
@@ -239,6 +299,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
           }
         }
       }
@@ -318,6 +381,63 @@
                 }
               }
             }
+          },
+          "404": {
+            "x-docuccino": {
+              "id": "res:v1:kzwmwcsc3mwx2znp",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "component",
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/NeverGuardController.php",
+                    "line": 32,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\NeverGuardController::traitNeverAbort"
+                  }
+                }
+              ],
+              "facts": {
+                "component": "NotFound"
+              }
+            },
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "fallback",
+                        "layer": "fallback",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/NeverGuardController.php",
+                          "line": 32,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\NeverGuardController::traitNeverAbort"
+                        }
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -346,7 +466,23 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "429": {
+                "id": "res:v1:s6x7ud6s35d7o43h",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "description"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.guarded.traitNeverCarried",
         "tags": [
@@ -397,6 +533,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
           }
         }
       }
@@ -425,7 +564,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "423": {
+                "id": "res:v1:e7tloaacewngnnv4",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/NeverGuardController.php",
+                      "line": 41,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\NeverGuardController::traitNeverCustom"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.guarded.traitNeverCustom",
         "tags": [
@@ -476,6 +637,9 @@
                 }
               }
             }
+          },
+          "423": {
+            "$ref": "#/components/responses/Locked"
           }
         }
       }
@@ -551,6 +715,63 @@
                   },
                   "required": [
                     "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "x-docuccino": {
+              "id": "res:v1:h6qjdk2ci7sfn5gh",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "component",
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/NeverGuardController.php",
+                    "line": 23,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\NeverGuardController::traitNeverHttp"
+                  }
+                }
+              ],
+              "facts": {
+                "component": "Conflict"
+              }
+            },
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "fallback",
+                        "layer": "fallback",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/NeverGuardController.php",
+                          "line": 23,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\NeverGuardController::traitNeverHttp"
+                        }
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
                   ]
                 }
               }
@@ -634,6 +855,73 @@
                 }
               }
             }
+          },
+          "422": {
+            "x-docuccino": {
+              "id": "res:v1:czafpot7thsk43f2",
+              "provenance": [
+                {
+                  "producer": "integration:framework-errors",
+                  "layer": "integration",
+                  "fields": [
+                    "component",
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/NeverGuardController.php",
+                    "line": 50,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\NeverGuardController::traitNeverValidation"
+                  }
+                }
+              ],
+              "facts": {
+                "component": "UnprocessableEntity"
+              }
+            },
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "integration:framework-errors",
+                        "layer": "integration",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/NeverGuardController.php",
+                          "line": 50,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\NeverGuardController::traitNeverValidation"
+                        }
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "errors": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message",
+                    "errors"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -662,7 +950,23 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "429": {
+                "id": "res:v1:4h7estmhop4co7i2",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "description"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.guarded.traitVoidCarried",
         "tags": [
@@ -715,49 +1019,7 @@
             }
           },
           "429": {
-            "x-docuccino": {
-              "id": "res:v1:4h7estmhop4co7i2",
-              "provenance": [
-                {
-                  "producer": "fallback",
-                  "layer": "fallback",
-                  "fields": [
-                    "description"
-                  ]
-                }
-              ]
-            },
-            "description": "Too Many Requests",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "x-docuccino": {
-                    "provenance": [
-                      {
-                        "producer": "inference",
-                        "layer": "inference",
-                        "fields": [
-                          "properties",
-                          "required",
-                          "type"
-                        ],
-                        "confidence": 1
-                      }
-                    ]
-                  },
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string",
-                      "const": "slow down"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ]
-                }
-              }
-            }
+            "$ref": "#/components/responses/Error429"
           }
         }
       }
@@ -786,7 +1048,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "423": {
+                "id": "res:v1:orbhwnvexgoz3ylm",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/NeverGuardController.php",
+                      "line": 68,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\NeverGuardController::traitVoidCustom"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.guarded.traitVoidCustom",
         "tags": [
@@ -839,60 +1123,61 @@
             }
           },
           "423": {
-            "x-docuccino": {
-              "id": "res:v1:orbhwnvexgoz3ylm",
-              "provenance": [
-                {
-                  "producer": "fallback",
-                  "layer": "fallback",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/NeverGuardController.php",
-                    "line": 68,
-                    "symbol": "Workbench\\App\\Http\\Controllers\\NeverGuardController::traitVoidCustom"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "Locked"
-              }
-            },
-            "description": "Locked",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "x-docuccino": {
-                    "provenance": [
-                      {
-                        "producer": "fallback",
-                        "layer": "fallback",
-                        "fields": [
-                          "properties",
-                          "required",
-                          "type"
-                        ],
-                        "source": {
-                          "file": "workbench/app/Http/Controllers/NeverGuardController.php",
-                          "line": 68,
-                          "symbol": "Workbench\\App\\Http\\Controllers\\NeverGuardController::traitVoidCustom"
-                        }
-                      }
-                    ]
-                  },
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "message"
-                  ]
-                }
-              }
+            "$ref": "#/components/responses/Locked"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error429": {
+        "x-docuccino": {
+          "id": "sch:v1:bv2zmrzadykh6273"
+        },
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "const": "slow down"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "Locked": {
+        "x-docuccino": {
+          "id": "sch:v1:srgmu3ngad7ic3wz"
+        },
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      }
+    },
+    "responses": {
+      "Error429": {
+        "description": "Too Many Requests",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error429"
+            }
+          }
+        }
+      },
+      "Locked": {
+        "description": "Locked",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Locked"
             }
           }
         }
@@ -903,7 +1188,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "eca42c423a817f3c5a60ee0199fee626b0046e3d3cfb0e96a7606147c1d6cb6a"
+      "contentHash": "e3d8aca6f027851bdc5a842c0683a1c4a3b5a78fe8c7eb3a70f8d9b92c8014fe"
     },
     "generator": {
       "name": "docuccino/laravel",
