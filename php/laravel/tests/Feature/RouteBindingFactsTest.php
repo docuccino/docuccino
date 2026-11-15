@@ -107,6 +107,36 @@ it('names the column a binding is matched on', function (string $path, string $n
     'an implicit binding' => ['/api/binding-ledgers/{ledger}', 'ledger', 'id'],
     // The route names the column outright, and nothing needs reflecting to know it.
     'a route that names its column' => ['/api/binding-refs/{ledger}', 'ledger', 'reference'],
+    // `getRouteKeyName()` is one `return 'slug';` — a declaration in all but name, and the column the
+    // framework queries.
+    'a model that names its route key as a literal' => ['/api/binding-articles/{article}', 'article', 'slug'],
+    // The framework's own `Route::model()` binder resolves through the model's route key.
+    'a Route::model() binding' => ['/api/binding-explicit/{explicit}', 'explicit', 'id'],
+    // …and never sees the route's `:reference`, which only implicit binding reads. Publishing it would
+    // name a column the server does not look the value up by.
+    'a Route::model() binding the route names a column for' => ['/api/binding-explicit-refs/{explicit}', 'explicit', 'id'],
+]);
+
+/**
+ * A segment whose column is known is typed from that column — the key's shape for a model routing on its
+ * key, the named column's for one routing on another — because a client sending the wrong shape is
+ * refused before the lookup is ever made.
+ */
+it('types a segment from the column it is matched on', function (string $path, string $name, string $type): void {
+    $result = localityBuild(bindingFactRoutes());
+    /** @var array{schema: array<string, mixed>} $parameter */
+    $parameter = pathParameter(emittedArray($result)['paths'][$path]['get'], $name);
+    $untyped = array_filter(
+        [...diagnosticsCoded($result->diagnostics, 'route-binding.untyped'), ...diagnosticsCoded($result->diagnostics, 'route-binding.column-untyped'), ...diagnosticsCoded($result->diagnostics, 'route-binding.custom-binder')],
+        static fn ($diagnostic): bool => str_contains($diagnostic->routeSignature ?? '', $path),
+    );
+
+    // Typed, not fallen back to the string an unread segment gets: nothing says it went untyped.
+    expect($parameter['schema']['type'])->toBe($type)
+        ->and($untyped)->toBe([]);
+})->with([
+    'the slug a model names as its route key' => ['/api/binding-articles/{article}', 'article', 'string'],
+    'the key a Route::model() binding resolves on' => ['/api/binding-explicit/{explicit}', 'explicit', 'integer'],
 ]);
 
 it('says nothing about a column it cannot read', function (string $path, string $name): void {
@@ -115,9 +145,9 @@ it('says nothing about a column it cannot read', function (string $path, string 
     expect($facts)->not->toHaveKey('key')
         ->and(str_contains($description ?? '', 'Matched on'))->toBeFalse();
 })->with([
-    // `getRouteKeyName()` is a method body. Publishing `id` here would name the one column the server
-    // does NOT look this up by.
-    'a model that overrides its route key' => ['/api/binding-articles/{article}', 'article'],
+    // `getRouteKeyName()` reads configuration when the request runs. Publishing `id` here would name
+    // the one column the server does NOT look this up by.
+    'a model that decides its route key at run time' => ['/api/binding-dossiers/{dossier}', 'dossier'],
     // The binder decides in a closure, and it runs before implicit binding either way.
     'a segment the application binds itself' => ['/api/binding-custom/{custom}', 'custom'],
     // An enum segment is matched against the enum's own values, which the schema already publishes as
@@ -131,9 +161,8 @@ it('says nothing about a column it cannot read', function (string $path, string 
  * precise wrong answer: it refuses every value the route accepts, and a generated client gets a
  * parameter it cannot pass. The vague true shape is a string, and a notice names what to pin.
  *
- * The registry cannot tell a `Route::bind()` binder from a `Route::model()` one, whose key really is
- * the model's, so widening covers both. That is the trade the degradation rule settles: the second
- * loses some type safety, and not widening loses the first a working request.
+ * A `Route::model()` binder is the framework's own closure around the model it was handed, so it is read
+ * as that model's binding; a `Route::bind()` closure is the application's, and only it is widened.
  */
 it('widens the schema of a binding whose column it cannot read, and reports it', function (string $path, string $name, string $code): void {
     $result = localityBuild(bindingFactRoutes());
@@ -148,7 +177,7 @@ it('widens the schema of a binding whose column it cannot read, and reports it',
         ->and($parameter['schema'])->not->toHaveKey('format')
         ->and(diagnosticsCoded($result->diagnostics, $code))->toHaveCount(1);
 })->with([
-    'a model whose route key is a method body' => ['/api/binding-articles/{article}', 'article', 'route-binding.untyped'],
+    'a model that decides its route key at run time' => ['/api/binding-dossiers/{dossier}', 'dossier', 'route-binding.untyped'],
     'a segment the application binds itself' => ['/api/binding-custom/{custom}', 'custom', 'route-binding.custom-binder'],
 ]);
 

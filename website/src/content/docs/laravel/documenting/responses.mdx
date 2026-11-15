@@ -914,8 +914,9 @@ Docuccino writes a link only where your code proves it. The route binds an `Orde
 matched on the order's route key; the response sends that column, as it is stored, at `data.id`. Both
 halves are read from the code:
 
-- **What a route takes.** An implicit binding — a type-hinted model — matched on the model's route key,
-  or on the column the route names, as in `{order:reference}`.
+- **What a route takes.** An implicit binding — a type-hinted model — or a `Route::model()` one, matched
+  on the model's route key: its primary key, or the column its `getRouteKeyName()` returns. An implicit
+  binding can also name its column, as in `{order:reference}`.
 - **What a response gives.** A model returned as it is sends each column under its own name. A resource
   sends the columns its `toArray()` writes as `$this->column` (or `$this->getRouteKey()`). Docuccino reads which model a resource wraps from where
   your action builds it — `new OrderResource($order)` — or from the resource's `@mixin`.
@@ -925,7 +926,7 @@ stored: one an accessor rewrites, a date, or a cast other than `int` or `string`
 
 Nothing is matched by name. A response sending a `customer_id` is not linked to a route taking
 `{customer}`, because nothing in the code says the two are the same value. Where a binding can't be read
-— a `Route::bind()` closure, a route key decided in a method body — no link is written, and the notices
+— a `Route::bind()` closure, a `getRouteKeyName()` that decides at run time — no link is written, and the notices
 in [Diagnostics](/laravel/reference/diagnostics/#routes-operations-and-names) name the segment.
 
 ## Adding and refining responses

@@ -103,11 +103,24 @@ it('links a create endpoint to every route that binds the model it gives back', 
     expect(array_map(static fn (array $link): array => $link['parameters'], $links))->toBe([
         'delete.api.parcels.@parcel' => ['parcel' => '$response.body#/data/id'],
         'get.api.parcels.@parcel' => ['parcel' => '$response.body#/data/id'],
+        // `Route::model('shipment', Parcel::class)` resolves on the parcel's route key, so the key fills it.
+        'get.api.shipments.@shipment' => ['shipment' => '$response.body#/data/id'],
         'get.api.tracked-parcels.@parcel' => ['parcel' => '$response.body#/data/tracking'],
         'patch.api.parcels.@parcel' => ['parcel' => '$response.body#/data/id'],
     ])
         ->and($links['get.api.parcels.@parcel']['operationId'])->toBe('get.api.parcels.@parcel')
         ->and($links['get.api.parcels.@parcel']['x-docuccino']['provenance'])->toBe([['producer' => 'inference', 'layer' => 'inference']]);
+});
+
+it('links on the route key a model names for itself', function (): void {
+    $document = emittedArray(localityBuild($this->routes, $this->engine));
+
+    // `Pallet::getRouteKeyName()` returns `'tag'`, so the tag is what `{pallet}` is looked up by — the
+    // key would be a value the route never matches.
+    expect($document['paths']['/api/pallets']['post']['responses']['200']['links'])
+        ->toHaveKey('get.api.pallets.@pallet')
+        ->and($document['paths']['/api/pallets']['post']['responses']['200']['links']['get.api.pallets.@pallet']['parameters'])
+        ->toBe(['pallet' => '$response.body#/data/tag']);
 });
 
 it('reads a model returned bare as sending its columns under their own names', function (): void {

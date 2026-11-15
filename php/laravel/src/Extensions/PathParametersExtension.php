@@ -132,8 +132,8 @@ final class PathParametersExtension implements OperationExtension
                 if ($isBound && $constraint === null && ! self::declaresType($context, $name)) {
                     if (self::isCustomBound($context, $name)) {
                         $this->reportCustomBinding($context, $name);
-                    } elseif ($field !== null) {
-                        $this->reportUntypedColumn($context, $name, $context->routeBindings[$name], $field);
+                    } elseif (($column = BoundColumn::of($context, $name)) !== null) {
+                        $this->reportUntypedColumn($context, $field === null ? '{'.$name.'}' : '{'.$name.':'.$field.'}', $context->routeBindings[$name], $column);
                     } else {
                         $this->reportUntypedBinding($context, $name, $context->routeBindings[$name]);
                     }
@@ -287,7 +287,12 @@ final class PathParametersExtension implements OperationExtension
             return $context->converter()->convert(new EnumT($modelFqcn, EnumReflection::names($modelFqcn)));
         }
 
-        return $context->routeBindingKeySchema($modelFqcn);
+        // A model routing on a column of its own naming answers with that column's shape, which is the
+        // column chain's question rather than the key's.
+        $keySchema = $context->routeBindingKeySchema($modelFqcn);
+        $keyName = $keySchema === null ? $context->routeBindingKeyName($modelFqcn) : null;
+
+        return $keyName === null ? $keySchema : $context->routeBindingFieldSchema($modelFqcn, $keyName);
     }
 
     /** Whether the application registered a binder of its own for this segment. */
@@ -355,15 +360,14 @@ final class PathParametersExtension implements OperationExtension
     }
 
     /** Says which column went untyped, and why the parameter is a bare string because of it. */
-    private function reportUntypedColumn(RouteContext $context, string $name, string $modelFqcn, string $field): void
+    private function reportUntypedColumn(RouteContext $context, string $segment, string $modelFqcn, string $field): void
     {
         $context->components->addDiagnostic(new Diagnostic(
             severity: Severity::Info,
             code: 'route-binding.column-untyped',
             message: sprintf(
-                '{%s:%s} binds on %s::$%s, whose type could not be recovered; the parameter is documented as a plain string.',
-                $name,
-                $field,
+                '%s binds on %s::$%s, whose type could not be recovered; the parameter is documented as a plain string.',
+                $segment,
                 $modelFqcn,
                 $field,
             ),

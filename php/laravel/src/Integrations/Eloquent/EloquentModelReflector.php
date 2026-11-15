@@ -11,6 +11,9 @@ use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
+use Docuccino\Laravel\Integrations\Support\ParsedClassFile;
+use PhpParser\Node\Scalar\String_;
+use PhpParser\Node\Stmt\Return_;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionProperty;
@@ -25,14 +28,6 @@ use ReflectionProperty;
 final class EloquentModelReflector
 {
     public const MODEL = 'Illuminate\\Database\\Eloquent\\Model';
-
-    /**
-     * The chain an implicit binding's column comes out of. Overriding ANY of them takes the answer out
-     * of the declarations {@see routeKeyNameFor()} can read.
-     *
-     * @var list<string>
-     */
-    private const ROUTE_KEY_METHODS = ['getRouteKeyName', 'getKeyName'];
 
     public function __construct(
         private readonly CastsMethodReader $castsMethod = new CastsMethodReader,
@@ -112,12 +107,11 @@ final class EloquentModelReflector
      * somewhere no reflection can read.
      *
      * Laravel resolves an implicit binding through `getRouteKeyName()`, which defaults to
-     * `getKeyName()`, which answers the declared `$primaryKey`. Only that declaration is readable, so
-     * a model overriding either method — a trait it imports counts, since PHP reports a flattened
-     * method as the using class's — has chosen a column this cannot see, and answering `id` for one of
-     * those would tell a consumer to send an id where the server matches a slug. Null is what
-     * {@see keySchemaFor()} cannot do: that one owes a schema either way and a primary-key shape is
-     * still the closest static answer, where a NAME is either right or a lie.
+     * `getKeyName()`, which answers the declared `$primaryKey`. A `getRouteKeyName()` whose whole body is
+     * `return '<column>';` states its column as plainly as a property would, so it is read — in the class or
+     * the trait PHP took it from; any other body — a branch, a config read — has chosen a column this
+     * cannot see, and so has an overridden `getKeyName()`. Answering `id` for one of those would tell a consumer to
+     * send an id where the server matches a slug, so the answer there is null.
      */
     public function routeKeyNameFor(string $fqcn): ?string
     {
@@ -125,13 +119,40 @@ final class EloquentModelReflector
             return null;
         }
 
-        foreach (self::ROUTE_KEY_METHODS as $method) {
-            if ((new ReflectionMethod($fqcn, $method))->getDeclaringClass()->getName() !== self::MODEL) {
-                return null;
-            }
+        if ((new ReflectionMethod($fqcn, 'getKeyName'))->getDeclaringClass()->getName() !== self::MODEL) {
+            return null;
         }
 
-        return $this->facts($fqcn)['keyName'];
+        $routeKey = new ReflectionMethod($fqcn, 'getRouteKeyName');
+
+        return $routeKey->getDeclaringClass()->getName() === self::MODEL
+            ? $this->facts($fqcn)['keyName']
+            : self::literalReturn($routeKey);
+    }
+
+    /**
+     * Whether the route key is the primary key — the one column whose shape {@see keySchemaFor()} answers.
+     */
+    public function routesOnPrimaryKey(string $fqcn): bool
+    {
+        $name = $this->routeKeyNameFor($fqcn);
+
+        return $name !== null && $name === $this->facts($fqcn)['keyName'];
+    }
+
+    /** The column a method names when its whole body is one `return '<literal>';`, else null. */
+    private static function literalReturn(ReflectionMethod $method): ?string
+    {
+        $node = ParsedClassFile::declarationOf($method);
+        $statements = $node === null ? [] : ($node->stmts ?? []);
+
+        if (count($statements) !== 1 || ! $statements[0] instanceof Return_ || ! $statements[0]->expr instanceof String_) {
+            return null;
+        }
+
+        $column = $statements[0]->expr->value;
+
+        return $column === '' ? null : $column;
     }
 
     /**
