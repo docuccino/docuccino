@@ -486,7 +486,7 @@ in the file being walked, and an array return is no type the trace follows:
   or headers a later statement restates (`$response->setStatusCode(202);` on a line of its own): JSON,
   plain, streamed, redirect, `new JsonResponse` and an application subclass, and one thrown in an
   `HttpResponseException`; beside a status set on one branch, set twice, set before the local is replaced,
-  set by a helper handed the response or from the request, statements setting the content or a header, and
+  set by a helper handed the response or from the request, a helper that sets only a header, statements setting the content or a header, and
   statements that only read the response.
 - `app/Http/Controllers/ResponseChainController.php` and `app/Http/Responses/PinnedStatusJsonResponse.php` —
   fluent chains that set a response's content, data, JSONP callback, encoding, headers, a cookie, cache
