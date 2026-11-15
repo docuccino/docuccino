@@ -10,9 +10,7 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\UnionT;
-use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Inference\PhpStan\Support\ContentTypeHeader;
-use Docuccino\Inference\PhpStan\Support\PlainContent;
 use Docuccino\Inference\PhpStan\Support\ScalarFold;
 use Docuccino\Inference\PhpStan\Translation\TypeTranslator;
 use PhpParser\Node;
@@ -44,8 +42,9 @@ use PHPStan\Type\Type;
  * `Reason::Expired->status()` the one its case maps to; a body is read as the response's constructor reads
  * the same argument.
  *
+ * @phpstan-import-type ChainLink from LinkFacts
+ *
  * @phpstan-type PeeledChain array{receiver: Node\Expr, status: LiteralT|UnionT|null, statusUnknown: bool, contentType: string|null, contentTypeUnknown: bool, body: DType|null, bodyUnknown: bool}
- * @phpstan-type ChainLink array{status: LiteralT|UnionT|null, statusUnknown: bool, contentType: string|null, contentTypeUnknown: bool, body: DType|null, bodyUnknown: bool}
  *
  * @internal
  */
@@ -92,9 +91,6 @@ final class FluentResponseChain
 
     /** Sets a cookie, which is no fact the document carries. */
     private const COOKIE = 'cookie';
-
-    /** The encoding flags that change what a JSON body is: an empty list sent as an object, a numeric string as a number. */
-    private const RESHAPING_FLAGS = JSON_FORCE_OBJECT | JSON_NUMERIC_CHECK;
 
     /**
      * @param  Closure(Node\Expr, Scope): (LiteralT|UnionT|null)  $statusIn  the refiner's status reader
@@ -177,7 +173,7 @@ final class FluentResponseChain
         }
 
         if (! $call->name instanceof Node\Identifier) {
-            return self::unread(); // `$response->{$method}()` — a mutation this cannot even name
+            return LinkFacts::unread(); // `$response->{$method}()` — a mutation this cannot even name
         }
 
         $name = $call->name->toString();
@@ -190,16 +186,18 @@ final class FluentResponseChain
         $kind = $declared['own'] ? null : (self::LINKS[$name] ?? null);
         $args = ArgumentSlots::of($call->getArgs(), $declared['parameters']);
 
+        $first = $args->at(0) === null ? null : $scope->getType($args->at(0));
+
         return match ($kind) {
             self::STATUS => $this->readStatus($args, $scope),
             self::HEADER => $this->readHeader($args, $scope),
             self::HEADERS => $this->readHeaders($args, $scope),
-            self::CONTENT => $this->readContent($args, $root, $scope),
-            self::DATA => $this->readData($args, $scope),
-            self::ENCODING => self::readEncoding($args, $scope),
-            self::CALLBACK => self::readCallback($args, $scope),
-            self::COOKIE => self::untouched(),
-            default => self::unread(),
+            self::CONTENT => LinkFacts::content($first, $root, $this->payloadIn),
+            self::DATA => LinkFacts::data($first, $this->payloadIn),
+            self::ENCODING => LinkFacts::encoding($first),
+            self::CALLBACK => LinkFacts::callback($first, $args->knows(0)),
+            self::COOKIE => LinkFacts::untouched(),
+            default => LinkFacts::unread(),
         };
     }
 
@@ -252,7 +250,7 @@ final class FluentResponseChain
         $code = $args->at(0);
         $status = $code === null ? null : ($this->statusIn)($code, $scope);
 
-        return ['statusUnknown' => $status === null, 'status' => $status] + self::untouched();
+        return ['statusUnknown' => $status === null, 'status' => $status] + LinkFacts::untouched();
     }
 
     /**
@@ -268,23 +266,23 @@ final class FluentResponseChain
         $name = $args->at(0);
         $folded = $name === null ? null : ScalarFold::of($scope->getType($name));
         if ($folded === null || ! is_string($folded[0])) {
-            return self::unknownMediaType();
+            return LinkFacts::unknownMediaType();
         }
         if (! ContentTypeHeader::names($folded[0])) {
-            return self::untouched();
+            return LinkFacts::untouched();
         }
 
         $replace = $args->at(2);
         $value = $args->at(1);
         if (($replace !== null && ! $scope->getType($replace)->isTrue()->yes()) || $value === null) {
-            return self::unknownMediaType();
+            return LinkFacts::unknownMediaType();
         }
 
         $media = ScalarFold::of($scope->getType($value));
 
         return $media !== null && is_string($media[0])
-            ? ['contentType' => $media[0]] + self::untouched()
-            : self::unknownMediaType();
+            ? ['contentType' => $media[0]] + LinkFacts::untouched()
+            : LinkFacts::unknownMediaType();
     }
 
     /**
@@ -298,111 +296,9 @@ final class FluentResponseChain
     {
         $headers = $args->at(0);
         if (! $headers instanceof Node\Expr\Array_) {
-            return self::unknownMediaType();
+            return LinkFacts::unknownMediaType();
         }
 
-        return ['contentType' => ContentTypeHeader::inArray($headers, $scope)] + self::untouched();
-    }
-
-    /**
-     * `setContent($content)`, read as the response's constructor reads its content ({@see PlainContent}): text,
-     * nothing, a rendered view, or — for Laravel's plain response, which morphs it — JSON, relabelled with the
-     * default media type. A JSON response sends content as it is, which is no JSON body this can name.
-     *
-     * @return ChainLink
-     */
-    private function readContent(ArgumentSlots $args, string $root, Scope $scope): array
-    {
-        $content = $args->at(0);
-        $type = $content === null ? null : $scope->getType($content);
-        $morphs = $root === ResponseShapeRefiner::PLAIN_RESPONSE;
-        $read = $type === null || in_array($root, ResponseShapeRefiner::JSON_FQCNS, true) ? PlainContent::UNREAD : PlainContent::of($type, $morphs);
-        $body = match ($read) {
-            PlainContent::EMPTY => new VoidT,
-            PlainContent::RENDERED => new ClassT(ResponseShapeRefiner::VIEW),
-            PlainContent::TEXT, PlainContent::JSON => $type === null ? null : ($read === PlainContent::TEXT ? PlainContent::text($type) : ($this->payloadIn)($type)),
-            default => null,
-        };
-
-        // Content that is JSON is relabelled as JSON, and content that may be has an unknown label.
-        $relabelled = $read === PlainContent::JSON || ($read === PlainContent::UNREAD && $morphs);
-
-        return ['body' => $body, 'bodyUnknown' => $body === null, 'contentTypeUnknown' => $relabelled] + self::untouched();
-    }
-
-    /**
-     * `setData($rows)`: the body is the data now, read as the constructor reads it.
-     *
-     * @return ChainLink
-     */
-    private function readData(ArgumentSlots $args, Scope $scope): array
-    {
-        $data = $args->at(0);
-        $body = $data === null ? null : ($this->payloadIn)($scope->getType($data));
-
-        return ['body' => $body, 'bodyUnknown' => $body === null] + self::untouched();
-    }
-
-    /**
-     * `setEncodingOptions($flags)` re-encodes the same data: a body still sent as it was, unless the flags may
-     * reshape it ({@see RESHAPING_FLAGS}).
-     *
-     * @return ChainLink
-     */
-    private static function readEncoding(ArgumentSlots $args, Scope $scope): array
-    {
-        $options = $args->at(0);
-        $flags = $options === null ? null : ScalarFold::ints($scope->getType($options));
-        $kept = $flags !== null && array_filter($flags, static fn (int $each): bool => ($each & self::RESHAPING_FLAGS) !== 0) === [];
-
-        return ['bodyUnknown' => ! $kept] + self::untouched();
-    }
-
-    /**
-     * `setCallback($name)`: a JSONP body labelled as JavaScript, unless the name is provably null, which
-     * changes nothing.
-     *
-     * @return ChainLink
-     */
-    private static function readCallback(ArgumentSlots $args, Scope $scope): array
-    {
-        $callback = $args->at(0);
-        if ($args->knows(0) && ($callback === null || $scope->getType($callback)->isNull()->yes())) {
-            return self::untouched();
-        }
-
-        return ['bodyUnknown' => true, 'contentTypeUnknown' => true] + self::untouched();
-    }
-
-    /**
-     * A header link that may or may not have set the media type. Neither publishing the receiver's nor
-     * inventing one is honest, so the chain reports it unknown and the response falls back to the default.
-     *
-     * @return ChainLink
-     */
-    private static function unknownMediaType(): array
-    {
-        return ['contentTypeUnknown' => true] + self::untouched();
-    }
-
-    /**
-     * A link that touched no fact the document carries.
-     *
-     * @return ChainLink
-     */
-    private static function untouched(): array
-    {
-        return ['status' => null, 'statusUnknown' => false, 'contentType' => null, 'contentTypeUnknown' => false, 'body' => null, 'bodyUnknown' => false];
-    }
-
-    /**
-     * A link that may have touched every fact: what the response was built with no longer stands, and only
-     * its class does.
-     *
-     * @return ChainLink
-     */
-    private static function unread(): array
-    {
-        return ['status' => null, 'statusUnknown' => true, 'contentType' => null, 'contentTypeUnknown' => true, 'body' => null, 'bodyUnknown' => true];
+        return ['contentType' => ContentTypeHeader::inArray($headers, $scope)] + LinkFacts::untouched();
     }
 }
