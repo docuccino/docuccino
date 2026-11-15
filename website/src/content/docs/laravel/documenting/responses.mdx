@@ -499,7 +499,9 @@ The same holds for a class that extends a redirect, stream or file response, for
 `$this->setStatusCode(…)` once the parent's constructor has run, for a class two levels below the
 framework's, and for a static factory such as `InvoiceGoneResponse::make()`. A class that sets its status
 on only one branch of its constructor states no one status, so it's documented as the framework class it
-extends.
+extends: a JSON response as `200` with an open `application/json` body, a redirect as `3XX` with its
+`Location`. A response class from a package is documented the same way, because only your application's
+own constructors are read.
 
 A status Docuccino can't read at all, such as `->setStatusCode($upstream->status())`, is not documented
 under a code the endpoint may never send. Its body goes under `default` ("any status") and an
@@ -622,15 +624,16 @@ A response object — `JsonResponse`, `RedirectResponse`, `Illuminate\Http\Respo
 `BinaryFileResponse` and `StreamedResponse` — is transport, not a body. Its public members are PHP
 internals (`original`, `exception`, `headers`) that no client ever receives, so Docuccino never
 reflects one into `components.schemas`. That holds wherever the type turns up: a bare return, one arm
-of a `JsonResponse|RedirectResponse` union, a property of a class being expanded. Your own subclass
-(`class ApiResponse extends JsonResponse`) is covered too.
+of a `JsonResponse|RedirectResponse` union, a property of a class being expanded. A subclass, your own
+(`class ApiResponse extends JsonResponse`) or a package's, is covered too, and is documented below as the
+class it extends.
 
 What gets documented instead is only what the class itself proves:
 
 | Return type | Documented as |
 | --- | --- |
 | `RedirectResponse` | the status the call names (`redirect()->to($url, 301)`) or else `3XX`, with a `Location` header and no body |
-| `JsonResponse` with no recoverable payload | `200` with an open `application/json` body |
+| `JsonResponse`, Laravel's or Symfony's, with no recoverable payload | `200` with an open `application/json` body |
 | `BinaryFileResponse`, `StreamedResponse` | the status the call names (`response()->stream($callback, 202)`) or else `200`, with a binary body — see [file downloads and streams](#file-downloads-and-streams) |
 | `Illuminate\Http\Response` whose content can't be read | the status alone, the one the call names or else `200` — neither media type nor shape is stated anywhere |
 

@@ -403,6 +403,8 @@ final class InferredResponsesExtension implements OperationExtension
             return [[self::DEFAULT_STATUS], null, false, null, [], null];
         }
 
+        // The engine writes a body and status it read onto the framework's class alone; a subclass it read
+        // nothing off arrives bare, and is matched with its family below.
         if ($type instanceof ClassT && $type->fqcn === FrameworkClasses::JSON_RESPONSE && $type->typeArgs !== []) {
             $statuses = self::statusesOf($type->typeArgs);
             $payload = $type->typeArgs[0];
@@ -426,9 +428,10 @@ final class InferredResponsesExtension implements OperationExtension
     /**
      * A framework response object handed back with no payload generic: transport, not a body, so only what
      * the class itself proves is documented. A redirect proves a 3xx plus `Location` and no body; a bare
-     * `JsonResponse` proves a JSON body of an unrecovered shape, which converts to an open `{}` rather than
+     * JSON response proves a JSON body of an unrecovered shape, which converts to an open `{}` rather than
      * the no-body claim the class contradicts; a file or streamed response goes to {@see fileResponse()};
-     * anything else proves neither media type nor shape.
+     * anything else proves neither media type nor shape. Each family is matched with its subclasses, so a
+     * class whose own status and body went unread is documented as the framework class it extends.
      *
      * A redirect, file or stream the engine read a status for carries it as a `JsonResponse` does, in its
      * second type argument ({@see statusesOf()}). A redirect whose status was not read keeps the range.
@@ -443,7 +446,7 @@ final class InferredResponsesExtension implements OperationExtension
             return [$codes === null ? [self::REDIRECT_STATUS] : array_map(strval(...), $codes), null, true, self::LOCATION_HEADER, []];
         }
 
-        if ($type->fqcn === FrameworkClasses::JSON_RESPONSE) {
+        if (FrameworkClasses::isJson($type->fqcn)) {
             return [[self::DEFAULT_STATUS], $type, false, null, []];
         }
 
@@ -554,7 +557,7 @@ final class InferredResponsesExtension implements OperationExtension
             return null;
         }
 
-        if ($type->fqcn === FrameworkClasses::JSON_RESPONSE) {
+        if (FrameworkClasses::isJson($type->fqcn)) {
             // Parameterised is not the same as recovered: a response the engine could only pin a STATUS on
             // — a fluent `->setStatusCode(202)` over a body it could not follow — carries an unresolved
             // payload arg, and its body is exactly as undescribed as a bare response's. A void payload is
