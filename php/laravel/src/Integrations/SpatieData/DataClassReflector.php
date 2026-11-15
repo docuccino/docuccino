@@ -107,9 +107,8 @@ final class DataClassReflector
 
     private const MERGE_VALIDATION_RULES = 'Spatie\\LaravelData\\Attributes\\MergeValidationRules';
 
-    private const WITH_CAST = 'Spatie\\LaravelData\\Attributes\\WithCast';
-
-    private const DATETIME_CAST = 'Spatie\\LaravelData\\Casts\\DateTimeInterfaceCast';
+    /** What `#[WithCast]`, `#[WithCastAndTransformer]` and `#[WithCastable]` implement, in every 4.x. */
+    private const GETS_CAST = 'Spatie\\LaravelData\\Attributes\\GetsCast';
 
     private const WITH_TRANSFORMER = 'Spatie\\LaravelData\\Attributes\\WithTransformer';
 
@@ -231,30 +230,17 @@ final class DataClassReflector
     }
 
     /**
-     * The `format` of a `#[WithCast(DateTimeInterfaceCast::class, format: '…')]`, else null. Read from
-     * the attribute arguments (nothing is instantiated). It governs the wire shape — notably `U`, which
-     * serialises as an integer timestamp rather than a date-time string.
+     * The cast laravel-data reads this property's input with, as the class and constructor arguments its
+     * attribute names (nothing is instantiated), else null: the first attribute that gets a cast —
+     * `#[WithCast]`, `#[WithCastAndTransformer]` or `#[WithCastable]` — in declared order.
+     *
+     * @return array{class: string, arguments: array<array-key, mixed>}|null
      */
-    public function dateTimeCastFormat(string $fqcn, string $property): ?string
+    public function propertyCast(string $fqcn, string $property): ?array
     {
-        $reflection = $this->property($fqcn, $property);
-        if ($reflection === null) {
-            return null;
-        }
+        $attributes = $this->property($fqcn, $property)?->getAttributes(self::GETS_CAST, ReflectionAttribute::IS_INSTANCEOF) ?? [];
 
-        $attributes = $reflection->getAttributes(self::WITH_CAST);
-        if ($attributes === []) {
-            return null;
-        }
-
-        $arguments = $attributes[0]->getArguments();
-        if (($arguments[0] ?? null) !== self::DATETIME_CAST) {
-            return null;
-        }
-
-        $format = $arguments['format'] ?? $arguments[1] ?? null;
-
-        return is_string($format) ? $format : null;
+        return $attributes === [] ? null : self::named($attributes[0]);
     }
 
     /** Property-level `#[Hidden]`, either spatie's or Docuccino's. */
@@ -1086,9 +1072,20 @@ final class DataClassReflector
             return null;
         }
 
-        $arguments = $attributes[0]->getArguments();
-        $class = $arguments[0] ?? $arguments['transformerClass'] ?? $arguments['class'] ?? null;
-        unset($arguments[0], $arguments['transformerClass'], $arguments['class']);
+        return self::named($attributes[0]);
+    }
+
+    /**
+     * The class a cast or transformer attribute names first, and the arguments it is constructed with.
+     *
+     * @param  ReflectionAttribute<object>  $attribute
+     * @return array{class: string, arguments: array<array-key, mixed>}|null
+     */
+    private static function named(ReflectionAttribute $attribute): ?array
+    {
+        $arguments = $attribute->getArguments();
+        $class = $arguments[0] ?? $arguments['castClass'] ?? $arguments['transformerClass'] ?? $arguments['class'] ?? $arguments['castableClass'] ?? null;
+        unset($arguments[0], $arguments['castClass'], $arguments['transformerClass'], $arguments['class'], $arguments['castableClass']);
 
         return is_string($class) ? ['class' => $class, 'arguments' => $arguments] : null;
     }

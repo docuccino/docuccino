@@ -99,18 +99,23 @@ final class DataValidationRules
 
     private ?ValidationRulesToSchema $validation = null;
 
+    private readonly ReadDate $dates;
+
     /**
-     * @param  string  $dateFormat  the app's `data.date_format`, which the date cast parses input with
-     *                              where the property names no format of its own ({@see dateWireRules()})
+     * @param  string|list<string>  $dateFormat  the app's `data.date_format`, which the date cast parses input
+     *                                           with where the property names no format of its own
+     * @param  array<string, string>  $casts  the app's `data.casts` ({@see ReadDate})
      */
     public function __construct(
         private readonly DataClassReflector $reflector = new DataClassReflector,
         private readonly CustomRuleReader $customRules = new CustomRuleReader,
         private readonly RuleSetNormalizer $normalizer = new RuleSetNormalizer,
         private readonly RuleOrdering $ordering = new RuleOrdering,
-        private readonly string $dateFormat = DateWireFormat::DEFAULT_FORMAT,
+        string|array $dateFormat = DateWireFormat::DEFAULT_FORMAT,
+        array $casts = ReadDate::DEFAULT_CASTS,
     ) {
         $this->dependencyFiles = new DependencyFileSet;
+        $this->dates = new ReadDate($this->reflector, $dateFormat, $casts);
     }
 
     public function reflector(): DataClassReflector
@@ -530,15 +535,15 @@ final class DataValidationRules
     }
 
     /**
-     * The `date_wire` carrier for a `DateTimeInterface`-typed property: the wire format the app really
-     * accepts, from the most specific source there is. A `#[WithCast(DateTimeInterfaceCast::class,
-     * format: …)]` states it for this property outright — it is literally the format the cast parses
-     * input with — and otherwise the app's `data.date_format` does. The response side reads what the
+     * The `date_wire` carrier for a `DateTimeInterface`-typed property: the formats the cast laravel-data
+     * reads it with accepts ({@see ReadDate}) — a `#[WithCast(DateTimeInterfaceCast::class, format: …)]`'s
+     * own, else the app's `data.date_format`, either a pattern or a list. The response side reads what the
      * transformer writes instead ({@see WrittenDate}), so the two agree wherever the class states neither.
-     * A field whose own rules already carry a `date_format` says it more specifically still and gets none.
+     * A field whose own rules already carry a `date_format` says it more specifically still and gets none,
+     * and so does one read by a cast no one can read: it claims no type it cannot stand behind.
      *
-     * The PHP format travels on the rule as it was written, never a word summarising it: what the document
-     * may CLAIM about a pattern — a `format` keyword, a note, the example bytes — is one policy, and
+     * The PHP patterns travel on the rule, never a word summarising them: what the document may CLAIM about
+     * a pattern — a `format` keyword, a note, the example bytes — is one policy, and
      * {@see DateWireRuleTransformer} applies it.
      *
      * @param  list<ValidationRule>  $stated  the rules the property itself declared
@@ -546,7 +551,8 @@ final class DataValidationRules
      */
     private function dateWireRules(string $fqcn, string $property, DType $stripped, array $stated): array
     {
-        if (! DataSchema::hasDateTime($stripped)) {
+        $dateClass = DataSchema::dateClass($stripped);
+        if ($dateClass === null) {
             return [];
         }
 
@@ -556,9 +562,9 @@ final class DataValidationRules
             }
         }
 
-        $format = $this->reflector->dateTimeCastFormat($fqcn, $property) ?? $this->dateFormat;
+        $patterns = $this->dates->patterns($fqcn, $property, $dateClass);
 
-        return [ValidationRule::of('date_wire', [$format])];
+        return $patterns === null ? [] : [ValidationRule::of('date_wire', $patterns)];
     }
 
     /**

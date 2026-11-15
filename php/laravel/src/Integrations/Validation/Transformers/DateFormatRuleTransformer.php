@@ -13,7 +13,7 @@ use Docuccino\Laravel\Integrations\Support\DateWireFormat;
 /**
  * `date_format:Y-m-d` → a string schema carrying the raw PHP format in a note, so a reader keeps
  * the exact contract, plus the OAS `format` the pattern's own values satisfy where {@see DateWireFormat}
- * has one for it. The app states the accepted wire format outright here, so this is the most specific
+ * has one for it. `date_format:Y-m-d,d/m/Y` accepts either, and names both. The app states the accepted wire format outright here, so this is the most specific
  * source there is and nothing displaces it.
  *
  * The wire format is the one thing the schema cannot carry, so the example is proposed here rather than
@@ -35,12 +35,13 @@ final class DateFormatRuleTransformer implements RuleTransformer
     {
         $field->setType('string');
 
-        $pattern = $rule->parameter() ?? '';
-        if ($pattern === '') {
+        // Laravel accepts a value matching any of the patterns listed.
+        $patterns = array_values(array_filter($rule->parameters, static fn (string $pattern): bool => $pattern !== ''));
+        if ($patterns === []) {
             return;
         }
 
-        $oas = DateWireFormat::oas($pattern);
+        $oas = DateWireFormat::oasOfAll($patterns);
         if ($oas !== null) {
             $field->set('format', $oas);
         } else {
@@ -50,9 +51,9 @@ final class DateFormatRuleTransformer implements RuleTransformer
         }
 
         if ($field->notes() === []) {
-            $field->note(DateWireFormat::expected($pattern));
+            $field->note(DateWireFormat::expected(...$patterns));
         }
 
-        $field->proposeExample(DateWireFormat::example($pattern));
+        $field->proposeExample(DateWireFormat::example($patterns[0]));
     }
 }

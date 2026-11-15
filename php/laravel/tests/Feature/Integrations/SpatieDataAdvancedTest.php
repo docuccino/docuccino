@@ -269,9 +269,10 @@ it('documents a WithCast DateTimeInterfaceCast format:U property as the string t
     expect($properties['expiresAt'])->toBe(['type' => 'string', 'format' => 'date-time'])
         ->and($properties['createdAt'])->toBe(['type' => 'string', 'format' => 'date-time']);
 
-    // The reflector still reads the format straight off the attribute, for the request side.
-    expect((new DataClassReflector)->dateTimeCastFormat(TimestampData::class, 'expiresAt'))->toBe('U')
-        ->and((new DataClassReflector)->dateTimeCastFormat(TimestampData::class, 'createdAt'))->toBeNull();
+    // The reflector still reads the cast straight off the attribute, for the request side.
+    expect((new DataClassReflector)->propertyCast(TimestampData::class, 'expiresAt'))
+        ->toBe(['class' => 'Spatie\\LaravelData\\Casts\\DateTimeInterfaceCast', 'arguments' => ['format' => 'U']])
+        ->and((new DataClassReflector)->propertyCast(TimestampData::class, 'createdAt'))->toBeNull();
 });
 
 it('excludes route-parameter and explicitly request-hidden properties, but not output-#[Hidden] ones', function (): void {
