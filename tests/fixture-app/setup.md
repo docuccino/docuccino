@@ -474,6 +474,12 @@ in the file being walked, and an array return is no type the trace follows:
   `Response` and `Redirect` facades and `new`, the status a literal, a constant, an enum case's read, a
   named argument, a choice, a chain, a local or a helper's parameter; beside the calls that take no status,
   one sent with the framework's default, and one whose status nothing can read.
+- `app/Http/Controllers/StatementStatusController.php` — responses built into a local whose status, body
+  or headers a later statement restates (`$response->setStatusCode(202);` on a line of its own): JSON,
+  plain, streamed, redirect, `new JsonResponse` and an application subclass, and one thrown in an
+  `HttpResponseException`; beside a status set on one branch, set twice, set before the local is replaced,
+  set by a helper handed the response or from the request, statements setting the content or a header, and
+  statements that only read the response.
 - `app/Http/Controllers/ResponseSubclassController.php` and `app/Http/Responses/` — responses the
   application derives from the framework's so that the class names its status: a plain response, a JSON
   response, a redirect, a stream, a file and Symfony's own response, each handing `parent::__construct()` a
