@@ -958,7 +958,7 @@ document CARRIES, and `project_paths` bounds that on purpose; the declaring-call
 the error the document already carries SAYS, so its gate is the application's own source — the same scope
 every other status read uses, for the priming reason below. That is what lets a modular guard state its
 status as plainly as one in `app/`. Measured over one build of the fixture's throw corpus when it held 57
-(it holds 135 actions on two controllers now; every one added since depends only on files those already
+(it holds 139 actions on two controllers now; every one added since depends only on files those already
 did, but for the nine whose closures a helper runs, which add `app/Support/Attempts.php` and the helper
 files, and the seventeen that read a reason enum, which add the enums and exception classes they read — none
 re-measured), the analysed-file count is 163 with the read and 163 without, so no recorded walk is discarded; the cost is two
@@ -1100,7 +1100,7 @@ list and the read declines anyway — measured against Symfony's own `ConflictHt
 `__construct` has zero statements — while asking for it primes that file, grows the analysed set and
 discards every walk the replay layer had recorded. That argument is about PRIMING, so it reaches vendor and
 stops there: a primed root is already in the analysed set, its bodies intact, and reading one grows nothing.
-Measured over one build of the fixture app's throw corpus when it held 58 (it holds 135 throw actions now,
+Measured over one build of the fixture app's throw corpus when it held 58 (it holds 139 throw actions now,
 and every one added since depends only on files those already did, but for the nine helper rows and the
 seventeen reason-enum rows, not re-measured), the analysed-file count is the same whether the status reads are scoped to the
 application or to the descend paths — so nothing recorded is discarded — and the wider scope costs one extra live file walk, for an exception class nothing else opened. (The

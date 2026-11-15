@@ -1301,6 +1301,30 @@ class ThrowsController extends Controller
         throw new \App\Exceptions\ExportFaultException(\App\Enums\ExportFault::from(999));
     }
 
+    /** Case 10t''-abort: the same lookup read for the status abort() is handed. */
+    public function enumFromNoCaseAbort(): void
+    {
+        abort(\App\Enums\ExportFault::from(999)->value);
+    }
+
+    /** Case 10t''-message: the same lookup read for the message beside a status written out. */
+    public function enumFromNoCaseMessage(): void
+    {
+        abort(404, \App\Enums\ExportFault::from(999)->name);
+    }
+
+    /** Case 10t''-return: the same lookup read for the status of a returned response. */
+    public function enumFromNoCaseReturn(): JsonResponse
+    {
+        return response()->json(['locked' => true], \App\Enums\ExportFault::from(999)->value);
+    }
+
+    /** Case 10t''-throw: a `throw` written as the construction's argument. */
+    public function throwExpressionArgument(): void
+    {
+        throw new ExportLockedException(423, throw new \LogicException('The export has no lock to report.'));
+    }
+
     /** Case 10t''': a string for an int-backed enum, in a file declaring `strict_types`. */
     public function enumFromString(): void
     {

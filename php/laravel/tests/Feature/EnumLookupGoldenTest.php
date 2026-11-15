@@ -11,14 +11,15 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Workbench\App\Exceptions\ExportFaultException;
 use Workbench\App\Http\Controllers\ExportController;
 
 /**
- * The document an application gets for a refusal whose enum case is looked up with `from()`: once from a
- * value written in the code, and once from one the request chooses. Byte-locked, warm as well as cold; the
- * scripted throws are what the real engine recovers from the fixture app's same two calls, which the last
- * test holds them to.
+ * The document an application gets for a refusal whose enum case is looked up with `from()`: from a value
+ * written in the code, from one no case is backed by, and from one the request chooses. Byte-locked, warm as
+ * well as cold; the scripted throws are what the real engine recovers from the fixture app's same calls,
+ * which the last test holds them to.
  *
  * @return array<string, list<ThrownException>> action → its throws
  */
@@ -30,6 +31,16 @@ function enumLookupThrows(): array
         // 423 backs a case, so `from()` cannot throw the TypeError or the ValueError it declares.
         'lock' => [
             $thrown(ExportFaultException::class, 423, ThrowConfidence::Certain),
+        ],
+        // 999 backs no case, so `from()` always throws its ValueError.
+        'retire' => [
+            $thrown(ExportFaultException::class, null, ThrowConfidence::Certain),
+            $thrown(ValueError::class, 500, ThrowConfidence::Certain),
+        ],
+        // The same lookup read for the message abort() is handed beside its 404.
+        'withdraw' => [
+            $thrown(HttpException::class, 404, ThrowConfidence::Certain),
+            $thrown(ValueError::class, 500, ThrowConfidence::Certain),
         ],
         // A value the request chooses is not matched, so both stand as declared.
         'fail' => [
@@ -56,6 +67,8 @@ function enumLookupRoutes(): callable
 {
     return static function (Router $router): void {
         $router->post('api/exports/{export}/lock', [ExportController::class, 'lock']);
+        $router->post('api/exports/{export}/retire', [ExportController::class, 'retire']);
+        $router->post('api/exports/{export}/withdraw', [ExportController::class, 'withdraw']);
         $router->post('api/exports/{export}/fail/{code}', [ExportController::class, 'fail']);
     };
 }
@@ -93,5 +106,7 @@ it('scripts what the real engine recovers from the fixture app’s same calls', 
         ->and($facts($real->throws))->toBe($facts(enumLookupThrows()[$action]));
 })->with([
     'a value written in the code' => ['lock', 'enumFromStatus'],
+    'a value no case is backed by' => ['retire', 'enumFromNoCase'],
+    'the same, read for a message' => ['withdraw', 'enumFromNoCaseMessage'],
     'a value the request chooses' => ['fail', 'enumFromRuntime'],
 ])->group('fixture');
