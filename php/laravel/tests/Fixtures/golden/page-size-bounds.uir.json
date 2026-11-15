@@ -128,7 +128,7 @@
                 ]
               },
               "type": "integer",
-              "default": 30,
+              "default": 10,
               "maximum": 10,
               "minimum": 1
             }
@@ -258,7 +258,7 @@
                 ]
               },
               "type": "integer",
-              "default": 80,
+              "default": 50,
               "maximum": 50,
               "minimum": 1
             }
@@ -401,7 +401,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "8fa242e1c5718c7b065ba0876203acfed6d1bdad6604f50e3e3a39362b9a03ec"
+      "contentHash": "5e6efacd638828c62854c89609d8b8a05dfa0d532babb117164706257eea153e"
     },
     "generator": {
       "name": "docuccino/laravel",
