@@ -1239,8 +1239,9 @@ a `format` claim about it would be a guess.
 | `mac_address` | An anchored `pattern` for the forms Laravel accepts: six pairs of hex digits joined by `:` or by `-`, or three groups of four joined by `.`. |
 | `hex_color` | An anchored `pattern` for `#` and 3, 4, 6 or 8 hex digits in either case — Laravel's own regex, which takes a final newline the way any regex without `D` does. |
 | `starts_with:INV-` / `ends_with:.pdf` | An anchored `pattern` for a single value; a multi-value set becomes a description ("Must start with one of: …"), since there's no single pattern for it. |
-| `accepted`, `accepted_if` | `boolean` with `const: true` (the `_if` form adds "Must be accepted when …"). |
-| `declined`, `declined_if` | `boolean` with `const: false`. |
+| `accepted` | `boolean` with `const: true`. Laravel also takes the spellings a form sends, `"yes"`, `"on"`, `1`, `"1"` and `"true"`, which aren't published. |
+| `declined` | `boolean` with `const: false`, and Laravel also takes `"no"`, `"off"`, `0`, `"0"` and `"false"`. |
+| `accepted_if:kind,business`, `declined_if:kind,business` | A note, "Must be accepted when kind is business." (or "declined"), and nothing else. Until `kind` is one of the values listed, Laravel takes any value there, or none, and a schema can't say "until". A type rule beside it, such as `boolean`, still publishes. |
 | `list` | `array` |
 | `distinct` on `tags.*` | `uniqueItems: true` on `tags`, where the items are strings, numbers or booleans. Nothing where an item may be null, an array or an object, since Laravel lets those repeat, or a number under `distinct:strict`, which takes `1` beside `1.0`. `distinct:ignore_case` also refuses a repeat in another case, which no keyword says. |
 | `distinct` anywhere else | Nothing. On `tags` Laravel compares the value only with itself, and on `lines.*.sku` it compares skus across the objects in `lines`, which JSON Schema has no keyword for. |

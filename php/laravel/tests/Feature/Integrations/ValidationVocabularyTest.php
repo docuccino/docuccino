@@ -270,11 +270,18 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'after' => [[['after', ['2024-01-01']]], ['description' => 'Must be a date after 2024-01-01.', 'format' => 'date', 'type' => 'string']],
     'after_or_equal (date-time target)' => [[['after_or_equal', ['2024-01-01 09:00:00']]], ['description' => 'Must be a date on or after 2024-01-01 09:00:00.', 'format' => 'date-time', 'type' => 'string']],
 
-    // BooleanConstRuleTransformer — accepted/declined fix a boolean const; the _if forms add a condition.
+    // BooleanConstRuleTransformer — accepted/declined fix a boolean const. The _if forms take any value, or
+    // none, while the other field holds none of the listed values, so they state no type or const: only the
+    // condition, which names every value Laravel lists after the field.
     'accepted' => [[['accepted']], ['const' => true, 'type' => 'boolean']],
     'declined' => [[['declined']], ['const' => false, 'type' => 'boolean']],
-    'accepted_if' => [[['accepted_if', ['terms', 'yes']]], ['const' => true, 'description' => 'Must be accepted when terms is yes.', 'type' => 'boolean']],
-    'declined_if' => [[['declined_if', ['spam', '1']]], ['const' => false, 'description' => 'Must be declined when spam is 1.', 'type' => 'boolean']],
+    'accepted_if' => [[['accepted_if', ['terms', 'yes']]], ['description' => 'Must be accepted when terms is yes.']],
+    'declined_if' => [[['declined_if', ['spam', '1']]], ['description' => 'Must be declined when spam is 1.']],
+    'accepted_if (several values)' => [[['accepted_if', ['kind', 'business', 'charity']]], ['description' => 'Must be accepted when kind is business or charity.']],
+    'declined_if (several values)' => [[['declined_if', ['kind', 'business', 'charity', 'trust']]], ['description' => 'Must be declined when kind is business or charity or trust.']],
+    'accepted_if beside boolean' => [[['boolean'], ['accepted_if', ['kind', 'business']]], ['description' => 'Must be accepted when kind is business.', 'example' => true, 'type' => 'boolean']],
+    // Degradation: Laravel refuses to run one with no value to compare, so there is no condition to name.
+    'accepted_if (no value)' => [[['accepted_if', ['kind']]], []],
 
     // NotInRuleTransformer — the mirror of `in`: not: {enum}. It excludes values and says nothing about the
     // rest, so it states no type of its own (the agreement test below holds that to Laravel).
