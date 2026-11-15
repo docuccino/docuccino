@@ -71,19 +71,20 @@ tracks — so a class rename isn't reported as a removal plus an addition — wi
 [`#[SchemaId]`](/laravel/reference/attributes/#schemaid).
 
 **Wrapping.** A top-level resource is wrapped under `data` (Laravel's default); nested resources are
-not, so they can be shared by reference. `JsonResource::withoutWrapping()` is a global runtime call —
-made in a service provider, not on the class — so Docuccino can't see it, and `api_resources.wrap` is
-the escape hatch:
+not, so they can be shared by reference. The wrap key is read from your booted application, so a
+`JsonResource::withoutWrapping()` or `JsonResource::wrap('result')` call in a service provider is
+documented the way Laravel sends it, with no config. To document one wrapping for a whole document,
+set `api_resources.wrap`:
 
 | `wrap` | Result |
 | --- | --- |
-| omit (default) | Each resource's own `$wrap` (`data` unless overridden). |
+| omit (default) | The `$wrap` Laravel uses: the resource's own, or what your service provider set (`data` unless changed). |
 | `false` | Never wrap. |
 | `true` | Wrap under `data`. |
 | `'result'` (any string) | Wrap under that key. |
 
-Spatie Data classes are the exception: there, `withoutWrapping()` is written **on the class**, so it's
-read statically and needs no config — see
+Spatie Data classes follow laravel-data's own wrapping instead, including a `withoutWrapping()`
+written on the class — see
 [classes that unwrap themselves](/laravel/packages/spatie-data/#classes-that-unwrap-themselves).
 
 A resource whose `$forceWrapping` is on is wrapped even when its `toArray()` already returns the wrap
