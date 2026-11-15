@@ -174,6 +174,9 @@ it('says nothing about a column it cannot read', function (string $path, string 
     'an enum binding' => ['/api/binding-seasons/{season}', 'season'],
     // The model resolves the binding itself — a hashid trait decoding the segment — so the key it would
     // name by default, and a column the route names, are both columns the server may never query.
+    // `Route::model()` with a fallback: whatever the key misses, the application's closure answers —
+    // values the key's type refuses, and a default that never 404s.
+    'a Route::model() binding with a fallback' => ['/api/binding-fallback/{fallback}', 'fallback'],
     'a model that resolves its bindings itself' => ['/api/binding-vouchers/{voucher}', 'voucher'],
     'a model that resolves its bindings itself, under a column the route names' => ['/api/binding-voucher-codes/{voucher}', 'voucher'],
     'a model that narrows its binding query' => ['/api/binding-coupons/{coupon}', 'coupon'],

@@ -34,7 +34,8 @@ Every `{param}` in a route's URI becomes a path parameter. Docuccino types it fr
   hashid trait overriding `resolveRouteBinding()` and `getRouteKey()`, say — whatever column the route
   names.
 - A segment bound with [`Route::model()`](https://laravel.com/docs/routing#explicit-binding) is typed the
-  same way, from the model you handed it, whatever the action's signature says.
+  same way, from the model you handed it, whatever the action's signature says. Give it a fallback
+  callback and it is a plain `string`: the callback answers whatever the key doesn't find.
 - A binding that names its own column — `{post:slug}` — is typed from **that** column instead: its
   `$casts` entry, or the `@property` type the analyzer recovered for it.
 - An **unbound** segment is a required `string`, narrowed by any constraint the route puts on it —
@@ -186,8 +187,8 @@ decides at run time, a model that overrides how a binding resolves (`resolveRout
 `resolveChildRouteBinding()` for the children scoped to it), and a segment with a binder of the
 application's own ([`Route::bind`](https://laravel.com/docs/routing#explicit-binding)) all decide it in
 code that runs with the request. The framework's own `HasUuids` and `HasUlids`, which check the value
-before the usual lookup, are not among them. A `Route::model()` binding is not one of those — it resolves on the model's route key,
-and ignores a column the route names, so `key` says the route key.
+before the usual lookup, are not among them. A `Route::model()` binding without a fallback is not one of those — it resolves on the model's route
+key, and ignores a column the route names, so `key` says the route key.
 The parameter then falls back to a plain `string` and says nothing about the column, because naming
 the wrong one would send every client to fetch by the wrong attribute. Pin it with
 [`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) where you know the answer.

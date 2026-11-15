@@ -89,7 +89,8 @@ final class RouteBindingResolution
      * binder itself ({@see RouteBinding::forModel()}), around the class it was handed, and it resolves the
      * segment through the model's own route key — the route's `{param:column}` never reaches it. Read off
      * the closure the framework built, so a binder an application wrote that merely resembles it is not
-     * mistaken for one.
+     * mistaken for one. One given a fallback callback is the application's binder as much as the
+     * framework's: the fallback answers whatever the key does not find, so it stays custom.
      *
      * @param  list<string>  $pathParameters
      * @return array<string, string>
@@ -105,9 +106,12 @@ final class RouteBindingResolution
             }
 
             $function = new ReflectionFunction($callback);
-            $class = $function->getClosureUsedVariables()['class'] ?? null;
+            $used = $function->getClosureUsedVariables();
+            $class = $used['class'] ?? null;
 
-            if ($function->getClosureScopeClass()?->getName() === RouteBinding::class && is_string($class) && class_exists($class)) {
+            // A fallback the application passed decides in a closure of its own what a miss resolves to.
+            if ($function->getClosureScopeClass()?->getName() === RouteBinding::class && is_string($class) && class_exists($class)
+                && array_key_exists('callback', $used) && $used['callback'] === null) {
                 $models[$name] = $class;
             }
         }
