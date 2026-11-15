@@ -21,7 +21,8 @@ use Docuccino\Core\Provenance\ProvenanceRecord;
  * only by an operation on its own collection or its own path, so the parent it must belong to is the one
  * in the request. Nothing is matched by name, and a target whose operationId is not the document's only
  * one is not linked, since that is all a link can name it by. Nor is an `x-internal` target from a public
- * source: filters cut the target from public output and would leave the link pointing at nothing.
+ * source: filters cut the target from public output and would leave the link pointing at nothing. One
+ * response carries at most {@see MOST_DERIVED} derived links, the rest reported.
  *
  * A declared link is checked against the document and reported where it cannot be written: an operation
  * the document does not publish, a status it does not document, a parameter the target does not declare,
@@ -38,6 +39,14 @@ final class ResponseLinks
     private const string SIGNATURE = '/^([A-Za-z]+)\s+(\S+)$/';
 
     private const string QUALIFIED = '/^(path|query|header|cookie)\.(.+)$/';
+
+    /**
+     * The most derived links one response carries. A model's own routes are four (show, put, patch,
+     * destroy) and each collection under it adds two, so this covers a model with twenty-odd collections
+     * and actions of its own, past what a reader follows from one response. Without it, N operations
+     * sharing one model write N² links; with it, at most this many times N.
+     */
+    private const int MOST_DERIVED = 50;
 
     /**
      * @param  array<string, mixed>  $doc
@@ -61,6 +70,12 @@ final class ResponseLinks
             }
 
             foreach (self::derived($signature, $site, $operation, $facts, $sites, $doc) as $status => $byName) {
+                if (count($byName) > self::MOST_DERIVED) {
+                    ksort($byName, SORT_STRING);
+                    $diagnostics[] = self::truncated($signature, (string) $status, count($byName));
+                    $byName = array_slice($byName, 0, self::MOST_DERIVED, true);
+                }
+
                 foreach ($byName as $name => $link) {
                     $links[$signature][$status][$name] = $link;
                 }
@@ -591,6 +606,17 @@ final class ResponseLinks
             source: $declared->source,
             routeSignature: $signature,
             help: 'Point at a member the response schema describes, or document the member.',
+        );
+    }
+
+    private static function truncated(string $signature, string $status, int $proved): Diagnostic
+    {
+        return new Diagnostic(
+            severity: Severity::Info,
+            code: 'response-link.truncated',
+            message: sprintf('The %s response leads to %d operations by links the code proves, more than the %d one response carries, so the first %d by name were written.', $status, $proved, self::MOST_DERIVED, self::MOST_DERIVED),
+            routeSignature: $signature,
+            help: 'Nothing, unless one you want was left out: declare it with #[ResponseLink], which is always written.',
         );
     }
 

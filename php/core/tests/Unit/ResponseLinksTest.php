@@ -184,6 +184,49 @@ it('does not lead a public operation to an internal one unless declared', functi
         ->and(array_keys($out['paths']['/posts/{post}/audit']['get']['responses']['200']['links']))->toBe(['posts.reindex', 'posts.show']);
 });
 
+/**
+ * Every operation that binds and returns one model links to every other, so N of them would write N²
+ * links: a document that grows past use long before a reader follows the fiftieth. One response carries
+ * fifty, the first by name, and says the rest were left out; a declared link is the author's and is
+ * always written.
+ */
+it('writes at most fifty derived links on one response, and says when it left some out', function (): void {
+    $build = function (int $count): array {
+        $operations = $facts = [];
+        for ($i = 0; $i < $count; $i++) {
+            $signature = sprintf('GET /r%02d/{post}', $i);
+            $operations[$signature] = ['operationId' => sprintf('r%02d', $i)];
+            $facts[$signature] = new OperationLinks(takes: ['post' => $this->post], gives: [($this->gives)()]);
+        }
+        $facts['GET /r00/{post}'] = new OperationLinks(
+            takes: ['post' => $this->post],
+            gives: [($this->gives)()],
+            declared: [new DeclaredLink(sprintf('r%02d', $count - 1), ['post' => '$response.body#/data/id'], name: 'Declared')],
+        );
+
+        return ResponseLinks::write(($this->doc)($operations), $facts);
+    };
+
+    // Fifty others to lead to: all written, nothing said.
+    [$out, $diagnostics] = $build(51);
+    expect($out['paths']['/r50/{post}']['get']['responses']['200']['links'])->toHaveCount(50)
+        ->and($diagnostics)->toBe([]);
+
+    // Fifty-one: the first fifty by name are written, and each response says what it left out.
+    [$out, $diagnostics] = $build(52);
+    $links = static fn (string $path): array => array_keys($out['paths'][$path]['get']['responses']['200']['links']);
+
+    expect($links('/r51/{post}'))->toBe(array_map(static fn (int $i): string => sprintf('r%02d', $i), range(0, 49)))
+        ->and($links('/r00/{post}'))->toHaveCount(51)
+        ->and($links('/r00/{post}'))->toContain('Declared')
+        ->and($links('/r00/{post}'))->not->toContain('r51')
+        ->and($out['paths']['/r00/{post}']['get']['responses']['200']['links']['Declared']['operationId'])->toBe('r51')
+        ->and($diagnostics)->toHaveCount(52)
+        ->and(array_unique(array_map(static fn ($d): string => $d->code.' '.$d->severity->value, $diagnostics)))->toBe(['response-link.truncated info'])
+        ->and($diagnostics[0]->routeSignature)->toBe('GET /r00/{post}')
+        ->and($diagnostics[0]->message)->toContain('leads to 51 operations');
+});
+
 it('does not link to an operation its operationId cannot name alone', function (): void {
     $doc = ($this->doc)([
         'POST /posts' => ['operationId' => 'posts.store'],

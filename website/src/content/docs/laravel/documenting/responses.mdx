@@ -950,7 +950,10 @@ in [Diagnostics](/laravel/reference/diagnostics/#routes-operations-and-names) na
 A link only names what the document publishes. An older [API version](/laravel/guides/api-versioning/)
 links to the operations and members that version has. A public operation never links on its own to one
 marked [`#[Internal]`](/laravel/reference/attributes/#internal), because the tools that strip internal
-operations would leave the link pointing at nothing.
+operations would leave the link pointing at nothing. One response carries at most 50 of the links
+Docuccino works out, and the
+[`response-link.truncated`](/laravel/reference/diagnostics/#response-links) notice says when it leaves
+some out.
 
 Where you know a link the code can't show — a plain array, a value a route takes under a name of its own
 — declare it with [`#[ResponseLink]`](/laravel/reference/attributes/#responselink):
