@@ -81,6 +81,63 @@
                 }
               }
             }
+          },
+          "404": {
+            "x-docuccino": {
+              "id": "res:v1:ojpwxmyzwxdiilin",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "component",
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/FunctionHelperController.php",
+                    "line": 31,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\FunctionHelperController::globalAbort"
+                  }
+                }
+              ],
+              "facts": {
+                "component": "NotFound"
+              }
+            },
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "fallback",
+                        "layer": "fallback",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/FunctionHelperController.php",
+                          "line": 31,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\FunctionHelperController::globalAbort"
+                        }
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -160,6 +217,51 @@
                 }
               }
             }
+          },
+          "429": {
+            "x-docuccino": {
+              "id": "res:v1:g3nuerh6ac36z7cv",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "slow down"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -188,7 +290,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "423": {
+                "id": "res:v1:upehwwcjojo4fary",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/FunctionHelperController.php",
+                      "line": 40,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\FunctionHelperController::globalCustom"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.helped.globalCustom",
         "tags": [
@@ -239,6 +363,9 @@
                 }
               }
             }
+          },
+          "423": {
+            "$ref": "#/components/responses/Locked"
           }
         }
       }
@@ -274,9 +401,9 @@
           "FunctionHelper"
         ],
         "responses": {
-          "200": {
+          "410": {
             "x-docuccino": {
-              "id": "res:v1:qsdlxysxpelnfufy",
+              "id": "res:v1:q7lk5xsgj3uhtvsw",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -287,10 +414,35 @@
                 }
               ]
             },
-            "description": "OK",
+            "description": "Gone",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "Gone"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
               }
             }
           }
@@ -321,32 +473,31 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "410": {
+                "id": "res:v1:js23yuqjxfy7deus",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "description"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.helped.globalGone",
         "tags": [
           "FunctionHelper"
         ],
         "responses": {
-          "200": {
-            "x-docuccino": {
-              "id": "res:v1:wyh4aihn7kzcjhfp",
-              "provenance": [
-                {
-                  "producer": "fallback",
-                  "layer": "fallback",
-                  "fields": [
-                    "description"
-                  ]
-                }
-              ]
-            },
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+          "410": {
+            "$ref": "#/components/responses/Error410"
           }
         }
       }
@@ -422,6 +573,63 @@
                   },
                   "required": [
                     "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "x-docuccino": {
+              "id": "res:v1:bw4zknk4a242bivn",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "component",
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/FunctionHelperController.php",
+                    "line": 22,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\FunctionHelperController::globalHttp"
+                  }
+                }
+              ],
+              "facts": {
+                "component": "Conflict"
+              }
+            },
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "fallback",
+                        "layer": "fallback",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/FunctionHelperController.php",
+                          "line": 22,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\FunctionHelperController::globalHttp"
+                        }
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
                   ]
                 }
               }
@@ -505,6 +713,73 @@
                 }
               }
             }
+          },
+          "422": {
+            "x-docuccino": {
+              "id": "res:v1:4qkr5gcsfdrcvihg",
+              "provenance": [
+                {
+                  "producer": "integration:framework-errors",
+                  "layer": "integration",
+                  "fields": [
+                    "component",
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/FunctionHelperController.php",
+                    "line": 49,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\FunctionHelperController::globalValidation"
+                  }
+                }
+              ],
+              "facts": {
+                "component": "UnprocessableEntity"
+              }
+            },
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "integration:framework-errors",
+                        "layer": "integration",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/FunctionHelperController.php",
+                          "line": 49,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\FunctionHelperController::globalValidation"
+                        }
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "errors": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message",
+                    "errors"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -540,9 +815,9 @@
           "FunctionHelper"
         ],
         "responses": {
-          "200": {
+          "423": {
             "x-docuccino": {
-              "id": "res:v1:paie2gxxbcbi73ff",
+              "id": "res:v1:u67chtp7tu5cb7p2",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -553,10 +828,35 @@
                 }
               ]
             },
-            "description": "OK",
+            "description": "Locked",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "Locked"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
               }
             }
           }
@@ -587,32 +887,31 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "410": {
+                "id": "res:v1:36wro2zrylw7mtoi",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "description"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.helped.namespacedGone",
         "tags": [
           "FunctionHelper"
         ],
         "responses": {
-          "200": {
-            "x-docuccino": {
-              "id": "res:v1:7cvxrz4popoaumst",
-              "provenance": [
-                {
-                  "producer": "fallback",
-                  "layer": "fallback",
-                  "fields": [
-                    "description"
-                  ]
-                }
-              ]
-            },
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+          "410": {
+            "$ref": "#/components/responses/Error410"
           }
         }
       }
@@ -641,7 +940,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "423": {
+                "id": "res:v1:g2s633muwxwfmgir",
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/FunctionHelperController.php",
+                      "line": 77,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\FunctionHelperController::namespacedNested"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.helped.namespacedNested",
         "tags": [
@@ -692,6 +1013,64 @@
                 }
               }
             }
+          },
+          "423": {
+            "$ref": "#/components/responses/Locked"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error410": {
+        "x-docuccino": {
+          "id": "sch:v1:atrsyqtws65pd5to"
+        },
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "const": "gone"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "Locked": {
+        "x-docuccino": {
+          "id": "sch:v1:srgmu3ngad7ic3wz"
+        },
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      }
+    },
+    "responses": {
+      "Error410": {
+        "description": "Gone",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error410"
+            }
+          }
+        }
+      },
+      "Locked": {
+        "description": "Locked",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Locked"
+            }
           }
         }
       }
@@ -701,7 +1080,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "9ad2c92ee63569b55d926d8ec752d919a66875cd14e831ec0f96cbda3899589c"
+      "contentHash": "e08287a65a98139432dc971ab5a7de8fbed4722d919ee5a4ca2e4ace3fa8dcd8"
     },
     "generator": {
       "name": "docuccino/laravel",
