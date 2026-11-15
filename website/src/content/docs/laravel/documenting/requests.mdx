@@ -189,6 +189,20 @@ an OpenAPI `format`, a description, or an example, or give an unbound segment a 
 public function show(Invoice $invoice): InvoiceResource { /* … */ }
 ```
 
+A description you write leads, and what the route settles stays beneath it. The binding's sentences and
+an optional segment's "Leaving it off…" are true whatever you call the parameter, so your prose doesn't
+replace them:
+
+```yaml
+- name: invoice
+  in: path
+  required: true
+  description: |-
+    Invoice public id
+
+    Matched on the resource's `id`.
+```
+
 ## Fallback routes
 
 `Route::fallback()` answers whatever no other route matched, so its URI is a placeholder rather than a

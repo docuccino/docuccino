@@ -95,17 +95,6 @@ guard stays unambiguous.
 A route carrying several of these middleware gets one `x-permissions` entry per middleware, in route
 order, and one description line each separated by a blank line.
 
-<Aside type="caution" title="Your prose wins, so `x-permissions` is the reliable signal">
-The description line is contributed at the integration layer, which sits *below* docblocks and
-attributes in [precedence](/laravel/documenting/#how-contributions-combine). So if the operation's
-description already comes from somewhere higher — the paragraph after your docblock's summary line, or
-an attribute — that prose wins and the generated requirement line doesn't appear. `x-permissions` is
-emitted either way.
-
-Want the requirement in the human-readable description of an already-documented operation? Write it
-into the docblock yourself. Want it machine-readable everywhere? You already have it.
-</Aside>
-
 An operation marked [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) is skipped
 entirely: it documents no security requirement, so an authorization line beside `security: []` would
 contradict itself.

@@ -544,6 +544,7 @@ it('freezes the drafts an extension writes through at the methods they mean to p
             'validatesInput',
         ],
         ParameterDraft::class => [
+            'declareDescriptionNote',
             'declareExamples',
             'key',
             'keyFor',

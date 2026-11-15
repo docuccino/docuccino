@@ -54,11 +54,12 @@ use ReflectionEnum;
  *
  * A bound parameter also carries what the route and the model settle about how it RESOLVES, which is
  * the half a consumer cannot read off the path: the column the value is matched on, the parent it is
- * scoped to, and whether soft-deleted records resolve. Each goes out twice — as a sentence of the
- * description and as a member of `x-docuccino.facts.routeBinding` — because a client generator reads
- * the fact and a person reads the sentence, and a fact stated only in prose is one no generator can
- * act on. Nothing about the codebase reaches either: the model is not named, because a consumer
- * cannot see it and could do nothing with it if they could.
+ * scoped to, and whether soft-deleted records resolve. Each goes out twice — as a sentence beneath
+ * the description and as a member of `x-docuccino.facts.routeBinding` — because a client generator
+ * reads the fact and a person reads the sentence, and a fact stated only in prose is one no generator
+ * can act on. The sentences are notes rather than the description, so one the author writes keeps
+ * them. Nothing about the codebase reaches either: the model is not named, because a consumer cannot
+ * see it and could do nothing with it if they could.
  *
  * What is NOT settled is left out rather than guessed. A column comes from the route where the route
  * names one (`{post:slug}`) and from the bound model's route key otherwise — but only while nothing
@@ -123,8 +124,9 @@ final class PathParametersExtension implements OperationExtension
                 $default = $isBound || self::declaresType($context, $name) ? null : ($context->pathParameterDefaults[$name] ?? null);
                 if ($default !== null) {
                     $parameter->schema()->set('default', $default, Contribution::inference());
-                    // Which path this one then answers exactly as, which no schema keyword can say.
-                    $parameter->setDescription(sprintf('Leaving it off is the same as sending `%s`.', $default), $contribution);
+                    // Which path this one then answers exactly as, which no schema keyword can say. True
+                    // under any description an author writes, so it goes beneath theirs.
+                    $parameter->declareDescriptionNote(sprintf('Leaving it off is the same as sending `%s`.', $default), $contribution);
                 }
 
                 if ($isBound && $constraint === null && ! self::declaresType($context, $name)) {
@@ -244,7 +246,7 @@ final class PathParametersExtension implements OperationExtension
         }
 
         if ($notes !== []) {
-            $parameter->setDescription(implode(' ', $notes), $contribution);
+            $parameter->declareDescriptionNote(implode(' ', $notes), $contribution);
         }
 
         if ($facts !== []) {

@@ -21,6 +21,8 @@ final class ParameterDraft
 
     private readonly SchemaDraft $schema;
 
+    private readonly DescriptionNotes $descriptionNotes;
+
     /**
      * Additive semantic facts an integration records under this parameter's `x-docuccino.facts`.
      * Facts stay stable whatever the representation, and nothing contests them, so they skip the
@@ -46,11 +48,21 @@ final class ParameterDraft
     ) {
         $this->guard = new PatchGuard;
         $this->schema = new SchemaDraft;
+        $this->descriptionNotes = new DescriptionNotes;
     }
 
     public function setDescription(?string $value, Contribution $by): PatchResult
     {
         return $this->guard->apply('description', $value, $by);
+    }
+
+    /**
+     * Add a sentence beneath whatever description wins, such as how a bound segment resolves, rather than
+     * contesting the description itself ({@see DescriptionNotes}).
+     */
+    public function declareDescriptionNote(string $note, Contribution $by): void
+    {
+        $this->descriptionNotes->declare($note, $by);
     }
 
     public function setRequired(?bool $value, Contribution $by): PatchResult
@@ -149,7 +161,7 @@ final class ParameterDraft
     {
         $resolved = $this->guard->resolved();
 
-        $description = Hydrate::stringOrNull($resolved['description'] ?? null);
+        $description = $this->descriptionNotes->joinedTo(Hydrate::stringOrNull($resolved['description'] ?? null));
         $required = Hydrate::boolOrNull($resolved['required'] ?? null);
         $deprecated = Hydrate::boolOrNull($resolved['deprecated'] ?? null);
 
@@ -186,7 +198,7 @@ final class ParameterDraft
 
         $docuccino = new NodeExtension(
             id: $this->id,
-            provenance: $this->guard->provenance($derived, array_keys($derived)),
+            provenance: $this->guard->provenance($derived + $this->descriptionNotes->provenance(), array_keys($derived)),
             rest: $this->facts === [] ? [] : ['facts' => $this->facts],
         );
 
