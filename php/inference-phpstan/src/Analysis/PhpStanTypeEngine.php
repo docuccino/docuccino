@@ -52,6 +52,7 @@ use PhpParser\Node\Expr\Variable;
 use PHPStan\Analyser\Scope;
 use PHPStan\Node\ClosureReturnStatementsNode;
 use PHPStan\Node\InArrowFunctionNode;
+use PHPStan\Node\MethodReturnStatementsNode;
 use PHPStan\Type\ObjectType;
 use Throwable;
 
@@ -112,6 +113,16 @@ final class PhpStanTypeEngine implements TypeEngine
     private ?ClassBodies $classBodies = null;
 
     private ?CaseStatus $caseStatus = null;
+
+    private ?CalleeResolver $callees = null;
+
+    /**
+     * The helpers a narrowed harvest is inside, outermost first: how deep it has followed the exception, and
+     * which helper handing it back on would never end ({@see forwarded()}).
+     *
+     * @var list<string>
+     */
+    private array $forwarding = [];
 
     /**
      * The publishable form of a ref's label. Both {@see ActionRef::symbol()} and
@@ -445,6 +456,7 @@ final class PhpStanTypeEngine implements TypeEngine
             dependencyFiles: [
                 $callable->file,
                 ...($entryFile === null ? [] : [$entryFile]),
+                ...$narrowed['files'],
                 ...$returned['files'],
                 ...$this->drainRefinerFiles(),
             ],
@@ -519,9 +531,13 @@ final class PhpStanTypeEngine implements TypeEngine
      * comes back, in source order, each carrying the parameter it returns unchanged and the literal
      * parameter calls and `instanceof` tests its scope proves ({@see ParameterUse}).
      *
-     * `sites` are the harvested sites behind `returns`, for a reader that needs the expression itself.
+     * A site handing the narrowed exception on to a project helper answers with what that helper answers
+     * for it ({@see forwarded()}), so the narrowing reaches a `match` written inside the helper.
      *
-     * @return array{returns: list<ReturnSite>, diagnostics: list<Diagnostic>, sites: list<NarrowedSite>}
+     * `sites` are the harvested sites behind `returns`, for a reader that needs the expression itself, and
+     * `files` the helpers' files those answers were read in.
+     *
+     * @return array{returns: list<ReturnSite>, diagnostics: list<Diagnostic>, sites: list<NarrowedSite>, files: list<string>}
      */
     private function harvestNarrowed(CallableBody $body, CallableRef $callable): array
     {
@@ -562,7 +578,20 @@ final class PhpStanTypeEngine implements TypeEngine
         }
 
         if ($subject === null || $narrowTo === null) {
-            return ['returns' => $this->returnSites($sites, $callable), 'diagnostics' => [], 'sites' => $sites];
+            return ['returns' => $this->returnSites($sites, $callable), 'diagnostics' => [], 'sites' => $sites, 'files' => []];
+        }
+
+        $forwardedDiagnostics = [];
+        $forwardedFiles = [];
+        if (! $every && $subject instanceof Variable) {
+            foreach ($sites as $index => $site) {
+                $forwarded = $this->forwarded($site, $subject, $narrowTo, $body);
+                if ($forwarded !== null) {
+                    $sites[$index] = $forwarded['site'];
+                    $forwardedDiagnostics = [...$forwardedDiagnostics, ...$forwarded['diagnostics']];
+                    $forwardedFiles = [...$forwardedFiles, ...$forwarded['files']];
+                }
+            }
         }
 
         // Control-flow order, then every arm the narrowed type satisfies (empty guard = default branch).
@@ -588,16 +617,126 @@ final class PhpStanTypeEngine implements TypeEngine
                 }
             }
 
-            return ['returns' => $this->returnSites($admitted, $callable), 'diagnostics' => [], 'sites' => $admitted];
+            return ['returns' => $this->returnSites($admitted, $callable), 'diagnostics' => [], 'sites' => $admitted, 'files' => []];
         }
 
         $chosen = $this->chooseNarrowedSite($satisfiable, $narrowTo);
 
         return [
             'returns' => $this->returnSites($chosen === null ? [] : [$chosen], $callable),
-            'diagnostics' => $this->narrowingAmbiguity($satisfiable, $chosen, $narrowTo, $callable),
+            'diagnostics' => [...$forwardedDiagnostics, ...$this->narrowingAmbiguity($satisfiable, $chosen, $narrowTo, $callable)],
             'sites' => $chosen === null ? [] : [$chosen],
+            'files' => $forwardedFiles,
         ];
+    }
+
+    /**
+     * A site handing the narrowed exception on to a project helper — `return Problems::for($e);`, or
+     * `->toResponse()` on what such a helper builds — answers with what that helper answers for the same
+     * exception: its own return sites, harvested narrowed on the parameter the exception lands in and chosen
+     * by the same rules. The site keeps its own position and guard, which decide whether it is reached at
+     * all, and the helper's `#[ErrorComponent]` names the body over any below it, as a descended hop's does.
+     *
+     * Null, and the site stands as it was read, where it hands nothing on — the exception rebound first, or
+     * passed anywhere but whole to one parameter — where the helper is not the application's, where the walk
+     * is past its depth or back inside a helper it is already in, or where the helper reaches nothing for the
+     * type.
+     *
+     * @param  NarrowedSite  $site
+     * @return array{site: NarrowedSite, diagnostics: list<Diagnostic>, files: list<string>}|null
+     */
+    private function forwarded(array $site, Variable $subject, string $narrowTo, CallableBody $body): ?array
+    {
+        $expr = $site['expr'];
+        $scope = $site['foldScope'];
+        $name = $subject->name;
+        if ($expr === null || ! is_string($name) || ParameterUse::heldAt($expr, [$name], $body->nodes) === []) {
+            return null;
+        }
+
+        $call = $this->renderedReceiver($expr, $scope) ?? $expr;
+        if ((! $call instanceof Node\Expr\MethodCall && ! $call instanceof Node\Expr\StaticCall && ! $call instanceof Node\Expr\FuncCall)
+            || $call->isFirstClassCallable()
+        ) {
+            return null;
+        }
+
+        $callee = ($this->callees ??= new CalleeResolver($this->adapter->reflectionProvider()))->resolve($call, $scope);
+        if ($callee === null
+            || ! $this->appFilter->isProjectFile($callee->file)
+            || in_array($callee->key(), $this->forwarding, true)
+            || count($this->forwarding) >= $this->config->traceDepth
+        ) {
+            return null;
+        }
+
+        $parameter = HeldArguments::receiving(HeldArguments::parameters($callee->parameters($this->adapter->reflectionProvider())), $call->getArgs(), $name);
+        $node = $parameter === null ? null : $this->fileAnalyzer->callee($callee);
+        if ($parameter === null || $node === null) {
+            return null;
+        }
+        $calleeBody = $node instanceof MethodReturnStatementsNode ? CallableBody::ofMethod($node) : CallableBody::ofFunction($node);
+
+        $this->forwarding[] = $callee->key();
+        try {
+            $inner = $this->harvestNarrowed($calleeBody, new CallableRef($callee->file, $callee->class, $callee->method, narrowParameter: $parameter, narrowType: $narrowTo));
+        } finally {
+            array_pop($this->forwarding);
+        }
+
+        $chosen = $inner['sites'][0] ?? null;
+        if ($chosen === null) {
+            return null;
+        }
+
+        $files = [$callee->file, $callee->writtenIn(), ...$inner['files']];
+        $component = $chosen['component'];
+        if ($callee->class !== null) {
+            $written = $this->declarations()->fileFor($callee->class, $callee->method);
+            if ($written !== null) {
+                $files[] = $written;
+            }
+            if (! $chosen['delegates']) {
+                $component = $this->declarations()->on($callee->class, $callee->method) ?? $component;
+            }
+        }
+
+        return [
+            'site' => [
+                'type' => $chosen['type'],
+                'component' => $component,
+                'delegates' => $chosen['delegates'],
+                'expr' => $chosen['expr'],
+                'foldScope' => $chosen['foldScope'],
+            ] + $site,
+            'diagnostics' => $inner['diagnostics'],
+            'files' => $files,
+        ];
+    }
+
+    /**
+     * The object a `->toResponse()` call renders, where the application wrote that method: sending the
+     * object is the same response as returning it, so the object is what was handed on. Null for any other
+     * expression.
+     */
+    private function renderedReceiver(Node\Expr $expr, Scope $scope): ?Node\Expr
+    {
+        if (! $expr instanceof Node\Expr\MethodCall
+            || ! $expr->name instanceof Node\Identifier
+            || $expr->name->toLowerString() !== strtolower(ResponsableRendering::TO_RESPONSE)
+        ) {
+            return null;
+        }
+
+        $classes = $scope->getType($expr->var)->getObjectClassNames();
+        $provider = $this->adapter->reflectionProvider();
+        if (count($classes) !== 1 || ! $provider->hasClass($classes[0])) {
+            return null;
+        }
+
+        $owner = ResponsableRendering::of($provider->getClass($classes[0])->getNativeReflection(), ResponsableRendering::TO_RESPONSE, $this->appFilter->isProjectFile(...));
+
+        return $owner === ResponsableRendering::APPLICATION ? $expr->var : null;
     }
 
     /**

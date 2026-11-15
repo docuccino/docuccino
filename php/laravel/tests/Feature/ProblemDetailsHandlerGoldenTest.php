@@ -5,10 +5,12 @@ declare(strict_types=1);
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\CallableRef;
+use Docuccino\Core\Inference\DType\ArrayShapeField;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Core\Inference\DType\ListT;
 use Docuccino\Core\Inference\DType\LiteralT;
-use Docuccino\Core\Inference\DType\MapT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\ReturnSite;
@@ -19,6 +21,7 @@ use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 use Docuccino\Laravel\Integrations\InferredHandler\ReceivedException;
+use Docuccino\Laravel\Testing\ApiContract;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Contracts\Debug\ExceptionHandler;
@@ -54,14 +57,41 @@ function problemDetailsThrows(): array
     ];
 }
 
-/** What the callback is read to answer each thrown class with. */
+/**
+ * What the callback is read to answer each thrown class with: the problem the helper's arm builds for it,
+ * its body and status read with each property holding what the arm built it with. The problem a
+ * `ProblemException` carries was chosen where it was thrown, so nothing is read for it.
+ */
 function problemDetailsResponse(string $thrown): DType
 {
-    return new ClassT('Illuminate\\Http\\JsonResponse', [
-        new MapT(ScalarT::string(), new UnknownT('mixed')),
-        new UnknownT('status not folded'),
+    $problem = static fn (DType $type, string $title, DType $status, DType $detail, array $more = []): ClassT => new ClassT('Illuminate\\Http\\JsonResponse', [
+        new ArrayShapeT([
+            new ArrayShapeField('type', $type),
+            new ArrayShapeField('title', new LiteralT($title)),
+            new ArrayShapeField('status', $status),
+            new ArrayShapeField('detail', $detail),
+            new ArrayShapeField('instance', ScalarT::string()),
+            ...$more,
+        ]),
+        $status instanceof LiteralT ? $status : new UnknownT('status not folded'),
         new LiteralT('application/problem+json'),
     ]);
+    $blank = new LiteralT('about:blank');
+
+    return match ($thrown) {
+        OrderConflictException::class => $problem(new LiteralT('https://errors.test/problems/conflict'), 'Conflict', new LiteralT(409), ScalarT::string()),
+        ValidationException::class => $problem(
+            new LiteralT('https://errors.test/problems/validation'),
+            'Unprocessable Content',
+            ScalarT::int(),
+            ScalarT::string(),
+            [new ArrayShapeField('errors', new ListT(new UnknownT('mixed')))],
+        ),
+        AuthenticationException::class => $problem($blank, 'Unauthenticated', new LiteralT(401), new LiteralT('Sign in to continue.')),
+        NotFoundHttpException::class => $problem($blank, 'Request refused', new UnknownT('mixed'), ScalarT::string()),
+        ProblemException::class => new UnknownT('mixed'),
+        default => $problem($blank, 'Server Error', new LiteralT(500), new LiteralT('Something went wrong on our side.')),
+    };
 }
 
 /** The callback the workbench registers, under the ref the handler tier analyses it by for `$thrown`. */
@@ -124,7 +154,38 @@ it('publishes the problem each error is answered with, byte-identically', functi
     $warm = assertWarmEqualsCold(problemDetailsRoutes(), problemDetailsRoutes(), problemDetailsEngine(problemDetailsCallback()));
 
     assertGolden('workbench-problem-details-handler.uir.json', (new UirEmitter)->emit($warm->document));
+
+    // The problem a ProblemException carries is the one arm nothing reads, so it is the one the author hears
+    // about, warm as well as cold.
+    $deferred = diagnosticsCoded($warm->diagnostics, 'inferred-handler.too-dynamic');
+    expect($deferred)->toHaveCount(1)
+        ->and($deferred[0]->message)->toContain('ProblemException')
+        ->and($deferred[0]->message)->not->toContain('OrderConflictException');
 });
+
+it('documents the problem the server really sends for each error', function (string $action, int $status): void {
+    $engine = problemDetailsEngine(problemDetailsCallback());
+    problemDetailsRoutes()(app('router'));
+    workbenchContract(bindEngine: static fn () => app()->instance(TypeEngine::class, $engine()));
+
+    try {
+        $response = $this->postJson('api/problems/'.$action)->assertStatus($status);
+
+        ApiContract::assertions()->assertValidResponse($response);
+    } finally {
+        @unlink(workbenchContractPath());
+        ApiContract::reset();
+    }
+})->with([
+    'a problem built in an arm' => ['conflict', 409],
+    'a problem a factory builds' => ['unauthenticated', 401],
+    'a problem whose status the exception carries' => ['missing', 404],
+    'the default arm' => ['failed', 500],
+    // Not `carried`: the problem a ProblemException carries was chosen where it was thrown, which no arm
+    // states, so the document cannot say which one the server sends. Not `invalid` either: its `errors`
+    // are what `ValidationException::errors()` declares, a bare `array`, which the build reads as a list
+    // where the server sends an object keyed by field.
+]);
 
 it('scripts what the real engine recovers from the fixture app’s same handler', function (): void {
     ensureFixtureAvailable(FixtureRunner::available());

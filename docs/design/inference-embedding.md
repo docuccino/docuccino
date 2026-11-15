@@ -533,6 +533,15 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    every descended helper file and every folded enum's file is reported into `dependencyFiles`,
    re-contributed on a memo hit, so editing any of them invalidates the route fragment.
 
+**A Responsable built in sight.** An application's own `toResponse()` is read once per rendering, never
+memoised, so it can be read for the object it renders: where that object is a `new` of its class, or the
+one `new` a project factory returns (read with the factory's parameters holding what the call passed),
+each readonly property promoted from the constructor holds the argument's type, or the parameter's
+default where the call provably passed none (`RuntimeAdapter::holding()`, the analyser's own reading of
+an assignment). The body, status and media type then fold exactly as for any other return, a spread of an
+extension array included. Readonly and promoted is the whole rule: those are the properties written once,
+before any method runs.
+
 Bounds are shared with §3 (bounds only — §3's scope note); the marker type is §5. "Folded status beats
 the throw hint" is deliberate: the renderer's own status is what the client actually receives.
 
@@ -553,6 +562,14 @@ scope the walk evaluated that branch in: collapsed, two responses are the supert
 The walk's branch scope, not the return's scope filtered afterwards — once the walk is over there is no
 analysis for a narrowing to read the condition's current type from, and PHPStan 2.3 drops a "falsey
 removed" narrowing of an untracked call (`$request->is('api/*')`) rather than apply it.
+
+A site that hands the narrowed parameter, whole, to a project helper — `return Problems::for($e);`, or
+`->toResponse()` on what such a helper builds when the application wrote that method — is answered by the
+helper: its sites are harvested narrowed on the parameter the value lands in, chosen by the same rules,
+and the chosen one stands in for the site, which keeps its own position and guard. So a `match` written
+inside the helper narrows as one written in the renderer does. Bounded by the trace depth and refused for
+a helper already on the way; the helper's file, and the one its `#[ErrorComponent]` would be written in,
+are dependencies.
 
 A response POST-PROCESSOR (`$exceptions->respond()`) is read with `CallableRef::$narrowToEvery`, where
 nothing is chosen: every site the narrowed type reaches comes back, and PHPStan's own type for the

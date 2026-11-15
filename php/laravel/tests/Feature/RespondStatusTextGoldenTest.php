@@ -120,7 +120,8 @@ function statusTextSentProblem(): ClassT
 {
     return new ClassT('Illuminate\\Http\\JsonResponse', [
         new ClassT('App\\Problems\\SentProblem'),
-        new UnknownT('status not folded'),
+        // Its own `toResponse()` sends the status it was built with, and it was built with 410.
+        new LiteralT(410),
         new LiteralT('application/problem+json'),
         new ArrayShapeT([
             new ArrayShapeField('status', new LiteralT(410)),
