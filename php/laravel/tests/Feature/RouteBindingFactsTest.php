@@ -191,9 +191,10 @@ it('says nothing about a column it cannot read', function (string $path, string 
  * parameter it cannot pass. The vague true shape is a string, and a notice names what to pin.
  *
  * A `Route::model()` binder is the framework's own closure around the model it was handed, so it is read
- * as that model's binding; a `Route::bind()` closure is the application's, and only it is widened.
+ * as that model's binding; a `Route::bind()` closure is the application's, and so is a model's own
+ * `resolveRouteBinding()`, and those are widened.
  */
-it('widens the schema of a binding whose column it cannot read, and reports it', function (string $path, string $name, string $code): void {
+it('widens the schema of a binding whose column it cannot read, and reports it', function (string $path, string $name, string $code, bool $resolvedInCode): void {
     $result = localityBuild(bindingFactRoutes());
     $document = emittedArray($result);
 
@@ -201,20 +202,24 @@ it('widens the schema of a binding whose column it cannot read, and reports it',
     $paths = $document['paths'];
     /** @var array{schema: array<string, mixed>} $parameter */
     $parameter = pathParameter($paths[$path]['get'], $name);
+    $reported = array_values(array_filter(
+        diagnosticsCoded($result->diagnostics, $code),
+        static fn ($diagnostic): bool => $diagnostic->routeSignature === 'GET '.$path && str_contains($diagnostic->message, '{'.$name.'}'),
+    ));
 
     expect($parameter['schema']['type'])->toBe('string')
         ->and($parameter['schema'])->not->toHaveKey('format')
-        ->and(array_filter(
-            diagnosticsCoded($result->diagnostics, $code),
-            static fn ($diagnostic): bool => $diagnostic->routeSignature === 'GET '.$path && str_contains($diagnostic->message, '{'.$name.'}'),
-        ))->toHaveCount(1);
+        ->and($reported)->toHaveCount(1)
+        // A model that finds the record itself is one the integration could have typed: the notice says
+        // why it did not, rather than that nothing could.
+        ->and(str_contains($reported[0]->message, 'in code of its own'))->toBe($resolvedInCode);
 })->with([
-    'a model that decides its route key at run time' => ['/api/binding-dossiers/{dossier}', 'dossier', 'route-binding.untyped'],
-    'a segment the application binds itself' => ['/api/binding-custom/{custom}', 'custom', 'route-binding.custom-binder'],
+    'a model that decides its route key at run time' => ['/api/binding-dossiers/{dossier}', 'dossier', 'route-binding.untyped', false],
+    'a segment the application binds itself' => ['/api/binding-custom/{custom}', 'custom', 'route-binding.custom-binder', false],
     // A hashid segment holds a code, not the integer key: `integer` would refuse every value it takes.
-    'a model that resolves its bindings itself' => ['/api/binding-vouchers/{voucher}', 'voucher', 'route-binding.untyped'],
-    'a model that narrows its binding query' => ['/api/binding-coupons/{coupon}', 'coupon', 'route-binding.untyped'],
-    'a child its parent finds its own way' => ['/api/binding-coupons/{coupon}/entries/{entry}', 'entry', 'route-binding.untyped'],
+    'a model that resolves its bindings itself' => ['/api/binding-vouchers/{voucher}', 'voucher', 'route-binding.untyped', true],
+    'a model that narrows its binding query' => ['/api/binding-coupons/{coupon}', 'coupon', 'route-binding.untyped', true],
+    'a child its parent finds its own way' => ['/api/binding-coupons/{coupon}/entries/{entry}', 'entry', 'route-binding.untyped', true],
 ]);
 
 /**

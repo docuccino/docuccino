@@ -135,7 +135,7 @@ final class PathParametersExtension implements OperationExtension
                     } elseif (($column = BoundColumn::of($context, $name)) !== null) {
                         $this->reportUntypedColumn($context, $field === null ? '{'.$name.'}' : '{'.$name.':'.$field.'}', $context->routeBindings[$name], $column);
                     } else {
-                        $this->reportUntypedBinding($context, $name, $context->routeBindings[$name]);
+                        $this->reportUntypedBinding($context, $name, $context->routeBindings[$name], BoundColumn::resolvedInCode($context, $name));
                     }
                 }
             }
@@ -334,18 +334,26 @@ final class PathParametersExtension implements OperationExtension
     }
 
     /** Says the binding itself went untyped, without guessing why nothing answered for it. */
-    private function reportUntypedBinding(RouteContext $context, string $name, string $modelFqcn): void
+    private function reportUntypedBinding(RouteContext $context, string $name, string $modelFqcn, bool $resolvedInCode): void
     {
         $context->components->addDiagnostic(new Diagnostic(
             severity: Severity::Info,
             code: 'route-binding.untyped',
-            message: sprintf(
-                '{%s} is bound to %s, which nothing enabled could type, so the parameter is documented as a plain string.',
-                $name,
-                $modelFqcn,
-            ),
+            message: $resolvedInCode
+                ? sprintf(
+                    '{%s} is bound to %s, which finds the record in code of its own (an overridden resolveRouteBinding() or one of its siblings), so which column it matches, and in what shape, is not read: the parameter is documented as a plain string.',
+                    $name,
+                    $modelFqcn,
+                )
+                : sprintf(
+                    '{%s} is bound to %s, which nothing enabled could type, so the parameter is documented as a plain string.',
+                    $name,
+                    $modelFqcn,
+                ),
             routeSignature: $context->route->signature($context->httpMethod()),
-            help: sprintf('Declare the segment\'s type with #[PathParameter(\'%s\', type: …)] on the action, or bind a string-backed enum or an Eloquent model with the eloquent integration enabled.', $name),
+            help: $resolvedInCode
+                ? sprintf('Declare the segment\'s type with #[PathParameter(\'%s\', type: …)] on the action where you know what the code matches on.', $name)
+                : sprintf('Declare the segment\'s type with #[PathParameter(\'%s\', type: …)] on the action, or bind a string-backed enum or an Eloquent model with the eloquent integration enabled.', $name),
         ));
     }
 
