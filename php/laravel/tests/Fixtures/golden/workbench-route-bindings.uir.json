@@ -1329,29 +1329,7 @@
                 "operationId"
               ]
             }
-          ],
-          "uses": {
-            "responses": {
-              "404": {
-                "id": "res:v1:cgco754bfvcc64ru",
-                "provenance": [
-                  {
-                    "producer": "integration:implicit-response",
-                    "layer": "integration",
-                    "fields": [
-                      "component",
-                      "description"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 101,
-                      "symbol": "implicit:route-model-binding"
-                    }
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         "operationId": "get.api.binding-fallback.@fallback",
         "summary": "Show a ledger bound with `Route::model()` and a fallback for values the key does not find.",
@@ -1364,55 +1342,33 @@
               "id": "par:v1:ttmm3ozao4m2vtcc",
               "provenance": [
                 {
-                  "producer": "inference",
-                  "layer": "inference",
+                  "producer": "fallback",
+                  "layer": "fallback",
                   "fields": [
-                    "description",
                     "required"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 101,
-                    "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showFallback"
-                  }
+                  ]
                 }
-              ],
-              "facts": {
-                "routeBinding": {
-                  "key": "id"
-                }
-              }
+              ]
             },
             "name": "fallback",
             "in": "path",
-            "description": "Matched on the resource's `id`.",
             "required": true,
             "schema": {
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "inference",
-                    "layer": "inference",
+                    "producer": "fallback",
+                    "layer": "fallback",
                     "fields": [
                       "type"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 101,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showFallback"
-                    }
+                    ]
                   }
                 ]
               },
-              "type": "integer"
+              "type": "string"
             }
           }
-        ],
-        "responses": {
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          }
-        }
+        ]
       }
     },
     "/api/binding-journals/{journal}": {
@@ -3057,7 +3013,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "1d182f2d24ed42ecbf59669c9a1ca91447caacf46c0fd5b4937725332d8dd47f"
+      "contentHash": "d1b9c7b0d9cf2cc39f78e3ea2eabc732434e285e6c39fa8545a77bf760fd52c5"
     },
     "generator": {
       "name": "docuccino/laravel",
