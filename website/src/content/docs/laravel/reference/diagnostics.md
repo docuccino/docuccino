@@ -556,6 +556,20 @@ does. See [Postman collections](/laravel/reference/commands/#postman-collections
 | `postman.webhooks-dropped` | warning | A collection describes requests you send, so it can't carry the webhooks your API delivers | Nothing. Export an OpenAPI format alongside for the webhook contract |
 | `postman.yaml-ignored` | warning | A Postman collection has no YAML form, so JSON was written | Give the target a `.json` path |
 
+## Response links
+
+Docuccino writes the response links your code proves on its own and says nothing about them. These codes
+are about the ones you declare with [`#[ResponseLink]`](/laravel/reference/attributes/#responselink): each
+names a declaration the document could not honour, and the link is left out rather than published wrong.
+
+| Code | Severity | What it means | What to do |
+|---|---|---|---|
+| `response-link.unknown-operation` | warning | A declared link leads to an operation this document doesn't publish — a misspelt `operationId`, a route in another document, or one an `operationId` names twice. A link can only lead to an operation in the same document | Name the target by its `operationId` or as the document writes it, `GET /api/things/{thing}`, and check that this document includes it |
+| `response-link.unknown-status` | warning | A declared link names a `status` the operation doesn't document as a success, or the operation has no success response for a link to sit on | Name a 2xx status the operation documents, or leave `status` off to use its first one |
+| `response-link.parameter-undeclared` | warning | A declared link fills a parameter its target doesn't declare, so a client following it would send a value the target never reads | Name the parameter the way the target declares it, or qualify it by location (`path.id`) |
+| `response-link.pointer-undocumented` | warning | A declared link reads a `$response.body#/…` pointer the response it sits on doesn't document. Nothing is reported where the response describes no shape to contradict | Point at a member the response schema describes, or document the member |
+| `response-link.unreadable` | warning | A `#[ResponseLink]`'s `parameters` hold a value JSON can't carry — a pure enum case, a non-UTF-8 string — so the operation's declared links couldn't be recorded | Write the value the wire carries: scalars, arrays of them, and runtime expressions. Use a backed enum's value rather than the case |
+
 ## Workflows
 
 A workflow is assembled from the `#[WorkflowStep]` declarations on the operations that take part. See

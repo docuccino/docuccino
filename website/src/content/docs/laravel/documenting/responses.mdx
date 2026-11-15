@@ -947,6 +947,17 @@ Nothing is matched by name. A response sending a `customer_id` is not linked to 
 — a `Route::bind()` closure, a `getRouteKeyName()` that decides at run time — no link is written, and the notices
 in [Diagnostics](/laravel/reference/diagnostics/#routes-operations-and-names) name the segment.
 
+Where you know a link the code can't show — a plain array, a value a route takes under a name of its own
+— declare it with [`#[ResponseLink]`](/laravel/reference/attributes/#responselink):
+
+```php
+#[ResponseLink('orders.show', ['order' => '$response.body#/order_id'], description: 'The order this receipt is for.')]
+public function receipt(Payment $payment): array { /* … */ }
+```
+
+The document checks it as it builds: a target, status, parameter or response member that isn't there
+is reported, and the link is left out rather than published wrong.
+
 ## Adding and refining responses
 
 Where the code can't say everything, attributes step in — field by field, so they patch inferred
@@ -956,6 +967,7 @@ responses without discarding the rest:
 | --- | --- |
 | [`#[Response]`](/laravel/reference/attributes/#response) | Add a status, or set the `description`, `type` or `mediaType` of one — repeatable for several statuses. |
 | [`#[ResponseHeader]`](/laravel/reference/attributes/#responseheader) | Document a response header on a given status (`status: 200` by default), and say with `required: true` when the server always sends it. |
+| [`#[ResponseLink]`](/laravel/reference/attributes/#responselink) | Link a response to the operation a client can call next, where Docuccino can't work the link out. |
 | [`#[IgnoreResponse]`](/laravel/reference/attributes/#ignoreresponse) | Drop an auto-inferred response by status code. |
 | [`#[Example]`](/laravel/reference/attributes/#example) | Pin the payload a reader copies — see [Example payloads](/laravel/documenting/examples/). |
 

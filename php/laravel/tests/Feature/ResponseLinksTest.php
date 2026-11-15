@@ -19,6 +19,7 @@ use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Crate;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\CrateController;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\KeyedCrateResource;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\LabelController;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\MisdeclaredLinkController;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Pallet;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\PalletResource;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Parcel;
@@ -58,7 +59,7 @@ beforeEach(function (): void {
         $router->post('api/labels', [LabelController::class, 'store']);
     };
 
-    $this->engine = static function (): TypeEngine {
+    $this->engine = static function (array $more = []): TypeEngine {
         $returns = static fn (string $fqcn): ActionAnalysis => new ActionAnalysis(returns: [new ReturnSite(new ClassT($fqcn), new SourceLocation(''))]);
         $controller = ParcelController::class.'::';
 
@@ -80,6 +81,7 @@ beforeEach(function (): void {
                 ]),
             ],
             analysisOverrides: [
+                ...$more,
                 $controller.'store' => $returns(ParcelResource::class),
                 $controller.'show' => $returns(ParcelResource::class),
                 $controller.'update' => $returns(ParcelResource::class),
@@ -282,6 +284,68 @@ it('links on a column only where the body sends it as it is stored', function ()
         ->and($linked('/api/keyed-crates'))->toBe(['get.api.crates.@crate' => ['crate' => '$response.body#/data/ref']])
         // Two returns agree on the key and not on the code, and a closure's return is not one of them.
         ->and($linked('/api/branching-crates'))->toBe(['get.api.crates.@crate' => ['crate' => '$response.body#/data/id']]);
+});
+
+it('writes a declared link with where it was declared', function (): void {
+    $document = emittedArray(localityBuild($this->routes, $this->engine));
+    $link = $document['paths']['/api/labels']['post']['responses']['200']['links']['LabelledParcel'];
+
+    // Nothing in the code ties `parcel` to a parcel's key — the label's author does, and says so.
+    expect($link['operationId'])->toBe('get.api.parcels.@parcel')
+        ->and($link['parameters'])->toBe(['parcel' => '$response.body#/parcel'])
+        ->and($link['description'])->toBe('The parcel the label is for.')
+        ->and($link['x-docuccino']['provenance'][0])->toMatchArray(['producer' => 'attribute', 'layer' => 'attribute'])
+        ->and($link['x-docuccino']['provenance'][0]['source']['symbol'])->toBe(LabelController::class.'::store')
+        ->and($link['x-docuccino']['provenance'][0]['source']['file'])->toBe('tests/Fixtures/ResponseLinks/LabelController.php');
+});
+
+/**
+ * A declared link is a promise the document makes to a client, so one the document cannot keep is left
+ * out and reported to its author, naming what to fix — never published to send a client somewhere that
+ * is not there.
+ */
+it('reports a declared link the document cannot honour, and leaves it out', function (): void {
+    $routes = function (Router $router): void {
+        ($this->routes)($router);
+        foreach (['unknownOperation', 'unknownStatus', 'undeclaredParameter', 'undocumentedPointer', 'unreadable', 'honoured'] as $action) {
+            $router->post('api/misdeclared/'.$action, [MisdeclaredLinkController::class, $action]);
+        }
+    };
+    $engine = function (): TypeEngine {
+        $parcel = new ActionAnalysis(returns: [new ReturnSite(new ArrayShapeT([new ArrayShapeField('parcel', ScalarT::int())]), new SourceLocation(''))]);
+        $more = [];
+        foreach (['unknownOperation', 'unknownStatus', 'undeclaredParameter', 'undocumentedPointer', 'unreadable', 'honoured'] as $action) {
+            $more[MisdeclaredLinkController::class.'::'.$action] = $parcel;
+        }
+
+        return ($this->engine)($more);
+    };
+
+    $result = localityBuild($routes, $engine);
+    $paths = emittedArray($result)['paths'];
+    $reported = [];
+    foreach ($result->diagnostics as $diagnostic) {
+        if (str_starts_with($diagnostic->code, 'response-link.')) {
+            $reported[(string) $diagnostic->routeSignature] = $diagnostic->code;
+        }
+    }
+    ksort($reported);
+
+    expect($reported)->toBe([
+        'POST /api/misdeclared/undeclaredParameter' => 'response-link.parameter-undeclared',
+        'POST /api/misdeclared/undocumentedPointer' => 'response-link.pointer-undocumented',
+        'POST /api/misdeclared/unknownOperation' => 'response-link.unknown-operation',
+        'POST /api/misdeclared/unknownStatus' => 'response-link.unknown-status',
+        'POST /api/misdeclared/unreadable' => 'response-link.unreadable',
+    ]);
+
+    foreach (['unknownOperation', 'unknownStatus', 'undeclaredParameter', 'undocumentedPointer', 'unreadable'] as $action) {
+        expect($paths['/api/misdeclared/'.$action]['post']['responses']['200'])->not->toHaveKey('links');
+    }
+
+    // A parameter qualified by its location is how OpenAPI tells two of one name apart.
+    expect($paths['/api/misdeclared/honoured']['post']['responses']['200']['links']['get.api.parcels.@parcel']['parameters'])
+        ->toBe(['path.parcel' => '$response.body#/parcel']);
 });
 
 /**

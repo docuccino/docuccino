@@ -26,6 +26,7 @@ use Docuccino\Attributes\PathParameter;
 use Docuccino\Attributes\QueryParameter;
 use Docuccino\Attributes\Response;
 use Docuccino\Attributes\ResponseHeader;
+use Docuccino\Attributes\ResponseLink;
 use Docuccino\Attributes\RuleSchema;
 use Docuccino\Attributes\SchemaId;
 use Docuccino\Attributes\SchemaName;
@@ -99,6 +100,9 @@ function attributeCatalogue(): array
         'IgnoreParam' => [IgnoreParam::class, $classFn | Attribute::IS_REPEATABLE],
         'IgnoreResponse' => [IgnoreResponse::class, $classFn | Attribute::IS_REPEATABLE],
         'ResponseHeader' => [ResponseHeader::class, $classFn | Attribute::IS_REPEATABLE],
+        // A link leads from ONE operation's response; on a controller it would claim the same next call
+        // for every action in it.
+        'ResponseLink' => [ResponseLink::class, Attribute::TARGET_METHOD | Attribute::TARGET_FUNCTION | Attribute::IS_REPEATABLE],
         'Summary' => [Summary::class, $classFn],
         'Description' => [Description::class, $classFn | Attribute::TARGET_PROPERTY | Attribute::IS_REPEATABLE],
         'RuleSchema' => [RuleSchema::class, Attribute::TARGET_CLASS],
@@ -174,6 +178,7 @@ function defaultArgs(string $class): array
         Summary::class => ['Create an invoice'],
         ApiVersionChange::class => ['2026-09-01', 'Invoices publish `title` where they used to publish `name`.'],
         AppliesTo::class, AddedOperation::class => ['GET /api/invoices'],
+        ResponseLink::class => ['invoices.show'],
         WorkflowStep::class => ['checkout', 1],
         RenamedResponseField::class, RenamedRequestField::class => ['App\\Http\\Resources\\InvoiceResource', 'name', 'title'],
         RenamedParameter::class => ['query', 'q', 'search'],

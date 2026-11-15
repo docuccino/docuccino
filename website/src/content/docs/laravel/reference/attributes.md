@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 44 attributes with signatures and examples.
+description: The docuccino/attributes package — all 45 attributes with signatures and examples.
 ---
 
 
@@ -32,12 +32,13 @@ say `list<T>` or `array<string, T>` for the one you mean.
 
 ## At a glance
 
-All 44 attributes, grouped by what they do:
+All 45 attributes, grouped by what they do:
 
 | Attribute | Does |
 | --- | --- |
 | [`#[Response]`](#response) | Declare or refine a response for a status. |
 | [`#[ResponseHeader]`](#responseheader) | Document a response header on a status. |
+| [`#[ResponseLink]`](#responselink) | Link a response to the operation a client can call next. |
 | [`#[QueryParameter]`](#queryparameter) | Add or patch a query parameter. |
 | [`#[PathParameter]`](#pathparameter) | Refine a path parameter (type, format, example). |
 | [`#[HeaderParameter]`](#headerparameter) | Add or patch a request header parameter. |
@@ -177,6 +178,44 @@ is also what an undeclared header means, so leaving it out promises nothing eith
 #[ResponseHeader(name: 'Retry-After', type: 'integer', description: 'Seconds to wait', status: 429)]
 public function index(): AnonymousResourceCollection { /* … */ }
 ```
+
+### `#[ResponseLink]`
+
+Targets `METHOD | FUNCTION`, repeatable.
+
+```php
+public function __construct(
+    public string $operation,
+    public array $parameters = [],
+    public string $name = '',
+    public ?int $status = null,
+    public string $description = '',
+)
+```
+
+Links this operation's response to another operation, as an OpenAPI
+[response link](https://spec.openapis.org/oas/v3.2.0.html#link-object): the call a client can make next,
+and what to pass it from this exchange. Docuccino already links a response to the routes that bind the
+model it gives back ([Links between operations](/laravel/documenting/responses/#links-between-operations));
+declare one for anything it can't read, such as a body no model shapes.
+
+```php
+#[ResponseLink('GET /api/orders/{order}', ['order' => '$response.body#/order_id'], name: 'ViewOrder', description: 'The order this receipt is for.')]
+public function receipt(Payment $payment): array { /* … */ }
+```
+
+Name the target `operation` by its `operationId` or as the document writes it, `GET /api/orders/{order}`.
+Each of `parameters` is one of the target's parameters — qualify it by location as OpenAPI allows,
+`path.order`, where two share a name — mapped to a
+[runtime expression](https://spec.openapis.org/oas/v3.2.0.html#runtime-expressions) or a literal value.
+`status` picks the response the link sits on; leave it out for the operation's first success response.
+`name` defaults to the target's `operationId`, and a declared link replaces one Docuccino worked out under
+the same name.
+
+A declared link is checked against the document. A target it does not publish, a status it does not
+document, a parameter the target does not declare, or a `$response.body#/…` pointer the response doesn't
+describe is reported — `response-link.unknown-operation`, `response-link.unknown-status`,
+`response-link.parameter-undeclared`, `response-link.pointer-undocumented` — and the link is left out.
 
 ## Parameters
 

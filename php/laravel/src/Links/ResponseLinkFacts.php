@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Links;
 
+use Docuccino\Attributes\ResponseLink;
 use Docuccino\Core\Contract\Pointer;
 use Docuccino\Core\Document\DocumentGraph;
 use Docuccino\Core\Draft\OperationDraft;
@@ -18,6 +19,7 @@ use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Links\BindingTake;
 use Docuccino\Core\Links\BodyGive;
+use Docuccino\Core\Links\DeclaredLink;
 use Docuccino\Core\Links\OperationLinks;
 use Docuccino\Laravel\Integrations\ApiResources\ResourceReflector;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
@@ -27,8 +29,9 @@ use Illuminate\Contracts\Routing\UrlRoutable;
 
 /**
  * Records what this operation's code proves about the links it takes part in — the columns its path
- * parameters are matched on, and the columns its success responses send back and where — for
- * {@see ResponseLinkAssembly} to join across the document. It publishes nothing itself.
+ * parameters are matched on, the columns its success responses send back and where, and the links it
+ * declares with `#[ResponseLink]` — for {@see ResponseLinkAssembly} to join across the document. It
+ * publishes nothing itself.
  *
  * Finalize, because both halves are read off the operation as published: a response's status and body
  * are settled by then, and a pointer into a body is only worth recording if the body documents it.
@@ -49,7 +52,11 @@ final class ResponseLinkFacts implements OperationExtension
 
     public function handle(OperationDraft $operation, RouteContext $context): void
     {
-        $facts = new OperationLinks(takes: $this->takes($context), gives: $this->gives($operation, $context));
+        $facts = new OperationLinks(
+            takes: $this->takes($context),
+            gives: $this->gives($operation, $context),
+            declared: self::declared($context),
+        );
 
         if (! $facts->isEmpty()) {
             $context->notes()->record(self::CHANNEL, self::signature($context), $facts->toJson());
@@ -60,6 +67,29 @@ final class ResponseLinkFacts implements OperationExtension
     public static function signature(RouteContext $context): string
     {
         return strtoupper($context->documentedMethod ?? $context->route->primaryMethod()).' '.OasPath::of($context->route->uri);
+    }
+
+    /**
+     * The links the action declares with `#[ResponseLink]`, each carrying where it was written.
+     *
+     * @return list<DeclaredLink>
+     */
+    private static function declared(RouteContext $context): array
+    {
+        $declared = [];
+
+        foreach ($context->attributes->all(ResponseLink::class) as $link) {
+            $declared[] = new DeclaredLink(
+                operation: trim($link->operation),
+                parameters: $link->parameters,
+                name: trim($link->name),
+                status: $link->status === null ? null : (string) $link->status,
+                description: trim($link->description),
+                source: $context->actionSource(),
+            );
+        }
+
+        return $declared;
     }
 
     /**
