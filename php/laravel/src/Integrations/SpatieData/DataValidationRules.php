@@ -43,8 +43,8 @@ use Docuccino\Laravel\Integrations\Validation\UnreadRule;
  * marker-stripped type (unless a spatie type attribute already stated one), and every recovered
  * validation token. Nested Data recurses into dotted `author.name` / `items.*.title` keys, and the input
  * key honours `#[MapInputName]`/`#[MapName]`. A property that can never be sent — `#[Computed]`,
- * `#[WithoutValidation]`, `#[FromRouteParameter]`, `#[HiddenFromRequest]`, `#[Prohibited]` — contributes
- * no field and no subtree.
+ * `#[WithoutValidation]`, `#[FromRouteParameter]`, `#[HiddenFromRequest]`, or a `#[Prohibited]` whose
+ * condition settles to it — contributes no field and no subtree.
  *
  * The rule vocabulary has one word — `array` — for every array shape, so a recovered container states its
  * own structure too: a `list<V>` synthesises the `key.*` item field Laravel itself uses, an `array{…}`
@@ -388,10 +388,13 @@ final class DataValidationRules
     {
         $fields = [];
         foreach ($metadata->properties as $property) {
+            if ($this->reflector->isExcludedFromRequest($fqcn, $property->name)) {
+                continue;
+            }
+
             // A prohibited property contributes no field and no subtree. The rule set's `prohibited` pass
             // can't cover it: the nested-Data branch below never reaches the token.
-            if ($this->reflector->isExcludedFromRequest($fqcn, $property->name)
-                || $this->reflector->isProhibited($fqcn, $property->name)) {
+            if ($this->statesProhibited($fqcn, $property->name)) {
                 continue;
             }
 
@@ -401,7 +404,9 @@ final class DataValidationRules
             $nested = $this->nestedData($fqcn, $property->name, self::unwrapNull($stripped), $visiting);
             if ($nested !== null) {
                 [$childFqcn, $isCollection, $childMetadata] = $nested;
-                $fields[$key] = $this->presence($fqcn, $property->name, $stripped, [], $isCollection ? 'array' : null);
+                // laravel-data writes the child's rules whatever presence rule the property states, so a child
+                // field it requires requires the property too: its presence is its type's.
+                $fields[$key] = $this->presence($fqcn, $property->name, $stripped, [], $isCollection ? 'array' : null, false);
                 $fields = [...$fields, ...$this->fieldsFor($childFqcn, $childMetadata, $key.($isCollection ? '.*.' : '.'), [...$visiting, $childFqcn])];
 
                 continue;
@@ -420,24 +425,26 @@ final class DataValidationRules
                 ...$this->dateWireRules($fqcn, $property->name, $stripped, $stated),
             ];
 
+            $requiring = $this->reflector->statesRequiringRule($fqcn, $property->name);
+
             // An UploadedFile-typed property gets a synthesised `file` rule so the shared chain flips the
             // body to multipart/form-data and emits a binary schema — needed because a real upload Data
             // class usually has a dynamic rules() and only `#[Required]` to go on.
             $upload = $this->uploadedFileKind($stripped, $attributeRules);
             if ($upload === 'single') {
-                $fields[$key] = [...$this->presence($fqcn, $property->name, $stripped, $attributeRules, null), ...$attributeRules, ValidationRule::of('file')];
+                $fields[$key] = [...$this->presence($fqcn, $property->name, $stripped, $attributeRules, null, $requiring), ...$attributeRules, ValidationRule::of('file')];
 
                 continue;
             }
             if ($upload === 'list') {
                 // The field is the array; each item is the uploaded file.
-                $fields[$key] = [...$this->presence($fqcn, $property->name, $stripped, $attributeRules, 'array'), ...$attributeRules];
+                $fields[$key] = [...$this->presence($fqcn, $property->name, $stripped, $attributeRules, 'array', $requiring), ...$attributeRules];
                 $fields[$key.'.*'] = [ValidationRule::of('file')];
 
                 continue;
             }
 
-            $fields[$key] = [...$this->presence($fqcn, $property->name, $stripped, $attributeRules, null), ...$attributeRules];
+            $fields[$key] = [...$this->presence($fqcn, $property->name, $stripped, $attributeRules, null, $requiring), ...$attributeRules];
             $fields = [...$fields, ...$this->containerFields($key, self::unwrapNull($stripped), $visiting)];
         }
 
@@ -655,6 +662,23 @@ final class DataValidationRules
     }
 
     /**
+     * Whether a `#[Prohibited]` on the property prohibits it outright: bare, or handed a `ProhibitedIf` whose
+     * condition settles to it, read as {@see ruleObjectRules()} reads the object. One on a condition this build
+     * cannot settle leaves the property sendable.
+     */
+    private function statesProhibited(string $fqcn, string $property): bool
+    {
+        foreach ($this->reflector->prohibitions($fqcn, $property) as $rule) {
+            $read = is_string($rule) ? [RuleParsing::token($rule)] : (new ConstValueToRules($this->customRules))->fold(LiveRuleValue::of($rule));
+            if (in_array('prohibited', array_map(static fn (ValidationRule $rule): string => $rule->name, $read), true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Rules from the rule objects a property's attributes hand Laravel ({@see DataClassReflector::ruleObjects()}),
      * read as the same `new` in a rules array reads ({@see ConstValueToRules}): a framework object as the
      * `Rule::` factory that builds it, an annotated one by its `#[RuleSchema]`. Also whether one of them has
@@ -773,13 +797,14 @@ final class DataValidationRules
     /**
      * Presence/nullability/type rules synthesised from the property type, prepended ahead of the spatie
      * attribute rules and only when one doesn't already state them. Mirrors spatie's own inference:
-     * `required` is skipped for a nullable, Optional/Lazy or defaulted property, and for one stating any
-     * requiring rule ({@see REQUIRING_RULES}).
+     * `required` is skipped for a nullable, Optional/Lazy or defaulted property, for one stating any
+     * requiring rule ({@see REQUIRING_RULES}), and where `$requiring` says it carries a requiring attribute
+     * ({@see DataClassReflector::statesRequiringRule()}), whatever rule that attribute builds.
      *
      * @param  list<ValidationRule>  $attributeRules
      * @return list<ValidationRule>
      */
-    private function presence(string $fqcn, string $property, DType $stripped, array $attributeRules, ?string $forceType): array
+    private function presence(string $fqcn, string $property, DType $stripped, array $attributeRules, ?string $forceType, bool $requiring): array
     {
         $named = array_map(static fn (ValidationRule $rule): string => $rule->name, $attributeRules);
         $out = [];
@@ -790,7 +815,7 @@ final class DataValidationRules
 
         if (($optional || $defaulted) && ! in_array('sometimes', $named, true)) {
             $out[] = ValidationRule::of('sometimes');
-        } elseif (! $optional && ! $defaulted && ! $nullable
+        } elseif (! $optional && ! $defaulted && ! $nullable && ! $requiring
             && array_intersect(self::REQUIRING_RULES, $named) === [] && ! in_array('present', $named, true)) {
             $out[] = ValidationRule::of('required');
         }

@@ -35,10 +35,30 @@ use Docuccino\Laravel\Integrations\Validation\UnreadRule;
  */
 final class ConstValueToRules
 {
-    /** Framework rule objects that exclude the field when a condition holds, by the rule name each stands for. */
-    private const EXCLUDE_OBJECTS = [
-        'Illuminate\\Validation\\Rules\\ExcludeIf' => 'exclude_if',
-        'Illuminate\\Validation\\Rules\\ExcludeUnless' => 'exclude_unless',
+    /**
+     * Framework rule objects that apply a rule while a condition holds (`…If`) or fails (`…Unless`), by the
+     * rule each applies, the rule name standing for it on a condition unknown here, and the condition under
+     * which it applies.
+     *
+     * @var array<string, array{0: string, 1: string, 2: bool}>
+     */
+    private const CONDITIONAL_OBJECTS = [
+        'Illuminate\\Validation\\Rules\\ExcludeIf' => ['exclude', 'exclude_if', true],
+        'Illuminate\\Validation\\Rules\\ExcludeUnless' => ['exclude', 'exclude_unless', false],
+        'Illuminate\\Validation\\Rules\\RequiredIf' => ['required', 'required_if', true],
+        'Illuminate\\Validation\\Rules\\RequiredUnless' => ['required', 'required_unless', false],
+        'Illuminate\\Validation\\Rules\\ProhibitedIf' => ['prohibited', 'prohibited_if', true],
+        'Illuminate\\Validation\\Rules\\ProhibitedUnless' => ['prohibited', 'prohibited_unless', false],
+    ];
+
+    /** The `Rule::` factories that build those objects, by the lower-cased factory. */
+    private const CONDITIONAL_FACTORIES = [
+        'excludeif' => 'Illuminate\\Validation\\Rules\\ExcludeIf',
+        'excludeunless' => 'Illuminate\\Validation\\Rules\\ExcludeUnless',
+        'requiredif' => 'Illuminate\\Validation\\Rules\\RequiredIf',
+        'requiredunless' => 'Illuminate\\Validation\\Rules\\RequiredUnless',
+        'prohibitedif' => 'Illuminate\\Validation\\Rules\\ProhibitedIf',
+        'prohibitedunless' => 'Illuminate\\Validation\\Rules\\ProhibitedUnless',
     ];
 
     /** Framework rule objects that exclude the field when other fields are sent or missing. */
@@ -164,8 +184,8 @@ final class ConstValueToRules
     private function instance(ConstValue $value): array
     {
         $class = ltrim((string) $value->class, '\\');
-        if (isset(self::EXCLUDE_OBJECTS[$class])) {
-            $rule = self::exclude(self::EXCLUDE_OBJECTS[$class], $value->args[0] ?? null);
+        if (isset(self::CONDITIONAL_OBJECTS[$class])) {
+            $rule = self::conditional($class, $value->args[0] ?? null);
 
             return $rule === null ? [] : [$rule];
         }
@@ -275,8 +295,7 @@ final class ConstValueToRules
             $method === 'array' => ValidationRule::of('array', $this->values($descriptor->args) ?? []),
             $method === 'exists' => ValidationRule::of('exists'),
             $method === 'unique' => ValidationRule::of('unique'),
-            $method === 'excludeif' => self::exclude('exclude_if', $descriptor->args[0] ?? null),
-            $method === 'excludeunless' => self::exclude('exclude_unless', $descriptor->args[0] ?? null),
+            isset(self::CONDITIONAL_FACTORIES[$method]) => self::conditional(self::CONDITIONAL_FACTORIES[$method], $descriptor->args[0] ?? null),
             $method === 'exclude' => ValidationRule::of('exclude'),
             $method === 'excludewith' => self::excludeByFields('exclude_with', $descriptor->args),
             $method === 'excludewithout' => self::excludeByFields('exclude_without', $descriptor->args),
@@ -285,18 +304,21 @@ final class ConstValueToRules
     }
 
     /**
-     * `Rule::excludeIf(…)`/`Rule::excludeUnless(…)` and their `new` forms, which stop Laravel running the
-     * field's later rules when their condition says so ({@see RuleSetNormalizer}). A literal bool settles
-     * it now: bare `exclude`, or no rule at all. Any other condition is a callback nothing here can run,
-     * so the rule is kept with no parameters — an exclude rule whose condition is unknown.
+     * A conditional rule object ({@see CONDITIONAL_OBJECTS}), or the `Rule::` factory that builds it. A literal
+     * bool settles it now, as its `__toString()` does: the rule it applies, or no rule at all. Any other
+     * condition is a callback or a value only the request decides, which nothing here runs, so the rule is
+     * kept with no parameters: one applied on a condition this build cannot read. An exclude rule like that
+     * still stops the rules after it ({@see RuleSetNormalizer}); a required or prohibited one leaves the field
+     * optional and sendable, the true floor.
      */
-    private static function exclude(string $name, ?ConstValue $condition): ?ValidationRule
+    private static function conditional(string $class, ?ConstValue $condition): ?ValidationRule
     {
+        [$applied, $unknown, $when] = self::CONDITIONAL_OBJECTS[$class];
         if ($condition === null || ! $condition->isScalar() || ! is_bool($condition->scalar)) {
-            return ValidationRule::of($name);
+            return ValidationRule::of($unknown);
         }
 
-        return $condition->scalar === ($name === 'exclude_if') ? ValidationRule::of('exclude') : null;
+        return $condition->scalar === $when ? ValidationRule::of($applied) : null;
     }
 
     /**

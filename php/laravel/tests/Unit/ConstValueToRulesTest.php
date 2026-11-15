@@ -271,7 +271,6 @@ it('leaves out a rule it cannot read that can only refuse values, keeps the rest
     'Password::min()' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\Password::min', [ConstValue::scalar(8)]), 'Password::min(…)'],
     'File::types()' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\File::types', [ConstValue::scalar('pdf')]), 'File::types(…)'],
     'Rule::contains()' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::contains', [ConstValue::scalar('root')]), 'Rule::contains(…)'],
-    'Rule::requiredIf()' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::requiredIf', [ConstValue::unknown('closure')]), 'Rule::requiredIf(…)'],
     'new Password()' => [ConstValue::instance('Illuminate\\Validation\\Rules\\Password', [ConstValue::scalar(8)]), 'new Illuminate\\Validation\\Rules\\Password'],
     'new Contains()' => [ConstValue::instance('Illuminate\\Validation\\Rules\\Contains', [ConstValue::array([ConstValue::scalar('root')])]), 'new Illuminate\\Validation\\Rules\\Contains'],
 ]);
@@ -424,12 +423,43 @@ it('folds every exclude descriptor and rule object to the exclude rule it stands
     ]), [['exclude_if', []], ['required', []], ['string', []]]],
 ]);
 
-it('folds every framework factory and rule object that excludes a field', function (): void {
-    // The rows above list them by hand; this reads the framework's own. An exclude factory or rule class
+it('folds every required and prohibited descriptor and rule object to the rule its condition settles', function (ConstValue $value, array $expected): void {
+    // A literal bool is decided now, as `__toString()` decides it: the rule, or none, so a false condition
+    // leaves the field optional or sendable. A callback or a value only the request decides is not, so the
+    // rule stays with its condition unknown, which requires and refuses nothing.
+    $folder = new ConstValueToRules;
+    $rules = $folder->fold(ConstValue::array([ConstValue::scalar('string'), $value]));
+
+    expect(array_map(static fn ($r): array => [$r->name, $r->parameters], $rules))->toBe([['string', []], ...$expected])
+        ->and($folder->unread())->toBe([])
+        ->and($folder->opaque())->toBeNull();
+})->with([
+    'Rule::requiredIf(true)' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::requiredIf', [ConstValue::scalar(true)]), [['required', []]]],
+    'Rule::requiredIf(false)' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::requiredIf', [ConstValue::scalar(false)]), []],
+    'Rule::requiredIf(callback)' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::requiredIf', [ConstValue::unknown('closure')]), [['required_if', []]]],
+    'Rule::requiredUnless(false)' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::requiredUnless', [ConstValue::scalar(false)]), [['required', []]]],
+    'Rule::requiredUnless(true)' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::requiredUnless', [ConstValue::scalar(true)]), []],
+    'Rule::prohibitedIf(true)' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::prohibitedIf', [ConstValue::scalar(true)]), [['prohibited', []]]],
+    'Rule::prohibitedIf(false)' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::prohibitedIf', [ConstValue::scalar(false)]), []],
+    'Rule::prohibitedIf(callback)' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::prohibitedIf', [ConstValue::unknown('closure')]), [['prohibited_if', []]]],
+    'Rule::prohibitedUnless(false)' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::prohibitedUnless', [ConstValue::scalar(false)]), [['prohibited', []]]],
+    'Rule::prohibitedUnless(callback)' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::prohibitedUnless', [ConstValue::unknown('closure')]), [['prohibited_unless', []]]],
+    'Rule::requiredIf with no argument' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::requiredIf', []), [['required_if', []]]],
+    'new RequiredIf(true)' => [ConstValue::instance('Illuminate\\Validation\\Rules\\RequiredIf', [ConstValue::scalar(true)]), [['required', []]]],
+    'new RequiredIf(false)' => [ConstValue::instance('\\Illuminate\\Validation\\Rules\\RequiredIf', [ConstValue::scalar(false)]), []],
+    'new RequiredIf(a value the request decides)' => [ConstValue::instance('Illuminate\\Validation\\Rules\\RequiredIf', [ConstValue::unknown('call')]), [['required_if', []]]],
+    'new RequiredUnless(callback)' => [ConstValue::instance('Illuminate\\Validation\\Rules\\RequiredUnless', [ConstValue::unknown('closure')]), [['required_unless', []]]],
+    'new ProhibitedIf(true)' => [ConstValue::instance('Illuminate\\Validation\\Rules\\ProhibitedIf', [ConstValue::scalar(true)]), [['prohibited', []]]],
+    'new ProhibitedIf(false)' => [ConstValue::instance('Illuminate\\Validation\\Rules\\ProhibitedIf', [ConstValue::scalar(false)]), []],
+    'new ProhibitedUnless(true)' => [ConstValue::instance('Illuminate\\Validation\\Rules\\ProhibitedUnless', [ConstValue::scalar(true)]), []],
+]);
+
+it('folds every framework factory and rule object that applies a rule on a condition', function (): void {
+    // The rows above list them by hand; this reads the framework's own. A conditional factory or rule class
     // Laravel adds would otherwise fold to nothing, as any unrecognised descriptor or unannotated object does.
     $factories = array_values(array_filter(
         array_map(static fn (ReflectionMethod $method): string => $method->getName(), (new ReflectionClass(Rule::class))->getMethods(ReflectionMethod::IS_STATIC)),
-        static fn (string $name): bool => str_starts_with($name, 'exclude'),
+        static fn (string $name): bool => preg_match('/^(exclude|required|prohibited)/', $name) === 1,
     ));
 
     expect($factories)->not->toBeEmpty();
@@ -439,7 +469,7 @@ it('folds every framework factory and rule object that excludes a field', functi
 
     $classes = array_values(array_filter(
         array_map(static fn (string $file): string => 'Illuminate\\Validation\\Rules\\'.basename($file, '.php'), glob(dirname((string) (new ReflectionClass(Rule::class))->getFileName()).'/Rules/*.php') ?: []),
-        static fn (string $class): bool => str_starts_with(substr($class, (int) strrpos($class, '\\') + 1), 'Exclude'),
+        static fn (string $class): bool => preg_match('/^(Exclude|Required|Prohibited)/', substr($class, (int) strrpos($class, '\\') + 1)) === 1,
     ));
 
     expect($classes)->not->toBeEmpty();
@@ -464,7 +494,7 @@ it('folds a framework rule object written with new as the Rule factory that buil
 
     $folding = array_values(array_filter(
         array_map(static fn (ReflectionMethod $method): string => $method->getName(), (new ReflectionClass(Rule::class))->getMethods(ReflectionMethod::IS_STATIC)),
-        static fn (string $name): bool => ! str_starts_with($name, 'exclude')
+        static fn (string $name): bool => preg_match('/^(exclude|required|prohibited)/', $name) !== 1
             && RuleFactories::builtClass($name) !== null
             && (new ConstValueToRules)->fold(ConstValue::descriptor('Illuminate\\Validation\\Rule::'.$name, [ConstValue::scalar(WidgetStatus::class)])) !== [],
     ));

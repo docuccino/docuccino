@@ -34,8 +34,14 @@ final class LiveRuleValue
         // Read by name alone: the table and column decide nothing the document states.
         self::RULES.'Exists' => [],
         self::RULES.'Unique' => [],
+        // Read by condition, never cast: a cast calls a closure condition, which is the application's code
+        // answering for one request.
         self::RULES.'ExcludeIf' => ['condition'],
         self::RULES.'ExcludeUnless' => ['condition'],
+        self::RULES.'RequiredIf' => ['condition'],
+        self::RULES.'RequiredUnless' => ['condition'],
+        self::RULES.'ProhibitedIf' => ['condition'],
+        self::RULES.'ProhibitedUnless' => ['condition'],
         self::RULES.'ExcludeWith' => ['anotherField'],
         self::RULES.'ExcludeWithout' => ['fields'],
     ];

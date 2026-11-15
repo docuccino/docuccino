@@ -973,6 +973,7 @@ uploads](#file-uploads) below. Anything not listed leaves the property permissiv
 | `sometimes` | Keeps the field **out** of `required` — even alongside `required`, because `sometimes\|required` means "required when present". |
 | `filled` | No effect on the documented shape; a `nullable` field with it takes no blank — see [Blank values](#blank-values). |
 | `required_if`, `required_unless`, `required_with`, `required_with_all`, `required_without`, `required_without_all` | A description note ("Required when `status` is `paid`.") — a conditional requirement has no JSON Schema keyword. |
+| `Rule::requiredIf(…)`, `Rule::requiredUnless(…)`, or the `new RequiredIf(…)` / `new RequiredUnless(…)` they build | A literal `true` or `false` reads as the rule it settles to: `Rule::requiredIf(true)` is `required`, and `Rule::requiredIf(false)` is no rule at all. A closure, or a value only the request decides, leaves the field optional with no note. Docuccino never calls the closure: its answer at build time says nothing about the next request. |
 
 ### Blank values
 
@@ -1225,6 +1226,7 @@ every other rule, and they're applied last, so they see the finished property.
 | --- | --- |
 | `prohibited` | The field is **omitted** from the documented body. It can never be sent, so documenting it would invite exactly what the API rejects. Any nested key under it goes too. |
 | `prohibited_if:other,value` / `prohibited_unless:other,value` | The field stays documented and optional — it's sendable in some states — with the condition as a description ("Must not be sent when …"). |
+| `Rule::prohibitedIf(…)`, `Rule::prohibitedUnless(…)`, or the `new ProhibitedIf(…)` / `new ProhibitedUnless(…)` they build | A literal condition that prohibits the field omits it, like `prohibited`. One that doesn't is no rule, so the field stays documented. A closure or a value only the request decides leaves it documented and optional, with no note. |
 | `prohibits:other` | Documented and optional: this rule constrains the *other* field, and says so in the description. |
 
 ### Recognized with no schema effect
