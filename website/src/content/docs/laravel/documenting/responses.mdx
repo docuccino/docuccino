@@ -955,7 +955,8 @@ A `DELETE` response leads nowhere on its own, even when it sends the record back
 resolves, so every route that would look it up answers `404`.
 
 A link only names what the document publishes. An older [API version](/laravel/guides/api-versioning/)
-links to the operations and members that version has. A public operation never links on its own to one
+links only to the operations that version serves, and never on a member a later version renamed: the
+older document may give that name to another field. A public operation never links on its own to one
 marked [`#[Internal]`](/laravel/reference/attributes/#internal), because the tools that strip internal
 operations would leave the link pointing at nothing. One response carries at most 50 of the links
 Docuccino works out, and the

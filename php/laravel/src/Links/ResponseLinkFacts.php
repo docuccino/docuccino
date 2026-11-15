@@ -146,7 +146,7 @@ final class ResponseLinkFacts implements OperationExtension
 
                 [$class, $model] = $body;
                 foreach ($this->columns->carried($class, $model, array_map(strval(...), array_keys($properties)), $context) as $member => $column) {
-                    $gives[] = new BodyGive($status, $model, $column, Pointer::of([...$at, $member]));
+                    $gives[] = new BodyGive($status, $model, $column, Pointer::of([...$at, $member]), $class);
                 }
             }
         }

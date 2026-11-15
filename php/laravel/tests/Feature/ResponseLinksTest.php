@@ -185,19 +185,20 @@ it('links only what the version it documents publishes', function (string $chang
     ]]);
 
     $document = emittedArray(localityBuild($this->routes, $this->engine));
-    $links = $document['paths']['/api/parcels']['post']['responses']['200']['links'];
+    $links = $document['paths']['/api/parcels']['post']['responses']['200']['links'] ?? [];
 
     // The change took effect, and what it left alone is still linked: the row is not passing on a build
     // that versioned nothing, or linked nothing.
     expect($applied($document))->toBeTrue()
-        ->and($links['patch.api.parcels.@parcel']['parameters'])->toBe(['parcel' => '$response.body#/data/id'])
+        ->and($document['paths']['/api/pallets']['post']['responses']['200']['links'])->toHaveKey('get.api.pallets.@pallet')
         ->and($links)->not->toHaveKey($gone)
         ->and(json_encode($document, JSON_UNESCAPED_SLASHES))->not->toContain($absent);
 })->with([
     // The read route arrived later: the older document does not publish it, so nothing may lead there.
     'an operation a later version added' => [
         'ReadBackAdded',
-        static fn (array $document): bool => ! isset($document['paths']['/api/parcels/{parcel}']['get']),
+        static fn (array $document): bool => ! isset($document['paths']['/api/parcels/{parcel}']['get'])
+            && isset($document['paths']['/api/parcels']['post']['responses']['200']['links']['patch.api.parcels.@parcel']),
         'get.api.parcels.@parcel',
         '"operationId":"get.api.parcels.@parcel"',
     ],
@@ -209,6 +210,14 @@ it('links only what the version it documents publishes', function (string $chang
             && isset($document['paths']['/api/raw-parcels']['post']['responses']['200']['links']['get.api.tracked-parcels.@parcel']),
         'get.api.tracked-parcels.@parcel',
         'body#/data/tracking"',
+    ],
+    // The older resource sends the key as `internal_id` and the tracking code under `id`: `/data/id` is
+    // documented there, and holds a value no `{parcel}` route matches.
+    'a member a later version moved another field onto' => [
+        'KeyRepointed',
+        static fn (array $document): bool => array_keys($document['components']['schemas']['ParcelResource']['properties']) === ['id', 'internal_id', 'label'],
+        'get.api.parcels.@parcel',
+        '"parcel":"$response.body#/data/id"',
     ],
 ]);
 
