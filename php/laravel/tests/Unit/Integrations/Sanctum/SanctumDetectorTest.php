@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Laravel\Integrations\Sanctum\SanctumDetector;
 use Docuccino\Laravel\Integrations\Sanctum\SanctumScheme;
+use Docuccino\Laravel\Support\AuthMiddlewareNames;
 use Docuccino\Laravel\Support\RouteAuthentication;
 use Illuminate\Auth\Middleware\Authenticate;
 
@@ -15,7 +16,7 @@ const STATEFUL = 'Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreS
  * in SecurityAutoConfigTest. The token rows hand in `false`: a token guard is an authenticator of its own.
  */
 it('detects the active Sanctum modes across the detection combinations', function (array $middleware, array $guardDrivers, string $defaultGuard, bool $authenticates, array $modes): void {
-    expect((new SanctumDetector)->supportedModes($middleware, $guardDrivers, $defaultGuard, fn (): bool => $authenticates))->toBe($modes);
+    expect((new SanctumDetector)->supportedModes($middleware, $guardDrivers, $defaultGuard, fn (): bool => $authenticates, AuthMiddlewareNames::guardArguments(...)))->toBe($modes);
 })->with([
     'token only (auth:sanctum)' => [['auth:sanctum'], [], 'web', false, ['token']],
     'token only (bare sanctum alias)' => [['sanctum'], [], 'web', false, ['token']],
@@ -58,10 +59,10 @@ it('asks whether the route authenticates only where the stateful middleware is p
         return true;
     };
 
-    (new SanctumDetector)->supportedModes(['auth:web'], [], 'web', $authenticates);
+    (new SanctumDetector)->supportedModes(['auth:web'], [], 'web', $authenticates, AuthMiddlewareNames::guardArguments(...));
     expect($asked)->toBe(0);
 
-    (new SanctumDetector)->supportedModes([STATEFUL, 'auth:web'], [], 'web', $authenticates);
+    (new SanctumDetector)->supportedModes([STATEFUL, 'auth:web'], [], 'web', $authenticates, AuthMiddlewareNames::guardArguments(...));
     expect($asked)->toBe(1);
 });
 

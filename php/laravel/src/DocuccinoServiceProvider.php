@@ -426,12 +426,15 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         });
 
         // Passport's oauth2 scheme (and the cache digest below) need facts that only live on the
-        // vendor class: the scope catalogue and which grants are enabled.
+        // vendor class: the scope catalogue and which grants are enabled. Which guard an entry names is
+        // read by class through the alias map.
         $this->app->bind(PassportSecurityExtension::class, function (Application $app): PassportSecurityExtension {
             /** @var Repository $config */
             $config = $app->make('config');
 
-            return new PassportSecurityExtension($config, self::passportRuntime());
+            $authentication = new RouteAuthentication($app->make(MiddlewareClasses::class));
+
+            return new PassportSecurityExtension($config, $authentication->guardArguments(...), self::passportRuntime());
         });
 
         // Sanctum's stateful mode needs the route to authenticate a user: the framework's authenticators
@@ -444,6 +447,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
 
             return new SanctumSecurityExtension(
                 static fn (RouteContext $context): bool => $authentication->refusal($context) !== null,
+                $authentication->guardArguments(...),
                 $config,
             );
         });

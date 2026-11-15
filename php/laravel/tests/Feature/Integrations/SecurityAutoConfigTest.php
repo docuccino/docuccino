@@ -160,3 +160,35 @@ it('leaves a stateful route public where its alias resolves to something that do
 
     expect($operation)->not->toHaveKey('security');
 });
+
+/**
+ * A guard is named by the authenticator's parameters, whatever the alias the application wrote it under:
+ * `signed-in:sanctum` runs `Authenticate` against the `sanctum` guard exactly as `auth:sanctum` does, and
+ * refuses a request without a token with the same 401. So each spelling owes the token requirement.
+ */
+it('requires the Sanctum token wherever the authenticator names the sanctum guard', function (string $authenticator): void {
+    /** @var Router $router */
+    $router = app('router');
+    $router->aliasMiddleware('signed-in', ApplicationAuthenticate::class);
+    $router->aliasMiddleware('fw-signed-in', Authenticate::class);
+    $router->get('api/token-authenticated', [FormController::class, 'index'])->middleware($authenticator);
+
+    $operation = autoConfiguredDocument()['paths']['/api/token-authenticated']['get'];
+
+    expect($operation['security'] ?? null)->toBe([['sanctumToken' => []]]);
+})->with([
+    'the auth alias' => ['auth:sanctum'],
+    'the class spelling Authenticate::using() writes' => [Authenticate::using('sanctum')],
+    'the application subclass by class' => [ApplicationAuthenticate::using('sanctum')],
+    'an application alias of the framework authenticator' => ['fw-signed-in:sanctum'],
+    'an application alias of its own subclass' => ['signed-in:sanctum'],
+]);
+
+it('names no guard where the alias resolves to something that does not authenticate', function (): void {
+    /** @var Router $router */
+    $router = app('router');
+    $router->aliasMiddleware('signed-in', ThrottleRequests::class);
+    $router->get('api/throttled-guard', [FormController::class, 'index'])->middleware('signed-in:sanctum');
+
+    expect(autoConfiguredDocument()['paths']['/api/throttled-guard']['get'])->not->toHaveKey('security');
+});
