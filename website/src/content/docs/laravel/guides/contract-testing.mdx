@@ -600,6 +600,17 @@ ApiContract::forDocument('admin');          // assert against documents.admin
 ApiContract::using('docs/api.full.json');    // or name the artifact yourself
 ```
 
+Each document is built the way `docuccino:export` builds it, however many documents the run built before
+it, so one dataset can keep them all up to date:
+
+```php
+it('keeps every document up to date', function (string $document) {
+    ApiContract::forDocument($document);
+
+    $this->assertDocumentUpToDate();
+})->with(['people', 'integrations']);
+```
+
 `ApiContract::assertions()` hands you the same assertions as an object, for a test case you cannot add
 the trait to.
 

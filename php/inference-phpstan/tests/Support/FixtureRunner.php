@@ -367,6 +367,19 @@ final class FixtureRunner
     }
 
     /**
+     * Each named document built in turn in ONE process, through the adapter's own contract assertions, as a
+     * test suite holding several documents to their artifacts builds them: every path's response statuses,
+     * keyed by document. `$perTest` boots an application for each, as each test of a suite gets one.
+     *
+     * @param  list<string>  $documents
+     * @return array<string, mixed>
+     */
+    public static function contractBuilds(array $documents, bool $perTest = false): array
+    {
+        return self::invoke('contract-builds', '', '', implode(',', $documents), $perTest ? 'per-test' : '');
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private static function invoke(string $mode, string $file, string $class, string $method, string ...$extra): array

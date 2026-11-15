@@ -38,6 +38,7 @@ declare(strict_types=1);
  *   php engine-runner.php trace-closure             <file> <ignored> <ignored> <line>
  *   php engine-runner.php analyze-closures          <file> <ignored> <line[,line…]>
  *   php engine-runner.php request-headers           <controllerFile> <class> <method> <formRequest>
+ *   php engine-runner.php contract-builds           <ignored>        <ignored> <document,document,…> [per-test]
  *
  * Dispatch stays a `match ($mode)` rather than a mode => factory table — each arm is a thin
  * visitor probe and a test-only harness doesn't warrant the indirection. Revisit if the mode
@@ -103,6 +104,11 @@ spl_autoload_register(static function (string $class) use ($repoRoot): void {
         // so the fixture app's phpstan/php-parser stays the only one in play — which is what makes
         // mapping all of `Docuccino\Laravel\` here sound.
         'Docuccino\\Laravel\\' => $repoRoot.'/php/laravel/src/',
+        // The JSON Schema validator a build checks its document with, which the fixture app does not
+        // install; it shares nothing with the analyser.
+        'Opis\\JsonSchema\\' => $repoRoot.'/vendor/opis/json-schema/src/',
+        'Opis\\String\\' => $repoRoot.'/vendor/opis/string/src/',
+        'Opis\\Uri\\' => $repoRoot.'/vendor/opis/uri/src/',
     ];
     foreach ($map as $prefix => $dir) {
         if (str_starts_with($class, $prefix)) {
@@ -158,6 +164,15 @@ register_shutdown_function(static function () use ($tmp): void {
     }
     @rmdir($tmp);
 });
+
+// contract-builds boots no engine of its own: each document's build resolves one, as a test's does
+// (`contract-builds.php`).
+if ($mode === 'contract-builds') {
+    require __DIR__.'/contract-builds.php';
+    fwrite(STDOUT, "\n@@RESULT@@".json_encode(contractBuilds($app, $tmp, explode(',', $method), ($argv[5] ?? '') === 'per-test'), JSON_THROW_ON_ERROR)."\n");
+
+    exit(0);
+}
 
 // refine-pair and trace-qb-bounds drive the engine with a tiny per-analysis file budget (argv[2]) and
 // descent depth (argv[3]): the first so a shared helper truncates on a budget-spending path and has
