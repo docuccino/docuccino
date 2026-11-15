@@ -126,11 +126,15 @@ const FLOORS = [
     // condition can throw at all (`GuardCondition`) are unit-tested in process, while the analyser that
     // sends each read down the literal-throw path is the fixture group's. The floor stays 58: 59 would
     // leave under six statements for the subprocess-only engine code still landing in this release.
-    // Measured 59.11% (2984/5048): 58% of it is 2927.84 statements, 56.16 of margin.
+    // Re-recorded 59.11 → 58.74 when a response thrown inside an application's own `HttpResponseException`
+    // subclass came to be read: where the response lands through the subclass's constructors
+    // (`ParentArgument`) is unit-tested in process, while the reader that types it at the throw or in a
+    // static factory (`CarriedResponses`) runs only under real analysis, the fixture group's.
+    // Measured 58.74% (2993/5095): 58% of it is 2955.10 statements, 37.90 of margin.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads 3 statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 58, 'measured' => 59.11],
+    'inference-phpstan' => ['floor' => 58, 'measured' => 58.74],
 ];
 
 /*
