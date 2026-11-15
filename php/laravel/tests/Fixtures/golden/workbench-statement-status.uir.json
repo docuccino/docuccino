@@ -47,7 +47,7 @@
         "responses": {
           "202": {
             "x-docuccino": {
-              "id": "res:v1:fbzklmlzelbg3ebp",
+              "id": "res:v1:e43m2e6rvg74kqjh",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -60,7 +60,7 @@
             },
             "description": "Accepted",
             "content": {
-              "text/html": {
+              "text/csv": {
                 "schema": {
                   "x-docuccino": {
                     "provenance": [
@@ -167,6 +167,51 @@
                 }
               }
             }
+          },
+          "202": {
+            "x-docuccino": {
+              "id": "res:v1:t6g6455ks5nac5ni",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "queued": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "queued"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -210,7 +255,7 @@
           "DeferredExport"
         ],
         "responses": {
-          "3XX": {
+          "303": {
             "x-docuccino": {
               "provenance": [
                 {
@@ -234,7 +279,7 @@
                 }
               ]
             },
-            "description": "Redirect",
+            "description": "See Other",
             "headers": {
               "Location": {
                 "description": "The URL to follow.",
@@ -288,9 +333,9 @@
           "DeferredExport"
         ],
         "responses": {
-          "200": {
+          "default": {
             "x-docuccino": {
-              "id": "res:v1:sogmxjes2fwlkvjd",
+              "id": "res:v1:cyr3w5dktatvgdlq",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -299,37 +344,15 @@
                     "description"
                   ]
                 }
-              ]
+              ],
+              "facts": {
+                "statusUnplaced": true
+              }
             },
-            "description": "OK",
+            "description": "Any status",
             "content": {
               "application/json": {
-                "schema": {
-                  "x-docuccino": {
-                    "provenance": [
-                      {
-                        "producer": "inference",
-                        "layer": "inference",
-                        "fields": [
-                          "properties",
-                          "required",
-                          "type"
-                        ],
-                        "confidence": 1
-                      }
-                    ]
-                  },
-                  "type": "object",
-                  "properties": {
-                    "queued": {
-                      "type": "boolean",
-                      "const": true
-                    }
-                  },
-                  "required": [
-                    "queued"
-                  ]
-                }
+                "schema": {}
               }
             }
           }
@@ -375,9 +398,9 @@
           "DeferredExport"
         ],
         "responses": {
-          "200": {
+          "202": {
             "x-docuccino": {
-              "id": "res:v1:66vhvdfm4x7k76bb",
+              "id": "res:v1:fruyufld2ydvyd6o",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -388,7 +411,7 @@
                 }
               ]
             },
-            "description": "OK",
+            "description": "Accepted",
             "content": {
               "text/html": {
                 "schema": {
@@ -453,9 +476,9 @@
           "DeferredExport"
         ],
         "responses": {
-          "200": {
+          "202": {
             "x-docuccino": {
-              "id": "res:v1:tcd3ono2gbghpirb",
+              "id": "res:v1:tutxxeynw2rp4xfk",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -466,7 +489,7 @@
                 }
               ]
             },
-            "description": "OK",
+            "description": "Accepted",
             "content": {
               "application/json": {
                 "schema": {
@@ -540,9 +563,9 @@
           "DeferredExport"
         ],
         "responses": {
-          "200": {
+          "409": {
             "x-docuccino": {
-              "id": "res:v1:2okxjanw7utmnois",
+              "id": "res:v1:xauusnw22aftzoom",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -553,7 +576,7 @@
                 }
               ]
             },
-            "description": "OK",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -627,9 +650,9 @@
           "DeferredExport"
         ],
         "responses": {
-          "200": {
+          "default": {
             "x-docuccino": {
-              "id": "res:v1:n5fyt5ioddextald",
+              "id": "res:v1:ywkwjff5d6iredwq",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -638,9 +661,12 @@
                     "description"
                   ]
                 }
-              ]
+              ],
+              "facts": {
+                "statusUnplaced": true
+              }
             },
-            "description": "OK",
+            "description": "Any status",
             "content": {
               "application/json": {
                 "schema": {
@@ -801,9 +827,9 @@
           "DeferredExport"
         ],
         "responses": {
-          "200": {
+          "202": {
             "x-docuccino": {
-              "id": "res:v1:blbui6tvcxvgjc5n",
+              "id": "res:v1:7b736m6jh7o5yt4r",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -814,7 +840,7 @@
                 }
               ]
             },
-            "description": "OK",
+            "description": "Accepted",
             "content": {
               "application/json": {
                 "schema": {
@@ -888,9 +914,9 @@
           "DeferredExport"
         ],
         "responses": {
-          "200": {
+          "202": {
             "x-docuccino": {
-              "id": "res:v1:xanv7roo4m4g3qob",
+              "id": "res:v1:kiuiletjwr4p5kjw",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -901,7 +927,7 @@
                 }
               ]
             },
-            "description": "OK",
+            "description": "Accepted",
             "content": {
               "*/*": {
                 "schema": {
@@ -931,7 +957,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "588bebd19b252942178b8f2e18d08043b4b3c497625617cb4aab302fa800688e"
+      "contentHash": "4909c95ee81c395d902e141dc3468a2bf3de0cec7d10ac280219d8003f097d8c"
     },
     "generator": {
       "name": "docuccino/laravel",
