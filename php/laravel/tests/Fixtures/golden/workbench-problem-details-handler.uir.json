@@ -387,8 +387,13 @@
                       "type": "string"
                     },
                     "errors": {
-                      "type": "array",
-                      "items": {}
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
                     },
                     "instance": {
                       "type": "string"
@@ -420,9 +425,7 @@
                   "status": 422,
                   "detail": "string",
                   "instance": "string",
-                  "errors": [
-                    "string"
-                  ]
+                  "errors": {}
                 }
               }
             }
@@ -675,7 +678,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "eac46825b7f6c6ecc92518d37d1795882d226c96fb14dd7386a96cb1ff274542"
+      "contentHash": "03f0f5bcc6420fef7823ff2b8ed92876b99597068a71775a82da4db163e615dd"
     },
     "generator": {
       "name": "docuccino/laravel",
