@@ -74,7 +74,7 @@ function allowedSwitchReads(): array
         // ---- answers for every non-boolean, so nothing reads a switch backwards; what is missing is
         // ---- the diagnostic, and it stays missing until the allow-list question is settled.
         'php/laravel/src/Integrations/JsonApiPaginate/JsonApiPaginateConfig.php::mode' => [2, 'spatie/laravel-json-api-paginate `use_cursor_pagination`, `use_simple_pagination`'],
-        'php/laravel/src/Integrations/QueryBuilder/QueryBuilderConfig.php::fromArray' => [3, 'spatie/laravel-query-builder `disable_invalid_*_query_exception`'],
+        'php/laravel/src/Integrations/QueryBuilder/QueryBuilderConfig.php::fromArray' => [4, 'spatie/laravel-query-builder `disable_invalid_*_query_exception`, and `filter_value_splitting_enabled` cast as Spatie\'s own `! config()` reads it'],
     ];
 }
 

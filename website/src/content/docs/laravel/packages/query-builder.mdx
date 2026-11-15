@@ -132,6 +132,11 @@ filter, `AllowedFilter::exact('status')->delimiter('|')` documents `filter[statu
 with `|` named in its description, while the rest of the list keeps the configured shape.
 `->delimiter('')` turns splitting off for that filter, so it takes a single value.
 
+Setting `filter_value_splitting_enabled` to `false` in `config/query-builder.php` (Spatie 7.2.1 and
+later) turns splitting off for every filter that has no `->delimiter()` of its own. Each of those is
+then documented as taking a single value. A filter with its own delimiter still splits on it, because
+Spatie applies the setting only to filters without one. Sorts, includes and fields don't read the setting.
+
 Every sentence in that description comes from your allow-list, so a description you write with
 `#[QueryParameter('sort', description: 'How to order the list.')]` leads and those sentences stay
 beneath it as a paragraph of their own. The same goes for `include` and each fields group, under
