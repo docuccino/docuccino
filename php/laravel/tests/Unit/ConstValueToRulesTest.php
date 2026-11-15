@@ -455,11 +455,14 @@ it('folds every required and prohibited descriptor and rule object to the rule i
 ]);
 
 it('folds every framework factory and rule object that applies a rule on a condition', function (): void {
-    // The rows above list them by hand; this reads the framework's own. A conditional factory or rule class
-    // Laravel adds would otherwise fold to nothing, as any unrecognised descriptor or unannotated object does.
+    // The rows above list them by hand; this reads the framework's own: every exclude rule, and every rule
+    // object holding a `condition`, with the factories that build them. One Laravel adds would otherwise fold to
+    // nothing, as any unrecognised descriptor or unannotated object does.
+    $conditional = static fn (string $class): bool => str_starts_with($class, 'Illuminate\\Validation\\Rules\\') && class_exists($class)
+        && (str_starts_with(substr($class, (int) strrpos($class, '\\') + 1), 'Exclude') || property_exists($class, 'condition'));
     $factories = array_values(array_filter(
         array_map(static fn (ReflectionMethod $method): string => $method->getName(), (new ReflectionClass(Rule::class))->getMethods(ReflectionMethod::IS_STATIC)),
-        static fn (string $name): bool => preg_match('/^(exclude|required|prohibited)/', $name) === 1,
+        static fn (string $name): bool => str_starts_with($name, 'exclude') || $conditional((string) RuleFactories::builtClass($name)),
     ));
 
     expect($factories)->not->toBeEmpty();
@@ -469,10 +472,11 @@ it('folds every framework factory and rule object that applies a rule on a condi
 
     $classes = array_values(array_filter(
         array_map(static fn (string $file): string => 'Illuminate\\Validation\\Rules\\'.basename($file, '.php'), glob(dirname((string) (new ReflectionClass(Rule::class))->getFileName()).'/Rules/*.php') ?: []),
-        static fn (string $class): bool => preg_match('/^(Exclude|Required|Prohibited)/', substr($class, (int) strrpos($class, '\\') + 1)) === 1,
+        $conditional,
     ));
 
-    expect($classes)->not->toBeEmpty();
+    // ExcludeIf, ExcludeUnless and the four required and prohibited forms, on every Laravel this supports.
+    expect(count($classes))->toBeGreaterThanOrEqual(6);
     foreach ($classes as $class) {
         expect((new ConstValueToRules)->fold(ConstValue::instance($class, [ConstValue::unknown('closure')])))->toHaveCount(1, $class);
     }
@@ -494,7 +498,7 @@ it('folds a framework rule object written with new as the Rule factory that buil
 
     $folding = array_values(array_filter(
         array_map(static fn (ReflectionMethod $method): string => $method->getName(), (new ReflectionClass(Rule::class))->getMethods(ReflectionMethod::IS_STATIC)),
-        static fn (string $name): bool => preg_match('/^(exclude|required|prohibited)/', $name) !== 1
+        static fn (string $name): bool => ! isset(array_flip(['excludeIf', 'excludeUnless', 'requiredIf', 'requiredUnless', 'prohibitedIf', 'prohibitedUnless', 'excludeWith', 'excludeWithout'])[$name])
             && RuleFactories::builtClass($name) !== null
             && (new ConstValueToRules)->fold(ConstValue::descriptor('Illuminate\\Validation\\Rule::'.$name, [ConstValue::scalar(WidgetStatus::class)])) !== [],
     ));
