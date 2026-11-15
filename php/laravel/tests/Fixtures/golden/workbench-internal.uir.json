@@ -343,6 +343,18 @@
               "fields": [
                 "operationId"
               ]
+            },
+            {
+              "producer": "integration:sanctum",
+              "layer": "integration",
+              "fields": [
+                "security"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/FormController.php",
+                "line": 25,
+                "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
+              }
             }
           ]
         },
@@ -351,6 +363,11 @@
         "description": "Returns the collection of forms visible to the caller.",
         "tags": [
           "Forms"
+        ],
+        "security": [
+          {
+            "sanctumStateful": []
+          }
         ],
         "responses": {
           "200": {
@@ -462,7 +479,7 @@
     "document": {
       "id": "doc:internal",
       "configHash": "58a8092e2ddce2265e379ab7e3d6e81ff274d5ce60755bd9e428ab667a642338",
-      "contentHash": "d19b085f38de7884943c6745626623a89460542c16d19d2266ab29524153ab52"
+      "contentHash": "66b0ac22a9b07a54aa1d445cd6bd4977764c9ac659d21997a43924ba37c736e6"
     },
     "generator": {
       "name": "docuccino/laravel",
