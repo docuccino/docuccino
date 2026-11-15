@@ -222,12 +222,12 @@
           "marketing": {
             "description": "Must be declined when kind is business.",
             "type": "boolean",
-            "const": false
+            "example": true
           },
           "terms": {
             "description": "Must be accepted when kind is business.",
             "type": "boolean",
-            "const": true
+            "example": true
           }
         },
         "required": [
@@ -242,31 +242,25 @@
         "type": "object",
         "properties": {
           "contract": {
-            "description": "Must be accepted when kind is business.",
-            "type": "boolean",
-            "const": true
+            "description": "Must be accepted when kind is business or charity."
           },
           "kind": {
             "type": "string"
           },
           "marketing": {
-            "description": "Must be declined when kind is business.",
-            "type": "boolean",
-            "const": false
+            "description": "Must be declined when kind is business."
           },
           "newsletter": {
             "description": "Must be accepted when kind is business.",
             "type": "boolean",
-            "const": true
+            "example": true
           },
           "privacy": {
             "type": "boolean",
             "const": true
           },
           "terms": {
-            "description": "Must be accepted when kind is business.",
-            "type": "boolean",
-            "const": true
+            "description": "Must be accepted when kind is business."
           },
           "tracking": {
             "x-docuccino": {
@@ -274,16 +268,7 @@
                 "blankAsNull": "^[\\x00\\t-\\r  ­͏؜ᅟᅠ ឴឵᠎           ​‌‍‎‏\u2028\u2029  ⁠⁡⁢⁣⁤⁥⁪⁫⁬⁭⁮⁯⠀　ㅤ﻿ﾠ𝅙𝅳𝅴𝅵𝅶𝅷𝅸𝅹𝅺󠀠]*$"
               }
             },
-            "description": "Must be declined when kind is business.",
-            "anyOf": [
-              {
-                "type": "boolean",
-                "const": false
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "description": "Must be declined when kind is business."
           }
         }
       },
@@ -329,7 +314,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "f30977b6047a5efd57ff4834995af1bd898ca77cd7d69449205979bc5737ffc6"
+      "contentHash": "77fd437079f39b94464a6d07ceef0adf0a70ddb4c59ee9bb0d7f370609c9da6d"
     },
     "generator": {
       "name": "docuccino/laravel",
