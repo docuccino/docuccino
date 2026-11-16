@@ -81,8 +81,9 @@ generated from the document changes.
 ### What `docuccino:diff` reports across this upgrade
 
 Only if you diff a document committed before the upgrade against a build after it, or gate it with
-`--enforce`. Eight fixes make a choice rule publish what Laravel checks, a ninth does the same for a
-Spatie Data rule string, and the differ reads each as breaking where the rule is used:
+`--enforce`. Eight fixes make a choice rule publish what Laravel checks, two more do the same for
+Spatie Data's rule strings and validation attributes, and the differ reads each as breaking where the
+rule is used:
 
 - **`new Enum` and `new In` publish their values.** Both were dropped, so the field published no
   `enum`. An `enum` arriving where nothing constrained the field (`schema.enum-added`) is a narrowing,
@@ -130,6 +131,14 @@ Spatie Data rule string, and the differ reads each as breaking where the rule is
   `enum` on the array, and on an `array<string, string>` on the object, refusing every value the server
   takes; the `enum` now sits on `items`, or on `additionalProperties` for a map. `#[NotIn]` now
   refuses the arrays or maps whose every value is listed. The differ reads both as the bullet above.
+- **A Spatie Data validation attribute publishes the rule laravel-data writes for it.** That rule is the
+  attribute's own keyword, so `#[GreaterThan(5)]` is `gt:5`, where it was read as `greater_than:5`, a
+  rule Laravel does not have, and only a `validation.rule-unhandled` note named it. `#[GreaterThan]`,
+  `#[GreaterThanOrEqualTo]`, `#[LessThan]` and `#[LessThanOrEqualTo]` given a number now publish their
+  bound, and `#[ListType]` makes the field an array; each arriving is a narrowing. Arguments are read in
+  the order the attribute declares them, so `#[Between(max: 10, min: 1)]` publishes `minimum: 1` and
+  `maximum: 10`, where it published the two swapped and refused every value; bounds moving outward are
+  not breaking.
 
 So a gate run with `--enforce` fails on the upgrade. Your API did not change: in each case the
 document now says what your server already did. Upgrade in a pull request of its own, so the

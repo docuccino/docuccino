@@ -40,6 +40,7 @@ use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\AddressData;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\AttributeKeywordData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\BaseApiData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\CustomMappedController;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\CustomMappedData;
@@ -57,9 +58,9 @@ use Spatie\LaravelData\Support\Validation\ValidationPath;
 use Workbench\App\Enums\WidgetStatus;
 
 /**
- * Exhaustive coverage of the spatie validation-attribute → Laravel rule-token map ({@see
- * DataClassReflector::validationTokens()}): every supported attribute is recovered as the right
- * token, and an unsupported attribute degrades with the same permissive + info-diagnostic contract
+ * Coverage of the spatie validation-attribute → Laravel rule-token reading ({@see
+ * DataClassReflector::validationTokens()}): attributes are recovered as the rule laravel-data writes
+ * for them, and one the vocabulary has no reader for degrades with the same permissive + info-diagnostic contract
  * as an unknown string rule. The token is then shown to drive the SHARED validation chain to the
  * expected schema effect.
  */
@@ -72,7 +73,8 @@ it('recovers the right Laravel rule token from every supported spatie validation
     'Present' => ['present', 'present'],
     'Prohibited' => ['prohibited', 'prohibited'],
     'Filled' => ['filled', 'filled'],
-    'Email' => ['email', 'email'],
+    // laravel-data checks an address written with no mode against RFC 5322, and writes so.
+    'Email' => ['email', 'email:rfc'],
     'Url' => ['url', 'url'],
     'ActiveUrl' => ['activeUrl', 'active_url'],
     'Uuid' => ['uuid', 'uuid'],
@@ -99,10 +101,24 @@ it('recovers the right Laravel rule token from every supported spatie validation
     'DigitsBetween' => ['digitsBetween', 'digits_between:1,5'],
     'StartsWith' => ['startsWith', 'starts_with:a'],
     'EndsWith' => ['endsWith', 'ends_with:z'],
-    // Not in the reflector's map → snake-cased short name; recovery is independent of whether a
-    // transformer then handles the token (the chain now maps `accepted` → const, but the token
-    // recovery under test here is unchanged).
-    'Accepted (not in the reflector map)' => ['accepted', 'accepted'],
+    'Accepted' => ['accepted', 'accepted'],
+]);
+
+it('recovers the rule an attribute names itself, not its class name', function (string $property, string $expected): void {
+    // laravel-data writes each attribute's rule from its own keyword(), so `#[GreaterThan(5)]` is `gt:5`; its class
+    // name snake-cased (`greater_than`) is a rule Laravel has never heard of.
+    expect((new DataClassReflector)->validationTokens(AttributeKeywordData::class, $property))->toBe([$expected]);
+})->with([
+    'ListType' => ['items', 'list'],
+    'GreaterThan' => ['above', 'gt:5'],
+    'GreaterThanOrEqualTo' => ['atLeast', 'gte:5'],
+    'LessThan' => ['below', 'lt:10'],
+    'LessThanOrEqualTo' => ['atMost', 'lte:10'],
+    'IPv4' => ['v4', 'ipv4'],
+    'IPv6' => ['v6', 'ipv6'],
+    'MimeTypes' => ['avatar', 'mimetypes:image/png'],
+    // Its parameters come in the order the attribute declares them, not the order they were named in.
+    'Between, named out of order' => ['count', 'between:1,10'],
 ]);
 
 it('reads an #[In] or #[NotIn] as the rule laravel-data builds from it, as Laravel parses that rule', function (string $fqcn, string $property, string $name, array $parameters, bool $case): void {
