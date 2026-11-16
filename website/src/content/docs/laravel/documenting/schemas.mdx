@@ -137,7 +137,7 @@ A cast pins its column's shape. Native casts:
 | `date`, `immutable_date` | `string`, `format: date-time` in a response body; `format: date` in a filter or a bound path segment |
 | `datetime:Y-m-d`, `date:Y-m-d` | `string`, `format: date` in a response body (a date-only pattern) |
 | `datetime:<custom format>`, `date:<custom format>` | `string`, with the format named in the description — a bespoke format is neither `date` nor `date-time`, so claiming one would be wrong |
-| `timestamp` | `integer` (a unix timestamp, not a date string) |
+| `timestamp` | `integer` (a unix timestamp, not a date string), described as one in a response body |
 | `boolean`, `bool` | `boolean` |
 | `integer`, `int` | `integer` |
 | `real`, `float`, `double` | `number` |

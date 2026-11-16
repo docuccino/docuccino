@@ -58,18 +58,22 @@ final class DataSchema implements TypeToSchema
 {
     private readonly NestedCollectionWrap $nestedWrap;
 
+    private readonly WrittenDate $dates;
+
     /**
-     * @param  string  $dateFormat  the app's `data.date_format` (a PHP date() format), read through
-     *                              {@see DateWireFormat} — the same reading the request side gives it,
-     *                              so a `DateTimeInterface` property documents one format both ways
+     * @param  string  $dateFormat  the first of the app's `data.date_format` (a PHP date() format), which
+     *                              laravel-data's date transformer writes with unless given its own
+     * @param  array<string, string>  $transformers  the app's `data.transformers` ({@see WrittenDate})
      */
     public function __construct(
         private readonly DataClassReflector $reflector = new DataClassReflector,
         private readonly ComponentHoist $hoist = new ComponentHoist,
-        private readonly string $dateFormat = DateWireFormat::DEFAULT_FORMAT,
+        string $dateFormat = DateWireFormat::DEFAULT_FORMAT,
         private readonly WrapResolver $wrap = new WrapResolver,
+        array $transformers = WrittenDate::DEFAULT_TRANSFORMERS,
     ) {
         $this->nestedWrap = new NestedCollectionWrap($this->reflector, $this->wrap);
+        $this->dates = new WrittenDate($this->reflector, $dateFormat, $transformers);
     }
 
     public function supports(DType $type): bool
@@ -191,8 +195,8 @@ final class DataSchema implements TypeToSchema
 
     /**
      * One property's schema, special-casing the two shapes the generic class mapper gets wrong: a
-     * `#[DataCollectionOf(X)]` collection is an array of X, and a `DateTimeInterface` is a formatted
-     * string rather than a bare object.
+     * `#[DataCollectionOf(X)]` collection is an array of X, and a `DateTimeInterface` is whatever its
+     * transformer writes ({@see WrittenDate}).
      *
      * @return array<string, mixed>
      */
@@ -208,15 +212,18 @@ final class DataSchema implements TypeToSchema
             return ['type' => 'array', 'items' => $context->convert(new ClassT($item))];
         }
 
-        if (! self::hasDateTime($clean)) {
+        $dateClass = self::dateClass($clean);
+        $serialized = $dateClass !== null ? $this->dates->schema($fqcn, $property, $dateClass) : null;
+
+        // No transformer writes it, so the value goes out as its own JSON form, which the chain reads.
+        if ($serialized === null) {
             return $context->convert($clean);
         }
 
-        // Only the `U` cast format changes the wire TYPE (integer timestamp); every other explicit
-        // format still renders as a string, shaped by the one date policy.
-        $serialized = $this->reflector->dateTimeCastFormat($fqcn, $property) === DateWireFormat::UNIX
-            ? DateWireFormat::timestampSchema()
-            : DateWireFormat::serializedSchema($this->dateFormat);
+        // One no one can read writes it, and `{}` already admits whatever else the union holds.
+        if ($serialized === []) {
+            return [];
+        }
 
         return $this->withDateTime($clean, $serialized, $context);
     }
@@ -264,19 +271,20 @@ final class DataSchema implements TypeToSchema
      */
     public static function hasDateTime(DType $clean): bool
     {
-        if ($clean instanceof ClassT) {
-            return DataClassReflector::isDateTime($clean->fqcn);
-        }
+        return self::dateClass($clean) !== null;
+    }
 
-        if ($clean instanceof UnionT) {
-            foreach ($clean->members as $member) {
-                if ($member instanceof ClassT && DataClassReflector::isDateTime($member->fqcn)) {
-                    return true;
-                }
+    /** The `DateTimeInterface` class the marker-stripped type is, or the first it unions in. */
+    private static function dateClass(DType $clean): ?string
+    {
+        $members = $clean instanceof UnionT ? $clean->members : [$clean];
+        foreach ($members as $member) {
+            if ($member instanceof ClassT && DataClassReflector::isDateTime($member->fqcn)) {
+                return $member->fqcn;
             }
         }
 
-        return false;
+        return null;
     }
 
     private function collection(ClassT $type, SchemaContext $context): SchemaResult

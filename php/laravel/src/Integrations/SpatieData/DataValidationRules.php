@@ -100,8 +100,8 @@ final class DataValidationRules
     private ?ValidationRulesToSchema $validation = null;
 
     /**
-     * @param  string  $dateFormat  the app's `data.date_format`, read exactly as {@see DataSchema} reads
-     *                              it for the response side ({@see dateWireRules()})
+     * @param  string  $dateFormat  the app's `data.date_format`, which the date cast parses input with
+     *                              where the property names no format of its own ({@see dateWireRules()})
      */
     public function __construct(
         private readonly DataClassReflector $reflector = new DataClassReflector,
@@ -533,10 +533,9 @@ final class DataValidationRules
      * The `date_wire` carrier for a `DateTimeInterface`-typed property: the wire format the app really
      * accepts, from the most specific source there is. A `#[WithCast(DateTimeInterfaceCast::class,
      * format: …)]` states it for this property outright — it is literally the format the cast parses
-     * input with — and otherwise the app's `data.date_format` does, which is the source
-     * {@see DataSchema} reads for the response side, so the two directions agree by construction rather
-     * than by a second guess. A field whose own rules already carry a `date_format` says it more
-     * specifically still and gets none.
+     * input with — and otherwise the app's `data.date_format` does. The response side reads what the
+     * transformer writes instead ({@see WrittenDate}), so the two agree wherever the class states neither.
+     * A field whose own rules already carry a `date_format` says it more specifically still and gets none.
      *
      * The PHP format travels on the rule as it was written, never a word summarising it: what the document
      * may CLAIM about a pattern — a `format` keyword, a note, the example bytes — is one policy, and

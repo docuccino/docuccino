@@ -55,9 +55,11 @@ it('maps every known cast base in both directions', function (string $cast, ?arr
     'immutable_datetime' => ['immutable_datetime', null, ['type' => 'string', 'format' => 'date-time']],
     'date' => ['date', null, ['type' => 'string', 'format' => 'date']],
     'immutable_date' => ['immutable_date', null, ['type' => 'string', 'format' => 'date']],
-    // Everything else answers both directions alike.
+    // Everything else answers both directions alike, but for what a written timestamp counts.
     'custom_datetime' => ['custom_datetime', ['type' => 'string', 'format' => 'date-time'], ['type' => 'string', 'format' => 'date-time']],
-    'timestamp' => ['timestamp', ['type' => 'integer'], ['type' => 'integer']],
+    // Written as the integer `getTimestamp()` returns, which says what it counts the way a request date
+    // read with `U` says it; a request names the integer alone, as it does for every other column.
+    'timestamp' => ['timestamp', ['type' => 'integer', 'x-docuccino' => ['notes' => ['Unix timestamp (seconds).']]], ['type' => 'integer']],
     'boolean' => ['boolean', ['type' => 'boolean'], ['type' => 'boolean']],
     'bool' => ['bool', ['type' => 'boolean'], ['type' => 'boolean']],
     'integer' => ['integer', ['type' => 'integer'], ['type' => 'integer']],

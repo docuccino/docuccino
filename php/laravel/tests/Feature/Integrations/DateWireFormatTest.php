@@ -52,8 +52,9 @@ use Spatie\LaravelData\Optional;
 use Workbench\App\Support\StampedDate;
 
 /**
- * What a date-typed property publishes, in BOTH directions, from one class. The invariant: one value is
- * documented one way. A `date` rule is one word for everything non-relative `strtotime` parses, so it is
+ * What a date-typed property publishes, in BOTH directions, from one class. Each direction reads the source
+ * laravel-data uses for it — a request what the cast parses, a response what the transformer writes — so
+ * where the class states neither, one value is documented one way. A `date` rule is one word for everything non-relative `strtotime` parses, so it is
  * narrower than the server accepts and never the source a date-typed property's format comes from — and a
  * client round-tripping a value documented `date` on the way in and `date-time` on the way out truncates
  * the time.
@@ -172,11 +173,12 @@ it('resolves a date property\'s format from its most specific source, both ways'
         ['type' => 'string', 'format' => 'date-time'],
     ],
 
-    // 2. The `DateTimeInterfaceCast` format is what the cast really parses input with. `U` is the one
-    //    shape that is not a string at all, and both sides say integer.
-    'a U cast is a timestamp on both sides' => ['castTimestamp',
+    // 2. The `DateTimeInterfaceCast` format is what the cast really parses input with, and only input:
+    //    the response is written by the transformer, which never reads the cast. `U` makes the request
+    //    an integer and leaves the response the configured string.
+    'a U cast is a timestamp in, the configured string out' => ['castTimestamp',
         ['type' => 'integer', 'format' => null],
-        ['type' => 'integer', 'format' => null],
+        ['type' => 'string', 'format' => 'date-time'],
     ],
     'a date-only cast beats the configured format' => ['castDateOnly',
         ['type' => 'string', 'format' => 'date'],
@@ -341,15 +343,16 @@ it('keeps the recovered wire format under a rules() override that says less', fu
         ->and($schema['properties']['noTypeStated']['format'])->toBe('date-time');
 });
 
-it('describes a Unix-timestamp property identically in both directions', function (): void {
-    // The one date shape that is not a string: the integer says it, and the coarse rule's `format` goes
-    // with the type it belonged to rather than lingering on an integer.
+it('describes a Unix-timestamp cast as the epoch it reads, and the response as the string it writes', function (): void {
+    // The one date shape a request takes that is not a string: the integer says it, and the coarse rule's
+    // `format` goes with the type it belonged to rather than lingering on an integer. laravel-data writes
+    // the value with its date transformer, which formats with `data.date_format` and never reads the cast.
     $classes = [DateLadderData::class => ladderMetadata()];
 
     expect(dateWireRequest(DateLadderData::class, DateLadderController::class, $classes)['castTimestamp'])
         ->toBe(['type' => 'integer', 'description' => 'Unix timestamp (seconds).'])
         ->and(dateWireResponse(DateLadderData::class, $classes)['castTimestamp'])
-        ->toBe(['type' => 'integer', 'description' => 'Unix timestamp (seconds).']);
+        ->toBe(['type' => 'string', 'format' => 'date-time']);
 });
 
 it('claims a format only where the pattern\'s own bytes satisfy it', function (): void {

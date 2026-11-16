@@ -195,8 +195,9 @@
         "type": "object",
         "properties": {
           "archivedOn": {
-            "description": "When the logbook was archived.\n\nSerialized using the date format \"d/m/Y\".",
-            "type": "string"
+            "description": "When the logbook was archived.",
+            "type": "string",
+            "format": "date"
           },
           "closedOn": {
             "description": "The day the logbook was closed.\n\nSerialized using the date format \"d/m/Y\".",
@@ -218,8 +219,8 @@
             "type": "string"
           },
           "stampedAt": {
-            "description": "When the logbook was stamped.\n\nUnix timestamp (seconds).",
-            "type": "integer"
+            "description": "When the logbook was stamped.\n\nSerialized using the date format \"d/m/Y\".",
+            "type": "string"
           }
         },
         "required": [
@@ -237,7 +238,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "9f38eb7699af4208e2ee84f5f0e65e5c63e53461430c85331325c3d64dd4f9ec"
+      "contentHash": "a5a9567b75bc5d97090560b2d2cfa9f7ac71045b55a1c8ddddb1ca0a9d8746c6"
     },
     "generator": {
       "name": "docuccino/laravel",

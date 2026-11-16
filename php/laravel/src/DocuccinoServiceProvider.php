@@ -69,6 +69,7 @@ use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
 use Docuccino\Laravel\Integrations\SpatieData\WrapResolver;
+use Docuccino\Laravel\Integrations\SpatieData\WrittenDate;
 use Docuccino\Laravel\Integrations\Support\DateWireFormat;
 use Docuccino\Laravel\Pipeline\BuildFingerprint;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
@@ -446,13 +447,12 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         $this->app->bind(DataSchema::class, function (Application $app): DataSchema {
             return new DataSchema(
                 reflector: $app->make(DataClassReflector::class),
-                dateFormat: self::dataDateFormat(),
+                dateFormat: self::dataOutputDateFormat(),
                 wrap: new WrapResolver(self::stringConfig('data.wrap')),
+                transformers: self::dataTransformers(),
             );
         });
 
-        // The request side is handed the SAME `data.date_format`, so a DateTimeInterface property
-        // documents one wire format in both directions.
         $this->app->bind(DataValidationRules::class, function (Application $app): DataValidationRules {
             return new DataValidationRules(
                 reflector: $app->make(DataClassReflector::class),
@@ -534,6 +534,30 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
     private static function dataDateFormat(): string
     {
         return self::stringConfig('data.date_format') ?? DateWireFormat::DEFAULT_FORMAT;
+    }
+
+    /** The format laravel-data's date transformer writes by default: `data.date_format`, or its first entry. */
+    private static function dataOutputDateFormat(): string
+    {
+        $format = config('data.date_format');
+        $first = is_array($format) ? reset($format) : $format;
+
+        return is_string($first) && $first !== '' ? $first : DateWireFormat::DEFAULT_FORMAT;
+    }
+
+    /**
+     * The app's `data.transformers`, in order, or laravel-data's shipped entry where it is unset.
+     *
+     * @return array<string, string>
+     */
+    private static function dataTransformers(): array
+    {
+        $configured = config('data.transformers');
+        if (! is_array($configured)) {
+            return WrittenDate::DEFAULT_TRANSFORMERS;
+        }
+
+        return array_filter($configured, static fn (mixed $transformer, int|string $transformable): bool => is_string($transformable) && is_string($transformer), ARRAY_FILTER_USE_BOTH);
     }
 
     /** A non-empty string config value, or null when unset/blank. */
