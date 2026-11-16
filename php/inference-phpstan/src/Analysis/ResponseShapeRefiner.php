@@ -29,6 +29,8 @@ use Docuccino\Inference\PhpStan\Support\OmissionSentinel;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Support\ResponseFactoryCall;
 use Docuccino\Inference\PhpStan\Support\ScalarFold;
+use Docuccino\Inference\PhpStan\Throwing\CaseStatus;
+use Docuccino\Inference\PhpStan\Throwing\ConstantSource;
 use Docuccino\Inference\PhpStan\Trace\Callee;
 use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
 use Docuccino\Inference\PhpStan\Translation\TypeTranslator;
@@ -104,13 +106,14 @@ final class ResponseShapeRefiner
         private readonly CalleeResolver $calleeResolver,
         private readonly ProjectFilter $appFilter,
         private readonly ReflectionProvider $reflectionProvider,
+        private readonly CaseStatus $caseStatus,
         private readonly ClassMetadataFactory $classes = new ClassMetadataFactory,
         int $maxDepth = 4,
         int $fileBudget = 40,
     ) {
         $this->budget = new DescentBudget($maxDepth, $fileBudget);
         $this->declarations = new ComponentDeclarations($reflectionProvider);
-        $this->fluentChain = new FluentResponseChain($reflectionProvider, $translator);
+        $this->fluentChain = new FluentResponseChain($reflectionProvider, $translator, $this->statusIn(...));
         $this->echoes = new ConstructorEchoes($this->touchProject(...));
         $this->enumFolder = new EnumAccessorFolder(
             $this->fileAnalyzer,
@@ -189,14 +192,27 @@ final class ResponseShapeRefiner
 
     /**
      * Whether this reads the expression better than the response type PHPStan resolved for it, so the
-     * harvest knows a parameterised type is not the last word. Two shapes qualify: a `new` whose arguments
-     * fold to more than the erased generic the stub's `@template` bounds leave behind, and a fluent chain,
+     * harvest knows a parameterised type is not the last word. Three shapes qualify: a `new` whose arguments
+     * fold to more than the erased generic the stub's `@template` bounds leave behind, a fluent chain,
      * whose links can restate a status the receiver's own type carries unchanged
-     * ({@see FluentResponseChain}).
+     * ({@see FluentResponseChain}), and a `response()->json()` whose status is a read on an enum case, which
+     * its type carries as a bare int ({@see CaseStatus}). A factory call's status is read either way, so
+     * where it was written is recorded when the harvest keeps the type.
      */
     public function outranksResolvedType(Node\Expr $expr, Scope $scope): bool
     {
-        return $expr instanceof Node\Expr\New_ || $this->fluentChain->peel($expr, $scope) !== null;
+        if ($expr instanceof Node\Expr\New_ || $this->fluentChain->peel($expr, $scope) !== null) {
+            return true;
+        }
+
+        $status = $expr instanceof Node\Expr\MethodCall ? $this->factoryStatus($expr, $scope) : null;
+        if ($status === null) {
+            return false;
+        }
+
+        $read = $this->statusIn($status, $scope);
+
+        return $read !== null && ScalarFold::statusOf($scope->getType($status)) === null;
     }
 
     /**
@@ -780,31 +796,45 @@ final class ResponseShapeRefiner
 
     /**
      * `response()->json($body, $code)` with a status its type could not fold, read the way the constructor
-     * fold reads `new JsonResponse($body, $code)` ({@see foldConstructor()}): a status that is one of the
-     * enclosing helper's parameters is recorded as the accessor a call site binds, and a body member echoing
-     * it as the status marker — so `$this->ok($data, 201)` is a 201 and `$this->ok($data)` the parameter's
-     * default, rather than a status nothing read.
+     * fold reads `new JsonResponse($body, $code)` ({@see foldConstructor()}): a read on an enum case is the
+     * status its case maps to, and a status that is one of the enclosing helper's parameters is recorded as
+     * the accessor a call site binds, and a body member echoing it as the status marker — so
+     * `$this->ok($data, 201)` is a 201 and `$this->ok($data)` the parameter's default, rather than a status
+     * nothing read.
      *
      * @param  list<string>  $paramNames
      */
     private function factoryAccessors(RefinedResponse $refined, Node\Expr\MethodCall $call, Scope $scope, array $paramNames): RefinedResponse
     {
-        $arguments = $refined->status === null && ! $refined->statusOfPayload ? ResponseFactoryCall::arguments($call) : null;
-        if ($arguments === null
-            || $arguments['status'] === null
-            || ! (new ObjectType(ResponseFactoryCall::CONTRACT))->isSuperTypeOf($scope->getType($call->var))->yes()
-        ) {
+        $status = $refined->statusOfPayload ? null : $this->factoryStatus($call, $scope);
+        if ($status === null) {
             return $refined;
         }
 
-        $source = $this->resolveStatus($arguments['status'], $scope, $paramNames)[1];
-        if ($source === null) {
+        // Read even where the type folded it, which records where the status was written.
+        [$codes, $source] = $this->resolveStatus($status, $scope, $paramNames);
+        if ($codes !== null) {
+            return $refined->status === null ? $refined->withBoundStatus($codes) : $refined;
+        }
+        if ($source === null || $refined->status !== null) {
             return $refined;
         }
 
-        [$provenance, $statusTexts] = $arguments['body'] === null ? [[], []] : $this->bodyProvenance($arguments['body'], $scope, $paramNames);
+        $body = ResponseFactoryCall::arguments($call)['body'] ?? null;
+        [$provenance, $statusTexts] = $body === null ? [[], []] : $this->bodyProvenance($body, $scope, $paramNames);
 
         return RefinedResponse::fromConstructor($refined->payload, null, $source, $refined->contentType, $provenance, $statusTexts);
+    }
+
+    /** The status argument of a `response()->json()`/`noContent()` call, or null for any other call. */
+    private function factoryStatus(Node\Expr\MethodCall $call, Scope $scope): ?Node\Expr
+    {
+        $arguments = ResponseFactoryCall::arguments($call);
+        if ($arguments === null || ! (new ObjectType(ResponseFactoryCall::CONTRACT))->isSuperTypeOf($scope->getType($call->var))->yes()) {
+            return null;
+        }
+
+        return $arguments['status'];
     }
 
     /**
@@ -1128,8 +1158,8 @@ final class ResponseShapeRefiner
     }
 
     /**
-     * A foldable argument resolves the status outright — an int literal, or a concrete enum case whose
-     * accessor folds (`make(ProblemType::Forbidden, …)` → `$problem->status()` → 403); a caller parameter
+     * A foldable argument resolves the status outright — an int literal, or an enum case whose accessor
+     * folds (`make(ProblemType::Forbidden, …)` → `$problem->status()` → 403); a caller parameter
      * re-homes the accessor one hop out; anything else stays permissive.
      *
      * @param  list<string>  $paramNames  the caller's parameter names
@@ -1149,16 +1179,15 @@ final class ResponseShapeRefiner
             return $default === null ? $child->withStatusSource(null) : $child->withBoundStatus($default);
         }
 
-        // A forwarded code folds to every constant it can be (`$this->respond($b, $ok ? 200 : 503)`); an
-        // accessor read off it folds only from one known case.
-        $codes = ScalarFold::statusOf($source->kind === AccessorKind::Identity && SensitiveConstant::label($argExpr) === null ? $scope->getType($argExpr) : null);
+        // A forwarded code folds as a status written here does (`$this->respond($b, $ok ? 200 : 503)`); an
+        // accessor read off a forwarded case folds on every case the argument may be.
+        $codes = match (true) {
+            $source->kind !== AccessorKind::Identity => $this->statusIn($argExpr, $scope, $source),
+            SensitiveConstant::label($argExpr) === null => $this->statusIn($argExpr, $scope),
+            default => null,
+        };
         if ($codes !== null) {
             return $child->withBoundStatus($codes);
-        }
-
-        $literal = $this->foldAccessorArgument($argExpr, $source, $scope);
-        if ($literal !== null && is_int($literal->value)) {
-            return $child->withBoundStatus($literal);
         }
 
         $rehome = $this->rehomeAccessor($argExpr, $source, $paramNames);
@@ -1276,21 +1305,42 @@ final class ResponseShapeRefiner
     }
 
     /**
-     * A status expression as either the call-independent code(s) it folds to — one literal, or each constant
-     * of `$ok ? 200 : 503` — the {@see ParamAccessor} it reads from (a parameter, or an accessor on an enum
-     * parameter like `$problem->status()`), or neither.
+     * A status expression as either the call-independent code(s) it folds to ({@see statusIn()}), the
+     * {@see ParamAccessor} it reads from (a parameter, or an accessor on an enum parameter like
+     * `$problem->status()`), or neither.
      *
      * @param  list<string>  $paramNames
      * @return array{LiteralT|UnionT|null, ?ParamAccessor}
      */
     private function resolveStatus(Node\Expr $expr, Scope $scope, array $paramNames): array
     {
-        $codes = ScalarFold::statusOf($scope->getType($expr));
+        $codes = $this->statusIn($expr, $scope);
         if ($codes !== null) {
             return [$codes, null];
         }
 
         return [null, AccessorExtractor::fromExpr($expr, $paramNames, $this->locals($scope))];
+    }
+
+    /**
+     * The status an expression states, the one reader of it for every place a response takes one: what a
+     * read on an enum case gives ({@see CaseStatus}) — `Reason::Expired->status()`, or with `$read` the
+     * accessor a callee applies to the case passed here — or else each constant it can be
+     * ({@see ScalarFold::statusOf()}). Where it was written — the enums the read went through, the class
+     * constants it names ({@see ConstantSource}) — is a dependency whether or not it folded.
+     */
+    private function statusIn(Node\Expr $expr, Scope $scope, ?ParamAccessor $read = null): LiteralT|UnionT|null
+    {
+        $folded = $this->caseStatus->of($expr, $scope, $read);
+        foreach ([...$folded['files'], ...ConstantSource::files($expr, $scope->getClassReflection()?->getName())] as $file) {
+            $this->touchProject($file);
+        }
+
+        if ($folded['status'] !== null) {
+            return new LiteralT($folded['status']);
+        }
+
+        return $read === null ? ScalarFold::statusOf($scope->getType($expr)) : null;
     }
 
     /**

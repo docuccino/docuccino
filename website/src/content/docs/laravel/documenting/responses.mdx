@@ -415,6 +415,18 @@ A status that chooses between codes gets a response for each of them, the same a
 return response()->json(['ok' => $healthy], $healthy ? 200 : 503); // → 200 and 503, same body
 ```
 
+A status read off an enum case is the status that case maps to, wherever the response takes it. With the
+[`TokenRefusal`](/laravel/documenting/errors/#statuses-your-own-exceptions-state) enum from the errors page:
+
+```php
+return response()->json(['error' => 'token_expired'], TokenRefusal::Expired->status()); // → 401
+```
+
+The same goes for `new JsonResponse()`, `->setStatusCode()`, `->value` on an enum whose backing value is
+the status, and a helper you hand the case to (`$this->refuse(TokenRefusal::Expired)`). A case chosen at
+run time is the status every case it may be maps to. When they map to different statuses, no single code
+is true, so the body is documented as a status Docuccino can't read.
+
 A status Docuccino can't read at all, such as `->setStatusCode($upstream->status())`, is not documented
 under a code the endpoint may never send. Its body goes under `default` ("any status") and an
 `inferred-response.status-unread` info diagnostic names the action. Name the codes it sends with

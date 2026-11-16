@@ -13,14 +13,15 @@ use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use PhpParser\Node;
 use PHPStan\Analyser\Scope;
 use PHPStan\Type\Constant\ConstantIntegerType;
+use PHPStan\Type\Enum\EnumCaseObjectType;
 use PHPStan\Type\ObjectType;
 use PHPStan\Type\Type;
 use PHPStan\Type\TypeCombinator;
 
 /**
  * The status an expression states where it is written: a constant integer, or a read on an enum case —
- * `TokenRefusal::Expired->status()`, or the `$reason->status()` a constructor hands its parent, folded on
- * the case a construction passes. An enum is how an application writes a reason and its status in one
+ * `TokenRefusal::Expired->status()`, `$fault->value`, or the `$reason->status()` a constructor hands its
+ * parent, folded on the case a construction passes. An enum is how an application writes a reason and its status in one
  * place, so the number lives in a `match ($this)` arm rather than at the throw.
  *
  * Where the expression may be several cases, the answer is the one status they all read to, and none where
@@ -50,8 +51,9 @@ final class CaseStatus
 
     /**
      * The status `$expr` states in `$scope`. With no `$read`, `$expr` is the status itself — a constant, or a
-     * no-argument method called on a case. With one, `$expr` is the case and `$read` is how the status comes
-     * off it, which is how a construction fills a slot its class reads through `->status()` or `->value`.
+     * no-argument method or `->value` read on a case. With one, `$expr` is the case and `$read` is how the
+     * status comes off it, which is how a construction fills a slot its class reads through `->status()` or
+     * `->value`.
      *
      * @return FoldedStatus
      */
@@ -59,11 +61,12 @@ final class CaseStatus
     {
         if ($read === null) {
             $type = $scope->getType($expr);
+            $call = self::caseRead($expr);
             if ($type instanceof ConstantIntegerType) {
-                return ['status' => $type->getValue(), 'files' => []];
+                // PHPStan folded it already (`Case->value`, a constant), but a read on a case is still decided
+                // in the enum.
+                return ['status' => $type->getValue(), 'files' => $call === null ? [] : self::enumFiles($scope->getType($call[0]))];
             }
-
-            $call = self::methodRead($expr);
             if ($call === null) {
                 return ['status' => null, 'files' => []];
             }
@@ -82,20 +85,13 @@ final class CaseStatus
     private function ofType(Type $type, ParamAccessor $read): array
     {
         $cases = $type->getEnumCases();
-
-        $files = [];
-        $enums = [];
-        foreach ($cases as $case) {
-            $enums[] = new ObjectType($case->getClassName());
-            foreach (DeclarationFiles::of($case->getClassName()) as $file) {
-                $files[] = $file;
-            }
-        }
+        $files = self::enumFiles($type);
 
         // The cases cover the type only where it is nothing but those enums: an interface or a nullable
         // beside them may be a value no case names.
+        $enums = array_map(static fn (EnumCaseObjectType $case): ObjectType => new ObjectType($case->getClassName()), $cases);
         if ($enums === [] || ! TypeCombinator::union(...$enums)->isSuperTypeOf($type)->yes()) {
-            return ['status' => null, 'files' => array_values(array_unique($files))];
+            return ['status' => null, 'files' => $files];
         }
 
         $this->recorded = [];
@@ -114,12 +110,33 @@ final class CaseStatus
     }
 
     /**
-     * `$case->method()` with no arguments, as its receiver and the read it applies to it.
+     * The files declaring every enum `$type` may be a case of.
+     *
+     * @return list<string>
+     */
+    private static function enumFiles(Type $type): array
+    {
+        $files = [];
+        foreach ($type->getEnumCases() as $case) {
+            foreach (DeclarationFiles::of($case->getClassName()) as $file) {
+                $files[] = $file;
+            }
+        }
+
+        return array_values(array_unique($files));
+    }
+
+    /**
+     * `$case->method()` with no arguments, or `$case->value`, as its receiver and the read it applies to it.
      *
      * @return array{Node\Expr, ParamAccessor}|null
      */
-    private static function methodRead(Node\Expr $expr): ?array
+    private static function caseRead(Node\Expr $expr): ?array
     {
+        if ($expr instanceof Node\Expr\PropertyFetch && $expr->name instanceof Node\Identifier && $expr->name->toString() === 'value') {
+            return [$expr->var, new ParamAccessor('', AccessorKind::Value)];
+        }
+
         if (! $expr instanceof Node\Expr\MethodCall
             || ! $expr->name instanceof Node\Identifier
             || $expr->isFirstClassCallable()
