@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Draft\ParameterDraft;
 use Docuccino\Core\Draft\ResponseDraft;
 use Docuccino\Core\Draft\SchemaDraft;
 use Docuccino\Core\Draft\SchemaKeywords;
@@ -66,44 +67,66 @@ it('carries a shadowed value onto the frozen node so the emitted trail can answe
 });
 
 /**
- * A requirement the route enforces is true under whatever description the author writes, so it is a
- * sentence added beneath the winning description and not a contender for the field: a docblock must not
- * erase it, and it must not displace the docblock.
+ * A fact the build proved — a requirement the route enforces, how a bound path segment resolves — is true
+ * under whatever description the author writes, so it is a sentence added beneath the winning description
+ * and not a contender for the field: a docblock or attribute must not erase it, and it must not displace
+ * the author's prose. Every draft that publishes a description owes the same answer, so each is a row.
  */
-it('joins a declared description note after the winning description, whichever layer wrote it', function (): void {
-    $draft = new OperationDraft;
-    $sanctum = Contribution::integration('sanctum-abilities');
+dataset('drafts that carry description notes', [
+    'an operation' => [static fn (): OperationDraft => new OperationDraft],
+    'a parameter' => [static fn (): ParameterDraft => new ParameterDraft('path', 'post')],
+]);
 
-    $draft->declareDescriptionNote('Requires token ability: read', $sanctum);
-    $draft->setDescription('Docblock prose.', Contribution::docblock());
+it('joins a declared description note after the winning description, whichever layer wrote it', function (Closure $draft): void {
+    /** @var OperationDraft|ParameterDraft $draft */
+    $draft = $draft();
+    $inferred = Contribution::integration('sanctum-abilities');
 
-    $operation = $draft->freeze();
-    $records = $operation->docuccino?->provenance?->toArray() ?? [];
+    $draft->declareDescriptionNote('Requires token ability: read', $inferred);
+    $draft->setDescription('Author prose.', Contribution::attribute());
+
+    $node = $draft->freeze();
+    $records = $node->docuccino?->provenance?->toArray() ?? [];
     $byProducer = array_column($records, null, 'producer');
 
-    expect($operation->description)->toBe("Docblock prose.\n\nRequires token ability: read")
+    expect($node->description)->toBe("Author prose.\n\nRequires token ability: read")
         // Each wrote part of the description, so both records say so, and neither displaced the other.
-        ->and($byProducer['docblock']['fields'])->toBe(['description'])
-        ->and($byProducer['docblock'])->not->toHaveKey('overrode')
+        ->and($byProducer['attribute']['fields'])->toBe(['description'])
+        ->and($byProducer['attribute'])->not->toHaveKey('overrode')
         ->and($byProducer['integration:sanctum-abilities']['fields'])->toBe(['description']);
-});
+})->with('drafts that carry description notes');
 
-it('publishes the notes alone, in the order declared, when nothing writes a description', function (): void {
+it('publishes the notes alone, in the order declared, when nothing writes a description', function (Closure $draft): void {
     // Two producers at ONE layer: as a contested field the second would be shadowed by the first and its
-    // requirement lost. Notes are added, so both requirements stand.
-    $draft = new OperationDraft;
+    // fact lost. Notes are added, so both stand.
+    /** @var OperationDraft|ParameterDraft $draft */
+    $draft = $draft();
 
     $draft->declareDescriptionNote('Requires permission: moderate', Contribution::integration('permission'));
     $draft->declareDescriptionNote('Requires token ability: read', Contribution::integration('sanctum-abilities'));
 
-    $operation = $draft->freeze();
-    $producers = array_column($operation->docuccino?->provenance?->toArray() ?? [], 'fields', 'producer');
+    $node = $draft->freeze();
+    $producers = array_column($node->docuccino?->provenance?->toArray() ?? [], 'fields', 'producer');
 
-    expect($operation->description)->toBe("Requires permission: moderate\n\nRequires token ability: read")
+    expect($node->description)->toBe("Requires permission: moderate\n\nRequires token ability: read")
         ->and($producers)->toBe([
             'integration:permission' => ['description'],
             'integration:sanctum-abilities' => ['description'],
         ]);
+})->with('drafts that carry description notes');
+
+it('names a note and the requirement it shares a record with in one provenance record', function (): void {
+    // One producer that both required the segment and wrote its note is one record naming both fields,
+    // which is what the same producer writing both as contested fields published.
+    $parameter = new ParameterDraft('path', 'post');
+    $inference = Contribution::inference();
+
+    $parameter->setRequired(true, $inference);
+    $parameter->declareDescriptionNote('Matched on the resource\'s `slug`.', $inference);
+
+    expect($parameter->freeze()->docuccino?->provenance?->toArray())->toBe([
+        ['producer' => 'inference', 'layer' => 'inference', 'fields' => ['description', 'required']],
+    ]);
 });
 
 it('merges parameters by (in, name) rather than replacing the collection', function (): void {

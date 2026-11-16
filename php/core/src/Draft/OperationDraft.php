@@ -71,13 +71,7 @@ final class OperationDraft
      */
     private ?string $requestDescription = null;
 
-    /**
-     * Sentences a producer adds to the description ({@see declareDescriptionNote()}), each with whoever
-     * stated it.
-     *
-     * @var list<array{0: string, 1: Contribution}>
-     */
-    private array $descriptionNotes = [];
+    private readonly DescriptionNotes $descriptionNotes;
 
     private ?string $id = null;
 
@@ -86,6 +80,7 @@ final class OperationDraft
     public function __construct()
     {
         $this->guard = new PatchGuard;
+        $this->descriptionNotes = new DescriptionNotes;
     }
 
     public function setOperationId(?string $value, Contribution $by): PatchResult
@@ -298,14 +293,12 @@ final class OperationDraft
     }
 
     /**
-     * Add a sentence to whatever description wins, rather than contesting the description itself. For a
-     * fact the build proved, such as a requirement the route enforces: it is true under any description
-     * the author writes, so a higher layer's prose must not erase it, and it must not displace that
-     * prose either. Joined after the winning description at {@see freeze()}, in the order declared.
+     * Add a sentence beneath whatever description wins, such as a requirement the route enforces, rather
+     * than contesting the description itself ({@see DescriptionNotes}).
      */
     public function declareDescriptionNote(string $note, Contribution $by): void
     {
-        $this->descriptionNotes[] = [$note, $by];
+        $this->descriptionNotes->declare($note, $by);
     }
 
     /**
@@ -458,15 +451,11 @@ final class OperationDraft
             $responses[$status] = $draft->freeze();
         }
 
-        $noted = [];
-        foreach ($this->descriptionNotes as [$note, $by]) {
-            $description = DescriptionAppender::joined($description, $note);
-            $noted[$by->recordKey()] = $by;
-        }
+        $description = $this->descriptionNotes->joinedTo($description);
 
         $docuccino = new NodeExtension(
             id: $this->id,
-            provenance: $this->guard->provenance($noted === [] ? [] : ['description' => array_values($noted)]),
+            provenance: $this->guard->provenance($this->descriptionNotes->provenance()),
         );
 
         return new Operation(

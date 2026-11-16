@@ -6,6 +6,7 @@ use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Laravel\Config\BuildConfig;
 use Illuminate\Routing\Router;
 use Workbench\App\Http\Controllers\BindingController;
+use Workbench\App\Http\Controllers\DescribedBindingController;
 
 /**
  * What a route binding lets a path parameter tell a consumer, and — the harder half — what it does
@@ -51,6 +52,10 @@ function bindingFactRoutes(): callable
         $router->get('api/binding-articles/{article}', [BindingController::class, 'showArticle']);
         $router->get('api/binding-seasons/{season}', [BindingController::class, 'showSeason']);
         $router->get('api/binding-custom/{custom}', [BindingController::class, 'showBound']);
+        // Every note a binding writes, on segments their author described as well.
+        $router->get('api/binding-described/{ledger:reference}/entries/{entry}', [DescribedBindingController::class, 'showEntry'])
+            ->scopeBindings()
+            ->withTrashed();
     };
 }
 
@@ -171,6 +176,32 @@ it('leaves a parameter the framework does not scope unmarked', function (string 
     // The opt-out, on the one route shape that would otherwise scope itself. Marking this one would
     // tell every consumer their id has to belong to the parent when the server accepts it either way.
     'a child whose route prevented scoping' => ['/api/binding-ledgers/{ledger}/loose/{entry}', 'entry'],
+]);
+
+/**
+ * How a segment resolves is decided by the route before the action runs, so it is as true under the
+ * author's description as without one: a consumer told what the ledger IS still needs to know it is
+ * looked up by its reference, that an entry from another ledger 404s, and that a deleted one resolves.
+ * The author's prose leads, because it is theirs, and the notes follow beneath it.
+ */
+it('keeps every note a binding writes beneath the description its author wrote', function (string $name, string $authored, string $notes, array $facts): void {
+    [$published, $description] = bindingFactsOf('/api/binding-described/{ledger}/entries/{entry}', $name);
+
+    expect($description)->toBe($authored."\n\n".$notes)
+        ->and($published)->toBe($facts);
+})->with([
+    'a segment matched on the column its route names' => [
+        'ledger',
+        'The ledger the entry was filed against.',
+        'Matched on the resource\'s `reference`. Resolves soft-deleted (trashed) records as well as active ones.',
+        ['key' => 'reference', 'withTrashed' => true],
+    ],
+    'a segment scoped to its parent' => [
+        'entry',
+        'The entry to show.',
+        'Matched on the resource\'s `id`. Scoped to `{ledger}`: only values belonging to it match. Resolves soft-deleted (trashed) records as well as active ones.',
+        ['key' => 'id', 'scopedTo' => 'ledger', 'withTrashed' => true],
+    ],
 ]);
 
 it('serves a warm build the same bytes and diagnostics as a cold one', function (): void {

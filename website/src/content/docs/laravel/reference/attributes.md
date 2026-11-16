@@ -240,7 +240,9 @@ public function __construct(
 )
 ```
 
-Path params are inherently required (no `required` param).
+Path params are inherently required (no `required` param). A `description` leads the parameter's
+description, with anything the route settles about the segment (the column a binding matches, its
+scoping, a default) kept beneath it.
 
 ```php
 #[PathParameter(name: 'uuid', type: 'string', description: 'User id', format: 'uuid', example: '9b1…')]

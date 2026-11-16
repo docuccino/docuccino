@@ -407,7 +407,8 @@ own their own guarded writes:
 `resolvedField()` and `producerFor()` are on every draft, so the same two reads work on a parameter,
 response or schema draft too.
 
-A **`ParameterDraft`** offers `setDescription(?string, $by)`, `setRequired(?bool, $by)`,
+A **`ParameterDraft`** offers `setDescription(?string, $by)`, `declareDescriptionNote(string, $by)`
+(the same note an operation takes, added beneath whichever description wins), `setRequired(?bool, $by)`,
 `setDeprecated(?bool, $by)`, `set(field, value, $by)`, and `schema()` (a `SchemaDraft` whose own
 `set(keyword, value, $by)` builds the parameter's JSON Schema); `setDocuccinoFact(key, value)` records a
 representation-independent semantic fact.
