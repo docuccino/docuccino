@@ -244,9 +244,12 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'accepted_if' => [[['accepted_if', ['terms', 'yes']]], ['const' => true, 'description' => 'Must be accepted when terms is yes.', 'type' => 'boolean']],
     'declined_if' => [[['declined_if', ['spam', '1']]], ['const' => false, 'description' => 'Must be declined when spam is 1.', 'type' => 'boolean']],
 
-    // NotInRuleTransformer — the mirror of `in`: not: {enum}. Numeric-set inference like ChoiceRuleTransformer.
-    'not_in (string set)' => [[['not_in', ['draft', 'deleted']]], ['not' => ['enum' => ['draft', 'deleted']], 'type' => 'string']],
-    'not_in (numeric set)' => [[['not_in', ['1', '2']]], ['not' => ['enum' => [1, 2]], 'type' => 'integer']],
+    // NotInRuleTransformer — the mirror of `in`: not: {enum}. It excludes values and says nothing about the
+    // rest, so it states no type of its own (the agreement test below holds that to Laravel).
+    'not_in (string set)' => [[['not_in', ['draft', 'deleted']]], ['not' => ['enum' => ['draft', 'deleted']]]],
+    'not_in (numeric set)' => [[['not_in', ['1', '2']]], ['not' => ['enum' => [1, 2]]]],
+    'not_in beside string' => [[['string'], ['not_in', ['draft']]], ['not' => ['enum' => ['draft']], 'type' => 'string']],
+    'not_in beside integer' => [[['integer'], ['not_in', ['1', '2']]], ['not' => ['enum' => [1, 2]], 'type' => 'integer']],
 
     // NumericRuleTransformer — decimal note, multipleOf, and the numeric-literal comparison bounds.
     'decimal (fixed)' => [[['decimal', ['2']]], ['description' => 'Must have 2 decimal places.', 'type' => 'number']],
@@ -655,6 +658,40 @@ it('publishes distinct as the uniqueness of the list its items are in, never ref
     // `lines.*.sku` compares skus across objects. Two equal objects without one repeat nothing.
     'equal objects with no value to compare' => [['lines.*.sku' => 'string|distinct'], ['lines' => [['note' => 'x'], ['note' => 'x']]], true, true],
     'a value repeated across objects' => [['lines.*.sku' => 'string|distinct'], ['lines' => [['sku' => 'a'], ['sku' => 'a']]], false, false],
+]);
+
+/*
+ * A rule that only EXCLUDES values says nothing about the type of the rest: `not_in:admin` takes `5` and
+ * `[1]`, and `not_in:1,2` takes `'abc'`. Each row states the server's answer, read from Laravel itself, and
+ * the document must never refuse a value the server takes; where `exact`, it refuses the value too.
+ */
+it('publishes an exclusion-only rule no narrower than the server reads it', function (string $rules, mixed $value, bool $accepted, bool $exact): void {
+    expect(Validator::make(['f' => $value, 'other' => 'taken'], ['f' => $rules])->passes())->toBe($accepted);
+
+    $schema = json_decode((string) json_encode(convertLaravelRules(['f' => $rules])->schema['properties']['f'] ?: new stdClass), flags: JSON_THROW_ON_ERROR);
+    $published = (new Opis\JsonSchema\Validator)->validate(json_decode((string) json_encode($value), flags: JSON_THROW_ON_ERROR), $schema)->isValid();
+
+    expect($published)->toBe($accepted || ! $exact);
+})->with([
+    'an excluded word' => ['not_in:admin,root', 'admin', false, true],
+    'another word' => ['not_in:admin,root', 'support', true, true],
+    'a number beside excluded words' => ['not_in:admin,root', 5, true, true],
+    'a list beside excluded words' => ['not_in:admin,root', [1], true, true],
+    'a boolean beside excluded words' => ['not_in:admin,root', true, true, true],
+    'an excluded number' => ['not_in:1,2', 1, false, true],
+    'another number' => ['not_in:1,2', 3, true, true],
+    'a word beside excluded numbers' => ['not_in:1,2', 'abc', true, true],
+    // Laravel compares as strings, so it refuses the string spelling too; the document is the wider answer.
+    'an excluded number, as a string' => ['not_in:1,2', '1', false, false],
+    // A type rule beside it still types the field.
+    'a number where string excludes words' => ['string|not_in:admin', 5, false, true],
+    'a word where integer excludes numbers' => ['integer|not_in:1,2', 'abc', false, true],
+    // The other exclusion-only rules publish nothing, so they cannot narrow either.
+    'a number where different names a field' => ['different:other', 5, true, true],
+    'a number beside not_regex' => ['not_regex:/^a$/', 5, true, true],
+    'a number beside doesnt_start_with' => ['doesnt_start_with:a', 5, true, true],
+    'a number beside doesnt_end_with' => ['doesnt_end_with:a', 5, true, true],
+    'a number beside prohibited_unless' => ['prohibited_unless:other,taken', 5, true, true],
 ]);
 
 it('states no uniqueness where no keyword says what distinct does', function (array $rules, string $field, array $expected): void {
