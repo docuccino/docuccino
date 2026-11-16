@@ -110,7 +110,8 @@ Sanctum's `abilities:` (all-of) and `ability:` (any-of) middleware — and the d
 `CheckScopes` / `CheckForAnyScope` class forms — describe which token abilities a route needs. Since
 the `sanctumToken` scheme is an HTTP bearer token, OpenAPI can't carry abilities as scopes, so
 Docuccino surfaces them as an `x-abilities` extension member and appends a requirement line to the
-operation's description ("Requires token abilities: invoices:create, invoices:send"). Abilities checked
+operation's description ("Requires token abilities: invoices:create, invoices:send"), beneath any
+description your docblock or `#[Description]` gives it. Abilities checked
 in the action body (`$request->user()->tokenCan(…)`) can be declared with
 [`#[Abilities]`](/laravel/reference/attributes/#abilities), which is an all-of requirement:
 
