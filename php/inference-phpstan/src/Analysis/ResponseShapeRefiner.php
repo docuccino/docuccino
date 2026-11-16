@@ -1087,7 +1087,8 @@ final class ResponseShapeRefiner
     /**
      * What a plain response sends for its content, and the media type it is labelled with ({@see PlainContent}):
      * no body, JSON under the default label whatever header was stated, a rendered view, or text under the
-     * stated label or Symfony's `text/html`. Content nothing can read keeps the stated label and no body.
+     * stated label or Symfony's `text/html`. Content of no one kind is an open body: under any media type where
+     * it may be JSON, and under the label text would have where it may not.
      *
      * @param  ?Type  $content  null where nothing can see it
      * @param  string  $class  the framework response it is handed to
@@ -1095,12 +1096,16 @@ final class ResponseShapeRefiner
      */
     private function plainBody(?Type $content, ?string $stated, string $class): array
     {
-        return match (PlainContent::of($content, $class === self::PLAIN_RESPONSE)) {
+        $morphs = $class === self::PLAIN_RESPONSE;
+
+        return match (PlainContent::of($content, $morphs)) {
             PlainContent::EMPTY => [new VoidT, null],
             PlainContent::JSON => [$content === null ? null : $this->payloadOf($content), null],
             PlainContent::RENDERED => [new ClassT(self::VIEW), $stated],
             PlainContent::TEXT => [$content === null ? null : PlainContent::text($content), $stated ?? PlainContent::DEFAULT_MEDIA_TYPE],
-            PlainContent::UNREAD => [null, $stated],
+            PlainContent::UNREAD => PlainContent::mayBeJson($content, $morphs)
+                ? [null, PlainContent::ANY_MEDIA_TYPE]
+                : [null, $stated ?? PlainContent::DEFAULT_MEDIA_TYPE],
         };
     }
 

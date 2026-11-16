@@ -14,7 +14,8 @@ use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
  * Plain responses handed a string, nothing, or an array, in every spelling that makes one: constructed,
  * through the `response()` helper, the factory and the facade, Symfony's own, and a subclass handing its
  * parent the content. Laravel sends a string as it is, labelled `text/html` unless a `Content-Type` header
- * says otherwise, and an array as JSON whatever the header says.
+ * says otherwise, and an array as JSON whatever the header says. Content of no one kind — whatever the cache
+ * holds, text or an array, a file's bytes or `false` — with and without a header.
  */
 class PlainResponseBodyController extends Controller
 {
@@ -96,5 +97,41 @@ class PlainResponseBodyController extends Controller
     public function subclassArray(): LockedNoticeResponse
     {
         return new LockedNoticeResponse;
+    }
+
+    public function helperCached(): Response
+    {
+        return response(cache()->get('notice'), 410);
+    }
+
+    public function helperCachedOk(): Response
+    {
+        return response(cache()->get('notice'));
+    }
+
+    public function constructedTextOrArray(): Response
+    {
+        return new Response($this->notice(), 410);
+    }
+
+    public function helperCachedCsv(): Response
+    {
+        return response(cache()->get('export'), 200, ['Content-Type' => 'text/csv']);
+    }
+
+    public function helperFile(): Response
+    {
+        return response(file_get_contents(storage_path('notice.png')), 200, ['Content-Type' => 'image/png']);
+    }
+
+    public function symfonyCached(): SymfonyResponse
+    {
+        return new SymfonyResponse(cache()->get('notice'), 410);
+    }
+
+    /** @return string|array<string, string> */
+    private function notice(): string|array
+    {
+        return cache()->has('notice') ? ['error' => 'expired'] : 'The export has expired.';
     }
 }

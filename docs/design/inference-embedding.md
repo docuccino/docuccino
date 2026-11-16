@@ -1017,7 +1017,8 @@ the way a `throw new` is bound, and reads a JSON or plain response's BODY off th
 response's content, however it was built, is read by one reader (`PlainContent`, as Laravel's
 `Response::setContent()` decides): nothing is no body, an array or anything Laravel morphs is JSON under
 `application/json` over any stated header, a Renderable is the view, and any other scalar is text under the
-stated `Content-Type` or `text/html`. Only a
+stated `Content-Type` or `text/html`. Content of no one kind is an open body: under `*/*` where it may be
+morphed, since either label may be sent, and otherwise under the label text would have. Only a
 class in the application's files is read: a package's subclass stays the bare class it is typed as.
 
 **Every file the status was read from is a dependency.** The class's whole hierarchy, the factory's file,

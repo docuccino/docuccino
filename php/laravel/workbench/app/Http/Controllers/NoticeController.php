@@ -13,7 +13,7 @@ use Workbench\App\Http\Responses\LockedNoticeResponse;
 /**
  * Plain responses handed a string, nothing, or an array, in every spelling that makes one: constructed,
  * through the `response()` helper, the factory and the facade, Symfony's own, and a subclass handing its
- * parent the content.
+ * parent the content; and content of no one kind, with and without a `Content-Type` header.
  */
 final class NoticeController
 {
@@ -111,5 +111,47 @@ final class NoticeController
     public function subclassArray(): LockedNoticeResponse
     {
         return new LockedNoticeResponse;
+    }
+
+    /** Read the cached notice. */
+    public function helperCached(): Response
+    {
+        return response(cache()->get('notice'), 410);
+    }
+
+    /** Read the cached notice, whatever it holds. */
+    public function helperCachedOk(): Response
+    {
+        return response(cache()->get('notice'));
+    }
+
+    /** Read the notice as text or fields. */
+    public function constructedTextOrArray(): Response
+    {
+        return new Response($this->notice(), 410);
+    }
+
+    /** Export the cached notices. */
+    public function helperCachedCsv(): Response
+    {
+        return response(cache()->get('export'), 200, ['Content-Type' => 'text/csv']);
+    }
+
+    /** Read the notice image. */
+    public function helperFile(): Response
+    {
+        return response(file_get_contents(storage_path('notice.png')), 200, ['Content-Type' => 'image/png']);
+    }
+
+    /** Read the transport's cached notice. */
+    public function symfonyCached(): SymfonyResponse
+    {
+        return new SymfonyResponse(cache()->get('notice'), 410);
+    }
+
+    /** @return string|array<string, string> */
+    private function notice(): string|array
+    {
+        return cache()->has('notice') ? ['error' => 'expired'] : 'The export has expired.';
     }
 }

@@ -470,7 +470,8 @@ in the file being walked, and an array return is no type the trace follows:
   the way a real controller declares it: `BinaryFileResponse` from `response()->download()` and
   `response()->file()`, `StreamedResponse` from `response()->stream()`, `streamDownload()`,
   `eventStream()` and `Storage::download()` — two of them passing their headers and download name by
-  argument name, one through the `Response` facade — and the plain `Illuminate\Http\Response` from `response()`.
+  argument name, one through the `Response` facade — and the plain `Illuminate\Http\Response` from `response()`
+  and relayed from a contract (`app/Contracts/HealthReporter.php`).
   Each is proof that the class the response guard names is one the engine really recovers — and, since
   the download and the inline file are the SAME class, that the call site is where the media type and the
   disposition really come from. `download()` wraps its path in `storage_path(...)`, which PHPStan does not
@@ -504,7 +505,9 @@ in the file being walked, and an array return is no type the trace follows:
 - `app/Http/Controllers/PlainResponseBodyController.php` and `app/Http/Responses/LockedNoticeResponse.php` —
   plain responses handed a string, nothing or an array: constructed, through the `response()` helper, the
   factory, the `Response` facade, Symfony's own response and a subclass handing its parent the content,
-  with and without a `Content-Type` header, and a view handed to the helper.
+  with and without a `Content-Type` header, and a view handed to the helper; and content of no one kind —
+  what the cache holds, text or an array, a file's bytes or `false` — handed to the helper, `new Response`
+  and Symfony's own response, with and without a header.
 - `app/Http/Controllers/CarriedResponseController.php` — responses handed to the framework inside an
   exception: an `HttpResponseException` carrying a JSON response from the helper, the facade and `new`, a
   plain response, a redirect and a subclass, thrown at the action and from a helper, carrying a helper's
