@@ -50,14 +50,14 @@ final class PassportIntegration
      * valid token with Passport's `AuthenticationException`, and a token lacking a scope the entry names
      * with `MissingScopeException`, in both majors.
      *
-     * @return array<class-string, array{refusal: class-string, denial: class-string}>
+     * @return array<class-string, array{refusal: class-string, denial: class-string, signal: string}>
      */
     public static function authenticators(): array
     {
         $authenticators = [];
         foreach (self::candidates() as $class) {
             if (class_exists($class)) {
-                $authenticators[$class] = ['refusal' => self::AUTHENTICATION, 'denial' => self::MISSING_SCOPE];
+                $authenticators[$class] = ['refusal' => self::AUTHENTICATION, 'denial' => self::MISSING_SCOPE, 'signal' => 'token-middleware'];
             }
         }
 

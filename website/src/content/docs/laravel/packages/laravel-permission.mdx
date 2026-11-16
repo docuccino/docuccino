@@ -49,6 +49,12 @@ Once enabled, a route's permission middleware is documented two ways:
   *"Requires permission: invoices.view"*. A description you wrote yourself is kept, with the line
   beneath it.
 
+The route's `403` is documented too, wherever the document publishes
+[error responses](/laravel/documenting/errors/#implicit-responses-middleware-bindings--validation). The
+package's middleware refuses a guest with the same `403` it gives a user without the role or permission,
+so a route behind it alone documents no `401`. Put `auth` in front of it and the route documents both.
+It counts under whatever alias you registered the middleware as, or by class name.
+
 <Tabs>
 	<TabItem label="Your code">
 	```php

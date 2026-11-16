@@ -18,12 +18,13 @@ use Illuminate\Auth\Middleware\AuthenticateWithBasicAuth;
  *
  * The framework's authenticators refuse whatever the document's configuration says, so this does not
  * depend on `security.auth_middleware`. That pattern still counts where it matches: it is how an author
- * names an authenticator of their own ({@see AuthMiddlewareDetector}). An auth package's own middleware
- * counts where its integration is enabled for the document, which names each class that checks a token
+ * names an authenticator of their own ({@see AuthMiddlewareDetector}). A package's own middleware counts
+ * where its integration is enabled for the document, which names each class that reads the user or token
  * itself and what it throws; which classes those are depends on the package's installed version, so the
- * integration owns the list.
+ * integration owns the list. Such a class refuses a guest with a 401 (`refusal`), or with the same 403 it
+ * gives a user lacking what the entry names (a null `refusal`), and `signal` names it in provenance.
  *
- * @phpstan-type Authenticators array<class-string, array{refusal: class-string, denial: class-string}>
+ * @phpstan-type Authenticators array<class-string, array{refusal: class-string|null, denial: class-string, signal: string}>
  */
 final class RouteAuthentication
 {
@@ -45,10 +46,10 @@ final class RouteAuthentication
 
     /**
      * @param  (Closure(DocumentConfig): Authenticators)|null  $authenticators  the middleware the document's
-     *                                                                          enabled auth integrations name:
-     *                                                                          what each throws at a request
-     *                                                                          without a token, and at a token
-     *                                                                          lacking a scope it names
+     *                                                                          enabled integrations name: what
+     *                                                                          each throws at a guest, and at a
+     *                                                                          user or token lacking what the
+     *                                                                          entry names
      */
     public function __construct(private readonly MiddlewareClasses $middleware, ?Closure $authenticators = null)
     {
@@ -63,7 +64,9 @@ final class RouteAuthentication
     {
         $refusals = self::REFUSALS;
         foreach (($this->authenticators)($context->document) as $class => $thrown) {
-            $refusals[$class] = $thrown['refusal'];
+            if ($thrown['refusal'] !== null) {
+                $refusals[$class] = $thrown['refusal'];
+            }
         }
 
         foreach ($context->route->middleware as $middleware) {
@@ -81,17 +84,35 @@ final class RouteAuthentication
         return null;
     }
 
-    /** Whether a guest is refused before the action, and so before any gate on the route. */
+    /**
+     * Whether a guest is refused before the action, and so before any gate on the route: by a 401, or by
+     * middleware that refuses one with its 403.
+     */
     public function refusesGuests(RouteContext $context): bool
     {
-        return $this->refusal($context) !== null;
+        if ($this->refusal($context) !== null) {
+            return true;
+        }
+
+        $authenticators = ($this->authenticators)($context->document);
+        foreach ($context->route->middleware as $middleware) {
+            foreach (array_keys($authenticators) as $class) {
+                if ($this->middleware->runs($context, $middleware, $class)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
-     * The exception one middleware entry throws for a token lacking a scope or ability the entry names,
-     * or null. An entry naming none checks the token and nothing past it.
+     * What one middleware entry throws at a user or token lacking what the entry names, with the signal
+     * naming it, or null. An entry naming nothing checks the user or token and nothing past it.
+     *
+     * @return array{signal: string, exception: class-string}|null
      */
-    public function denial(RouteContext $context, string $middleware): ?string
+    public function denial(RouteContext $context, string $middleware): ?array
     {
         if (MiddlewareName::bare($middleware)) {
             return null;
@@ -99,7 +120,7 @@ final class RouteAuthentication
 
         foreach (($this->authenticators)($context->document) as $class => $thrown) {
             if ($this->middleware->runs($context, $middleware, $class)) {
-                return $thrown['denial'];
+                return ['signal' => $thrown['signal'], 'exception' => $thrown['denial']];
             }
         }
 

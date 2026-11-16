@@ -354,6 +354,9 @@ that names a scope or ability also documents the `403` a token without it receiv
 `EnsureFrontendRequestsAreStateful` and `AuthenticateSession` don't, because they let a guest through.
 Turning the integration off for a document turns this off with it.
 
+[spatie/laravel-permission](/laravel/packages/laravel-permission/)'s middleware reads the user too, but
+refuses a guest with a `403`, so a route behind it documents that `403` rather than a `401`.
+
 The `401` doesn't depend on `security.auth_middleware`, because Laravel refuses the request whatever
 that pattern says. The pattern still adds to it: a route whose middleware matches it gets the `401`
 too, which is how you tell Docuccino about an authenticator of your own that doesn't extend

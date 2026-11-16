@@ -105,6 +105,7 @@ final class IntegrationToggles
                 'permission', 'spatie/laravel-permission', false, 'document permission requirements',
                 static fn (?callable $probe): bool => PermissionIntegration::installed($probe),
                 static fn (): array => PermissionIntegration::extensions(),
+                static fn (): array => PermissionIntegration::authenticators(),
             ),
         ];
 

@@ -40,7 +40,7 @@ use ReflectionClass;
  *  | 401    | the route runs an authenticator ({@see RouteAuthentication}) AND is not `#[Unauthenticated]` |
  *  | 422    | validation rules were recovered (Data / FormRequest / inline / action rules()), body or query |
  *  | 404    | the route has ≥1 model-bound path parameter (one 404 per operation, not per param) |
- *  | 403    | `can:` / `signed` / `verified` middleware, an auth package's scope or ability middleware naming one, or a FormRequest `authorize()` not `return true` |
+ *  | 403    | `can:` / `signed` / `verified` middleware, an auth package's scope or ability middleware naming one, spatie/laravel-permission's role or permission middleware, or a FormRequest `authorize()` not `return true` |
  *
  * The 403 is inferred from the PRESENCE of a gate, which is right for `signed`/`verified` and only
  * usually right for `can:`: a policy method that returns `true` unconditionally cannot deny, and the
@@ -247,10 +247,9 @@ final class ImplicitResponsesExtension implements OperationExtension
         if ($this->middleware->runs($context, $middleware, EnsureEmailIsVerified::class)) {
             return ['signal' => 'verified-middleware', 'exception' => self::AUTHORIZATION];
         }
-        // A token missing a scope or ability the middleware names, as the auth package throws it.
-        $denial = $this->authentication->denial($context, $middleware);
 
-        return $denial === null ? null : ['signal' => 'token-middleware', 'exception' => $denial];
+        // A user or token lacking what a package's middleware names, as the package throws it.
+        return $this->authentication->denial($context, $middleware);
     }
 
     /** Whether the route's FormRequest declares an authorize() gate that is not a literal `return true`. */

@@ -55,6 +55,7 @@ use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Routing\Middleware\ValidateSignature;
 use Illuminate\Support\Facades\Gate;
 use Laravel\Sanctum\Http\Middleware\CheckAbilities;
+use Spatie\Permission\Middleware\PermissionMiddleware;
 
 /**
  * `authorization.gate-cannot-deny`: the implicit 403 is synthesized from the PRESENCE of a `can:` gate,
@@ -801,6 +802,24 @@ it("reads a guest as refused behind an auth package's token middleware", functio
 
     expect($gate)->not->toBeNull()
         ->and($denial->undeniablePolicyMethod($context, $gate))->toBe(KioskPolicy::class.'::view');
+});
+
+/** spatie/laravel-permission's middleware reads the user itself too, and refuses a guest before the gate with its 403. */
+it("reads a guest as refused behind spatie/laravel-permission's middleware", function (): void {
+    $gate = CanGate::parse('can:view,'.Kiosk::class);
+    $denial = new GateDenial(app(RouteAuthentication::class), static fn (): GateContract => app(GateContract::class), static fn (): bool => false);
+    $context = static fn (array $integrations): RouteContext => new RouteContext(
+        route: new RouteDescriptor(['GET'], 'api/kiosks', middleware: [PermissionMiddleware::class.':edit', 'can:view,'.Kiosk::class]),
+        actionRef: new ActionRef('', KioskController::class, 'index'),
+        attributes: new AttributeSet([]),
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', [], raw: ['integrations' => $integrations]),
+    );
+
+    expect($gate)->not->toBeNull()
+        ->and($denial->undeniablePolicyMethod($context(['permission' => ['enabled' => true]]), $gate))->toBe(KioskPolicy::class.'::view')
+        // Anti-vacuity: where the integration is off, nothing on the route is known to refuse a guest.
+        ->and($denial->undeniablePolicyMethod($context([]), $gate))->toBeNull();
 });
 
 it('says nothing about a policy method a package declares', function (): void {
