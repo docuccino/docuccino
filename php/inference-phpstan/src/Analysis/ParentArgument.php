@@ -16,13 +16,14 @@ use ReflectionMethod;
 use ReflectionParameter;
 
 /**
- * What a response subclass's constructors hand its root's constructor besides the status — the body, the
- * first argument of each framework response that takes one, and the headers — read by the same statements
- * grammar as the status ({@see SubclassStatus}): the one `parent::__construct()` each constructor makes,
- * walked up to the root. The answer is either the expression that lands in the slot, with the file and the
- * call it is written in (where its scope is), or the parameter of the class's own constructor handed through
- * untouched, for a construction to fill. Anything else, or a constructor that rewrites the slot's value once
- * its parent's has run, answers null: nothing read, never "empty".
+ * What a subclass's constructors hand its root's constructor besides a status — a framework response's body
+ * (the first argument of each that takes one) and headers, and the response an `HttpResponseException`
+ * carries — read by the same statements grammar as the status ({@see SubclassStatus}): the one
+ * `parent::__construct()` each constructor makes, walked up to the root. The answer is either the expression
+ * that lands in the slot, with the file and the call it is written in (where its scope is), or the parameter
+ * of the class's own constructor handed through untouched, for a construction to fill. Anything else, or a
+ * constructor that rewrites the slot's value once its parent's has run, answers null: nothing read, never
+ * "empty".
  *
  * Nothing here resolves a type: the bodies come from {@see ClassBodies}, and the caller types what lands.
  *
@@ -36,11 +37,17 @@ final class ParentArgument
 
     private const HEADERS = 'headers';
 
+    private const RESPONSE = 'response';
+
     /** What a constructor may call once its parent's has run to replace each slot's value. */
     private const REWRITES = [
         self::BODY => ['setContent', 'setData', 'setJson'],
         self::HEADERS => ['header', 'withHeaders'],
+        self::RESPONSE => [],
     ];
+
+    /** The slots a root keeps in a property of the same name, which a constructor may also write itself. */
+    private const HELD = [self::HEADERS, self::RESPONSE];
 
     /** @var array<string, Landing|null> by slot, class and root */
     private array $cache = [];
@@ -62,8 +69,14 @@ final class ParentArgument
         return $this->of(self::HEADERS, $fqcn, $root);
     }
 
+    /** @return Landing|null */
+    public function response(string $fqcn, string $root): ?array
+    {
+        return $this->of(self::RESPONSE, $fqcn, $root);
+    }
+
     /**
-     * @param  self::BODY|self::HEADERS  $slot
+     * @param  self::BODY|self::HEADERS|self::RESPONSE  $slot
      * @return Landing|null
      */
     private function of(string $slot, string $fqcn, string $root): ?array
@@ -84,14 +97,14 @@ final class ParentArgument
     }
 
     /**
-     * @param  self::BODY|self::HEADERS  $slot
+     * @param  self::BODY|self::HEADERS|self::RESPONSE  $slot
      * @param  ReflectionClass<object>  $class
      * @return Landing|null
      */
     private function read(string $slot, ReflectionClass $class, string $root): ?array
     {
         if ($class->getName() === $root) {
-            $index = $slot === self::BODY ? 0 : array_search(self::HEADERS, self::names($class->getConstructor()), true);
+            $index = $slot === self::BODY ? 0 : array_search($slot, self::names($class->getConstructor()), true);
 
             return is_int($index) ? ['parameter' => $index] : null;
         }
@@ -139,10 +152,10 @@ final class ParentArgument
     }
 
     /**
-     * Whether the constructor rewrites the slot's value itself — the headers also through the bag it
-     * holds them in (`$this->headers->set(…)`).
+     * Whether the constructor rewrites the slot's value itself — a held slot also through the property it is
+     * kept in (`$this->headers->set(…)`, `$this->response = …`).
      *
-     * @param  self::BODY|self::HEADERS  $slot
+     * @param  self::BODY|self::HEADERS|self::RESPONSE  $slot
      * @param  array<array-key, Node\Stmt>  $body
      */
     private function rewrites(string $slot, array $body): bool
@@ -153,13 +166,13 @@ final class ParentArgument
             }
         }
 
-        return $slot === self::HEADERS && (new NodeFinder)->findFirst(
+        return in_array($slot, self::HELD, true) && (new NodeFinder)->findFirst(
             $body,
             static fn (Node $node): bool => $node instanceof Node\Expr\PropertyFetch
                 && $node->var instanceof Node\Expr\Variable
                 && $node->var->name === 'this'
                 && $node->name instanceof Node\Identifier
-                && $node->name->toString() === self::HEADERS,
+                && $node->name->toString() === $slot,
         ) !== null;
     }
 

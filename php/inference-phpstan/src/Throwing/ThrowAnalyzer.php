@@ -64,9 +64,10 @@ use Throwable;
  * "not an HTTP error at all" — which is the fallback {@see ThrowSignal} reads to tell an API error from
  * vendor plumbing.
  *
- * An `HttpResponseException` the code builds, and a response handed to `abort()`, are not errors to render:
- * the framework sends the response they carry as it is, so that response is read as a return of the body
- * the throw is written in would be ({@see carriedResponses()}) and no exception is reported for it.
+ * An `HttpResponseException` the code builds — the framework's own or an application's subclass of it — and a
+ * response handed to `abort()`, are not errors to render: the framework sends the response they carry as it
+ * is, so that response is read as a return of the body the throw is written in would be
+ * ({@see carriedResponses()}) and no exception is reported for it.
  *
  * Result identity is `(fqcn, httpStatusHint)` — two aborts (403/404) are two responses, so never dedupe by
  * FQCN alone. Vendor-declared 500-class exceptions are demoted to `internal`; dropped bare-`Throwable`
@@ -79,7 +80,7 @@ use Throwable;
  */
 final class ThrowAnalyzer
 {
-    private const HTTP_RESPONSE_EXCEPTION = 'Illuminate\\Http\\Exceptions\\HttpResponseException';
+    private const HTTP_RESPONSE_EXCEPTION = CarriedResponses::EXCEPTION;
 
     /** @var array<string, true> */
     private array $visitedFiles = [];
@@ -126,6 +127,7 @@ final class ThrowAnalyzer
         // How a returned expression is read as the response it is, so a carried one is read the same way.
         /** @var Closure(Node\Expr, Scope): list<array{type: DType, component: ComponentDeclaration|null}> */
         private readonly Closure $responseShapes,
+        private readonly CarriedResponses $carriedResponses,
     ) {
         $this->unreadStatuses = new UnreadStatuses;
         $this->skippedDescents = new SkippedDescents($this->declaredFilter);
@@ -1355,25 +1357,43 @@ final class ThrowAnalyzer
     }
 
     /**
-     * Whether this `throw` builds an `HttpResponseException` whose response can be read, which it then
-     * carries. Only the framework's own class: a subclass's constructor need not hand its first argument on.
+     * Whether this `throw` builds an `HttpResponseException` whose response can be read, which it then carries:
+     * the framework's own class or an application's subclass, built at the throw or by a static factory on the
+     * class ({@see CarriedResponses}).
      */
     private function carriesResponse(string $fqcn, Node $node, Scope $scope, Frame $frame): bool
     {
-        if ($fqcn !== self::HTTP_RESPONSE_EXCEPTION || ! $node instanceof Node\Expr\Throw_) {
+        if (! $node instanceof Node\Expr\Throw_ || ! $this->reflectionProvider->hasClass($fqcn)) {
             return false;
+        }
+
+        $class = $this->reflectionProvider->getClass($fqcn);
+        if (! $class->is(self::HTTP_RESPONSE_EXCEPTION)) {
+            return false;
+        }
+
+        // A subclass's constructors decide what it carries, so its whole hierarchy keys the route.
+        if ($fqcn !== self::HTTP_RESPONSE_EXCEPTION) {
+            $this->dependOn($this->ancestryFiles($class));
         }
 
         [$thrown, $scope] = $this->localValue($node->expr, $scope);
         $construction = $this->construction($thrown, $fqcn, $scope);
-        $response = $construction === null ? null : ArgumentSlots::of($construction->getArgs(), ['response'])->at(0);
-        if ($response === null) {
-            return false;
+        if ($construction !== null) {
+            $carried = $this->carriedResponses->constructed($construction, $fqcn, $scope);
+            $responses = $carried === null ? [] : [$carried];
+        } else {
+            $factory = $this->factoryName($thrown, $fqcn, $scope);
+            $read = $factory === null ? ['responses' => [], 'files' => []] : $this->carriedResponses->fromFactory($fqcn, $factory);
+            $this->dependOn($read['files']);
+            $responses = $read['responses'];
         }
 
-        $this->carry($response, $scope, $frame);
+        foreach ($responses as [$response, $at]) {
+            $this->carry($response, $at, $frame);
+        }
 
-        return true;
+        return $responses !== [];
     }
 
     /**

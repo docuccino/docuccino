@@ -153,9 +153,15 @@ it('hears a throw however the thrown thing is built', function (string $statemen
 
 it('hears an error in any throw but one handing the framework a response', function (string $statement, bool $raises): void {
     $source = "<?php\n\nuse Illuminate\\Http\\Exceptions\\HttpResponseException;\n\nfinal class Raiser\n{\n    public function run(): void\n    {\n        ".$statement."\n    }\n}\n";
+    $parents = [
+        'Probe\\Relayed' => 'Illuminate\\Http\\Exceptions\\HttpResponseException',
+        'Probe\\Upstream' => 'Probe\\Relayed',
+        'Probe\\Conflict' => 'RuntimeException',
+    ];
 
-    // Laravel sends the response an HttpResponseException carries as it is, so throwing one is no error.
-    expect(phpRaisesError($source))->toBe($raises)
+    // Laravel sends the response an HttpResponseException carries as it is, whichever class of it carries it,
+    // so throwing one is no error.
+    expect(phpRaisesError($source, static fn (string $class): ?string => $parents[$class] ?? null))->toBe($raises)
         ->and(phpRaisesThrow($source))->toBeTrue();
 })->with([
     'a carried response' => ['throw new HttpResponseException(response()->json([], 423));', false],
@@ -163,7 +169,18 @@ it('hears an error in any throw but one handing the framework a response', funct
     'an error beside it' => ['throw new HttpResponseException(response("", 409)); throw new \\RuntimeException;', true],
     'a carried response held in a variable' => ['$e = new HttpResponseException(response("", 409)); throw $e;', true],
     'an error' => ['throw new \\RuntimeException;', true],
+    'a subclass of it' => ['throw new \\Probe\\Relayed(response("", 409));', false],
+    'two levels below it' => ['throw new \\Probe\\Upstream(response("", 409));', false],
+    'a static factory on a subclass' => ['throw \\Probe\\Relayed::locked();', false],
+    'a static factory on an error' => ['throw \\Probe\\Conflict::for(1);', true],
 ]);
+
+it('reads a fixture class’s parent off the overlay it is written in', function (): void {
+    expect(fixtureOverlayParent('App\\Exceptions\\Relayed\\UpstreamRelayedException'))->toBe('App\\Exceptions\\Relayed\\RelayedResponseException')
+        ->and(fixtureOverlayParent('App\\Exceptions\\Relayed\\RelayedResponseException'))->toBe('Illuminate\\Http\\Exceptions\\HttpResponseException')
+        ->and(fixtureOverlayParent('App\\Exceptions\\Relayed\\Missing'))->toBeNull()
+        ->and(fixtureOverlayParent('Illuminate\\Http\\Exceptions\\HttpResponseException'))->toBeNull();
+});
 
 it('counts a call once per site, whatever surrounds it', function (): void {
     $source = "<?php\n\nfinal class Branchy\n{\n    public function run(): void\n    {\n"
