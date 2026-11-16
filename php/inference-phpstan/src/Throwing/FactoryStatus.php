@@ -106,14 +106,17 @@ final class FactoryStatus
             StatusForwarding::constructionsOf($body, $fqcn, $declaring),
         );
 
+        $read = $this->statuses->statusRead($fqcn);
+
         return ConstructionStatus::agreedIn(
             $sites,
             $slot,
             $this->statuses->constructorSlot($fqcn, $slot),
-            function (Node\Expr $argument, ConstructionSite $site) use (&$files): ?int {
-                $files = [...$files, ...ConstantSource::files($argument, $site->declaringClass)];
+            function (Node\Expr $argument, ConstructionSite $site) use ($read, &$files): ?int {
+                $fold = $this->bodies->foldStatus($site->file, $argument, $site->construction, $read);
+                $files = [...$files, ...ConstantSource::files($argument, $site->declaringClass), ...$fold['files']];
 
-                return $this->bodies->foldInt($site->file, $argument, $site->construction);
+                return $fold['status'];
             },
         );
     }

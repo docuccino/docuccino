@@ -431,7 +431,8 @@ and title — and pass a case into the helper:
 Because the arm names the case, Docuccino resolves the accessors the helper applies to it — even across
 the extra hop from a `renderProblem($case)` wrapper into the factory. `->value` and `->name` come
 straight from the case (so they fold for **vendor** enums too). A no-arg accessor **method** folds by
-reading the method body: a `match ($this)` arm for that case, or a plain constant `return`. A folded
+reading the method body: a `match ($this)` arm for that case, `return $this->value`, or a plain constant
+`return` — and where the method chooses by early return, only the returns that case can reach. A folded
 `status()` becomes the response's status, preferred over the status inferred from the exception type.
 
 The bounds are deliberate:
@@ -557,6 +558,47 @@ the same `{ "message": string }` body, `message` required, under the exception's
 status could be determined. It is the body Laravel's renderer sends for any exception it renders, so an
 `HttpException` subclass of your own that fixes a `501` is documented exactly as the framework's `404` is. Set
 `error_responses` to `none` to emit no error responses at all.
+
+### Statuses your own exceptions state
+
+Your own `HttpException` subclass is documented under the status your code gives it, wherever you write
+it: a literal in its `parent::__construct()`, an argument at the `throw`, or the static factory the `throw`
+names. Applications that keep a refusal's reason and its status together on an enum get the same:
+
+```php
+enum TokenRefusal: string
+{
+    case Expired = 'token_expired';
+    case AlreadyRotated = 'already_rotated';
+
+    public function status(): int
+    {
+        return match ($this) {
+            self::Expired => 401,
+            self::AlreadyRotated => 409,
+        };
+    }
+}
+
+class Refused extends HttpException
+{
+    public function __construct(TokenRefusal $reason, string $detail = '')
+    {
+        parent::__construct($reason->status(), $detail);
+    }
+}
+
+throw new Refused(TokenRefusal::AlreadyRotated, 'Rotate its replacement instead.'); // a 409
+```
+
+The case is read where it's chosen: at the `throw`, in a named constructor that picks it, or in a subclass
+that hands its parent one. An enum whose backing value *is* the status works the same through `->value`,
+and so does `abort(TokenRefusal::Expired->status())`.
+
+A reason chosen at run time — `new Refused($reason)` — is whichever status that case maps to. When every
+case maps to the same status, that's the status; otherwise no single number is true, so the error is filed
+under the [stand-in status](#when-a-500-is-a-stand-in) with an
+[`inference.http-exception-status-unread`](/laravel/reference/diagnostics/) notice naming the `throw`.
 
 ### When a `500` is a stand-in
 

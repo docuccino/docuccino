@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Throwing;
 
+use Docuccino\Inference\PhpStan\Analysis\ParamAccessor;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use PhpParser\Node;
 use ReflectionClass;
@@ -28,6 +29,11 @@ use ReflectionParameter;
  * parameter, {@see statusParameter()} names the slot so a construction the build can see — a
  * `throw new X(423, …)`, or the `new self(…)` inside the factory a `throw` names ({@see FactoryStatus}) —
  * can still be folded at its own site.
+ *
+ * A slot may also be read THROUGH the value it holds: `parent::__construct($reason->status(), …)` forwards
+ * the `$reason` slot, and the status is what the enum case a construction passes there maps to
+ * ({@see statusRead()}, folded by {@see CaseStatus}). A reason enum is how an application writes a refusal
+ * and its status in one place, and every construction reads exactly like one passing the number.
  *
  * A class only FORWARDS a parameter it hands over untouched. A constructor that writes the variable
  * anywhere in its body (`if ($errors === []) { $statusCode = 400; }`) gives the parent a value neither the
@@ -59,14 +65,15 @@ use ReflectionParameter;
  * Priming is also why the reads below cost the replay layer nothing, which is worth recording so it is not
  * re-litigated: the adapter primes the application's whole PSR-4 tree at boot, so every one of its
  * exception classes is already in the analysed set and reading one cannot grow it. Measured over one build
- * of the fixture app's throw corpus when it held 58 (it holds 94 throw actions now, and every one added
- * since depends only on files those already did, but for the nine helper rows, not re-measured), the
+ * of the fixture app's throw corpus when it held 58 (it holds 106 throw actions now, and every one added
+ * since depends only on files those already did, but for the nine helper rows and the twelve reason-enum
+ * rows, whose enums and exception classes sit in the same primed tree, not re-measured), the
  * analysed-file count is the same whether the reads are scoped to the application or to the descend
  * paths — so no recording is ever discarded, and the modular root is no different because being primed
  * is the whole of what makes that true. What the wider scope costs is one more live file walk, for an
  * exception class nothing else opened.
  *
- * @phpstan-type StatusPin array{status: int|null, parameter: int|null, files: list<string>}
+ * @phpstan-type StatusPin array{status: int|null, parameter: int|null, read: ParamAccessor|null, files: list<string>}
  * @phpstan-type AgreedRead array{status: int|null, files: list<string>}
  * @phpstan-type ConstructorSlot array{names: list<string>, default: int|null}
  *
@@ -121,6 +128,15 @@ final class HttpExceptionStatus
     }
 
     /**
+     * How the argument in {@see statusParameter()} becomes the status: null where it IS the status, and
+     * otherwise the read the constructor applies to it — `$reason->status()`, `$status->value`.
+     */
+    public function statusRead(string $fqcn): ?ParamAccessor
+    {
+        return $this->resolve($fqcn)['read'];
+    }
+
+    /**
      * The one status every construction the class makes of ITSELF agrees on — a weaker claim than
      * {@see pinned()}, and the only one left where a throw point carries no construction to read: a throw
      * inside a closure the callee runs, one written in a trait and surfacing as a `@throws`, a rethrow.
@@ -162,7 +178,7 @@ final class HttpExceptionStatus
         }
 
         $files = [];
-        $status = $this->agreedOver($sites, $fqcn, $slot, $files);
+        $status = $this->agreedOver($sites, $fqcn, $slot, $this->statusRead($fqcn), $files);
 
         return $this->agreed[$fqcn] = ['status' => $status, 'files' => array_values(array_unique($files))];
     }
@@ -204,7 +220,7 @@ final class HttpExceptionStatus
             return $this->cache[$fqcn];
         }
 
-        $this->cache[$fqcn] = ['status' => null, 'parameter' => null, 'files' => []];
+        $this->cache[$fqcn] = ['status' => null, 'parameter' => null, 'read' => null, 'files' => []];
 
         // Spelled out rather than asked of `isHttpException()`, which answers the same question: the
         // `class_exists()` is what makes the name a class the reflection below may be handed.
@@ -228,12 +244,12 @@ final class HttpExceptionStatus
         $files = $file === false ? [] : [$file];
 
         if ($class->getName() === KnownThrowers::HTTP_EXCEPTION) {
-            return ['status' => null, 'parameter' => self::STATUS_SLOT, 'files' => $files];
+            return ['status' => null, 'parameter' => self::STATUS_SLOT, 'read' => null, 'files' => $files];
         }
 
         $parent = $class->getParentClass();
         if ($parent === false) {
-            return ['status' => null, 'parameter' => null, 'files' => $files];
+            return self::nothing($files);
         }
 
         $inherited = $this->resolve($parent->getName());
@@ -243,7 +259,7 @@ final class HttpExceptionStatus
 
         // No constructor of its own, so the parent's is what runs — and its answer is this class's.
         if ($constructor === null || $constructor->getDeclaringClass()->getName() !== $class->getName()) {
-            return ['status' => $inherited['status'], 'parameter' => $inherited['parameter'], 'files' => $files];
+            return [...$inherited, 'files' => $files];
         }
 
         return $this->readConstructor($class, $constructor, $parent, $inherited, $files);
@@ -283,7 +299,7 @@ final class HttpExceptionStatus
         // A literal the parent pins is one no subclass can move: it reaches the parent's own
         // `parent::__construct()` call, and this constructor only chooses the message beside it.
         if ($inherited['status'] !== null) {
-            return ['status' => $inherited['status'], 'parameter' => null, 'files' => $files];
+            return ['status' => $inherited['status'], 'parameter' => null, 'read' => null, 'files' => $files];
         }
 
         $slot = $inherited['parameter'];
@@ -297,26 +313,32 @@ final class HttpExceptionStatus
         }
 
         // The declaration a `parent::__construct(HttpStatus::CONFLICT, …)` reads decides this class's
-        // status, so it joins the set whether or not the fold went on to succeed.
-        $files = [...$files, ...ConstantSource::files($argument, $class->getName())];
+        // status, so it joins the set whether or not the fold went on to succeed — and so does the enum a
+        // `parent::__construct(Reason::Gone->status(), …)` reads its status off.
+        $read = $inherited['read'];
+        $fold = $this->bodies->foldStatus($file, $argument, $call, $read);
+        $files = [...$files, ...ConstantSource::files($argument, $class->getName()), ...$fold['files']];
 
-        $folded = HttpStatusCode::folded($this->bodies->foldInt($file, $argument, $call));
+        $folded = HttpStatusCode::folded($fold['status']);
         if ($folded !== null) {
-            return ['status' => $folded, 'parameter' => null, 'files' => $files];
+            return ['status' => $folded, 'parameter' => null, 'read' => null, 'files' => $files];
         }
 
-        if (! $argument instanceof Node\Expr\Variable || ! is_string($argument->name)) {
+        $forwarded = StatusForwarding::forwarded($argument, $read);
+        if ($forwarded === null) {
             return self::nothing($files);
         }
+
+        [$variable, $read] = $forwarded;
 
         // A body that WRITES the variable it forwards hands the parent a value neither the caller nor the
         // default names — `if ($errors === []) { $statusCode = 400; }` really builds a 400 — so this class
         // forwards no slot at all, and a `throw new X(409, …)` cannot be read off one either.
-        if (StatusForwarding::reassigns($body, $argument->name)) {
+        if (StatusForwarding::reassigns($body, $variable)) {
             return self::nothing($files);
         }
 
-        $index = array_search($argument->name, self::parameterNames($constructor), true);
+        $index = array_search($variable, self::parameterNames($constructor), true);
         if (! is_int($index)) {
             return self::nothing($files);
         }
@@ -329,9 +351,9 @@ final class HttpExceptionStatus
             $files[] = $default;
         }
 
-        $status = $this->forwardedDefault($class, $constructor, $index, $file, $files);
+        $status = $this->forwardedDefault($class, $constructor, $index, $read, $file, $files);
 
-        return ['status' => $status, 'parameter' => $index, 'files' => $files];
+        return ['status' => $status, 'parameter' => $index, 'read' => $read, 'files' => $files];
     }
 
     /**
@@ -345,7 +367,7 @@ final class HttpExceptionStatus
      */
     private static function nothing(array $files): array
     {
-        return ['status' => null, 'parameter' => null, 'files' => $files];
+        return ['status' => null, 'parameter' => null, 'read' => null, 'files' => $files];
     }
 
     /**
@@ -365,6 +387,7 @@ final class HttpExceptionStatus
         ReflectionClass $class,
         ReflectionMethod $constructor,
         int $index,
+        ?ParamAccessor $read,
         string $file,
         array &$files,
     ): ?int {
@@ -378,27 +401,30 @@ final class HttpExceptionStatus
             $this->constructionsIn($class->getName(), $class->getName(), $file),
             $class->getName(),
             $index,
+            $read,
             $files,
         );
     }
 
     /**
      * The one status a set of the class's own constructions folds to, each at the site it is written.
-     * `$files` collects the declarations the folds read, for the dependency set.
+     * `$read` is how the slot's argument becomes the status ({@see statusRead()}), and `$files` collects
+     * the declarations the folds read, for the dependency set.
      *
      * @param  list<ConstructionSite>  $sites
      * @param  list<string>  $files
      */
-    private function agreedOver(array $sites, string $class, int $slot, array &$files): ?int
+    private function agreedOver(array $sites, string $class, int $slot, ?ParamAccessor $read, array &$files): ?int
     {
         return ConstructionStatus::agreedIn(
             $sites,
             $slot,
             $this->constructorSlot($class, $slot),
-            function (Node\Expr $argument, ConstructionSite $site) use (&$files): ?int {
-                $files = [...$files, ...ConstantSource::files($argument, $site->declaringClass)];
+            function (Node\Expr $argument, ConstructionSite $site) use ($read, &$files): ?int {
+                $fold = $this->bodies->foldStatus($site->file, $argument, $site->construction, $read);
+                $files = [...$files, ...ConstantSource::files($argument, $site->declaringClass), ...$fold['files']];
 
-                return $this->bodies->foldInt($site->file, $argument, $site->construction);
+                return $fold['status'];
             },
         );
     }

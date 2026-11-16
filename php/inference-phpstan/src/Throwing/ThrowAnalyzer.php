@@ -15,6 +15,7 @@ use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Support\Fqcn;
 use Docuccino\Inference\PhpStan\Analysis\CallableBody;
 use Docuccino\Inference\PhpStan\Analysis\FileAnalyzer;
+use Docuccino\Inference\PhpStan\Analysis\ParamAccessor;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Trace\Callee;
 use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
@@ -24,7 +25,6 @@ use PHPStan\Node\ClosureReturnStatementsNode;
 use PHPStan\Node\MethodReturnStatementsNode;
 use PHPStan\Reflection\ClassReflection;
 use PHPStan\Reflection\ReflectionProvider;
-use PHPStan\Type\Constant\ConstantIntegerType;
 use PHPStan\Type\NeverType;
 use PHPStan\Type\ObjectType;
 use PHPStan\Type\Type;
@@ -95,6 +95,7 @@ final class ThrowAnalyzer
         private readonly CalleeResolver $calleeResolver,
         private readonly HttpExceptionStatus $httpExceptionStatus,
         private readonly FactoryStatus $factoryStatus,
+        private readonly CaseStatus $caseStatus,
         // A diagnostic leaves here publishable, like every other one the engine composes: the file a
         // notice names is a raw analyser path, and an engine is a contract another host can call.
         private readonly MessagePaths $labels,
@@ -874,6 +875,9 @@ final class ThrowAnalyzer
      * hands a function throw point the NORMALIZED call, so its named arguments already sit in the positions
      * the registry indexes, and `abort()` defaults no status to fall back on.
      *
+     * `$read` is how the slot's argument becomes the status where the class reads it through the enum case
+     * it holds ({@see HttpExceptionStatus::statusRead()}); with none, the argument is the status itself.
+     *
      * @param  array{names: list<string>, default: int|null}  $constructor
      */
     private function foldStatusArg(
@@ -881,6 +885,7 @@ final class ThrowAnalyzer
         Scope $scope,
         ?int $argIndex,
         array $constructor = ['names' => [], 'default' => null],
+        ?ParamAccessor $read = null,
     ): ?int {
         if ($argIndex === null || ! $node instanceof Node\Expr\CallLike) {
             return null;
@@ -890,14 +895,14 @@ final class ThrowAnalyzer
             $node,
             $argIndex,
             $constructor,
-            function (Node\Expr $argument) use ($scope): ?int {
+            function (Node\Expr $argument) use ($scope, $read): ?int {
                 // A `throw new X(HttpStatus::CONFLICT)` takes its status from another file's declaration,
-                // which then decides what this route publishes ({@see ConstantSource}).
-                $this->dependOn(ConstantSource::files($argument, $scope->getClassReflection()?->getName()));
+                // which then decides what this route publishes ({@see ConstantSource}) — as does the enum a
+                // `throw new Refused(Reason::Gone)` reads its status off.
+                $fold = $this->caseStatus->of($argument, $scope, $read);
+                $this->dependOn([...ConstantSource::files($argument, $scope->getClassReflection()?->getName()), ...$fold['files']]);
 
-                $type = $scope->getType($argument);
-
-                return $type instanceof ConstantIntegerType ? $type->getValue() : null;
+                return $fold['status'];
             },
         );
     }
@@ -1164,6 +1169,7 @@ final class ThrowAnalyzer
                     $scope,
                     $slot,
                     $this->httpExceptionStatus->constructorSlot($fqcn, $slot),
+                    $this->httpExceptionStatus->statusRead($fqcn),
                 ),
                 'spoke' => true,
                 'foldedHere' => $slot !== null,

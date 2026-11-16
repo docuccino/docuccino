@@ -34,6 +34,7 @@ use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Support\SourceOrder;
 use Docuccino\Inference\PhpStan\Throwing\AnalyzedBodies;
+use Docuccino\Inference\PhpStan\Throwing\CaseStatus;
 use Docuccino\Inference\PhpStan\Throwing\ClassBodies;
 use Docuccino\Inference\PhpStan\Throwing\FactoryStatus;
 use Docuccino\Inference\PhpStan\Throwing\HttpExceptionStatus;
@@ -104,6 +105,8 @@ final class PhpStanTypeEngine implements TypeEngine
     private ?FactoryStatus $factoryStatus = null;
 
     private ?ClassBodies $classBodies = null;
+
+    private ?CaseStatus $caseStatus = null;
 
     /**
      * The publishable form of a ref's label. Both {@see ActionRef::symbol()} and
@@ -912,7 +915,8 @@ final class PhpStanTypeEngine implements TypeEngine
 
     private function makeThrowAnalyzer(): ThrowAnalyzer
     {
-        $bodies = $this->classBodies ??= new AnalyzedBodies($this->fileAnalyzer);
+        $cases = $this->caseStatus ??= new CaseStatus($this->fileAnalyzer, $this->appFilter);
+        $bodies = $this->classBodies ??= new AnalyzedBodies($this->fileAnalyzer, $cases);
         // Application scope for the two status READS, descend scope for the analyzer's own walk: how far
         // this build may descend is `project_paths`' question, and whether a declaration is the
         // application's is not. An exception class in a modular root is the application's, its file is
@@ -929,6 +933,7 @@ final class PhpStanTypeEngine implements TypeEngine
             new CalleeResolver($this->adapter->reflectionProvider()),
             $statuses,
             $this->factoryStatus ??= new FactoryStatus($statuses, $bodies, $this->appFilter),
+            $cases,
             $this->labels,
             $this->config->throwDepth,
         );
