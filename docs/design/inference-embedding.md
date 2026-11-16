@@ -1210,6 +1210,11 @@ commented out, and commenting a template out does not edit anybody's file.
 - `ResponseJsonReturnTypeExtension` on `Illuminate\Contracts\Routing\ResponseFactory::json`
   + `JsonResponse<TPayload>` stub → payload ConstantArrayType survives to return harvest
   (proven in Spike A).
+- `ResponseFactoryFacadeReturnTypeExtension` on `Illuminate\Support\Facades\Facade`: a facade whose root
+  is a response factory (`Response::json()`) is typed as the same call on that root. `FacadeCall` builds that
+  call — the root `getFacadeRoot()` resolves in the booted app, as Larastan reads a facade, on a `TypeExpr`
+  receiver — and the refiner's factory readers (`MadeResponseCall`, the status and body reads) take it too,
+  so a facade call's status binds at a helper's call site as the factory's does.
 - `Data::from/collect` precision; `Resource::collection` → `AnonymousResourceCollection<T>`
   (threading the inner resource type through anonymous collections needs a dedicated
   extension — flagged by Spike A as not-free; Phase 4).

@@ -439,6 +439,13 @@ return response($csv, Response::HTTP_GONE);       // → 410
 An empty content is documented as no body. Laravel sends a string as it is rather than as JSON, so the
 shape of any other content is left open.
 
+The `Response` facade hands every call to the same factory, so it's documented the same way:
+
+```php
+return Response::json(['error' => 'locked'], 422); // → 422 with that body
+return Response::noContent(205);                   // → 205, no body
+```
+
 A status Docuccino can't read at all, such as `->setStatusCode($upstream->status())`, is not documented
 under a code the endpoint may never send. Its body goes under `default` ("any status") and an
 `inferred-response.status-unread` info diagnostic names the action. Name the codes it sends with

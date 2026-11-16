@@ -9,6 +9,7 @@ use Docuccino\Inference\PhpStan\Extensions\DataToResponseReturnTypeExtension;
 use Docuccino\Inference\PhpStan\Extensions\DataTransformReturnTypeExtension;
 use Docuccino\Inference\PhpStan\Extensions\ResourceCollectionReturnTypeExtension;
 use Docuccino\Inference\PhpStan\Extensions\ResourceCollectionTransformReturnTypeExtension;
+use Docuccino\Inference\PhpStan\Extensions\ResponseFactoryFacadeReturnTypeExtension;
 use Docuccino\Inference\PhpStan\Extensions\ResponseJsonReturnTypeExtension;
 use Docuccino\Inference\PhpStan\Runtime\BootFailedException;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter as RuntimeAdapterContract;
@@ -253,6 +254,7 @@ final class RuntimeAdapter implements RuntimeAdapterContract
         $services = '';
         foreach ([
             ResponseJsonReturnTypeExtension::class => 'dynamicMethodReturnTypeExtension',
+            ResponseFactoryFacadeReturnTypeExtension::class => 'dynamicStaticMethodReturnTypeExtension',
             DataToResponseReturnTypeExtension::class => 'dynamicMethodReturnTypeExtension',
             DataTransformReturnTypeExtension::class => 'dynamicMethodReturnTypeExtension',
             ResourceCollectionTransformReturnTypeExtension::class => 'dynamicMethodReturnTypeExtension',

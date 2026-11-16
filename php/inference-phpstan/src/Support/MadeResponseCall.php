@@ -12,9 +12,9 @@ use PHPStan\Type\ObjectType;
 
 /**
  * Where a plain response the factory makes takes its body, status and headers: `make($content, $status,
- * $headers)` and `view($view, $data, $status, $headers)`, called on the factory, or as the
- * `response($content, $status, $headers)` helper, which is `make()`. Every spelling reads through here, so a
- * status is read the same whichever one an application wrote.
+ * $headers)` and `view($view, $data, $status, $headers)`, called on the factory or through a facade proxying
+ * it ({@see FacadeCall}), or as the `response($content, $status, $headers)` helper, which is `make()`. Every
+ * spelling reads through here, so a status is read the same whichever one an application wrote.
  *
  * @internal
  */
@@ -45,6 +45,9 @@ final class MadeResponseCall
      */
     public static function of(Node\Expr $call, Scope $scope, ReflectionProvider $reflection): ?array
     {
+        if ($call instanceof Node\Expr\StaticCall) {
+            $call = FacadeCall::onRoot($call, $scope, $reflection);
+        }
         if (! $call instanceof Node\Expr\FuncCall && ! $call instanceof Node\Expr\MethodCall) {
             return null;
         }

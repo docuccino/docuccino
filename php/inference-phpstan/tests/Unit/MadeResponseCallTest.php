@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 use Docuccino\Inference\PhpStan\Support\MadeResponseCall;
 use Docuccino\Inference\PhpStan\Support\ResponseFactoryCall;
+use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Facades\ProbeFactoryFacade;
+use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Facades\ProbeLedger;
+use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Facades\ProbeLedgerFacade;
 use PhpParser\Node;
 use PhpParser\ParserFactory;
 use PhpParser\PrettyPrinter\Standard;
 use PHPStan\Analyser\Scope;
+use PHPStan\Node\Expr\TypeExpr;
 use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\Reflection\ReflectionProviderStaticAccessor;
 use PHPStan\Type\Constant\ConstantStringType;
@@ -34,21 +38,28 @@ function madeResponseCallOf(string $code): ?array
     $scope->method('getType')->willReturnCallback(static fn (Node\Expr $expr): Type => match (true) {
         // `response()` with no arguments, or an injected factory.
         $expr instanceof Node\Expr\FuncCall, $expr instanceof Node\Expr\Variable && $expr->name === 'factory' => new ObjectType(ResponseFactoryCall::CONTRACT),
+        // The object a facade resolves: a factory where it implements the contract.
+        $expr instanceof TypeExpr => $expr->getExprType() instanceof ObjectType && is_a($expr->getExprType()->getClassName(), ResponseFactoryCall::CONTRACT, true)
+            ? new ObjectType(ResponseFactoryCall::CONTRACT)
+            : $expr->getExprType(),
         $expr instanceof Node\Expr\Variable && $expr->name === 'empty' => new UnionType([new ConstantStringType(''), new NullType]),
         $expr instanceof Node\Expr\Variable && $expr->name === 'body' => new StringType,
         $expr instanceof Node\Scalar\String_ => new ConstantStringType($expr->value),
         $expr instanceof Node\Expr\ConstFetch && $expr->name->toLowerString() === 'null' => new NullType,
         default => new MixedType,
     });
+    $scope->method('resolveName')->willReturnCallback(static fn (Node\Name $name): string => $name->toString());
 
     // A namespaced `response()` an application declared itself is not the framework's helper.
     $reflection = test()->createStub(ReflectionProvider::class);
     $reflection->method('resolveFunctionName')->willReturnCallback(static fn (Node\Name $name): string => $name->toLowerString() === 'app\\response' ? 'app\\response' : $name->toLowerString());
+    $reflection->method('hasClass')->willReturnCallback(static fn (string $class): bool => class_exists($class));
 
-    // Comparing object types asks PHPStan's static reflection, which only a booted analyser registers.
+    // Comparing object types asks PHPStan's static reflection, which only a booted analyser registers; one
+    // reading no class leaves any two distinct classes unrelated.
     $accessor = new ReflectionProperty(ReflectionProviderStaticAccessor::class, 'instance');
     $previous = $accessor->getValue();
-    ReflectionProviderStaticAccessor::registerInstance($reflection);
+    ReflectionProviderStaticAccessor::registerInstance(test()->createStub(ReflectionProvider::class));
     try {
         $made = MadeResponseCall::of($call, $scope, $reflection);
     } finally {
@@ -77,6 +88,11 @@ it('reads the status and headers wherever a plain response is made', function (s
     'a first-class callable' => ['response()->make(...)', null],
     'the helper as a first-class callable' => ['response(...)', null],
     'a dynamic method' => ['response()->{$method}(\'\', 410)', null],
+    // A facade hands the call to the factory it resolves.
+    'make() through a facade' => ['\\'.ProbeFactoryFacade::class.'::make(\'\', 410)', [MadeResponseCall::EMPTY, '410', null]],
+    'view() through a facade' => ['\\'.ProbeFactoryFacade::class.'::view(\'archived\', [], 410, $headers)', [MadeResponseCall::VIEW, '410', '$headers']],
+    'make() through a facade proxying something else' => ['\\'.ProbeLedgerFacade::class.'::make(\'\', 410)', null],
+    'make() on a class that is no facade' => ['\\'.ProbeLedger::class.'::make(\'\', 410)', null],
 ]);
 
 it('reads no body only where the content is provably nothing', function (string $code, string $body): void {

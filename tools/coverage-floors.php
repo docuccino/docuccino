@@ -38,7 +38,7 @@ const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
     // phpdoc type grammar, the contract checker. The floor sits at the measured integer and 98 is out of
     // reach:
-    // Measured 97.87% (18605/19009): 97% of it is 18438.73 statements, 166.27 of margin (0.87pp).
+    // Measured 97.87% (18645/19050): 97% of it is 18478.50 statements, 166.50 of margin (0.87pp).
     // It was ratcheted 96 → 97 back when
     // the figure was 97.51% over a denominator 1189 statements smaller, dipped to 97.39% as core absorbed
     // work at slightly under its own average, and has come back up without the floor needing to move
@@ -47,12 +47,12 @@ const FLOORS = [
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/, the
     // contract-testing assertions. The floor sat at 96 while 97 would have been a hair-trigger, and was to
     // ratchet once the figure cleared 97.20% — about 28 statements. It has:
-    // Measured 97.26% (16379/16840): 97% of it is 16334.80 statements, 44.20 of margin (0.26pp).
+    // Measured 97.27% (16445/16906): 97% of it is 16398.82 statements, 46.18 of margin (0.27pp).
     // The margin is thinner than `core`'s, and the risk it carries is a denominator change rather than a
     // lost proof — deleting about 1,200 fully covered adapter statements would drop the ratio under 97 with
     // no change in test quality. The record check further down fires at ten statements either way, so the
     // floor is not the only thing watching this number.
-    'laravel' => ['floor' => 97, 'measured' => 97.26],
+    'laravel' => ['floor' => 97, 'measured' => 97.27],
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
     // which pcov cannot instrument either way. Its behavioural proof is the `fixture` group, not this
@@ -111,11 +111,14 @@ const FLOORS = [
     // Re-recorded 59.03 → 58.82 as statuses read off enum cases and a plain response's status were folded
     // in the refiner, whose call-site paths only real analysis reaches; the grammars they apply
     // (`CaseStatus`, `MadeResponseCall`) are unit-tested in process.
-    // Measured 58.82% (2711/4609): 58% of it is 2673.22 statements, 37.78 of margin.
+    // It rose to 59.03% when a facade's static call came to be read as the same call on the object it
+    // resolves: what stands in for the call (`FacadeCall`) and the facade's return-type extension are
+    // unit-tested in process. 59 is declined at 1.19 statements of margin, the hair-trigger again.
+    // Measured 59.03% (2750/4659): 58% of it is 2702.22 statements, 47.78 of margin.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads 3 statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 58, 'measured' => 58.82],
+    'inference-phpstan' => ['floor' => 58, 'measured' => 59.03],
 ];
 
 /*
