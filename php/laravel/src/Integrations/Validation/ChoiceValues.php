@@ -54,6 +54,25 @@ final class ChoiceValues
     }
 
     /**
+     * Every scalar, of any type, whose string is listed: the list read where nothing types the values.
+     *
+     * @return list<bool|float|int|string>
+     */
+    public static function anyType(ValidationRule $rule): array
+    {
+        $out = [];
+        foreach (['string', 'number', 'boolean'] as $type) {
+            foreach (self::of($rule, [$type]) as $value) {
+                if (! in_array($value, $out, true)) {
+                    $out[] = $value;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  list<string>  $values
      * @return list<int>|list<string>
      */

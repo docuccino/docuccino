@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Laravel\Integrations\Validation\Transformers\AdditionalPropertiesRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\Transformers\AnnotationRuleTransformer;
+use Docuccino\Laravel\Integrations\Validation\Transformers\ArrayNotInRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\Transformers\DateWireRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 
@@ -18,15 +19,15 @@ use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 /**
  * The transformers whose rule names are Docuccino's OWN rather than Laravel's: a recovered fact the rule
  * vocabulary has no word for, stated outright by the integration that recovered it — an `array<string, V>`
- * property's value schema, a date-typed property's wire format. Laravel would reject the name and nobody
- * ever types one, so there is nothing here for a count or a reference to tell a reader; the exclusion is
- * structural, not a name on a preference list.
+ * property's value schema, a date-typed property's wire format, a `not_in` read on an array's elements.
+ * Laravel would reject the name and nobody ever types one, so there is nothing here for a count or a
+ * reference to tell a reader; the exclusion is structural, not a name on a preference list.
  *
  * @return list<class-string>
  */
 function synthesisedRuleTransformers(): array
 {
-    return [AdditionalPropertiesRuleTransformer::class, DateWireRuleTransformer::class];
+    return [AdditionalPropertiesRuleTransformer::class, ArrayNotInRuleTransformer::class, DateWireRuleTransformer::class];
 }
 
 /**
