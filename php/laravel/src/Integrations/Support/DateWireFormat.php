@@ -83,10 +83,41 @@ final class DateWireFormat
         return SchemaNotes::onto(['type' => 'integer'], [self::TIMESTAMP_NOTE]);
     }
 
-    /** The note naming a pattern the request ACCEPTS, for a reader whose `format` keyword cannot say it. */
-    public static function expected(string $phpFormat): string
+    /**
+     * The OAS `format` every value written with any of these patterns satisfies, or null where they do not
+     * all share one: a request accepting `d/m/Y` or `Y-m-d` takes a value no single keyword names.
+     *
+     * @param  non-empty-list<string>  $phpFormats
+     */
+    public static function oasOfAll(array $phpFormats): ?string
     {
-        return sprintf('Expected format: %s', $phpFormat);
+        $named = array_unique(array_map(self::oas(...), $phpFormats));
+
+        return count($named) === 1 ? reset($named) : null;
+    }
+
+    /**
+     * The note naming the pattern a request ACCEPTS, or the patterns where it accepts any of several, for a
+     * reader whose `format` keyword cannot say it. Several are quoted, as a pattern may hold a comma.
+     */
+    public static function expected(string $phpFormat, string ...$more): string
+    {
+        if ($more === []) {
+            return sprintf('Expected format: %s', $phpFormat);
+        }
+
+        return sprintf('Expected format: one of "%s"', implode('", "', [$phpFormat, ...$more]));
+    }
+
+    /**
+     * The pattern the values `createFromFormat()` READS with `$phpFormat` are written in: the format less its
+     * unescaped `!` and `|`, which reset fields rather than match a byte, and which `format()` would write
+     * literally. Only for a reader that parses with no round trip — Laravel's `date_format` rule formats the
+     * parsed value back and compares, so its `!` is a byte no value matches.
+     */
+    public static function readPattern(string $phpFormat): string
+    {
+        return preg_replace('/\\\\.(*SKIP)(*FAIL)|[!|]/s', '', $phpFormat) ?? $phpFormat;
     }
 
     /** The fixed instant rendered with the pattern — the bytes the wire really carries. */

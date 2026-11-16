@@ -102,7 +102,7 @@ fields you described changes, so read the first point even if you write no exten
   the description still publishes it, but as prose that a description written later replaces. Write
   it with `$field->note()` instead.
 
-### A date in a Spatie Data response
+### A date in a Spatie Data class
 
 Nothing needs editing. But a document whose Data classes put a cast or a transformer on a date property,
 or whose `data.date_format` is a list, changes, and a client generated from it changes with it.
@@ -115,6 +115,13 @@ or whose `data.date_format` is a list, changes, and a client generated from it c
   is `format: date` where the app's format stood. A transformer of your own, on the property or in
   `data.transformers`, now leaves the property untyped rather than documented as a date string it may
   not be.
+- **A request date is documented as laravel-data reads it.** A list of formats, in `data.date_format` or
+  a `#[WithCast(DateTimeInterfaceCast::class, format: [...])]`, names every format the cast tries, where
+  the list was documented as the ISO default. A cast of your own, on the property or in `data.casts`, and
+  a property typed `DateTimeInterface`, which laravel-data's cast cannot build, now leave the property
+  untyped. A `!` or `|` in a cast's format is left out of the format named and the example, so `!Y-m-d`
+  is `format: date`. Laravel's `date_format:Y-m-d,d/m/Y` names both patterns, where it named the first.
+  Most of these only widen; a `format` arriving or changing is read as breaking.
 - **An Eloquent `timestamp` column says what it counts.** In a response it is still an integer, now
   described as a Unix timestamp in seconds.
 - **`docuccino:diff` reads a date whose type changes as breaking.** The `U` cast's integer becoming a

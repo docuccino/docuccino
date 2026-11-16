@@ -46,6 +46,7 @@ use Docuccino\Laravel\Tests\Fixtures\SpatieData\DateLadderController;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\DateLadderData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\DateOverrideData;
 use Illuminate\Routing\Router;
+use Opis\JsonSchema\Validator;
 use Spatie\LaravelData\Attributes\Validation\DateFormat;
 use Spatie\LaravelData\Attributes\WithCast;
 use Spatie\LaravelData\Optional;
@@ -382,6 +383,87 @@ it('claims a format only where the pattern\'s own bytes satisfy it', function ()
         ->and(DateWireFormat::oas('Y-m-d\T'))->toBeNull()
         ->and(DateWireFormat::oas(DateWireFormat::UNIX))->toBeNull();
 });
+
+/**
+ * A date rule's leaf schema, its notes rendered into the description as the document publishes them.
+ *
+ * @param  list<string>  $formats
+ * @return array<string, mixed>
+ */
+function dateWireLeaf(string $rule, array $formats): array
+{
+    $schema = SchemaNotes::rendered((new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))
+        ->convert(new RuleSet(['f' => [ValidationRule::of($rule, $formats)]]), schemaConverter())->schema);
+
+    /** @var array<string, mixed> $leaf */
+    $leaf = $schema['properties']['f'];
+
+    return $leaf;
+}
+
+it('admits a value in any of the formats a date_format rule lists, as Laravel does', function (array $formats, array $leaf): void {
+    // Laravel's `date_format` passes a value matching any one of its patterns, so the schema owes each of
+    // them: checked by a JSON Schema validator against the values Laravel's own validator passes, and the
+    // example against Laravel too. One `format` is claimed only where every pattern's values carry it.
+    $schema = dateWireLeaf('date_format', $formats);
+    $candidates = ['2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00.000000+00:00', '2024-01-01', '01/01/2024', 'soon'];
+    $laravel = static fn (string $value): bool => validator(['f' => $value], ['f' => 'date_format:'.implode(',', $formats)])->passes();
+
+    expect($schema)->toBe($leaf)
+        ->and($laravel($schema['example']))->toBeTrue();
+
+    $passed = 0;
+    foreach ($candidates as $value) {
+        if ($laravel($value)) {
+            $passed++;
+            expect((new Validator)->validate($value, json_decode((string) json_encode(array_diff_key($schema, ['description' => true]))))->isValid())
+                ->toBeTrue($value.' passes Laravel and fails '.json_encode($schema));
+        }
+    }
+
+    expect($passed)->toBe(count($formats));
+})->with([
+    'two patterns no keyword names together' => [['Y-m-d', 'd/m/Y'], [
+        'type' => 'string',
+        'description' => 'Expected format: one of "Y-m-d", "d/m/Y"',
+        'example' => '2024-01-01',
+    ]],
+    'two patterns one keyword names' => [['Y-m-d\TH:i:sP', 'Y-m-d\TH:i:s.uP'], [
+        'type' => 'string',
+        'format' => 'date-time',
+        'description' => 'Expected format: one of "Y-m-d\TH:i:sP", "Y-m-d\TH:i:s.uP"',
+        'example' => '2024-01-01T00:00:00+00:00',
+    ]],
+]);
+
+it('takes an epoch or a string where a cast tries a Unix timestamp among other formats', function (): void {
+    // laravel-data's cast reads an integer through `U` and a string through the rest, so the field is both.
+    expect(dateWireLeaf('date_wire', ['U', 'Y-m-d']))->toBe([
+        'type' => ['integer', 'string'],
+        'description' => 'Expected format: one of "U", "Y-m-d"',
+        'example' => '1704067200',
+    ])
+        // Formats one keyword names keep it.
+        ->and(dateWireLeaf('date_wire', ['Y-m-d', 'Y-m-d'])['format'])->toBe('date');
+});
+
+it('reads a pattern without the reset characters a value never spells', function (string $format, string $read): void {
+    // `!` and `|` reset fields when `createFromFormat()` parses, and `format()` writes them as bytes. The
+    // pattern a value is written in is the one whose rendered bytes the original format reads back as the
+    // same instant; an escaped one is a literal and stays.
+    $instant = new DateTimeImmutable('2024-01-01 00:00:00', new DateTimeZone('UTC'));
+    $parsed = DateTimeImmutable::createFromFormat($format, $instant->format($read), new DateTimeZone('UTC'));
+
+    expect(DateWireFormat::readPattern($format))->toBe($read)
+        ->and($parsed)->toBeInstanceOf(DateTimeImmutable::class)
+        ->and($parsed?->format('Y-m-d'))->toBe('2024-01-01');
+})->with([
+    'a leading reset' => ['!Y-m-d', 'Y-m-d'],
+    'a trailing reset' => ['Y-m-d|', 'Y-m-d'],
+    'an escaped bang' => ['\!Y-m-d', '\!Y-m-d'],
+    'an escaped backslash before a reset' => ['Y-m-d\\\\|', 'Y-m-d\\\\'],
+    'no reset' => ['d/m/Y', 'd/m/Y'],
+]);
 
 it('breaks the rank-12 tie on insertion order alone', function (): void {
     // `additional_properties` and `date_wire` share a rank, so the sort tie-breaks on position — a

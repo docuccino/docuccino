@@ -396,10 +396,19 @@ specific source the class gives, not from a validation rule that says less:
 | `#[DateFormat('d/m/Y')]` | "Expected format: d/m/Y" and `example: 01/01/2024` — you stated the wire format outright, and no `format` word describes it. |
 | `#[WithCast(DateTimeInterfaceCast::class, format: 'U')]` | `type: integer` and "Unix timestamp (seconds)." — the cast parses a timestamp, so that is what the endpoint takes. |
 | `#[WithCast(DateTimeInterfaceCast::class, format: 'Y-m-d')]` | `format: date` — the cast's format is the one it accepts. |
-| A `DateTimeInterface` type, nothing else | The `format` your `data.date_format` gives. |
+| `#[WithCast(DateTimeInterfaceCast::class, format: ['Y-m-d', 'd/m/Y'])]` | `Expected format: one of "Y-m-d", "d/m/Y"` — the cast tries each, so a value in any of them is accepted. |
+| A cast of your own (`#[WithCast]`, `#[WithCastAndTransformer]`, or a `data.casts` entry) | No type at all — your cast decides what it reads. |
+| A `DateTimeInterface` type, nothing else | The `format` your `data.date_format` gives, or every format in it when it is a list. |
 
 The example is always rendered with the format itself, so it is a value your endpoint accepts rather than
-an ISO one it would reject.
+an ISO one it would reject. Where several formats are accepted, the example uses the first. A `!` or `|`
+in a cast's format resets fields as the value is read rather than matching a character, so it is left out
+of the format named and the example.
+
+A property typed as the `DateTimeInterface` interface itself is documented with no type in a request body.
+laravel-data's cast builds the class a property declares, and it cannot build an interface, so it reads no
+value into one. Name a class instead, or tell the cast which to build with
+`#[WithCast(DateTimeInterfaceCast::class, type: CarbonImmutable::class)]`.
 
 So a `#[Date]` (or a `'date'` in a `rules()` override) beside a `CarbonImmutable` property does not narrow
 the field to `format: date`. Laravel's `date` rule accepts anything non-relative `strtotime` parses —
@@ -699,7 +708,7 @@ JSON your app actually produces and accepts:
 | A constructor `@param` / a property `@var` | Supplies the element type PHP can't declare (`list<T>`), wherever the native type is vague. |
 | `calculateResponseStatus()`, or Spatie's inherited default | Documents the success status: `201` on `POST`, `200` otherwise, unless the class overrides it — and an override deciding on the route name documents the one status each route takes. |
 | An overridden `toResponse()` / `transform()` | Docuccino reads your own construction instead — its status, headers and media type win. |
-| `#[WithCast(DateTimeInterfaceCast::class, format: '…')]` | Documents the format a request body's date is read with; `U` makes it an integer Unix timestamp. |
+| `#[WithCast(DateTimeInterfaceCast::class, format: '…')]` / `data.casts` | Documents the format a request body's date is read with, or each format where it is a list; `U` makes it an integer Unix timestamp. A cast of your own leaves the property untyped. |
 | `#[WithTransformer(DateTimeInterfaceTransformer::class, format: '…')]` / `data.transformers` | Documents the format a response's date is written with. A transformer of your own leaves the property untyped. |
 | `rules()` | Overrides the inferred request rules per field. |
 | `allowedRequest*()` | Surfaces the `include`/`exclude`/`only`/`except` query parameters. |
@@ -725,9 +734,9 @@ None required. Like every integration, the Data support accepts an `enabled` opt
 [configuration reference](/laravel/reference/configuration/#integrations). It's a no-op when the package
 isn't installed.
 
-Four of your app's own `config/data.php` settings do reshape the output, and Docuccino reads all
-four: `wrap`, `name_mapping_strategy`, `date_format`, and `transformers`. Change one and every documented
-Data class is rebuilt.
+Five of your app's own `config/data.php` settings do reshape the output, and Docuccino reads all
+five: `wrap`, `name_mapping_strategy`, `date_format`, `casts`, and `transformers`. Change one and every
+documented Data class is rebuilt.
 
 ## When it can't tell
 

@@ -1191,7 +1191,7 @@ per value:
 | `ipv4` | `string`, `format: ipv4` — a dotted quad with no leading zeros, as Laravel checks it. |
 | `ipv6` | `string`, `format: ipv6` — an IPv4-mapped address like `::ffff:192.0.2.1` is one, an address with a zone id like `fe80::1%eth0` isn't. |
 | `date` | `string`, `format: date` — the reading of intent where nothing more specific is known. |
-| `date_format:Y-m-d H:i` | `string` with "Expected format: …" and an example rendered in that pattern, plus `format: date`/`date-time` where the pattern is an ISO one those words describe. |
+| `date_format:Y-m-d H:i` | `string` with "Expected format: …" and an example rendered in that pattern, plus `format: date`/`date-time` where the pattern is an ISO one those words describe. `date_format:Y-m-d,d/m/Y` accepts either, so it names both and claims a `format` only where every pattern has the same one. |
 | `json` | `string` with `contentMediaType: application/json` — the value is a string *carrying* JSON. |
 | `timezone` | `string`, described as "Must be a valid timezone identifier." |
 

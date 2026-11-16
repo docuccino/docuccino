@@ -266,16 +266,10 @@ final class DataSchema implements TypeToSchema
     }
 
     /**
-     * Whether the marker-stripped type is, or unions in, a `DateTimeInterface`. Public because the
+     * The `DateTimeInterface` class the marker-stripped type is, or the first it unions in. Public because the
      * request side asks the same question of the same type, and two answers would be two documents.
      */
-    public static function hasDateTime(DType $clean): bool
-    {
-        return self::dateClass($clean) !== null;
-    }
-
-    /** The `DateTimeInterface` class the marker-stripped type is, or the first it unions in. */
-    private static function dateClass(DType $clean): ?string
+    public static function dateClass(DType $clean): ?string
     {
         $members = $clean instanceof UnionT ? $clean->members : [$clean];
         foreach ($members as $member) {

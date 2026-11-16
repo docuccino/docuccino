@@ -68,6 +68,7 @@ use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParametersExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
+use Docuccino\Laravel\Integrations\SpatieData\ReadDate;
 use Docuccino\Laravel\Integrations\SpatieData\WrapResolver;
 use Docuccino\Laravel\Integrations\SpatieData\WrittenDate;
 use Docuccino\Laravel\Integrations\Support\DateWireFormat;
@@ -449,7 +450,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
                 reflector: $app->make(DataClassReflector::class),
                 dateFormat: self::dataOutputDateFormat(),
                 wrap: new WrapResolver(self::stringConfig('data.wrap')),
-                transformers: self::dataTransformers(),
+                transformers: self::dataClassMap('data.transformers', WrittenDate::DEFAULT_TRANSFORMERS),
             );
         });
 
@@ -457,6 +458,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             return new DataValidationRules(
                 reflector: $app->make(DataClassReflector::class),
                 dateFormat: self::dataDateFormat(),
+                casts: self::dataClassMap('data.casts', ReadDate::DEFAULT_CASTS),
             );
         });
 
@@ -530,10 +532,16 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         }
     }
 
-    /** The app's spatie-data date format, or the package's own default where it is unset. */
-    private static function dataDateFormat(): string
+    /**
+     * The app's spatie-data date format, or the list of them laravel-data's cast tries in turn.
+     *
+     * @return string|list<string>
+     */
+    private static function dataDateFormat(): string|array
     {
-        return self::stringConfig('data.date_format') ?? DateWireFormat::DEFAULT_FORMAT;
+        $format = config('data.date_format');
+
+        return is_array($format) ? array_values(array_filter($format, is_string(...))) : self::stringConfig('data.date_format') ?? DateWireFormat::DEFAULT_FORMAT;
     }
 
     /** The format laravel-data's date transformer writes by default: `data.date_format`, or its first entry. */
@@ -546,15 +554,17 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
     }
 
     /**
-     * The app's `data.transformers`, in order, or laravel-data's shipped entry where it is unset.
+     * The app's `data.transformers` or `data.casts`, in order, or laravel-data's shipped date entry where it
+     * is unset.
      *
+     * @param  array<string, string>  $default
      * @return array<string, string>
      */
-    private static function dataTransformers(): array
+    private static function dataClassMap(string $key, array $default): array
     {
-        $configured = config('data.transformers');
+        $configured = config($key);
         if (! is_array($configured)) {
-            return WrittenDate::DEFAULT_TRANSFORMERS;
+            return $default;
         }
 
         return array_filter($configured, static fn (mixed $transformer, int|string $transformable): bool => is_string($transformable) && is_string($transformer), ARRAY_FILTER_USE_BOTH);
