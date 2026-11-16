@@ -570,6 +570,42 @@ The allow-list itself isn't enumerated — reading it would mean running your me
 is documented as a free comma-separated string. Describe one yourself with `#[QueryParameter]` and
 your prose leads, with "Values are separated by `,`." kept beneath it.
 
+### Response links
+
+A Data object built from a model gives the operation it answers
+[response links](/laravel/documenting/responses/#links-between-operations) to the routes that bind that
+model, on each column it copies unchanged. Docuccino reads the copy where the object is built, as
+laravel-data makes it:
+
+```php
+public function store(StoreTeamRequest $request): TeamData
+{
+    return TeamData::from(Team::create($request->validated()));
+}
+
+// or, in the model
+public function toDTO(): TeamData
+{
+    return new TeamData(slug: $this->slug, name: $this->name);
+}
+```
+
+`from($team)` reads each property from the column its input name gives it — `#[MapInputName]`, the
+class's mapper, the global strategy — snake-cased as Eloquent reads attributes. A constructor argument
+lands in the promoted property of its name, and an array key in the property whose input name it is.
+The link then points at the member the property is sent as: `#[MapOutputName]`, inside the class's
+envelope, so `"team": "$response.body#/data/slug"` under `data.wrap`.
+
+Only a plain copy counts, because the route looks the record up by what is stored. The property is a
+`readonly` `int` or `string`, not nullable, `Lazy` or `Optional`, with no cast, transformer,
+`#[Computed]` or `#[Hidden]`, and the column has no accessor or cast of its own. A writable property
+could be set again after the copy. Anything that could step in between gives nothing: a class with its
+own `toArray()` or `transform()`, a constructor with a body, its own `from()`, `collect()` or other
+`from*()` method, a default `from()` could fall back to, a method the action calls on the object
+(`->withoutWrapping()`), even through a helper typed on a base class, a custom name mapper, or a global
+strategy beside a class-level map. A Data object nested in another gives nothing either: its members sit
+inside a shared component, not at one place in the response.
+
 ### Data classes as error bodies
 
 `Data::toResponse()` declares a bare `JsonResponse` and `transform()` a bare `array`, so a renderer that
@@ -734,9 +770,10 @@ None required. Like every integration, the Data support accepts an `enabled` opt
 [configuration reference](/laravel/reference/configuration/#integrations). It's a no-op when the package
 isn't installed.
 
-Five of your app's own `config/data.php` settings do reshape the output, and Docuccino reads all
-five: `wrap`, `name_mapping_strategy`, `date_format`, `casts`, and `transformers`. Change one and every
-documented Data class is rebuilt.
+Your app's own `config/data.php` reshapes the output in five places, and Docuccino reads them all:
+`wrap`, `name_mapping_strategy`, `date_format`, `casts`, and `transformers`. It also reads `normalizers`,
+which decides how `from()` reads a model, and so whether a response link can trust the copy. Change one
+and every documented Data class is rebuilt.
 
 ## When it can't tell
 

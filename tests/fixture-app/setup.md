@@ -188,6 +188,11 @@ them.
   wraps, and a `find()` that may be null: which model a response link reads the resource's columns off. Beside
   it `app/Http/Resources/MixinUserResource.php`, whose `@mixin User` is consulted only where no construction
   shows (`toResource()`), never over one around either of two models.
+- `app/Http/Controllers/LinkedCourierController.php` + `app/Data/CourierData.php` + `app/Models/Courier.php` — one
+  Data class built from a model in each of the ways an action builds one (`from()` a model, `collect()` models, the
+  constructor by name and by position, the model's own `toDTO()`, `from()` an array), and from either of two models,
+  a `find()` that may be null, an object the action then unwraps, and one a helper typed on the base class changes:
+  which model column each property copies.
 
 ### Closures located by line
 

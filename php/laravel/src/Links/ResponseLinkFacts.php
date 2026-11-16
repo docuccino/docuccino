@@ -23,6 +23,7 @@ use Docuccino\Core\Links\DeclaredLink;
 use Docuccino\Core\Links\OperationLinks;
 use Docuccino\Laravel\Integrations\ApiResources\ResourceReflector;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
+use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
 use Docuccino\Laravel\Routing\BoundColumn;
 use Docuccino\Laravel\Routing\OasPath;
 use Illuminate\Contracts\Routing\UrlRoutable;
@@ -43,7 +44,10 @@ final class ResponseLinkFacts implements OperationExtension
 {
     public const string CHANNEL = 'response-link';
 
-    public function __construct(private readonly BodyColumns $columns = new BodyColumns) {}
+    public function __construct(
+        private readonly BodyColumns $columns = new BodyColumns,
+        private readonly DataColumns $data = new DataColumns,
+    ) {}
 
     public function phase(): OperationPhase
     {
@@ -116,7 +120,8 @@ final class ResponseLinkFacts implements OperationExtension
      */
     private function gives(OperationDraft $operation, RouteContext $context): array
     {
-        $bodies = $this->bodies($context);
+        $sources = null;
+        $bodies = $this->bodies($context, $sources);
         if ($bodies === []) {
             return [];
         }
@@ -145,8 +150,13 @@ final class ResponseLinkFacts implements OperationExtension
                 }
 
                 [$class, $model] = $body;
-                foreach ($this->columns->carried($class, $model, array_map(strval(...), array_keys($properties)), $context) as $member => $column) {
-                    $gives[] = new BodyGive($status, $model, $column, Pointer::of([...$at, $member]), $class);
+                $published = array_map(strval(...), array_keys($properties));
+                $carried = $model === null
+                    ? $this->data->carried($class, $sources?->constructionsOf($class) ?? [], $published, $context)
+                    : array_map(static fn (string $column): array => [$model, $column], $this->columns->carried($class, $model, $published, $context));
+
+                foreach ($carried as $member => [$from, $column]) {
+                    $gives[] = new BodyGive($status, $from, $column, Pointer::of([...$at, (string) $member]), $class);
                 }
             }
         }
@@ -156,12 +166,13 @@ final class ResponseLinkFacts implements OperationExtension
 
     /**
      * The model bodies this operation returns, by the identity their component is published under:
-     * a model itself, or a resource whose model is known — from where the action builds it, or from its
-     * `@mixin` where the action builds it nowhere the walk sees.
+     * a model itself, a resource whose model is known — from where the action builds it, or from its
+     * `@mixin` where the action builds it nowhere the walk sees — or a Data class the walk saw built, whose
+     * model is read per property (null here, the constructions in `$sources`).
      *
-     * @return array<string, array{0: string, 1: string}> published id → [class, model]
+     * @return array<string, array{0: string, 1: string|null}> published id → [class, model]
      */
-    private function bodies(RouteContext $context): array
+    private function bodies(RouteContext $context, ?DataSourceVisitor &$sources): array
     {
         $classes = [];
         foreach ($context->analysis()->returns as $return) {
@@ -173,6 +184,19 @@ final class ResponseLinkFacts implements OperationExtension
         foreach (array_keys($classes) as $class) {
             if (EloquentModelReflector::isModel($class)) {
                 $bodies[SchemaIdentity::publishedId($class)] = [$class, $class];
+
+                continue;
+            }
+
+            if (DataClassReflector::isData($class)) {
+                if ($sources === null) {
+                    $sources = new DataSourceVisitor;
+                    $context->trace($sources);
+                }
+
+                if ($sources->constructionsOf($class) !== null) {
+                    $bodies[SchemaIdentity::publishedId($class)] = [$class, null];
+                }
 
                 continue;
             }

@@ -924,6 +924,10 @@ halves are read from the code:
   your action builds it — `new OrderResource($order)`. Only where the action builds it nowhere Docuccino
   can see, as with `$order->toResource()`, does the resource's `@mixin` answer: one built around either of
   two models gives nothing, whatever the `@mixin` says.
+- **What a Data object gives.** A [Spatie Data](/laravel/packages/spatie-data/#response-links) object sends
+  a column wherever it copies one unchanged — `OrderData::from($order)`, `new OrderData(id: $order->id)`,
+  or `OrderData::from(['id' => $order->id])` — whether your action builds it or a model method such as
+  `toDTO()` does. The link points at the member the property is sent as, inside the class's envelope.
 
 The same goes for a response that already binds the model: `show` links to `destroy`, because the order
 it sends back carries the key `destroy` takes. A segment the two routes share is passed straight through
