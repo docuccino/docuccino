@@ -47,6 +47,20 @@ it('answers what from() throws for every value it may be handed', function (arra
     'no value' => [[], [423], true, true, null],
 ]);
 
+it('answers whether from() throws for every value it may be handed', function (array $values, array $backing, bool $strict, bool $expected): void {
+    // Every value throwing, whichever error each throws, is what makes the call it is handed to unreachable.
+    expect(EnumLookup::always($values, $backing, true, $strict))->toBe($expected);
+})->with([
+    'an int no case backs' => [[999], [410, 423], true, true],
+    'an int a case backs' => [[423], [410, 423], true, false],
+    'two values, one backed' => [[410, 999], [410, 423], true, false],
+    // Two values throwing two different errors still both throw.
+    'an unbacked int beside a string, strict' => [[999, '423'], [423], true, true],
+    // Coercion decides, so nothing is known.
+    'a string, coercive' => [['999'], [423], false, false],
+    'no value' => [[], [423], true, false],
+]);
+
 /** The one expression a line of code is. */
 function lookupCall(string $code): Node\Expr
 {

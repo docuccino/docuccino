@@ -431,6 +431,12 @@ final class ThrowAnalyzer
         Frame $frame,
         array $caught,
     ): array {
+        // A point an operand always throws ahead of is never reached: what leaves is that operand's own
+        // throw, read at its own point. The enum whose cases say so is a dependency either way.
+        if (Unreached::byOperand($node, $scope, fn (string $enum) => $this->dependOn(DeclarationFiles::of($enum)))) {
+            return [];
+        }
+
         $calleeName = $this->calleeResolver->name($node);
         $callee = $this->calleeResolver->resolve($node, $scope);
 

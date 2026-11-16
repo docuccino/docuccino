@@ -22,11 +22,11 @@ use ValueError;
 final class EnumLookup
 {
     /**
-     * The enum a call looks a case up on and what the lookup can throw, each class with whether every value
-     * throws it; null where the call is not `from()` on a backed enum with a constant argument, and what it
-     * declares stands.
+     * The enum a call looks a case up on, what the lookup can throw, each class with whether every value
+     * throws it, and whether every value throws something; null where the call is not `from()` on a backed
+     * enum with a constant argument, and what it declares stands.
      *
-     * @return array{class-string, array<string, bool>}|null
+     * @return array{class-string, array<string, bool>, bool}|null
      */
     public static function of(Node $node, Scope $scope, FunctionReflection|ExtendedMethodReflection|null $reached): ?array
     {
@@ -55,9 +55,9 @@ final class EnumLookup
             $backing[] = $value[0];
         }
 
-        $outcomes = self::outcomes($type->getConstantScalarValues(), $backing, $backingType->isInteger()->yes(), $scope->isDeclareStrictTypes());
+        $thrown = self::thrown($type->getConstantScalarValues(), $backing, $backingType->isInteger()->yes(), $scope->isDeclareStrictTypes());
 
-        return $outcomes === null ? null : [$enum->getName(), $outcomes];
+        return $thrown === null ? null : [$enum->getName(), self::tally($thrown), ! in_array(null, $thrown, true)];
     }
 
     /**
@@ -70,6 +70,33 @@ final class EnumLookup
      * @return array<string, bool>|null class → whether every value throws it
      */
     public static function outcomes(array $values, array $backing, bool $intBacked, bool $strict): ?array
+    {
+        $thrown = self::thrown($values, $backing, $intBacked, $strict);
+
+        return $thrown === null ? null : self::tally($thrown);
+    }
+
+    /**
+     * Whether `from()` throws for every value its argument may be, so a call it is an operand of is never made.
+     *
+     * @param  list<mixed>  $values
+     * @param  list<mixed>  $backing
+     */
+    public static function always(array $values, array $backing, bool $intBacked, bool $strict): bool
+    {
+        $thrown = self::thrown($values, $backing, $intBacked, $strict);
+
+        return $thrown !== null && ! in_array(null, $thrown, true);
+    }
+
+    /**
+     * What each value throws, null for one that finds its case; null for no value, or one PHP coerces.
+     *
+     * @param  list<mixed>  $values
+     * @param  list<mixed>  $backing
+     * @return list<string|null>|null
+     */
+    private static function thrown(array $values, array $backing, bool $intBacked, bool $strict): ?array
     {
         if ($values === []) {
             return null;
@@ -86,6 +113,15 @@ final class EnumLookup
             }
         }
 
+        return $thrown;
+    }
+
+    /**
+     * @param  list<string|null>  $thrown
+     * @return array<string, bool>
+     */
+    private static function tally(array $thrown): array
+    {
         $outcomes = [];
         foreach (array_filter($thrown) as $class) {
             $outcomes[$class] = count(array_keys($thrown, $class, true)) === count($thrown);

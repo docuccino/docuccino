@@ -178,3 +178,33 @@ it('publishes what a case lookup can throw for the value it is handed', function
     // `tryFrom()` answers null where `from()` would throw, and declares nothing.
     'tryFrom()' => ['enumTryFrom', []],
 ])->group('fixture');
+
+it('publishes only what an operand that always throws lets out', function (string $method, array $expected): void {
+    // PHP evaluates a call's arguments before it makes the call, and a construction's before it builds
+    // the object, so an argument that always throws means the call is never made and the exception never
+    // built. What the server sends is that argument's own error. Documenting the construction as well
+    // publishes a response the route cannot give: the 404 below is never sent, and the refusals with no
+    // status would be filed under a status nothing answers with.
+    expect(signalThrows($method))->toBe($expected)
+        ->and(unreadStatusDiagnostics($method))->toBe([]);
+})->with([
+    // `from(999)`: 999 backs no case, so PHP throws a ValueError (the manual's documented failure).
+    'a refusal built from a value no case backs' => ['enumFromNoCase', ['ValueError@500']],
+    // Under `strict_types` a string for an int-backed enum is a TypeError before any case is looked up.
+    'a refusal built from a value of the wrong type' => ['enumFromString', ['TypeError@500']],
+    'abort() handed the lookup\'s value as its status' => ['enumFromNoCaseAbort', ['ValueError@500']],
+    'abort() handed the lookup\'s name beside a 404' => ['enumFromNoCaseMessage', ['ValueError@500']],
+    // A `throw` expression always throws, so the refusal it is handed to is never built.
+    'a refusal handed a throw expression' => ['throwExpressionArgument', ['LogicException@500']],
+    // The boundary: a lookup a case backs completes, so the refusal is built and thrown.
+    'a refusal built from a value a case backs' => ['enumFromStatus', ['ExportFaultException@423']],
+])->group('fixture');
+
+it('documents no response for a return whose value always throws first', function (): void {
+    // The response's status is read off a lookup that always throws, so `response()->json()` is never
+    // called and nothing is returned: the request gets the lookup's 500 and no other answer.
+    $analysis = throwsAnalysis('enumFromNoCaseReturn');
+
+    expect($analysis['returns'])->toBe([])
+        ->and(signalThrows('enumFromNoCaseReturn'))->toBe(['ValueError@500']);
+})->group('fixture');

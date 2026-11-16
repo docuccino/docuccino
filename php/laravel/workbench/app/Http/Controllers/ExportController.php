@@ -9,8 +9,8 @@ use Workbench\App\Enums\ExportFault;
 use Workbench\App\Exceptions\ExportFaultException;
 
 /**
- * Refusals whose fault is looked up from its backing value: once from a value written in the code, and
- * once from one the request chooses.
+ * Refusals whose fault is looked up from its backing value: from a value written in the code, from one no
+ * fault is backed by, and from one the request chooses.
  */
 final class ExportController
 {
@@ -24,5 +24,17 @@ final class ExportController
     public function fail(string $export, int $code): JsonResponse
     {
         throw new ExportFaultException(ExportFault::from($code));
+    }
+
+    /** Retire an export under a fault code no fault is backed by. */
+    public function retire(string $export): JsonResponse
+    {
+        throw new ExportFaultException(ExportFault::from(999));
+    }
+
+    /** Withdraw an export, naming a fault code no fault is backed by. */
+    public function withdraw(string $export): JsonResponse
+    {
+        abort(404, ExportFault::from(999)->name);
     }
 }
