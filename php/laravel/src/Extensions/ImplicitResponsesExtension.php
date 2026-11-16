@@ -19,12 +19,12 @@ use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Provenance\Source;
-use Docuccino\Laravel\Support\AuthMiddlewareDetector;
 use Docuccino\Laravel\Support\CanGate;
 use Docuccino\Laravel\Support\GateBody;
 use Docuccino\Laravel\Support\GateDenial;
 use Docuccino\Laravel\Support\IgnoredResponses;
 use Docuccino\Laravel\Support\MiddlewareClasses;
+use Docuccino\Laravel\Support\RouteAuthentication;
 use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
 use Illuminate\Routing\Middleware\ValidateSignature;
 use ReflectionClass;
@@ -37,7 +37,7 @@ use ReflectionClass;
  *
  *  | Status | Signal |
  *  |--------|--------|
- *  | 401    | auth middleware detected AND the route is not `#[Unauthenticated]` |
+ *  | 401    | the route runs an authenticator ({@see RouteAuthentication}) AND is not `#[Unauthenticated]` |
  *  | 422    | validation rules were recovered (Data / FormRequest / inline / action rules()), body or query |
  *  | 404    | the route has ≥1 model-bound path parameter (one 404 per operation, not per param) |
  *  | 403    | `can:` / `signed` / `verified` middleware, or a FormRequest `authorize()` not `return true` |
@@ -60,8 +60,6 @@ final class ImplicitResponsesExtension implements OperationExtension
 {
     private const PRODUCER = 'integration:implicit-response';
 
-    private const AUTHENTICATION = 'Illuminate\\Auth\\AuthenticationException';
-
     private const VALIDATION = 'Illuminate\\Validation\\ValidationException';
 
     private const MODEL_NOT_FOUND = 'Illuminate\\Database\\Eloquent\\ModelNotFoundException';
@@ -71,6 +69,7 @@ final class ImplicitResponsesExtension implements OperationExtension
     public function __construct(
         private readonly GateDenial $gates,
         private readonly MiddlewareClasses $middleware,
+        private readonly RouteAuthentication $authentication,
         private readonly ResponseDraftApplier $applier = new ResponseDraftApplier,
     ) {}
 
@@ -85,9 +84,10 @@ final class ImplicitResponsesExtension implements OperationExtension
             return;
         }
 
-        // 401 — behind auth middleware and not explicitly public.
-        if (AuthMiddlewareDetector::matches($context) && ! $context->attributes->has(Unauthenticated::class)) {
-            $this->synthesize($operation, $context, 401, self::AUTHENTICATION, 'auth-middleware');
+        // 401 — behind an authenticator and not explicitly public, as whatever that authenticator throws.
+        $refusal = $this->authentication->refusal($context);
+        if ($refusal !== null && ! $context->attributes->has(Unauthenticated::class)) {
+            $this->synthesize($operation, $context, 401, $refusal, 'auth-middleware');
         }
 
         // 422 — the route validates its input, in the body or in the query.

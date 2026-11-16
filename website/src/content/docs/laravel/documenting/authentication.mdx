@@ -180,8 +180,8 @@ documents:
 
 Two things worth knowing:
 
-- `auth_middleware` on its own does nothing visible — it decides **which** routes are
-  "protected", and `default` decides **what** requirement they carry. Set both. The pattern is a
+- `auth_middleware` decides **which** routes are "protected", and `default` decides **what**
+  requirement they carry. Set both. The pattern is a
   wildcard matched against each route's middleware strings, so the shipped `auth*` covers `auth`,
   `auth:web`, `auth:sanctum` and friends.
 - A route can name the same middleware two ways — the alias, or the middleware's own class name, which
@@ -338,7 +338,18 @@ or the alias on both — reads best either way.
 
 ## Implicit `401`
 
-When a route sits behind authentication middleware (matching `security.auth_middleware`),
-Docuccino also documents the `401` response an unauthenticated request receives — no annotation
-needed. Mark a route [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) to opt out. See
+When a route runs Laravel's authenticator, Docuccino also documents the `401` response a request
+without credentials receives — no annotation needed, and no configuration either. `auth`, `auth:sanctum`,
+`auth:api` and any other guard all count, written as the alias or as the class name
+`Authenticate::using()` writes, and so does your own middleware extending `Authenticate`, whatever alias
+you gave it. It counts wherever the middleware comes from: the route, a group, or the controller's own
+`middleware()`. `auth.basic` documents its `401` too. `auth.session` doesn't, because it lets a guest
+through.
+
+The `401` doesn't depend on `security.auth_middleware`, because Laravel refuses the request whatever
+that pattern says. The pattern still adds to it: a route whose middleware matches it gets the `401`
+too, which is how you tell Docuccino about an authenticator of your own that doesn't extend
+`Authenticate`.
+
+Mark a route [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) to opt out. See
 [implicit responses](/laravel/documenting/errors/#implicit-responses-middleware-bindings--validation).

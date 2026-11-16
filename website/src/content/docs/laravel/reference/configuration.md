@@ -53,7 +53,8 @@ so a value converted quietly would be a policy nobody chose.
 The **Default** column is the value the published file ships with. For most keys that is also the
 built-in fallback you get by deleting the key, but not for all of them, and the three that differ all
 read an omitted key as "no opinion": `error_responses` falls back to `'none'`, `routes.include` to no
-route filter at all, and `security.auth_middleware` to treating no route as authenticated. That is why
+route filter at all, and `security.auth_middleware` to applying the `default` requirement to no route
+(the [implicit `401`](/laravel/documenting/authentication/#implicit-401) doesn't need it). That is why
 a second document [inherits nothing](/laravel/guides/multiple-documents/) from the first — and why a
 document nobody wrote at all gets the shipped values above rather than those fallbacks.
 
@@ -301,7 +302,7 @@ security:
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `auth_middleware` | `'auth*'` | Wildcard (`*` stands for any run of characters; everything else, `\` included, is literal) matched against each route's middleware, in either spelling — the registered alias or the middleware's own class name; a match applies the `default` requirement. |
+| `auth_middleware` | `'auth*'` | Wildcard (`*` stands for any run of characters; everything else, `\` included, is literal) matched against each route's middleware, in either spelling — the registered alias or the middleware's own class name; a match applies the `default` requirement and documents a `401`. Laravel's own authenticator documents its `401` without it. |
 | `schemes` | none | `components.securitySchemes` — full breadth: http bearer/basic, apiKey (header/query/cookie), oauth2 flow builders, OpenID Connect. |
 | `default` | none | The per-operation `security` requirement applied to auth-detected routes. |
 | `document` | none | A document-wide `security` requirement. |
