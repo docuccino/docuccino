@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Response;
 use Illuminate\Http\StreamedEvent;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -65,5 +66,11 @@ final class FileDeliveryController
     public function health(): Response
     {
         return response('ok');
+    }
+
+    /** A body whose type nothing states — the base `Illuminate\Http\Response`, with nothing read of it. */
+    public function cached(): Response
+    {
+        return response(Cache::get('health.report'));
     }
 }

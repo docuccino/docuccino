@@ -9,7 +9,6 @@ use PhpParser\Node;
 use PHPStan\Analyser\Scope;
 use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\Type\ObjectType;
-use PHPStan\Type\Type;
 
 /**
  * Where a plain response the factory makes takes its body, status and headers: `make($content, $status,
@@ -29,20 +28,12 @@ final class MadeResponseCall
         'view' => ['view', 'data', 'status', 'headers'],
     ];
 
-    /** The body is the view the call renders. */
-    public const VIEW = 'view';
-
-    /** The content is provably nothing — omitted, `''` or `null` — so there is no body. */
-    public const EMPTY = 'empty';
-
-    /** Anything else: Laravel sends a string as it is rather than as JSON, so its shape is not read here. */
-    public const UNREAD = 'unread';
-
     /**
-     * The call's slots, where its status and headers sit, and what its body is; null for any other call. The
-     * helper with no arguments is the factory itself, not a response.
+     * The call's slots, where its status and headers sit, and whether its body is the view it renders or the
+     * content in its first slot ({@see PlainContent}); null for any other call. The helper with no arguments
+     * is the factory itself, not a response.
      *
-     * @return array{body: self::VIEW|self::EMPTY|self::UNREAD, slots: ArgumentSlots, status: int, headers: int}|null
+     * @return array{view: bool, slots: ArgumentSlots, status: int, headers: int}|null
      */
     public static function of(Node\Expr $call, Scope $scope, ReflectionProvider $reflection): ?array
     {
@@ -65,32 +56,11 @@ final class MadeResponseCall
         $slots = ArgumentSlots::of($call->getArgs(), self::PARAMETERS[$method]);
 
         return [
-            'body' => match (true) {
-                $method === 'view' => self::VIEW,
-                self::emptyContent($slots, $scope) => self::EMPTY,
-                default => self::UNREAD,
-            },
+            'view' => $method === 'view',
             'slots' => $slots,
             'status' => $status,
             'headers' => $status + 1,
         ];
-    }
-
-    private static function emptyContent(ArgumentSlots $slots, Scope $scope): bool
-    {
-        $content = $slots->at(0);
-        if ($content === null) {
-            return $slots->knows(0);
-        }
-
-        return self::isEmpty($scope->getType($content));
-    }
-
-    /** Whether content of this type is provably nothing — `''` or `null`, whichever it is. */
-    public static function isEmpty(Type $type): bool
-    {
-        return $type->isConstantScalarValue()->yes()
-            && array_filter($type->getConstantScalarValues(), static fn (mixed $value): bool => $value !== '' && $value !== null) === [];
     }
 
     private static function helper(Node\Expr\FuncCall $call, Scope $scope, ReflectionProvider $reflection): ?string

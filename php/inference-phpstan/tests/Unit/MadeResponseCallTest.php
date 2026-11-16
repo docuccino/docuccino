@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Inference\PhpStan\Support\MadeResponseCall;
+use Docuccino\Inference\PhpStan\Support\PlainContent;
 use Docuccino\Inference\PhpStan\Support\ResponseFactoryCall;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Facades\ProbeFactoryFacade;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Facades\ProbeLedger;
@@ -20,15 +21,13 @@ use PHPStan\Type\NullType;
 use PHPStan\Type\ObjectType;
 use PHPStan\Type\StringType;
 use PHPStan\Type\Type;
-use PHPStan\Type\UnionType;
 
 /**
- * Where a plain response the factory makes takes its status and headers, and what its body is: the
- * `response()` helper is `make()`, so `response('', 410)` and `response()->make('', 410)` must read alike.
- * Laravel sends a string content as it is rather than as JSON, so only an empty one says anything about the
- * body — that there is none.
+ * Where a plain response the factory makes takes its status and headers, and whether its body is a view
+ * or its content: the `response()` helper is `make()`, so `response('', 410)` and `response()->make('', 410)`
+ * must read alike. What the content is sent as is {@see PlainContent}'s to say.
  *
- * @return array{string, string|null, string|null}|null body kind, status, headers
+ * @return array{bool, string|null, string|null}|null whether the body is a view, status, headers
  */
 function madeResponseCallOf(string $code): ?array
 {
@@ -42,7 +41,6 @@ function madeResponseCallOf(string $code): ?array
         $expr instanceof TypeExpr => $expr->getExprType() instanceof ObjectType && is_a($expr->getExprType()->getClassName(), ResponseFactoryCall::CONTRACT, true)
             ? new ObjectType(ResponseFactoryCall::CONTRACT)
             : $expr->getExprType(),
-        $expr instanceof Node\Expr\Variable && $expr->name === 'empty' => new UnionType([new ConstantStringType(''), new NullType]),
         $expr instanceof Node\Expr\Variable && $expr->name === 'body' => new StringType,
         $expr instanceof Node\Scalar\String_ => new ConstantStringType($expr->value),
         $expr instanceof Node\Expr\ConstFetch && $expr->name->toLowerString() === 'null' => new NullType,
@@ -68,18 +66,18 @@ function madeResponseCallOf(string $code): ?array
 
     $print = static fn (?Node\Expr $expr): ?string => $expr === null ? null : (new Standard)->prettyPrintExpr($expr);
 
-    return $made === null ? null : [$made['body'], $print($made['slots']->at($made['status'])), $print($made['slots']->at($made['headers']))];
+    return $made === null ? null : [$made['view'], $print($made['slots']->at($made['status'])), $print($made['slots']->at($made['headers']))];
 }
 
 it('reads the status and headers wherever a plain response is made', function (string $code, ?array $expected): void {
     expect(madeResponseCallOf($code))->toBe($expected);
 })->with([
-    'the helper' => ['response($body, 410, $headers)', [MadeResponseCall::UNREAD, '410', '$headers']],
-    'the helper, status named' => ['response(status: 410)', [MadeResponseCall::EMPTY, '410', null]],
-    'make() on response()' => ['response()->make(\'\', 410)', [MadeResponseCall::EMPTY, '410', null]],
-    'make() on an injected factory' => ['$factory->make($body, $code)', [MadeResponseCall::UNREAD, '$code', null]],
-    'view() takes its status third' => ['response()->view(\'archived\', [], 410, $headers)', [MadeResponseCall::VIEW, '410', '$headers']],
-    'any casing' => ['response()->MAKE(\'\', 410)', [MadeResponseCall::EMPTY, '410', null]],
+    'the helper' => ['response($body, 410, $headers)', [false, '410', '$headers']],
+    'the helper, status named' => ['response(status: 410)', [false, '410', null]],
+    'make() on response()' => ['response()->make(\'\', 410)', [false, '410', null]],
+    'make() on an injected factory' => ['$factory->make($body, $code)', [false, '$code', null]],
+    'view() takes its status third' => ['response()->view(\'archived\', [], 410, $headers)', [true, '410', '$headers']],
+    'any casing' => ['response()->MAKE(\'\', 410)', [false, '410', null]],
     // The helper with no arguments hands back the factory, not a response.
     'the helper alone' => ['response()', null],
     'another factory method' => ['response()->download($path)', null],
@@ -89,21 +87,8 @@ it('reads the status and headers wherever a plain response is made', function (s
     'the helper as a first-class callable' => ['response(...)', null],
     'a dynamic method' => ['response()->{$method}(\'\', 410)', null],
     // A facade hands the call to the factory it resolves.
-    'make() through a facade' => ['\\'.ProbeFactoryFacade::class.'::make(\'\', 410)', [MadeResponseCall::EMPTY, '410', null]],
-    'view() through a facade' => ['\\'.ProbeFactoryFacade::class.'::view(\'archived\', [], 410, $headers)', [MadeResponseCall::VIEW, '410', '$headers']],
+    'make() through a facade' => ['\\'.ProbeFactoryFacade::class.'::make(\'\', 410)', [false, '410', null]],
+    'view() through a facade' => ['\\'.ProbeFactoryFacade::class.'::view(\'archived\', [], 410, $headers)', [true, '410', '$headers']],
     'make() through a facade proxying something else' => ['\\'.ProbeLedgerFacade::class.'::make(\'\', 410)', null],
     'make() on a class that is no facade' => ['\\'.ProbeLedger::class.'::make(\'\', 410)', null],
-]);
-
-it('reads no body only where the content is provably nothing', function (string $code, string $body): void {
-    expect(madeResponseCallOf($code)[0] ?? null)->toBe($body);
-})->with([
-    'omitted' => ['response(status: 410)', MadeResponseCall::EMPTY],
-    'an empty string' => ['response(\'\', 410)', MadeResponseCall::EMPTY],
-    'null' => ['response(null, 410)', MadeResponseCall::EMPTY],
-    'either of them' => ['response($empty, 410)', MadeResponseCall::EMPTY],
-    'a string' => ['response(\'archived\', 410)', MadeResponseCall::UNREAD],
-    'a string not known' => ['response($body, 410)', MadeResponseCall::UNREAD],
-    // A spread may carry the content: nothing is known about it.
-    'a spread nobody can read' => ['response(...$args)', MadeResponseCall::UNREAD],
 ]);

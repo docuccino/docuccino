@@ -345,11 +345,14 @@ cursor page with no page on either side has no links left, which is sent as an e
 
 ### Media types
 
-A response is `application/json` unless the payload itself says otherwise. A first-party JSON:API
+A response is `application/json` unless your code or the payload says otherwise. A `Content-Type` you
+pass in the response's headers (`new JsonResponse($problem, 422, ['Content-Type' => 'application/problem+json'])`,
+or `->header('Content-Type', …)` on it) is the media type it's documented under. A first-party JSON:API
 resource (or a collection of one) serializes as `application/vnd.api+json`, as does a
 [`timacdonald/json-api`](/laravel/packages/timacdonald-json-api/) resource, a rendered view serializes as
-[`text/html`](#html-and-view-responses), and a [file or stream](#file-downloads-and-streams) serializes
-as the type the call names.
+[`text/html`](#html-and-view-responses), a [plain response](#status-codes-and-jsonresponse) handed a
+string as `text/html`, and a [file or stream](#file-downloads-and-streams) serializes as the type the call
+names.
 
 An action that negotiates between representations gets **one content entry per media type** on the same
 status, rather than one schema filed under a media type half of it contradicts. The entries are ordered
@@ -433,11 +436,19 @@ A plain response gets its status the same way, whether you build it with the `re
 ```php
 return response('', 410);                         // → 410, no body
 return response()->view('archived', [], 410);     // → 410 with an HTML body
-return response($csv, Response::HTTP_GONE);       // → 410
+return response('Gone for good.', Response::HTTP_GONE); // → 410 with a text/html body
 ```
 
-An empty content is documented as no body. Laravel sends a string as it is rather than as JSON, so the
-shape of any other content is left open.
+The body is documented the way Laravel sends it. A string is sent as it is, so it's a `text/html` string,
+or one under the `Content-Type` you pass, and a literal string is documented as exactly that text. An empty
+content is no body. An array, or anything Laravel turns into JSON (an `Arrayable`, a `JsonSerializable`), is
+an `application/json` body of that shape, whatever `Content-Type` you passed, since Laravel replaces it.
+`new Response(…)`, the `Response` facade and your own subclass of `Response` are read the same way:
+
+```php
+return response(['error' => 'locked'], 423);                       // → 423 with that JSON body
+return new Response('id,name', 200, ['Content-Type' => 'text/csv']); // → 200 with a text/csv body
+```
 
 The `Response` facade hands every call to the same factory, so it's documented the same way:
 
@@ -621,7 +632,7 @@ What gets documented instead is only what the class itself proves:
 | `RedirectResponse` | the status the call names (`redirect()->to($url, 301)`) or else `3XX`, with a `Location` header and no body |
 | `JsonResponse` with no recoverable payload | `200` with an open `application/json` body |
 | `BinaryFileResponse`, `StreamedResponse` | the status the call names (`response()->stream($callback, 202)`) or else `200`, with a binary body — see [file downloads and streams](#file-downloads-and-streams) |
-| `Illuminate\Http\Response` | the status alone, the one the call names (`response('', 410)`) or else `200` — neither media type nor shape is stated anywhere |
+| `Illuminate\Http\Response` whose content can't be read | the status alone, the one the call names or else `200` — neither media type nor shape is stated anywhere |
 
 A redirect whose call names no status gets the OAS `3XX` range key rather than `302`: Laravel's
 `RedirectResponse` defaults to 302 but takes any 3xx, and a status read off the request, or a redirect a

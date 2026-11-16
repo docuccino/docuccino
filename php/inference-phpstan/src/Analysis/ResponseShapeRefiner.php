@@ -28,6 +28,7 @@ use Docuccino\Inference\PhpStan\Support\ContentTypeHeader;
 use Docuccino\Inference\PhpStan\Support\FacadeCall;
 use Docuccino\Inference\PhpStan\Support\MadeResponseCall;
 use Docuccino\Inference\PhpStan\Support\OmissionSentinel;
+use Docuccino\Inference\PhpStan\Support\PlainContent;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Support\ResponseFactoryCall;
 use Docuccino\Inference\PhpStan\Support\ScalarFold;
@@ -43,6 +44,7 @@ use PhpParser\Node;
 use PHPStan\Analyser\Scope;
 use PHPStan\Reflection\ParameterReflection;
 use PHPStan\Reflection\ReflectionProvider;
+use PHPStan\Type\Constant\ConstantStringType;
 use PHPStan\Type\ObjectType;
 use PHPStan\Type\Type;
 use ReflectionClass;
@@ -84,6 +86,9 @@ final class ResponseShapeRefiner
         'Illuminate\\Http\\JsonResponse',
         'Symfony\\Component\\HttpFoundation\\JsonResponse',
     ];
+
+    /** Laravel's plain response, which morphs an array handed to it into JSON. */
+    private const PLAIN_RESPONSE = 'Illuminate\\Http\\Response';
 
     /** What `view()` renders, and so the body of a response the factory makes of a view. */
     private const VIEW = 'Illuminate\\Contracts\\View\\View';
@@ -597,7 +602,8 @@ final class ResponseShapeRefiner
 
     /**
      * Fold `new JsonResponse($body, $status, [headers])`: payload from arg 0, status from arg 1 (literal,
-     * pass-through parameter, or permissive), content type from a `Content-Type` header in arg 2. Slots,
+     * pass-through parameter, or permissive), content type from a `Content-Type` header in arg 2. A plain
+     * response's content is read as every plain response's is ({@see plainBody()}). Slots,
      * not written arguments ({@see ArgumentSlots}), so a named argument still lands on its parameter and a
      * spread nobody can read leaves every argument it covers UNKNOWN rather than absent.
      *
@@ -609,11 +615,18 @@ final class ResponseShapeRefiner
             ? ArgumentSlots::of([])
             : ArgumentSlots::of($new->getArgs(), $this->constructorParameterNames($class));
 
+        $headers = $args->at(2);
+        $contentType = $headers === null ? null : ContentTypeHeader::inArray($headers, $scope);
+
         $payload = null;
         [$provenance, $statusTexts] = [[], []];
         $body = $args->at(0);
-        if ($body !== null) {
+        if (! in_array($class, self::JSON_FQCNS, true)) {
+            [$payload, $contentType] = $this->plainBody($this->contentOf($args, 0, $scope), $contentType, $class);
+        } elseif ($body !== null) {
             $payload = $this->payloadOf($scope->getType($body));
+        }
+        if ($body !== null) {
             [$provenance, $statusTexts] = $this->bodyProvenance($body, $scope, $paramNames);
         }
 
@@ -626,9 +639,6 @@ final class ResponseShapeRefiner
             $args->knows(1) => [new LiteralT(200), null],
             default => [null, null],
         };
-
-        $headers = $args->at(2);
-        $contentType = $headers === null ? null : ContentTypeHeader::inArray($headers, $scope);
 
         // A member reading the same accessor as the status echoes the status: the factory marks it, so a
         // call site folding the status folds the member too, and an unfolded one still fills at doc time.
@@ -651,10 +661,10 @@ final class ResponseShapeRefiner
 
     /**
      * Fold a plain response the factory makes ({@see MadeResponseCall}), its status read as the constructor's
-     * is. Where that leaves nothing but the framework's 200 and a body nothing read, the bare class already
-     * says it, so null.
+     * is and its content as {@see plainBody()} reads it. Where that leaves nothing but the framework's 200 and
+     * a body nothing read, the bare class already says it, so null.
      *
-     * @param  array{body: MadeResponseCall::VIEW|MadeResponseCall::EMPTY|MadeResponseCall::UNREAD, slots: ArgumentSlots, status: int, headers: int}  $made
+     * @param  array{view: bool, slots: ArgumentSlots, status: int, headers: int}  $made
      * @param  list<string>  $paramNames
      */
     private function foldMade(array $made, Scope $scope, array $paramNames): ?RefinedResponse
@@ -670,13 +680,11 @@ final class ResponseShapeRefiner
         $headers = $args->at($made['headers']);
         $contentType = $headers === null ? null : ContentTypeHeader::inArray($headers, $scope);
 
-        $payload = match ($made['body']) {
-            MadeResponseCall::VIEW => new ClassT(self::VIEW),
-            MadeResponseCall::EMPTY => new VoidT,
-            MadeResponseCall::UNREAD => null,
-        };
+        [$payload, $contentType] = $made['view']
+            ? [new ClassT(self::VIEW), $contentType]
+            : $this->plainBody($this->contentOf($args, 0, $scope), $contentType, self::PLAIN_RESPONSE);
 
-        if ($payload === null && $statusSource === null && $status instanceof LiteralT && $status->value === 200) {
+        if ($payload === null && $contentType === null && $statusSource === null && $status instanceof LiteralT && $status->value === 200) {
             return null;
         }
 
@@ -748,8 +756,7 @@ final class ResponseShapeRefiner
             return $status === null && $statusSource === null ? $refined->withUnreadStatus() : $refined;
         }
 
-        [$payload, $provenance, $statusTexts] = $this->subclassBody($class, $root, $args, $scope, $paramNames);
-        $contentType = $this->subclassContentType($class, $root, $args, $scope);
+        [$payload, $provenance, $statusTexts, $contentType] = $this->subclassBody($class, $root, $args, $scope, $paramNames);
 
         // As for the factory's plain response ({@see foldMade()}): its default status over content nothing
         // read is what the bare class already says.
@@ -802,17 +809,17 @@ final class ResponseShapeRefiner
     }
 
     /**
-     * The body a derived JSON or plain response is sent with: what its constructors fix, typed where it is
-     * written, or what this construction passes to the parameter they hand through, or that parameter's
-     * default. A plain response's content is read as the factory's is ({@see MadeResponseCall}): provably
-     * empty is no body, and anything else a string sent as it is, whose shape is not read. Nothing, where
-     * neither.
+     * The body a derived JSON or plain response is sent with, and its media type: what its constructors fix,
+     * typed where it is written, or what this construction passes to the parameter they hand through, or that
+     * parameter's default. A plain response's content is read as every plain response's is
+     * ({@see plainBody()}). Nothing, where neither.
      *
      * @param  list<string>  $paramNames
-     * @return array{?DType, array<string, ParamAccessor>, array<string, array{ParamAccessor, ?LiteralT}>}
+     * @return array{?DType, array<string, ParamAccessor>, array<string, array{ParamAccessor, ?LiteralT}>, ?string}
      */
     private function subclassBody(string $class, string $root, ArgumentSlots $args, Scope $scope, array $paramNames): array
     {
+        $contentType = $this->subclassContentType($class, $root, $args, $scope);
         $landing = $this->subclassArguments->body($class, $root);
         $body = $landing === null || isset($landing['expr']) ? null : $args->at($landing['parameter']);
         $type = match (true) {
@@ -823,14 +830,45 @@ final class ResponseShapeRefiner
             default => null,
         };
 
-        if ($type === null || ! in_array($root, self::JSON_FQCNS, true)) {
-            return [$type !== null && MadeResponseCall::isEmpty($type) ? new VoidT : null, [], []];
+        if (! in_array($root, self::JSON_FQCNS, true)) {
+            [$payload, $contentType] = $this->plainBody($type, $contentType, $root);
+        } else {
+            // A JSON response handed no data sends `{}`, which no `null` describes.
+            $payload = $type === null || $type->isNull()->yes() ? null : $this->payloadOf($type);
         }
 
-        // A JSON response handed no data sends `{}`, which no `null` describes.
-        $payload = $type->isNull()->yes() ? null : $this->payloadOf($type);
+        return [$payload, ...($body === null ? [[], []] : $this->bodyProvenance($body, $scope, $paramNames)), $contentType];
+    }
 
-        return [$payload, ...($body === null ? [[], []] : $this->bodyProvenance($body, $scope, $paramNames))];
+    /**
+     * What a plain response sends for its content, and the media type it is labelled with ({@see PlainContent}):
+     * no body, JSON under the default label whatever header was stated, a rendered view, or text under the
+     * stated label or Symfony's `text/html`. Content nothing can read keeps the stated label and no body.
+     *
+     * @param  ?Type  $content  null where nothing can see it
+     * @param  string  $class  the framework response it is handed to
+     * @return array{?DType, ?string}
+     */
+    private function plainBody(?Type $content, ?string $stated, string $class): array
+    {
+        return match (PlainContent::of($content, $class === self::PLAIN_RESPONSE)) {
+            PlainContent::EMPTY => [new VoidT, null],
+            PlainContent::JSON => [$content === null ? null : $this->payloadOf($content), null],
+            PlainContent::RENDERED => [new ClassT(self::VIEW), $stated],
+            PlainContent::TEXT => [$content === null ? null : PlainContent::text($content), $stated ?? PlainContent::DEFAULT_MEDIA_TYPE],
+            PlainContent::UNREAD => [null, $stated],
+        };
+    }
+
+    /** The type of the content in one slot: `''` where the call provably passed none, null where a spread may hold it. */
+    private function contentOf(ArgumentSlots $args, int $slot, Scope $scope): ?Type
+    {
+        $content = $args->at($slot);
+        if ($content !== null) {
+            return $scope->getType($content);
+        }
+
+        return $args->knows($slot) ? new ConstantStringType('') : null;
     }
 
     /**

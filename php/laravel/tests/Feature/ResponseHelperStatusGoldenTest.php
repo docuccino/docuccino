@@ -7,7 +7,6 @@ use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
-use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
@@ -32,13 +31,13 @@ function responseHelperStatusReturns(): array
     return [
         // Sent with the status the call names, and an empty content is no body.
         'purge' => $made(new VoidT, 410),
-        // A string is sent as it is rather than as JSON, so its shape is not read; the status still is.
-        'retire' => $made(new UnknownT('payload not folded'), 410),
+        // A string is sent as it is rather than as JSON, labelled `text/html`; the status still is read.
+        'retire' => new ClassT('Illuminate\\Http\\JsonResponse', [new LiteralT('archived'), new LiteralT(410), new LiteralT('text/html')]),
         'lock' => $made(new VoidT, 423),
         // A view is rendered as HTML whatever status carries it.
         'tombstone' => $made(new ClassT('Illuminate\\Contracts\\View\\View'), 410),
-        // The framework's 200 with a body nothing read is what the bare class already says.
-        'ping' => new ClassT('Illuminate\\Http\\Response'),
+        // The framework's 200, with the text it sends.
+        'ping' => new ClassT('Illuminate\\Http\\JsonResponse', [new LiteralT('created'), new LiteralT(200), new LiteralT('text/html')]),
     ];
 }
 
