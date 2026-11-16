@@ -4,6 +4,22 @@ One section per release that asks something of you, newest first. A release not 
 nothing but the version bump — the [changelog](https://docs.docuccino.app/changelog/) carries the
 full record either way.
 
+## v0.24.0
+
+Only if `lint.leakage.allow` lists a JSON pointer. Names are unaffected, and so is the response
+recorder's redaction.
+
+- **A data-leakage pointer is escaped, and names a parameter by `in:name`.** A token is escaped the
+  way RFC 6901 says, so `/paths//api/users/get/…` is now `/paths/~1api~1users/get/…`, and a media
+  type reads `application~1json`. A parameter in an operation's or a path item's list is named by its
+  location and name, `parameters/query:api_key`, where it was named by its position, `parameters/0`.
+  The position moved whenever the list was reordered, so an entry stopped silencing its parameter and
+  began silencing whichever sensitive one took its place. A pointer under `components` with no `/` or
+  `~` in it reads as before.
+- **An entry spelled the old way silences nothing.** The finding comes back, and its help names the
+  entry that stopped matching and the pointer to write instead. Replace the one with the other. If
+  your parameters were reordered after you wrote the entry, check that it is the parameter you meant.
+
 ## v0.23.0
 
 Only if you read uploaded documents through `Docuccino\Core\Reader`. Nothing about a generated document

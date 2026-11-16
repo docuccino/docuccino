@@ -204,8 +204,10 @@ lint:
   leakage:
     enabled: true
     # Property names, parameter names or JSON pointers to accept, e.g.
-    # ['reset_token', '/components/schemas/Invoice/properties/status']. A name silences this lint
-    # only; the response recorder redacts by name regardless and honours a pointer alone.
+    # ['reset_token', '/components/schemas/Invoice/properties/status']. Copy a pointer as the
+    # warning prints it, escaped (~1 for /) and naming a parameter by in:name, never by position. A
+    # name silences this lint only; the response recorder redacts by name regardless and honours a
+    # pointer alone.
     allow: []
     # Extra heuristics, merged over the built-in table (built-in tokens keep their label). Key = a
     # token matched anywhere inside a property or parameter name, value = the label.
