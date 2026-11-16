@@ -102,7 +102,7 @@ final class DataColumns
     /** @var array<string, bool> class, property and path → whether the property is a plain copy */
     private array $plain = [];
 
-    /** @var array<string, array<string, bool>> class → constructor parameter → whether it has a default */
+    /** @var array<string, array<string, true>> class → the constructor parameters that have a default */
     private array $defaults = [];
 
     /**
@@ -371,7 +371,7 @@ final class DataColumns
             return true;
         }
 
-        $default = $reflection->isPromoted() ? ($this->defaults[$data] ??= self::defaults($data))[$property] ?? false : $reflection->hasDefaultValue();
+        $default = $reflection->isPromoted() ? isset(($this->defaults[$data] ??= self::defaulted($data))[$property]) : $reflection->hasDefaultValue();
 
         return ! $default && ! in_array($type->getName(), $this->castTypes, true);
     }
@@ -522,19 +522,21 @@ final class DataColumns
     }
 
     /**
-     * Constructor parameter → whether `from()` could fall back to its default.
+     * The constructor parameters whose default `from()` could fall back to.
      *
      * @param  class-string  $data
-     * @return array<string, bool>
+     * @return array<string, true>
      */
-    private static function defaults(string $data): array
+    private static function defaulted(string $data): array
     {
-        $defaults = [];
+        $defaulted = [];
         foreach ((new ReflectionClass($data))->getConstructor()?->getParameters() ?? [] as $parameter) {
-            $defaults[$parameter->getName()] = $parameter->isDefaultValueAvailable();
+            if ($parameter->isDefaultValueAvailable()) {
+                $defaulted[$parameter->getName()] = true;
+            }
         }
 
-        return $defaults;
+        return $defaulted;
     }
 
     /**
