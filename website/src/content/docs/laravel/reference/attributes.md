@@ -783,7 +783,8 @@ One enum is one component, so that sentence reaches every use of it at once — 
 `Rule::enum()` on a request, a Query Builder filter. It sits beside the per-case prose
 [`#[CaseDescription]`](#casedescription) publishes: the description says what the type is, and the
 case descriptions say what each value means. Turning enum components off publishes the same body in
-place of the `$ref`, sentence included.
+place of the `$ref`, sentence included, and so does a rule beside `Rule::enum()` that declares another
+type than the enum's, such as `string` for an int-backed one: the field lists the cases as strings.
 
 A rule accepting only *some* of the cases (`Rule::enum(InvoiceStatus::class)->only(…)`) is the one
 place it does not appear. That field publishes its own narrower set, and both the `$ref` and this

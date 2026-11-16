@@ -81,7 +81,7 @@ generated from the document changes.
 ### What `docuccino:diff` reports across this upgrade
 
 Only if you diff a document committed before the upgrade against a build after it, or gate it with
-`--enforce`. Three fixes make a choice rule publish what Laravel checks, and the differ reads each as
+`--enforce`. Four fixes make a choice rule publish what Laravel checks, and the differ reads each as
 breaking where the rule is used:
 
 - **`new Enum` and `new In` publish their values.** Both were dropped, so the field published no
@@ -92,6 +92,10 @@ breaking where the rule is used:
 - **An enum case publishes its backing value**, as above. The case's name leaving and its value
   arriving are reported together, and a value leaving an `enum` (`schema.enum-value-removed`) is
   breaking.
+- **A choice list beside a type rule publishes its values in that type.** `string|in:1,2` publishes
+  `"1"` and `"2"` where it published `1` and `2`, and `string` beside `Rule::enum()` of an int-backed
+  enum lists the cases' strings where it referred to the enum's component. A value of no such type
+  leaves the list (`integer|in:1,any` publishes `[1]`), and a value leaving an `enum` is breaking.
 
 So a gate run with `--enforce` fails on the upgrade. Your API did not change: in each case the
 document now says what your server already did. Upgrade in a pull request of its own, so the

@@ -551,6 +551,8 @@ it('reads Rule::notIn and new NotIn as the not_in rule Laravel casts them to', f
     'one array' => [[ConstValue::array([ConstValue::scalar('admin'), ConstValue::scalar('root')])], ['admin', 'root']],
     'separate arguments' => [[ConstValue::scalar('admin'), ConstValue::scalar('root')], ['admin', 'root']],
     'numbers and a bool' => [[ConstValue::array([ConstValue::scalar(0), ConstValue::scalar(true)])], ['0', '1']],
+    // PHP spells `false` as an empty string, so the rule excludes `""` (and with it `false`), never `"0"`.
+    'false and a float' => [[ConstValue::array([ConstValue::scalar(false), ConstValue::scalar(1.5)])], ['', '1.5']],
 ]);
 
 it('publishes no exclusion where a value of Rule::notIn comes from a call, and says it widened', function (): void {

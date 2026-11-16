@@ -8,6 +8,7 @@ use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
 use Docuccino\Core\Extensions\Validation\ValidationField;
 use Docuccino\Core\Extensions\Validation\ValidationRule;
+use Docuccino\Laravel\Integrations\Validation\ChoiceValues;
 
 /**
  * `not_in:a,b,c` → `not: {enum: […]}` — the mirror of {@see ChoiceRuleTransformer}'s `in`, excluding a
@@ -30,19 +31,13 @@ final class NotInRuleTransformer implements RuleTransformer
 
     public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void
     {
-        $values = $rule->parameters;
+        // Read in the type the other rules declare, as `in` is; an entry no value of that type equals
+        // excludes nothing.
+        $values = ChoiceValues::of($rule, $field->types());
         if ($values === []) {
             return;
         }
 
-        $allNumeric = true;
-        foreach ($values as $value) {
-            if (! is_numeric($value) || str_contains($value, '.')) {
-                $allNumeric = false;
-                break;
-            }
-        }
-
-        $field->set('not', ['enum' => $allNumeric ? array_map('intval', $values) : $values]);
+        $field->set('not', ['enum' => $values]);
     }
 }

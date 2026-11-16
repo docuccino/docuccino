@@ -429,7 +429,8 @@ final class ConstValueToRules
             }
 
             $this->dependencyFiles->add(EnumCaseValue::file($arg));
-            $out[] = is_bool($value) ? ($value ? '1' : '0') : (string) $value;
+            // Laravel writes each value into the rule string as PHP spells it, so `false` is `""`, not `"0"`.
+            $out[] = (string) $value;
         }
 
         return $out;
