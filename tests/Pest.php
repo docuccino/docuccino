@@ -2367,6 +2367,34 @@ function phpRaisesThrow(string $source): bool
 }
 
 /**
+ * Whether one PHP source raises an ERROR: a throw of any shape ({@see phpRaisesThrow()}) bar one that builds
+ * an `HttpResponseException`, which hands the framework a response to send as it is rather than an error to
+ * render.
+ */
+function phpRaisesError(string $source): bool
+{
+    $ast = phpParsedSource($source);
+    if ($ast === null) {
+        return false;
+    }
+
+    $finder = new FindingVisitor(static function (Node $node): bool {
+        if (! $node instanceof Node\Stmt\Throw_ && ! $node instanceof Node\Expr\Throw_) {
+            return false;
+        }
+
+        $thrown = $node->expr;
+
+        return ! ($thrown instanceof Node\Expr\New_
+            && $thrown->class instanceof Node\Name
+            && $thrown->class->toString() === 'Illuminate\\Http\\Exceptions\\HttpResponseException');
+    });
+    (new NodeTraverser($finder))->traverse($ast);
+
+    return $finder->getFoundNodes() !== [];
+}
+
+/**
  * How many times one PHP source CALLS the named method, whatever the receiver and whatever surrounds
  * the call. A count matched as text answers for one spelling of the call site and silently omits the
  * rest, which is a branch nobody is holding the mirror to.

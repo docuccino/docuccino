@@ -42,9 +42,11 @@ it('sweeps every fixture controller that writes a throw', function (): void {
     // A throw is a throw whatever it is built out of: the pattern that used to stand here knew
     // `throw new X` and `throw $e` and read straight past `throw X::for(…)` and `throw static::make()`,
     // which is six of the eleven throwing files in this tree. Asked of the parsed source instead.
+    // A throw handing the framework a response to send is no error, so a controller raising only those is
+    // outside the corpus too ({@see phpRaisesError()}).
     $throwing = [];
     foreach (fixtureControllerPaths() as $relPath) {
-        if (phpRaisesThrow((string) file_get_contents(fixtureSourcePath($relPath)))) {
+        if (phpRaisesError((string) file_get_contents(fixtureSourcePath($relPath)))) {
             $throwing[] = $relPath;
         }
     }
