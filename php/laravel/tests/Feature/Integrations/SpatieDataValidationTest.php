@@ -218,6 +218,31 @@ it('degrades an unsupported spatie validation attribute like an unknown string r
     expect($unhandled)->toHaveCount(1);
 });
 
+it('reads an attribute that builds a rule object as the rules Laravel validates with that object', function (string $attribute, string $source, ClassT|ScalarT $type, array $schema, array $unread): void {
+    $carrier = attributeCarrier('Spatie\\LaravelData\\Attributes\\Validation\\'.$attribute, $source);
+    $context = new SchemaConverter(DefaultTypeMappers::all(), new NullTypeEngine, new ComponentRegistry, new RepresentationPolicy);
+
+    $rules = new DataValidationRules;
+    $ruleSet = $rules->build($carrier, new ClassMetadata($carrier, [new PropertyMetadata('value', $type)]), new NullTypeEngine, null, $context);
+    $converted = (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert((new RuleOrdering)->order((new RuleSetNormalizer)->normalize($ruleSet)), $context);
+
+    expect(array_diff_key($converted->schema['properties']['value'], ['example' => true]))->toBe($schema)
+        ->and(array_map(static fn (array $note): string => $note['rule'], $rules->unreadRuleObjects()))->toBe($unread)
+        ->and(array_filter($converted->diagnostics, static fn ($d): bool => $d->code === 'validation.rule-unhandled'))->toBe([]);
+})->with([
+    // Laravel casts a Dimensions to `dimensions:min_width=10,max_height=50`, the bounds it checks an image against.
+    'dimensions by name' => ['Dimensions', 'maxHeight: 50, minWidth: 10', new ClassT('Illuminate\\Http\\UploadedFile'), ['type' => 'string', 'format' => 'binary', 'description' => 'Image dimensions: min_width=10, max_height=50.'], []],
+    'dimensions by position' => ['Dimensions', '10, 20', new ClassT('Illuminate\\Http\\UploadedFile'), ['type' => 'string', 'format' => 'binary', 'description' => 'Image dimensions: min_width=10, min_height=20.'], []],
+    'dimensions handed to #[Rule]' => ['Rule', 'new \Illuminate\Validation\Rules\Dimensions(["min_width" => 10])', new ClassT('Illuminate\\Http\\UploadedFile'), ['type' => 'string', 'format' => 'binary', 'description' => 'Image dimensions: min_width=10.'], []],
+    // A password is first validated as `string|min:10`; a letters check then runs on it, which no schema states.
+    'a password' => ['Password', 'min: 10', ScalarT::string(), ['type' => 'string', 'minLength' => 10], []],
+    'a password by position' => ['Password', '10, true', ScalarT::string(), ['type' => 'string', 'minLength' => 10], ['new Illuminate\\Validation\\Rules\\Password']],
+    'a password at its default' => ['Password', '', ScalarT::string(), ['type' => 'string', 'minLength' => 12], []],
+    // A table and a column decide nothing the document states.
+    'a row that must exist' => ['Exists', 'column: "email", table: "users"', ScalarT::string(), ['type' => 'string'], []],
+    'a value that must be unique' => ['Unique', '"users", ignore: "5"', ScalarT::string(), ['type' => 'string'], []],
+]);
+
 it('makes a #[Nullable] property null-admitting', function (): void {
     $result = buildValidatedSchema([new PropertyMetadata('nullable', UnionT::of([ScalarT::string(), new NullT]))]);
 

@@ -119,21 +119,21 @@ final class DataClassReflector
 
     private const ENUM_ATTRIBUTE = 'Spatie\\LaravelData\\Attributes\\Validation\\Enum';
 
-    /**
-     * Attributes that take one of the framework's rule objects in place of their own parameters, by that
-     * object's class: laravel-data validates with the object itself when it is the only argument.
-     */
-    private const OBJECT_ATTRIBUTES = [
-        'Spatie\\LaravelData\\Attributes\\Validation\\In' => 'Illuminate\\Validation\\Rules\\In',
-        'Spatie\\LaravelData\\Attributes\\Validation\\NotIn' => 'Illuminate\\Validation\\Rules\\NotIn',
-        'Spatie\\LaravelData\\Attributes\\Validation\\Exclude' => 'Illuminate\\Validation\\Rules\\ExcludeIf',
-    ];
+    /** The attributes laravel-data validates with whatever `getRule()` returns: a rule string or a rule object. */
+    private const OBJECT_ATTRIBUTE = 'Spatie\\LaravelData\\Attributes\\Validation\\ObjectValidationAttribute';
 
-    /** Attributes that build a framework choice object from the values they are given, by its class. */
+    /**
+     * Attributes that build a framework choice object from the values they are given, by its class, or take
+     * one in place of their values: laravel-data validates with the object itself when it is the only argument.
+     */
     private const CHOICE_ATTRIBUTES = [
         'Spatie\\LaravelData\\Attributes\\Validation\\In' => 'Illuminate\\Validation\\Rules\\In',
         'Spatie\\LaravelData\\Attributes\\Validation\\NotIn' => 'Illuminate\\Validation\\Rules\\NotIn',
     ];
+
+    private const PASSWORD_ATTRIBUTE = 'Spatie\\LaravelData\\Attributes\\Validation\\Password';
+
+    private const PASSWORD_RULE = 'Illuminate\\Validation\\Rules\\Password';
 
     private const VALIDATION_PATH = 'Spatie\\LaravelData\\Support\\Validation\\ValidationPath';
 
@@ -328,7 +328,7 @@ final class DataClassReflector
             }
 
             // These validate with the rule object they build or are given ({@see ruleObjects()}).
-            if (self::handsOverObject($attribute)) {
+            if (self::handedObject($attribute) !== null) {
                 continue;
             }
 
@@ -380,10 +380,7 @@ final class DataClassReflector
 
     /**
      * The rule OBJECTS a property's validation attributes hand Laravel: any a `#[Rule(...)]` carries, bare
-     * or inside an array, the `Enum` rule an `#[Enum]` builds, the object an `#[In]`, `#[NotIn]` or
-     * `#[Exclude]` is given in place of its parameters, and the `In`/`NotIn` an `#[In]`/`#[NotIn]` builds
-     * from its values otherwise. An `#[Enum]` is built the way laravel-data builds it, so its `only`/`except`
-     * narrow it; one that cannot be built fails every request, and hands over nothing.
+     * or inside an array, and the one any other attribute validates with ({@see handedObject()}).
      *
      * @return list<object>
      */
@@ -396,16 +393,9 @@ final class DataClassReflector
 
         $out = [];
         foreach ($reflection->getAttributes() as $attribute) {
-            if ($attribute->getName() === self::ENUM_ATTRIBUTE) {
-                $rule = self::builtRule($attribute);
-                $out = $rule === null ? $out : [...$out, $rule];
-
-                continue;
-            }
-
-            $given = self::givenObject($attribute) ?? self::builtChoice($attribute);
-            if ($given !== null) {
-                $out[] = $given;
+            $handed = self::handedObject($attribute);
+            if ($handed !== null) {
+                $out[] = $handed;
 
                 continue;
             }
@@ -428,32 +418,34 @@ final class DataClassReflector
     }
 
     /**
-     * Whether an attribute validates with a rule object rather than its own keyword ({@see ruleObjects()}):
-     * an `#[Enum]`, `#[In]` and `#[NotIn]` always do.
+     * The rule object an attribute hands Laravel in place of a rule string, or null. An `#[In]`/`#[NotIn]` is the
+     * object it is given, or the one it builds from its values ({@see builtChoice()}); any other object attribute
+     * is the object its `getRule()` builds, as laravel-data builds it ({@see builtRule()}).
      *
      * @param  ReflectionAttribute<object>  $attribute
      */
-    private static function handsOverObject(ReflectionAttribute $attribute): bool
+    private static function handedObject(ReflectionAttribute $attribute): ?object
     {
-        return $attribute->getName() === self::ENUM_ATTRIBUTE
-            || isset(self::CHOICE_ATTRIBUTES[$attribute->getName()])
-            || self::givenObject($attribute) !== null;
+        if (isset(self::CHOICE_ATTRIBUTES[$attribute->getName()])) {
+            return self::givenObject($attribute) ?? self::builtChoice($attribute);
+        }
+
+        $rule = self::builtRule($attribute);
+
+        return is_object($rule) ? $rule : null;
     }
 
     /**
-     * The `In`/`NotIn` an `#[In]`/`#[NotIn]` builds from its values, flattened as laravel-data flattens them,
-     * or null for any other attribute. Each value stays as written, so the list reads as `Rule::in()` does
-     * ({@see LiveRuleValue}): `true` as `"1"` and `false` as `""`, the strings Laravel compares, and a
-     * reference only a request resolves as a value this build cannot read.
+     * The `In`/`NotIn` an `#[In]`/`#[NotIn]` builds from its values, flattened as laravel-data flattens them.
+     * Each value stays as written, so the list reads as `Rule::in()` does ({@see LiveRuleValue}): `true` as
+     * `"1"` and `false` as `""`, the strings Laravel compares, and a reference only a request resolves as a
+     * value this build cannot read.
      *
      * @param  ReflectionAttribute<object>  $attribute
      */
-    private static function builtChoice(ReflectionAttribute $attribute): ?object
+    private static function builtChoice(ReflectionAttribute $attribute): object
     {
-        $class = self::CHOICE_ATTRIBUTES[$attribute->getName()] ?? null;
-        if ($class === null) {
-            return null;
-        }
+        $class = self::CHOICE_ATTRIBUTES[$attribute->getName()];
 
         $values = [];
         $arguments = $attribute->getArguments();
@@ -465,34 +457,62 @@ final class DataClassReflector
     }
 
     /**
-     * The framework rule object an `#[In]`, `#[NotIn]` or `#[Exclude]` was given as its only argument, or null.
+     * The framework choice object an `#[In]` or `#[NotIn]` was given as its only argument, or null.
      *
      * @param  ReflectionAttribute<object>  $attribute
      */
     private static function givenObject(ReflectionAttribute $attribute): ?object
     {
-        $class = self::OBJECT_ATTRIBUTES[$attribute->getName()] ?? null;
+        $class = self::CHOICE_ATTRIBUTES[$attribute->getName()] ?? null;
         $arguments = array_values($attribute->getArguments());
 
         return $class !== null && count($arguments) === 1 && $arguments[0] instanceof $class ? $arguments[0] : null;
     }
 
     /**
-     * The rule object an `#[Enum]` validates with, built by the attribute itself, or null where it cannot
-     * be built — an argument this version does not take, or a reference only a request can resolve.
+     * What an object attribute validates with — the rule string or object its own `getRule()` builds, as
+     * laravel-data builds it — or null for any other attribute, or where the rule cannot be built: an argument
+     * this version does not take, or a reference only a request can resolve. A `#[Password(default: true)]` is
+     * the default the application registers at boot, which no file this build keys on states, so it is read as
+     * its bare keyword instead.
      *
      * @param  ReflectionAttribute<object>  $attribute
      */
-    private static function builtRule(ReflectionAttribute $attribute): ?object
+    private static function builtRule(ReflectionAttribute $attribute): object|string|null
     {
+        if (! is_a($attribute->getName(), self::OBJECT_ATTRIBUTE, true)) {
+            return null;
+        }
+
         try {
             $instance = $attribute->newInstance();
+            if (self::takesRegisteredDefault($instance)) {
+                $class = $attribute->getName();
+
+                return $class::keyword();
+            }
+
             $rule = method_exists($instance, 'getRule') ? $instance->getRule(new (self::VALIDATION_PATH)) : null;
         } catch (Throwable) {
             return null;
         }
 
-        return is_object($rule) ? $rule : null;
+        return is_object($rule) || is_string($rule) ? $rule : null;
+    }
+
+    /** Whether a `#[Password]` validates with the default the application registered rather than its own arguments. */
+    private static function takesRegisteredDefault(object $instance): bool
+    {
+        $rule = self::PASSWORD_RULE;
+        $reflection = new ReflectionClass($instance);
+        if (! is_a($instance, self::PASSWORD_ATTRIBUTE) || ! $reflection->hasProperty('default') || ! property_exists($rule, 'defaultCallback')) {
+            return false;
+        }
+
+        // A rule object it is given wins over `default`, as it does in `getRule()`.
+        $given = $reflection->hasProperty('rule') ? $reflection->getProperty('rule')->getValue($instance) : null;
+
+        return $given === null && $reflection->getProperty('default')->getValue($instance) === true && $rule::$defaultCallback !== null;
     }
 
     /**
@@ -688,9 +708,9 @@ final class DataClassReflector
 
     /**
      * The rule string laravel-data writes for a validation attribute: the attribute's own `keyword()`, then
-     * the `parameters()` it reports, as laravel-data's `RuleDenormalizer` joins them. An object attribute that
-     * hands over no object (`#[Required]`, `#[Exists]`) reports no parameters, and keeps the arguments it was
-     * written with. Null where laravel-data cannot build the rule either, which fails every request.
+     * the `parameters()` it reports, as laravel-data's `RuleDenormalizer` joins them. An object attribute is the
+     * rule string its own `getRule()` builds ({@see builtRule()}), and null where that is an object. Null too where
+     * laravel-data cannot build the rule either, which fails every request.
      *
      * @param  ReflectionAttribute<object>  $attribute
      */
@@ -698,6 +718,16 @@ final class DataClassReflector
     {
         $class = $attribute->getName();
         if (! method_exists($class, 'keyword')) {
+            return null;
+        }
+
+        // An object attribute that builds a rule string hands Laravel that string.
+        $built = self::builtRule($attribute);
+        if (is_string($built)) {
+            return $built;
+        }
+
+        if (is_a($class, self::OBJECT_ATTRIBUTE, true)) {
             return null;
         }
 

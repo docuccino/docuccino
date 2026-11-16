@@ -81,9 +81,9 @@ generated from the document changes.
 ### What `docuccino:diff` reports across this upgrade
 
 Only if you diff a document committed before the upgrade against a build after it, or gate it with
-`--enforce`. Eight fixes make a choice rule publish what Laravel checks, two more do the same for
-Spatie Data's rule strings and validation attributes, and the differ reads each as breaking where the
-rule is used:
+`--enforce`. Eight fixes make a choice rule publish what Laravel checks, three more do the same for
+Spatie Data's rule strings, its validation attributes and the attributes that build a rule object, and
+the differ reads each as breaking where the rule is used:
 
 - **`new Enum` and `new In` publish their values.** Both were dropped, so the field published no
   `enum`. An `enum` arriving where nothing constrained the field (`schema.enum-added`) is a narrowing,
@@ -139,6 +139,11 @@ rule is used:
   the order the attribute declares them, so `#[Between(max: 10, min: 1)]` publishes `minimum: 1` and
   `maximum: 10`, where it published the two swapped and refused every value; bounds moving outward are
   not breaking.
+- **A Spatie Data attribute that builds a rule object publishes what that object checks.**
+  `#[Password(min: 10)]` was read as `password:10`, a rule Laravel does not have, and published no
+  constraint; it now publishes the `minLength: 10` of the `string|min:10` a password is validated with
+  first, a narrowing. `#[Dimensions(minWidth: 10)]` described the image as `10`, and now as
+  `min_width=10`, which is not breaking.
 
 So a gate run with `--enforce` fails on the upgrade. Your API did not change: in each case the
 document now says what your server already did. Upgrade in a pull request of its own, so the

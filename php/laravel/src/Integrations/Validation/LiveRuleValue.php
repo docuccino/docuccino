@@ -6,14 +6,17 @@ namespace Docuccino\Laravel\Integrations\Validation;
 
 use Docuccino\Core\Inference\ConstValue;
 use Docuccino\Laravel\Integrations\FormRequest\ConstValueToRules;
+use Illuminate\Validation\ValidationRuleParser;
 use ReflectionObject;
+use Stringable;
 use UnitEnum;
 
 /**
  * A rule value that already exists — an attribute's argument, built by PHP — as the {@see ConstValue} the
  * `new` that built it folds to, so {@see ConstValueToRules} reads `#[Rule(new Enum(X::class))]` exactly as it
  * reads `new Enum(X::class)` in a rules array. A framework rule object keeps its constructor's arguments in
- * its own state, and is read back from there; any other object is its class alone.
+ * its own state, and is read back from there. One Laravel casts to a rule string is that string, and a
+ * `Password` the rules it runs; any other object is its class alone.
  */
 final class LiveRuleValue
 {
@@ -43,6 +46,20 @@ final class LiveRuleValue
      */
     private const ENUM_SELECTORS = ['only', 'except'];
 
+    /**
+     * The objects Laravel runs as rules of their own rather than casting them to a string
+     * ({@see ValidationRuleParser}).
+     */
+    private const RUN_AS_RULES = [
+        'Illuminate\\Contracts\\Validation\\Rule',
+        'Illuminate\\Contracts\\Validation\\ValidationRule',
+        'Illuminate\\Contracts\\Validation\\InvokableRule',
+        'Illuminate\\Contracts\\Validation\\CompilableRules',
+    ];
+
+    /** The checks a `Password` runs on the value after its own rules, none of which a schema states. */
+    private const PASSWORD_CHECKS = ['mixedCase', 'letters', 'numbers', 'symbols', 'uncompromised'];
+
     public static function of(mixed $value): ConstValue
     {
         return match (true) {
@@ -57,6 +74,14 @@ final class LiveRuleValue
     private static function object(object $rule): ConstValue
     {
         $class = $rule::class;
+        if ($class === self::RULES.'Password') {
+            return self::password($rule);
+        }
+
+        if (! isset(self::ARGUMENTS[$class]) && self::castToString($rule)) {
+            return ConstValue::scalar((string) $rule);
+        }
+
         $args = [];
         foreach (self::ARGUMENTS[$class] ?? [] as $property) {
             $args[] = self::state($rule, $property);
@@ -75,6 +100,55 @@ final class LiveRuleValue
         }
 
         return $value;
+    }
+
+    /**
+     * A framework rule object Laravel validates with as its string cast: one of its own, not run as a rule
+     * itself, that has one. Only the framework's are cast here, so no application code runs.
+     *
+     * @phpstan-assert-if-true Stringable $rule
+     */
+    private static function castToString(object $rule): bool
+    {
+        if (! str_starts_with($rule::class, self::RULES) || ! $rule instanceof Stringable) {
+            return false;
+        }
+
+        foreach (self::RUN_AS_RULES as $contract) {
+            if ($rule instanceof $contract) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * A `Password` as the rules Laravel validates the value with first — `string`, `min`, any `max`, and the
+     * rules it was handed — then, where it also runs a check of its own on the value (letters, symbols, a
+     * breach lookup), itself, which the fold leaves out as a rule it cannot read.
+     */
+    private static function password(object $rule): ConstValue
+    {
+        $items = [ConstValue::scalar('string')];
+        foreach (['min', 'max'] as $bound) {
+            $value = self::state($rule, $bound)->scalar;
+            if (is_int($value) && $value > 0) {
+                $items[] = ConstValue::scalar($bound.':'.$value);
+            }
+        }
+
+        $items = [...$items, ...self::state($rule, 'customRules')->items];
+
+        foreach (self::PASSWORD_CHECKS as $check) {
+            if (self::state($rule, $check)->scalar !== false) {
+                $items[] = ConstValue::instance($rule::class, []);
+
+                break;
+            }
+        }
+
+        return ConstValue::array($items);
     }
 
     /** One property of a rule object's state, or unknown where the installed class keeps no such property. */

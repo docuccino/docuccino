@@ -3,38 +3,49 @@
 declare(strict_types=1);
 
 use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
+use Illuminate\Validation\Rules\Password;
 use Spatie\LaravelData\Attributes\Validation\ObjectValidationAttribute;
-use Spatie\LaravelData\Attributes\Validation\Rule;
 use Spatie\LaravelData\Attributes\Validation\ValidationAttribute;
 use Spatie\LaravelData\Exceptions\CannotBuildValidationRule;
 use Spatie\LaravelData\Support\Validation\RuleDenormalizer;
 use Spatie\LaravelData\Support\Validation\ValidationPath;
+use Workbench\App\Enums\WidgetStatus;
+use Workbench\App\Models\Article;
 
 /*
  * The guard behind the reflector's reading of spatie validation attributes. laravel-data, not Docuccino, says
  * which rule an attribute stands for: it writes the attribute's own `keyword()` and `parameters()` into a rule
- * string (`RuleDenormalizer`). So every attribute the installed package ships is built here, with an argument
- * for each parameter it requires, and the token the reflector reads off it must be the string laravel-data
- * writes. An attribute that hands Laravel a rule object rather than a string carries a row below saying so.
+ * string, or hands Laravel the rule string or object an object attribute's `getRule()` builds
+ * (`RuleDenormalizer`). So every attribute the installed package ships is built here, and what the reflector
+ * hands over for it — its rule strings, then its rule objects — must be what laravel-data hands Laravel.
  *
- * Required arguments are written by name and in reverse, so a reading that took them in the order written
- * rather than the order the attribute declares them fails too.
+ * An attribute is built with an argument for each parameter it requires, written by name and in reverse, so a
+ * reading that took them in the order written rather than the order the attribute declares them fails too. An
+ * object attribute requires none and refuses to build without one, so it is built from the sources below
+ * instead: by name, by position, and both.
  */
 
-it('reads every validation attribute laravel-data ships to the rule string laravel-data writes for it', function (): void {
+it('reads every validation attribute laravel-data ships to the rule laravel-data hands Laravel for it', function (): void {
     $directory = dirname((string) (new ReflectionClass(ValidationAttribute::class))->getFileName());
     $denormalizer = app(RuleDenormalizer::class);
+    $status = '\\'.WidgetStatus::class.'::class';
 
-    // The shipped attributes that build no rule string, each with why the reflector reads it apart.
+    // The shipped attributes read apart, each with why.
     $rows = [
         'Rule' => 'Its arguments are rule strings and objects already, split as laravel-data splits them.',
-        'Enum' => 'Builds an Enum rule object, read through ruleObjects().',
-        'In' => 'Builds an In rule object from its values, read through ruleObjects().',
-        'NotIn' => 'Builds a NotIn rule object from its values, read through ruleObjects().',
-        'Exists' => 'Builds an Exists rule object; the vocabulary reads it by name alone.',
-        'Unique' => 'Builds a Unique rule object; the vocabulary reads it by name alone.',
-        'Password' => 'Builds a Password rule object, which Laravel runs as a check.',
-        'Dimensions' => 'Builds a Dimensions rule object, which Laravel casts to its own rule string.',
+    ];
+
+    $sources = [
+        'Dimensions' => ['minWidth: 10', '10', '10, 20, maxWidth: 100', 'maxHeight: 50, minWidth: 10', 'ratio: "3/2"', 'rule: new \Illuminate\Validation\Rules\Dimensions(["width" => 5])'],
+        'Exists' => ['"users"', '"users", "email"', 'column: "email", table: "users"', '"users", connection: "pgsql"', 'withoutTrashed: true, table: "users"', '\\'.Article::class.'::class', 'rule: new \Illuminate\Validation\Rules\Exists("users", "id")'],
+        'Unique' => ['"users"', 'column: "handle", table: "users"', '"users", "email", ignore: "5"', 'ignoreColumn: "uuid", ignore: "5", table: "users"', 'rule: new \Illuminate\Validation\Rules\Unique("users")'],
+        'Password' => ['', '10', 'min: 10, letters: true', '10, true, mixedCase: true', 'uncompromised: true, uncompromisedThreshold: 3', 'default: true', 'rule: new \Illuminate\Validation\Rules\Password(6)'],
+        'Enum' => [$status, 'enum: '.$status, 'new \Illuminate\Validation\Rules\Enum('.$status.')'],
+        'In' => ['"a", "b"', '["a", "b"]', 'new \Illuminate\Validation\Rules\In(["a"])'],
+        'NotIn' => ['"a", "b"', '["a", "b"]', 'new \Illuminate\Validation\Rules\NotIn(["a"])'],
+        'Required' => ['', 'new \Illuminate\Validation\Rules\RequiredIf(false)'],
+        'Prohibited' => ['', 'new \Illuminate\Validation\Rules\ProhibitedIf(true)'],
+        'Exclude' => ['', 'new \Illuminate\Validation\Rules\ExcludeIf(true)'],
     ];
 
     $compared = [];
@@ -49,36 +60,57 @@ it('reads every validation attribute laravel-data ships to the rule string larav
         }
 
         if (isset($rows[$short])) {
-            // A row is only true of an attribute that builds no string: the escape hatch, or one whose rule is
-            // whatever object getRule() returns.
-            expect($class === Rule::class || is_subclass_of($class, ObjectValidationAttribute::class))->toBeTrue($short);
             $apart[] = $short;
 
             continue;
         }
 
-        [$arguments, $source] = attributeSampleArguments($class);
-        try {
-            $written = $denormalizer->execute(new $class(...$arguments), ValidationPath::create());
-        } catch (CannotBuildValidationRule) {
-            // laravel-data refuses these arguments, so every request carrying the field fails, and no rule holds.
-            $written = [];
-        }
+        // Every object attribute is built from sources of its own, so none is compared only where it refuses to build.
+        expect(is_subclass_of($class, ObjectValidationAttribute::class))->toBe(isset($sources[$short]), $short);
 
-        $read = (new DataClassReflector)->validationTokens(attributeCarrier($class, $source), 'value');
+        foreach ($sources[$short] ?? [attributeSampleArguments($class)[1]] as $source) {
+            $carrier = attributeCarrier($class, $source);
+            try {
+                $written = $denormalizer->execute((new ReflectionProperty($carrier, 'value'))->getAttributes()[0]->newInstance(), ValidationPath::create());
+            } catch (CannotBuildValidationRule) {
+                // laravel-data refuses these arguments, so every request carrying the field fails, and no rule holds.
+                $written = [];
+            }
 
-        $compared[] = $short;
-        if ($read !== $written) {
-            $wrong[] = sprintf('#[%s(%s)]: read %s, laravel-data writes %s', $short, $source, json_encode($read), json_encode($written));
+            $reflector = new DataClassReflector;
+            $read = [...$reflector->validationTokens($carrier, 'value'), ...$reflector->ruleObjects($carrier, 'value')];
+
+            $compared[$short] = true;
+            if (serialize($read) !== serialize($written)) {
+                $wrong[] = sprintf('#[%s(%s)]: read %s, laravel-data hands over %s', $short, $source, print_r($read, true), print_r($written, true));
+            }
         }
     }
 
-    // A scan that matched nothing would agree with everything. spatie has shipped ~90 of these for the whole of
-    // v4, and fewer than ten build objects.
+    // A scan that matched nothing would agree with everything. spatie has shipped ~90 of these for the whole of v4.
     expect(count($compared))->toBeGreaterThanOrEqual(70)
         ->and($wrong)->toBe([])
         // Every row names an attribute the package ships, so none outlives its attribute.
-        ->and(array_values(array_diff(array_keys($rows), $apart)))->toBe([]);
+        ->and(array_values(array_diff(array_keys($rows), $apart)))->toBe([])
+        ->and(array_values(array_diff(array_keys($sources), array_keys($compared))))->toBe([]);
+});
+
+it('reads a password the application registers as its default by its keyword alone', function (): void {
+    // That default is set at boot, in a file no build keys on, so a minimum read off it could go stale unseen.
+    Password::defaults(static fn (): Password => Password::min(20));
+
+    try {
+        $carrier = attributeCarrier('Spatie\\LaravelData\\Attributes\\Validation\\Password', 'default: true');
+        $reflector = new DataClassReflector;
+
+        expect($reflector->validationTokens($carrier, 'value'))->toBe(['password'])
+            ->and($reflector->ruleObjects($carrier, 'value'))->toBe([])
+            // A rule object it is given wins over the default, in laravel-data as here.
+            ->and((new DataClassReflector)->ruleObjects(attributeCarrier('Spatie\\LaravelData\\Attributes\\Validation\\Password', 'default: true, rule: new \Illuminate\Validation\Rules\Password(6)'), 'value'))
+            ->toEqual([new Password(6)]);
+    } finally {
+        Password::$defaultCallback = null;
+    }
 });
 
 it('reads a parameter as laravel-data writes it', function (string $attribute, string $read): void {
