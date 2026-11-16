@@ -251,11 +251,14 @@ lint:
   #   # Operation signatures or operationIds to accept, e.g. ['GET /auth/callback'].
   #   allow: []
 
-# Codes you have read and accepted. An accepted diagnostic still prints, marked `accepted`, and stops
-# counting towards `--fail-on` — so a stricter gate can go on before the last report is fixed. An
-# error is never accepted, and an entry nothing reports warns so the list cannot rot.
+# Diagnostics you have read and accepted. An accepted diagnostic still prints, marked `accepted`, and
+# stops counting towards `--fail-on` — so a stricter gate can go on before the last report is fixed.
+# An entry is a whole code, or a code at one operation, copied as the route signature printed above
+# the finding. An error is never accepted, and an entry nothing reports warns so the list cannot rot.
 diagnostics:
-  accept: [] # e.g. ['eloquent.no-columns']
+  accept: []
+    # - 'eloquent.no-columns'
+    # - { code: 'attribute.body-parameter-narrower', operation: 'POST /api/orders' }
 
 # Which engine backs type inference. A boot failure always degrades to no inference rather than
 # failing the build, so docblock- and attribute-driven documentation keeps working.

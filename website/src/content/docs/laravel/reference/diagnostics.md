@@ -77,6 +77,17 @@ diagnostics:
   Accepted, so --fail-on ignores them: eloquent.no-columns (12)
 ```
 
+Where a code is fine on the route you checked and could be a mistake on the next, accept it at that
+operation instead, copying the route signature printed above the finding:
+
+```yaml
+diagnostics:
+  accept:
+    - { code: 'attribute.body-parameter-narrower', operation: 'POST /api/orders' }
+```
+
+The same code on any other operation still fails the gate.
+
 Acceptance changes the exit code and nothing else: the document is byte-identical either way, and the
 report is still in the log the day it starts firing somewhere new. **An `error` is never accepted** —
 it says the document is wrong or the build lost a whole tier of facts, and an entry that reaches one
@@ -246,8 +257,8 @@ key, or — for the four that are about the file itself — the file.
 | `config.export-duplicate-path` | error | Two export targets in one document write the same file, so the later would clobber the earlier | Give each target its own path |
 | `config.export-yaml-unsupported` | error | An export target asks for a `.yaml` file in a format that has no YAML serialization | Give it a `.json` path rather than a `.yaml` file holding JSON |
 | `config.export-path-collision` | error | Two documents write the same file, so one would clobber the other | Give each document its own export path — see [Multiple documents](/laravel/guides/multiple-documents/) |
-| `config.accept-refused` | warning | A code in `diagnostics.accept` was reported as an error, and acceptance never covers an error, so it still failed the run | Fix what the error reports, then delete the entry — see [Diagnostics](/laravel/reference/configuration/#diagnostics) |
-| `config.accept-unused` | warning | A code in `diagnostics.accept` that nothing reported: the cause is fixed, or the code is misspelled | Delete the entry. Checked only once a run has built every document, so a single-document run never raises it |
+| `config.accept-refused` | warning | An entry in `diagnostics.accept` was reported as an error, and acceptance never covers an error, so it still failed the run | Fix what the error reports, then delete the entry — see [Diagnostics](/laravel/reference/configuration/#diagnostics) |
+| `config.accept-unused` | warning | An entry in `diagnostics.accept` that nothing reported: the cause is fixed, the code is misspelled, or the operation it names no longer reports it | Delete the entry, or copy the operation's new signature. Checked only once a run has built every document, so a single-document run never raises it |
 | `config.export-path-ignored` | info | A document sets both `export.targets` and `export.path`, and targets win, so the path is never written | Delete the `export.path` key |
 | `integration.disabled` | info | An integration's package is installed, but the integration is off — either opt-in and never switched on, or explicitly disabled | Set `integrations.<key>.enabled = true` if you want its contributions. The message names the package and the key |
 

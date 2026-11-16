@@ -125,7 +125,7 @@ They are not interchangeable, and picking the wrong one is how a real finding go
 | --- | --- | --- | --- |
 | `lint.<rule>.enabled: false` | The whole pass, every document | Never raised | The rule doesn't describe a problem you have. |
 | `lint.<rule>.allow: [...]` | One target | Never raised for that target | This one hit is fine; the rest of the pass still earns its place. |
-| [`diagnostics.accept`](/laravel/reference/configuration/#diagnostics) | The code, everywhere | **Still printed**, marked `accepted` | You want the gate green today without going blind. |
+| [`diagnostics.accept`](/laravel/reference/configuration/#diagnostics) | The code, everywhere or at one operation | **Still printed**, marked `accepted` | You want the gate green today without going blind. |
 
 The middle row is almost always the right one. A safelist is a decision you made about a specific
 property, operation or pointer, written where the next reader can see what you decided and check
