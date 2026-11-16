@@ -13,13 +13,16 @@ use Docuccino\Laravel\Integrations\SpatieData\WrapResolver;
 use Docuccino\Laravel\Links\BodyColumns;
 use Docuccino\Laravel\Links\DataColumns;
 use Docuccino\Laravel\Links\DataConstruction;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\BareVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\CamelVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\ConstructingVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\DefaultedVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\FleetVanData;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\HandedMapperVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\LazyVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\LiteralVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\MadeVanData;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\NestedInputVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\NormalisingVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\OwnMapperVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\PaintedVanData;
@@ -79,6 +82,10 @@ it('reads each spelling of a plain copy as the column it copies', function (stri
     // Two constructions agree on the key and not on the plate: one copies it, the other copies nothing.
     'what every construction agrees on' => [VanData::class, [DataConstruction::model(Van::class), DataConstruction::arguments(['id' => [Van::class, 'id'], 'plate' => null])], ['id' => [Van::class, 'id']]],
     'a construction the walk could not read' => [VanData::class, [DataConstruction::model(Van::class), DataConstruction::unknown()], []],
+    // With no constructor, `from()` sets each property itself; `new` hands nothing to any of them.
+    'from() a class with no constructor' => [BareVanData::class, [DataConstruction::model(Van::class)], ['id' => [Van::class, 'id'], 'plate' => [Van::class, 'plate']]],
+    'the constructor of a class with none' => [BareVanData::class, [DataConstruction::arguments(['id' => [Van::class, 'id']])], []],
+    'from() a class that is not there' => [VanData::class, [DataConstruction::model('Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\Missing')], []],
 ]);
 
 it('reads the names laravel-data reads and writes each property under', function (string $data, array $built, array $carried, ?string $globalInput = null, ?string $globalOutput = null): void {
@@ -98,8 +105,12 @@ it('reads the names laravel-data reads and writes each property under', function
     // A global strategy decides a property's name before its class's map does, which the published schema
     // does not mirror: the schema's `fleetNumber` is a member laravel-data sends as `fleet_number`.
     'a global strategy over a class map' => [CamelVanData::class, [DataConstruction::model(Van::class)], ['id' => [Van::class, 'id']], 'Spatie\\LaravelData\\Mappers\\SnakeCaseMapper', 'Spatie\\LaravelData\\Mappers\\SnakeCaseMapper'],
-    // What an application's own mapper does is code this does not run.
+    // What an application's own mapper does is code this does not run, and nor is one handed over as an object.
     'a mapper the application wrote' => [OwnMapperVanData::class, [DataConstruction::model(Van::class)], ['id' => [Van::class, 'id']]],
+    'a mapper handed over as an object' => [HandedMapperVanData::class, [DataConstruction::model(Van::class)], ['id' => [Van::class, 'id']]],
+    // A dotted input name reads a nested key, which neither a model attribute nor a flat payload has.
+    'a nested input name, from() a model' => [NestedInputVanData::class, [DataConstruction::model(Van::class)], ['id' => [Van::class, 'id']]],
+    'a nested input name, from() an array' => [NestedInputVanData::class, [DataConstruction::payload(['id' => [Van::class, 'id'], 'registration.plate' => [Van::class, 'plate']])], ['id' => [Van::class, 'id']]],
 ]);
 
 /**
@@ -141,6 +152,8 @@ it('carries nothing that is not a plain copy of the column', function (string $d
     'normalizers of its own' => [NormalisingVanData::class, [DataConstruction::model(Van::class)], []],
     // A column under an accessor, a cast or a date is not the value the route matches.
     'an accessor, a date cast' => [VanData::class, [DataConstruction::arguments(['id' => [Van::class, 'registered_at'], 'plate' => [Van::class, 'colour']])], []],
+    // A property the model declares is read in place of the attribute of its name.
+    'a column a model property shares its name with' => [VanData::class, [DataConstruction::arguments(['id' => [Van::class, 'id'], 'plate' => [Van::class, 'timestamps']])], ['id' => [Van::class, 'id']]],
     // A loaded relation of the column's name is what laravel-data hands over.
     'a column a relation shares its name with' => [VanData::class, [DataConstruction::arguments(['id' => [Van::class, 'id'], 'plate' => [Van::class, 'depot']])], ['id' => [Van::class, 'id']]],
     // A model that reads its own attributes may hand back anything under a column's name.
