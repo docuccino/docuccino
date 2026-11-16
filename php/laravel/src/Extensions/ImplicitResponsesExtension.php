@@ -20,6 +20,7 @@ use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Provenance\Source;
 use Docuccino\Laravel\Support\CanGate;
+use Docuccino\Laravel\Support\FormRequestFailure;
 use Docuccino\Laravel\Support\GateBody;
 use Docuccino\Laravel\Support\GateDenial;
 use Docuccino\Laravel\Support\IgnoredResponses;
@@ -71,6 +72,7 @@ final class ImplicitResponsesExtension implements OperationExtension
         private readonly MiddlewareClasses $middleware,
         private readonly RouteAuthentication $authentication,
         private readonly ResponseDraftApplier $applier = new ResponseDraftApplier,
+        private readonly InferredResponsesExtension $responses = new InferredResponsesExtension,
     ) {}
 
     public function phase(): OperationPhase
@@ -92,7 +94,7 @@ final class ImplicitResponsesExtension implements OperationExtension
 
         // 422 — the route validates its input, in the body or in the query.
         if ($this->hasValidatedRequest($operation)) {
-            $this->synthesize($operation, $context, 422, self::VALIDATION, 'validated-request');
+            $this->refuse($operation, $context, 422, self::VALIDATION, 'validated-request', FormRequestFailure::VALIDATION);
         }
 
         // 404 — one per operation, regardless of how many params are model-bound.
@@ -107,7 +109,11 @@ final class ImplicitResponsesExtension implements OperationExtension
         $authorization = $this->authorizationSignal($context);
         if ($authorization !== null) {
             $noOther403 = ! $operation->hasResponse('403');
-            $this->synthesize($operation, $context, 403, $authorization['exception'], $authorization['signal']);
+            if ($authorization['signal'] === 'formrequest-authorize') {
+                $this->refuse($operation, $context, 403, $authorization['exception'], $authorization['signal'], FormRequestFailure::AUTHORIZATION);
+            } else {
+                $this->synthesize($operation, $context, 403, $authorization['exception'], $authorization['signal']);
+            }
 
             if ($noOther403 && $operation->hasResponse('403')) {
                 $this->reportUndeniableGates($context, $authorization['signal']);
@@ -160,6 +166,71 @@ final class ImplicitResponsesExtension implements OperationExtension
             routeSignature: $context->route->signature($context->httpMethod()),
             help: 'Drop the response with #[IgnoreResponse(403)] on the action if the gate is meant to be a formality, or tighten the policy method so the 403 it publishes is one a request can provoke.',
         ));
+    }
+
+    /**
+     * The response a request the route's FormRequest refuses gets: what the application's override of the
+     * refusing hook answers with where it has one ({@see FormRequestFailure}), and the framework's error where it
+     * has none. The override replaces that error outright — a response it throws is documented as a returned one
+     * is, at the status it carries, and an exception it throws as an action's throw is — so the framework's body
+     * stands only where the override is the framework's own (`parent::` is read as the exception it declares) or
+     * where nothing it does could be read, which the author is told about.
+     */
+    private function refuse(
+        OperationDraft $operation,
+        RouteContext $context,
+        int $status,
+        string $exceptionFqcn,
+        string $signal,
+        string $hook,
+    ): void {
+        $failure = FormRequestFailure::of($context, $hook);
+        if ($failure === null || ! $failure->isRead()) {
+            $this->synthesize($operation, $context, $status, $exceptionFqcn, $signal);
+            if ($failure !== null) {
+                $this->reportUnreadFailure($context, $failure, $status);
+            }
+
+            return;
+        }
+
+        $this->responses->document($operation, $context, $failure->responses, null, $failure->label);
+
+        foreach ($failure->throws as $throw) {
+            $mapped = IgnoredResponses::mapThrow($context, $throw);
+            if ($mapped !== null) {
+                $this->applier->apply($operation, $mapped->draft, $mapped->producer(), $this->throwSource($context, $throw));
+            }
+        }
+    }
+
+    private function reportUnreadFailure(RouteContext $context, FormRequestFailure $failure, int $status): void
+    {
+        $context->components->addDiagnostic(new Diagnostic(
+            severity: Severity::Warning,
+            code: 'inferred-response.form-request-failure-unread',
+            message: sprintf(
+                '%s answers the request it refuses in a way this build cannot read, so the framework\'s %d is documented in its place, which may not be the response the server sends.',
+                $failure->label,
+                $status,
+            ),
+            routeSignature: $context->route->signature($context->httpMethod()),
+            help: sprintf(
+                'Throw an HttpResponseException carrying a response built where the analyzer can see it (response()->json([...], %d)), or an exception named at the throw (throw new SubmissionRefused(...)); or call parent::%s() where the framework\'s answer is the one you want.',
+                $status,
+                $failure->hook,
+            ),
+        ));
+    }
+
+    /** Where a refusal's throw is written: its deepest frame, else the action. */
+    private function throwSource(RouteContext $context, ThrownException $throw): ?Source
+    {
+        $frame = $throw->callChain === [] ? null : $throw->callChain[count($throw->callChain) - 1];
+
+        return $frame !== null && $frame->location->file !== ''
+            ? $context->sourceAt($frame->location, $throw->exceptionFqcn)
+            : $context->actionSource();
     }
 
     private function synthesize(

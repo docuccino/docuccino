@@ -26,6 +26,7 @@ use Docuccino\Core\Inference\DType\PayloadStatusT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
+use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\StatusCodes;
 use Docuccino\Core\Patch\Contribution;
@@ -101,7 +102,19 @@ final class InferredResponsesExtension implements OperationExtension
     {
         [$analysis, $producer] = $this->responseAnalysis($context);
 
-        $fileCalls = $this->fileResponseCalls($analysis, $context);
+        $this->document($operation, $context, $analysis->returns, $producer, $context->actionLabel());
+    }
+
+    /**
+     * Documents each return path as the response it is sent as. Also asked for responses the framework sends
+     * from outside the action — a form request's own answer to a request it refuses — so they read alike.
+     *
+     * @param  list<ReturnSite>  $returns
+     * @param  string  $label  what the notices name as sending them
+     */
+    public function document(OperationDraft $operation, RouteContext $context, array $returns, ?string $producer, string $label): void
+    {
+        $fileCalls = $this->fileResponseCalls($returns, $context);
 
         /** @var array<string, array{payloads: list<array{DType, ?string}>, location: ?SourceLocation, empty: bool, headers: ?array<string, mixed>, bodies: array<string, array<string, mixed>>}> $byStatus */
         $byStatus = [];
@@ -111,7 +124,7 @@ final class InferredResponsesExtension implements OperationExtension
 
         $unread = false;
 
-        foreach ($analysis->returns as $return) {
+        foreach ($returns as $return) {
             [$statuses, $payload, $empty, $headers, $bodies, $mediaType] = $this->unwrap($return->type, $fileCalls);
             $unread = $unread || $statuses === [OperationDraft::UNREAD_STATUS];
 
@@ -147,9 +160,9 @@ final class InferredResponsesExtension implements OperationExtension
             }
         }
 
-        $this->reportUnrecovered($context, $unrecovered);
+        $this->reportUnrecovered($context, $unrecovered, $label);
         if ($unread) {
-            $this->reportUnreadStatus($context);
+            $this->reportUnreadStatus($context, $label);
         }
 
         if ($byStatus === []) {
@@ -187,7 +200,7 @@ final class InferredResponsesExtension implements OperationExtension
      *
      * @param  array<string, list<string>>  $fqcns  the unrecovered response class → every status it landed on
      */
-    private function reportUnrecovered(RouteContext $context, array $fqcns): void
+    private function reportUnrecovered(RouteContext $context, array $fqcns, string $label): void
     {
         foreach ($fqcns as $fqcn => $statuses) {
             // The streamed JSON response is the exception: it names its own media type, so what it is
@@ -206,7 +219,7 @@ final class InferredResponsesExtension implements OperationExtension
                     $streamed
                         ? '%s returns a bare %s, and nothing at the call site names the media type it streams, so the body is documented as any media type at all.'
                         : '%s returns a bare %s, so nothing names the response body and its shape could not be recovered.',
-                    $context->actionLabel(),
+                    $label,
                     $fqcn,
                 ),
                 routeSignature: $context->route->signature(),
@@ -223,7 +236,7 @@ final class InferredResponsesExtension implements OperationExtension
      * survives: a declaration that retires it ({@see OperationDraft::retiresUnreadStatus()}), a
      * `#[Response]` or a `#[ResponseHeader]` alike, has already said what the notice would ask for.
      */
-    private function reportUnreadStatus(RouteContext $context): void
+    private function reportUnreadStatus(RouteContext $context, string $label): void
     {
         foreach ([...$context->attributes->all(Response::class), ...$context->attributes->all(ResponseHeader::class)] as $declared) {
             if (OperationDraft::retiresUnreadStatus((string) $declared->status)) {
@@ -236,7 +249,7 @@ final class InferredResponsesExtension implements OperationExtension
             code: 'inferred-response.status-unread',
             message: sprintf(
                 '%s sets a response status the analyzer could not read, so its body is documented under `default` (any status) rather than under a code it may never send.',
-                $context->actionLabel(),
+                $label,
             ),
             routeSignature: $context->route->signature(),
             help: 'Name each status it can send with #[Response(status: …)] — the inferred body moves onto every status you name below 400 — or pass the status as a literal, a constant, or a choice between them ($ok ? 200 : 503).',
@@ -301,10 +314,12 @@ final class InferredResponsesExtension implements OperationExtension
      * `BinaryFileResponse` for a download and for an inline file, so the call site is the only place the
      * difference — and the media type — is written down. Tracing through the context records the walk's
      * files, so a warm build reports what a cold one did.
+     *
+     * @param  list<ReturnSite>  $returns
      */
-    private function fileResponseCalls(ActionAnalysis $analysis, RouteContext $context): ?FileResponseVisitor
+    private function fileResponseCalls(array $returns, RouteContext $context): ?FileResponseVisitor
     {
-        foreach ($analysis->returns as $return) {
+        foreach ($returns as $return) {
             $type = $return->type;
             if ($type instanceof ClassT && (FrameworkClasses::isBinaryFile($type->fqcn) || FrameworkClasses::isStreamed($type->fqcn))) {
                 $context->trace($visitor = new FileResponseVisitor);

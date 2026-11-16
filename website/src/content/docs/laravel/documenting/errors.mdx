@@ -761,6 +761,46 @@ deliberately not inferred — a middleware's name doesn't tell Docuccino what st
 Declare those with a [`#[Response]`](/laravel/reference/attributes/#response) attribute.
 :::
 
+### A form request's own answer
+
+A form request refuses a request through two methods you can override: `failedValidation()` when its
+rules fail, and `failedAuthorization()` when its `authorize()` gate denies. Laravel calls them before your
+action runs, so whatever yours throws is the response the request gets, in place of the framework's
+`422` or `403`. Docuccino reads the override, on the request itself or on a base class your requests
+extend, and documents that answer instead:
+
+```php
+abstract class ApiRequest extends FormRequest
+{
+    protected function failedValidation(Validator $validator): void
+    {
+        throw new HttpResponseException(response()->json([
+            'success' => false,
+            'errors' => $validator->errors(),
+        ], 422));
+    }
+}
+```
+
+Every request extending `ApiRequest` documents a `422` with that `{ "success": false, "errors": … }`
+body, not the framework's `{ "message", "errors" }`. The validator's errors are published as the map they
+are sent as, each field to its list of messages, under whatever key you put them.
+
+What the override throws decides the response, as it would anywhere else:
+
+- A response, carried by an `HttpResponseException` or handed to `abort()`, is documented at the status
+  it carries, as a [response you throw](#responses-you-throw) is. A `failedAuthorization()` that throws a
+  `404` documents a `404` and no `403`.
+- An exception is documented as your exception handling renders it. One of your own that states a `400`
+  documents a `400` in place of the `422`; a `ValidationException` or an `AuthorizationException`, with
+  messages of your own or a named error bag, keeps the framework's body.
+- `parent::failedValidation($validator)` is the framework's answer, so it changes nothing.
+
+Where nothing the override throws can be read, such as an exception class only known at runtime, the
+framework's response stays and an
+[`inferred-response.form-request-failure-unread`](/laravel/reference/diagnostics/) warning names the
+method, since that response may not be the one your server sends.
+
 ## Repeated bodies become shared components
 
 Error contracts repeat by nature: the same `404` shape sits under every show route, the same `422` under
