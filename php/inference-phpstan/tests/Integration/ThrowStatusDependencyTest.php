@@ -113,6 +113,12 @@ it('depends on the enum a status was read off', function (string $method, array 
     'a backing value read through the constructor' => ['enumValueStatus', ['ExportFault.php', 'ExportFaultException.php']],
 ])->group('fixture');
 
+it('depends on the enum a case lookup was matched against', function (): void {
+    // Whether `ExportFault::from(410)` can throw is a fact of the enum's cases, which nothing else this
+    // route publishes reads: renumbering `Gone` turns the lookup into a ValueError.
+    expect(throwDependencyNames('enumLookedUp'))->toContain('ExportFault.php');
+})->group('fixture');
+
 it('depends on the file the factory was written in', function (): void {
     // The same soundness one hop on: the status this route publishes is now a fact of a factory body, so
     // that file has to be able to invalidate the route as well.

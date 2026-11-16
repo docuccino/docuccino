@@ -1292,6 +1292,36 @@ class ThrowsController extends Controller
         throw new \App\Exceptions\ExportFaultException(\App\Enums\ExportFault::from(423));
     }
 
+    /** Case 10t'': a value no case is backed by, so `from()` throws before the refusal is built. */
+    public function enumFromNoCase(): void
+    {
+        throw new \App\Exceptions\ExportFaultException(\App\Enums\ExportFault::from(999));
+    }
+
+    /** Case 10t''': a string for an int-backed enum, in a file declaring `strict_types`. */
+    public function enumFromString(): void
+    {
+        throw new \App\Exceptions\ExportFaultException(\App\Enums\ExportFault::from('423'));
+    }
+
+    /** Case 10t-runtime: a value the request chooses, which may name no case. */
+    public function enumFromRuntime(int $code): void
+    {
+        throw new \App\Exceptions\ExportFaultException(\App\Enums\ExportFault::from($code));
+    }
+
+    /** Case 10t-try: `tryFrom()` answers null for a value no case is backed by. */
+    public function enumTryFrom(): void
+    {
+        throw new \App\Exceptions\ExportFaultException(\App\Enums\ExportFault::tryFrom(423) ?? \App\Enums\ExportFault::Gone);
+    }
+
+    /** Case 10t-lookup: a case looked up from a constant, beside a status that does not come from it. */
+    public function enumLookedUp(): void
+    {
+        abort(404, \App\Enums\ExportFault::from(410)->name);
+    }
+
     /** Case 10u: abort() with a case's backing value. */
     public function abortEnumValue(): void
     {
