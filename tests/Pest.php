@@ -99,7 +99,11 @@ use Docuccino\Laravel\Routing\LaravelRouteResolver;
 use Docuccino\Laravel\Testing\ApiContract;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Almanac;
 use Docuccino\Laravel\Tests\Fixtures\ExcludedFields\StorePaymentRequest;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\AuthorData;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\AuthorPageData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\NestedWrapItemData;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\PageController;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\PageMetaData;
 use Docuccino\Laravel\Tests\Support\BuildSettings;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\FragmentCacheDirs;
@@ -5015,6 +5019,52 @@ function bootLaravelData(?string $wrap): void
     $defaults = require dirname(__DIR__).'/vendor/spatie/laravel-data/config/data.php';
 
     config()->set('data', [...$defaults, 'wrap' => $wrap]);
+}
+
+/**
+ * A build of {@see PageController}'s two routes — the page returned, and the page named by `#[Response]`
+ * — with the engine answering `$classes` and the returned action answering `$returns`.
+ *
+ * @param  array<string, ClassMetadata>  $classes
+ * @param  list<ReturnSite>  $returns
+ */
+function selfUnwrappedPageBuild(array $classes, array $returns): GenerationResult
+{
+    $engine = static fn (): TypeEngine => WorkbenchEngine::make(
+        classOverrides: $classes,
+        analysisOverrides: [PageController::class.'::index' => new ActionAnalysis(returns: $returns)],
+    );
+
+    return localityBuild(static function (Router $router): void {
+        $router->get('api/zz-pages', [PageController::class, 'index']);
+        $router->get('api/zz-declared', [PageController::class, 'declared']);
+    }, $engine);
+}
+
+/**
+ * Both {@see selfUnwrappedPageBuild()} routes publish the page as its own component at the root, with
+ * its descriptions — the body the server sends, which is checked against a real render rather than
+ * restated — and nothing reports the envelope as unsettled.
+ */
+function expectSelfUnwrappedPage(GenerationResult $result): void
+{
+    $document = $result->document->toArray();
+    $wire = AuthorPageData::page([new AuthorData('a', 'a@example.com')], new PageMetaData(1, 1))
+        ->toResponse(request())->getData(true);
+    $component = $document['components']['schemas']['AuthorPageData'];
+
+    expect(array_keys($wire))->toBe(['data', 'meta'])
+        ->and(array_keys($component['properties']))->toBe(array_keys($wire))
+        ->and($component['properties']['data']['description'])->toBe('The authors on this page.')
+        ->and($component['properties']['meta']['description'])->toBe('Where this page sits in the whole list.')
+        ->and(diagnosticsCoded($result->diagnostics, 'spatie-data.root-wrap-unsettled'))->toBe([]);
+
+    foreach (['/api/zz-pages', '/api/zz-declared'] as $path) {
+        $schema = $document['paths'][$path]['get']['responses']['200']['content']['application/json']['schema'];
+        unset($schema['x-docuccino']);
+
+        expect($schema)->toBe(['$ref' => '#/components/schemas/AuthorPageData']);
+    }
 }
 
 /**

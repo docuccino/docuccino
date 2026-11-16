@@ -407,7 +407,23 @@ a local it's built in, and reads only the class's own declarations, so a neighbo
 answers for itself. Precedence is an explicit unwrap, then `defaultWrap()`, then `data.wrap`, then
 unwrapped.
 
-Where the vocabulary is there and no receiver can be named for it — a hop through a helper, say — the
+A named constructor that builds the class and hands it out unwrapped counts too, which is how a page
+that is its own `{data, meta}` envelope is usually written:
+
+```php
+public static function page(array $invoices, PageMetaData $meta): self
+{
+    return (new self($invoices, $meta))->withoutWrapping();
+}
+```
+
+`new static`, the class's own name and `self::from(…)` read the same way. The answer belongs to the
+class, not to one call, so `#[Response(type: InvoicePageData::class)]` publishes the page's own component
+at the root too, with its property descriptions — and a route that builds the class some other way is
+documented unwrapped as well, so send it through `page()` everywhere.
+
+Where the vocabulary is there and no receiver can be named for it — a hop through a helper, or an
+instance of the class built unwrapped and passed into another rather than returned — the
 envelope stays as `data.wrap` resolves it, because that's what the framework does to every root Data
 response and unwrapping is the override. The half that couldn't be read reaches you as
 [`spatie-data.root-wrap-unsettled`](/laravel/reference/diagnostics/#package-integrations) rather than
@@ -632,7 +648,7 @@ JSON your app actually produces and accepts:
 | `DataCollection` / `#[DataCollectionOf]` | Becomes an array of the item schema. |
 | Paginated Data collections | Produce Spatie's own paginator envelope (above), not Laravel's. |
 | `defaultWrap()` / `data.wrap` | Nests the top-level response under the wrap key (`{ "data": … }`). |
-| `$this->withoutWrapping()` / `WrapExecutionType::Disabled` | Documents this class's response root **unwrapped**, whatever `data.wrap` says — when the receiver is the class itself. Aimed at a value it holds, it says nothing about the root. |
+| `$this->withoutWrapping()` / `WrapExecutionType::Disabled` | Documents this class's response root **unwrapped**, whatever `data.wrap` says — when the receiver is the class itself, or an instance a named constructor builds and returns (`(new self(…))->withoutWrapping()`). Aimed at a value it holds, it says nothing about the root. |
 | A constructor `@param` / a property `@var` | Supplies the element type PHP can't declare (`list<T>`), wherever the native type is vague. |
 | `calculateResponseStatus()`, or Spatie's inherited default | Documents the success status: `201` on `POST`, `200` otherwise, unless the class overrides it — and an override deciding on the route name documents the one status each route takes. |
 | An overridden `toResponse()` / `transform()` | Docuccino reads your own construction instead — its status, headers and media type win. |
