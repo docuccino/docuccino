@@ -777,7 +777,7 @@ narrower to say.
 the file it serves, so a literal path's extension is the same answer the server will reach. Docuccino
 resolves the media type in this order:
 
-1. a literal `Content-Type` you pass in the call's `$headers` argument;
+1. a literal `Content-Type` you pass in the call's `$headers` argument, in place or by name (`headers: [...]`);
 2. the media type the call fixes itself — `eventStream()` always sends `text/event-stream`,
    `streamJson()` always sends `application/json`;
 3. a well-known extension on a literal file path — `.pdf`, `.csv`, `.zip`, `.xlsx`, and so on.
@@ -814,8 +814,8 @@ return response()->streamDownload($export, 'ledger.csv', ['Content-Type' => 'tex
 | `Storage::response($path)` | `inline` |
 | `response()->stream($callback)`, `response()->eventStream($callback)` | none |
 
-A literal fourth argument overrides it — `response()->download($file, $name, [], 'inline')` documents
-`inline`. Both facades and a specific disk work the same way, since the receiver is matched by type:
+A literal `$disposition` argument overrides it — `response()->download($file, $name, [], 'inline')` and
+`response()->download($file, disposition: 'inline')` both document `inline`. Both facades and a specific disk work the same way, since the receiver is matched by type:
 `Response::download(...)`, `Storage::disk('s3')->download(...)`. If one action takes two paths that
 disagree — one attaches, the other displays — no header is documented, because either answer would
 describe the wrong path.
