@@ -42,6 +42,7 @@ use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
 use Docuccino\Inference\PhpStan\Translation\TypeTranslator;
 use PhpParser\Node;
 use PHPStan\Analyser\Scope;
+use PHPStan\Node\ReturnStatement;
 use PHPStan\Reflection\ParameterReflection;
 use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\Type\Constant\ConstantStringType;
@@ -545,7 +546,8 @@ final class ResponseShapeRefiner
      * out of the contract.
      *
      * Each arm is then bound to the call that reached it, as a descended helper's shape is
-     * ({@see bindCall()}), and stamped with the `#[ErrorComponent]` the override declares.
+     * ({@see bindCall()}), and stamped with the `#[ErrorComponent]` the override declares. Where the object
+     * was built in sight, its promoted properties hold what that construction passed ({@see constructionHolds()}).
      *
      * @param  array{receiver: ClassT, callee: Callee|null, call: Node\Expr\MethodCall|Node\Expr\StaticCall, scope: Scope}  $render
      * @param  list<string>  $paramNames  the caller's parameter names
@@ -577,13 +579,21 @@ final class ResponseShapeRefiner
 
         $outer = $this->renderingSelf;
         $this->renderingSelf = ['class' => $class, 'receiver' => $render['receiver']];
+        // `parent::toResponse()` renders `$this`, whose construction is not in sight from here.
+        $held = $render['call'] instanceof Node\Expr\MethodCall
+            ? $this->constructionHolds($render['call']->var, $render['scope'], $render['receiver']->fqcn)
+            : [];
         $read = [];
         try {
             foreach ($node->getReturnStatements() as $statement) {
                 $expr = $statement->getReturnNode()->expr;
+                $returnScope = $this->fileAnalyzer->stableScope($statement->getScope());
+                foreach ($held as [$property, $type]) {
+                    $returnScope = $this->adapter->holding($returnScope, $property, $type);
+                }
                 $refined = $expr === null
                     ? null
-                    : $this->refineExpr($expr, $this->fileAnalyzer->stableScope($statement->getScope()), $this->parameterNames($callee), $depth + 1);
+                    : $this->refineExpr($expr, $returnScope, $this->parameterNames($callee), $depth + 1);
                 if ($expr === null || $refined === null || $refined->delegates) {
                     $read[] = null;
 
@@ -601,6 +611,111 @@ final class ResponseShapeRefiner
         }
 
         return ResponseArms::whole($read);
+    }
+
+    /**
+     * What each readonly property promoted from the object's constructor holds inside the object's own
+     * methods ({@see HeldArguments::promotedReadonly()}): the type of the argument the construction passed
+     * it, or the parameter's default where it provably passed none. The construction is the receiver itself
+     * when it is a `new` of the class, or the one `new` a project factory returns, read with the factory's
+     * parameters holding what this call passed them. Empty for anything else, and the body is then read
+     * with each property's declared type.
+     *
+     * @return list<array{Node\Expr\PropertyFetch, Type}>
+     */
+    private function constructionHolds(Node\Expr $receiver, Scope $scope, string $fqcn): array
+    {
+        $construction = $this->construction($receiver, $scope, $fqcn);
+        if ($construction === null || $construction[0]->isFirstClassCallable() || ! $this->reflectionProvider->hasClass($fqcn)) {
+            return [];
+        }
+        [$new, $newScope] = $construction;
+
+        $class = $this->reflectionProvider->getClass($fqcn);
+        if (! $class->hasConstructor()) {
+            return [];
+        }
+
+        $promoted = HeldArguments::promotedReadonly($class->getNativeReflection());
+        $held = [];
+        foreach (self::argumentTypes($class->getConstructor()->getVariants()[0]->getParameters(), $new->getArgs(), $newScope) as $name => $type) {
+            if (in_array($name, $promoted, true)) {
+                $held[] = [new Node\Expr\PropertyFetch(new Node\Expr\Variable('this'), $name), $type];
+            }
+        }
+
+        return $held;
+    }
+
+    /**
+     * The `new` of `$fqcn` a receiver is, or the only return of the project factory it calls, with the scope
+     * to read its arguments in. A factory with any other return builds more than one object, and none of
+     * them is this one.
+     *
+     * @return array{Node\Expr\New_, Scope}|null
+     */
+    private function construction(Node\Expr $receiver, Scope $scope, string $fqcn): ?array
+    {
+        if ($receiver instanceof Node\Expr\New_) {
+            return $receiver->class instanceof Node\Name && $scope->resolveName($receiver->class) === $fqcn ? [$receiver, $scope] : null;
+        }
+
+        if ((! $receiver instanceof Node\Expr\MethodCall && ! $receiver instanceof Node\Expr\StaticCall && ! $receiver instanceof Node\Expr\FuncCall)
+            || $receiver->isFirstClassCallable()
+        ) {
+            return null;
+        }
+
+        $factory = $this->calleeResolver->resolve($receiver, $scope);
+        if ($factory === null || ! $this->appFilter->isProjectFile($factory->file)) {
+            return null;
+        }
+        if (! $this->budget->withinBudget($this->adapter->normalize($factory->file))) {
+            $this->budget->truncate();
+
+            return null;
+        }
+        $this->touch($factory->file);
+        $this->touch($factory->writtenIn());
+
+        $returns = $this->fileAnalyzer->callee($factory)?->getReturnStatements() ?? [];
+        $new = HeldArguments::soleConstruction(array_map(static fn (ReturnStatement $return): ?Node\Expr => $return->getReturnNode()->expr, $returns));
+        $factoryScope = $new === null ? null : $this->fileAnalyzer->stableScope($returns[0]->getScope());
+        if ($new === null || $factoryScope === null || ! $new->class instanceof Node\Name || $factoryScope->resolveName($new->class) !== $fqcn) {
+            return null;
+        }
+
+        foreach (self::argumentTypes($factory->parameters($this->reflectionProvider), $receiver->getArgs(), $scope) as $name => $type) {
+            $factoryScope = $this->adapter->holding($factoryScope, new Node\Expr\Variable($name), $type);
+        }
+
+        return [$new, $factoryScope];
+    }
+
+    /**
+     * The type each parameter a call settles holds ({@see HeldArguments::of()}): the argument's, read where
+     * the call is written, or the parameter's default.
+     *
+     * @param  list<ParameterReflection>  $parameters
+     * @param  array<Node\Arg>  $args
+     * @return array<string, Type>
+     */
+    private static function argumentTypes(array $parameters, array $args, Scope $scope): array
+    {
+        $declared = [];
+        foreach ($parameters as $parameter) {
+            $declared[$parameter->getName()] = $parameter;
+        }
+
+        $types = [];
+        foreach (HeldArguments::of(HeldArguments::parameters($parameters), $args) as $name => $arg) {
+            $type = $arg === null ? $declared[$name]->getDefaultValue() : $scope->getType($arg);
+            if ($type !== null) {
+                $types[$name] = $type;
+            }
+        }
+
+        return $types;
     }
 
     /**

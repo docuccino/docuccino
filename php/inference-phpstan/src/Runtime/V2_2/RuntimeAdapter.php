@@ -16,6 +16,7 @@ use Docuccino\Inference\PhpStan\Runtime\PhpDocParserCopy;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter as RuntimeAdapterContract;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeConfig;
 use FilesystemIterator;
+use PhpParser\Node\Expr;
 use PHPStan\Analyser\NodeScopeResolver;
 use PHPStan\Analyser\Scope;
 use PHPStan\Analyser\ScopeContext;
@@ -25,6 +26,7 @@ use PHPStan\File\FileHelper;
 use PHPStan\Parser\Parser;
 use PHPStan\Parser\PathRoutingParser;
 use PHPStan\Reflection\ReflectionProvider;
+use PHPStan\Type\Type;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;
@@ -205,6 +207,16 @@ final class RuntimeAdapter implements RuntimeAdapterContract
         // concrete class only one era had did not survive a patch release. Naming no concrete scope class is
         // what keeps this compiling on both. AnalyserDriftTest fails if either half of that stops holding.
         return $scope->toMutatingScope();
+    }
+
+    public function holding(Scope $scope, Expr $expr, Type $type): Scope
+    {
+        // The read the analyser itself makes of an assignment, on the scope both eras stabilise to. Not
+        // BC-promised, which is why it is here; AnalyserDriftTest fails if the signature moves.
+        $mutating = $scope->toMutatingScope();
+
+        // @phpstan-ignore phpstanApi.method (the analyser's own assignment, behind this seam)
+        return $mutating->assignExpression($expr, $type, $mutating->getNativeType($expr));
     }
 
     public function reflectionProvider(): ReflectionProvider

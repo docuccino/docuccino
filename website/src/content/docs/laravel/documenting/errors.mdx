@@ -468,6 +468,69 @@ no return) is treated as "delegate to the framework", not an error — the next 
 exception types. When a renderer genuinely can't be read, Docuccino emits one summary diagnostic per
 renderer (naming the exception types it skipped), not one per exception.
 
+### A problem that sends itself
+
+Many RFC 9457 handlers don't build the response in the arm at all. The callback hands the exception to
+a helper, the helper's `match` picks a problem object, and the object sends itself:
+
+```php
+// bootstrap/app.php
+->withExceptions(function (Exceptions $exceptions): void {
+    $exceptions->render(fn (Throwable $e) => Problems::for($e));
+})
+```
+
+```php
+final class Problems
+{
+    public static function for(Throwable $e): Problem
+    {
+        return match (true) {
+            $e instanceof ValidationException => self::invalid($e),
+            $e instanceof OrderConflictException => new Problem(409, 'Conflict', $e->getMessage()),
+            default => new Problem(500, 'Server Error', 'Something went wrong on our side.'),
+        };
+    }
+
+    // …
+}
+
+final readonly class Problem implements Responsable
+{
+    public function __construct(
+        public int $status,
+        public string $title,
+        public string $detail,
+        public string $type = 'about:blank',
+        public array $extensions = [],
+    ) {}
+
+    public function toResponse($request): JsonResponse
+    {
+        return new JsonResponse([
+            'type' => $this->type,
+            'title' => $this->title,
+            'status' => $this->status,
+            'detail' => $this->detail,
+            ...$this->extensions,
+        ], $this->status, ['Content-Type' => 'application/problem+json']);
+    }
+}
+```
+
+Docuccino follows the exception into the helper, so each exception is documented with the arm its type
+reaches. It then reads the problem's `toResponse()` with each property holding what that arm built it
+with: an `OrderConflictException` is documented as a `409` under `application/problem+json`, titled
+`Conflict`. A property the arm doesn't pass takes its default, and the extension members an arm passes
+are spread into that arm's body. The same holds when the arm builds the problem through a factory of
+yours (`self::of(401, 'Unauthenticated', …)`), and when the helper calls `->toResponse($request)` itself
+and returns the response.
+
+Only properties that are `readonly` and promoted in the constructor are read this way, since those are
+the only ones certain to hold what the construction passed. A problem the arm doesn't build, such as one
+the exception carries (`$e->toProblem()`), can't be read, so that exception is documented by its status
+alone and reported with `inferred-handler.too-dynamic`.
+
 ### When the error body is a Data class
 
 A renderer that hands the body to `spatie/laravel-data` —

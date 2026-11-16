@@ -135,11 +135,15 @@ const FLOORS = [
     // holds the `HttpResponseException` subclass reader above.
     // Re-recorded 58.93 → 59.59 when a status or media type set on its own line on a returned local came
     // to be read: which chains on the local definitely run (`LocalRestatements`) is unit-tested in process.
-    // Measured 59.59% (3160/5303): 58% of it is 3075.74 statements, 84.26 of margin.
+    // Re-recorded 59.59 → 58.78 when a render callback came to be narrowed into the helper it hands the
+    // exception to, and a `toResponse()` read for the object it renders: which call a site hands the
+    // exception to (`ForwardedSite`) is unit-tested in process, while the harvest through the helper and
+    // `RuntimeAdapter::holding()` run only under real analysis, the fixture group's.
+    // Measured 58.78% (3233/5500): 58% of it is 3190.00 statements, 43.00 of margin.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads 3 statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 58, 'measured' => 59.59],
+    'inference-phpstan' => ['floor' => 58, 'measured' => 58.78],
 ];
 
 /*
