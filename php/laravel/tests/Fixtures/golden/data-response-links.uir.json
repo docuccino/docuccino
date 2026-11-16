@@ -69,36 +69,6 @@
                   "$ref": "#/components/schemas/OverridingVanData"
                 }
               }
-            },
-            "links": {
-              "get.api.plated-vans.@van": {
-                "operationId": "get.api.plated-vans.@van",
-                "parameters": {
-                  "van": "$response.body#/plate"
-                },
-                "x-docuccino": {
-                  "provenance": [
-                    {
-                      "producer": "inference",
-                      "layer": "inference"
-                    }
-                  ]
-                }
-              },
-              "get.api.vans.@van": {
-                "operationId": "get.api.vans.@van",
-                "parameters": {
-                  "van": "$response.body#/id"
-                },
-                "x-docuccino": {
-                  "provenance": [
-                    {
-                      "producer": "inference",
-                      "layer": "inference"
-                    }
-                  ]
-                }
-              }
             }
           }
         }
@@ -1169,7 +1139,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "efdfff951299c2af95cd584b252a3e38f99e78b4f921c0c0ab708b1ff4f2cc49"
+      "contentHash": "ae105703e54771f617f10065aa2fa7770372cbe6b016a03835fccda40b427990"
     },
     "generator": {
       "name": "docuccino/laravel",
