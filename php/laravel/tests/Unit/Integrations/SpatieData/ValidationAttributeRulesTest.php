@@ -130,6 +130,29 @@ it('reads a parameter as laravel-data writes it', function (string $attribute, s
     'a route parameter' => ['Max(new \Spatie\LaravelData\Support\Validation\References\RouteParameterReference("limit"))', 'max'],
 ]);
 
+it('reads a field reference under the path laravel-data validates the declaring object at', function (string $attribute, string $path, string $item): void {
+    // laravel-data resolves a reference under the path of the object declaring the property, so the rule it hands
+    // Laravel there is the one to read. A list's items it validates one by one, at `ranges.0`, `ranges.1`, … —
+    // the build documents them once, at `ranges.*`, which Laravel reads as the index of the item being validated.
+    $class = 'Spatie\\LaravelData\\Attributes\\Validation\\'.explode('(', $attribute)[0];
+    $carrier = attributeCarrier($class, substr($attribute, strlen(explode('(', $attribute)[0]) + 1, -1));
+    $instance = (new ReflectionProperty($carrier, 'value'))->getAttributes()[0]->newInstance();
+    $written = app(RuleDenormalizer::class)->execute($instance, ValidationPath::create(str_replace('*', $item, $path) ?: null));
+
+    $read = (new DataClassReflector)->validationTokens($carrier, 'value', $path);
+
+    expect(str_replace($path, str_replace('*', $item, $path), $read))->toBe($written);
+})->with([
+    'at the root' => ['GreaterThan("min")', '', '0'],
+    'in a nested object' => ['GreaterThan("min")', 'range', '0'],
+    'in a list of objects' => ['GreaterThan("min")', 'ranges.*', '0'],
+    'in a list nested in an object' => ['GreaterThan("min")', 'order.lines.*', '3'],
+    // A reference written from the root names the same field wherever it is declared.
+    'from the root, in a nested object' => ['LessThan(new \Spatie\LaravelData\Support\Validation\References\FieldReference("max", fromRoot: true))', 'range', '0'],
+    // Every attribute taking a field writes it through the one reading, a presence condition included.
+    'a presence condition in a nested object' => ['RequiredIf("kind", "business")', 'range', '0'],
+]);
+
 it('reads no rule from an attribute laravel-data cannot build either', function (): void {
     // laravel-data refuses this mode when it builds the rule, so every request carrying the field fails.
     expect((new DataClassReflector)->validationTokens(attributeCarrier('Spatie\\LaravelData\\Attributes\\Validation\\Distinct', '"loose"'), 'value'))->toBe([]);

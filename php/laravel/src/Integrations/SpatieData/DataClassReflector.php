@@ -294,9 +294,11 @@ final class DataClassReflector
      * laravel-data writes for it ({@see attributeRule()}). {@see DataValidationRules} feeds them through the
      * shared validation chain, so one the chain has no reader for degrades like any unknown string rule.
      *
+     * @param  string  $path  where the object declaring the property sits in the request (`range`,
+     *                        `ranges.*`), empty at the root — what laravel-data resolves a field reference under
      * @return list<string>
      */
-    public function validationTokens(string $fqcn, string $property): array
+    public function validationTokens(string $fqcn, string $property, string $path = ''): array
     {
         $reflection = $this->property($fqcn, $property);
         if ($reflection === null) {
@@ -325,7 +327,7 @@ final class DataClassReflector
                 continue;
             }
 
-            $rule = self::attributeRule($attribute);
+            $rule = self::attributeRule($attribute, $path);
             if ($rule !== null) {
                 $tokens[] = $rule;
             }
@@ -741,7 +743,7 @@ final class DataClassReflector
      *
      * @param  ReflectionAttribute<object>  $attribute
      */
-    private static function attributeRule(ReflectionAttribute $attribute): ?string
+    private static function attributeRule(ReflectionAttribute $attribute, string $path): ?string
     {
         $class = $attribute->getName();
         if (! method_exists($class, 'keyword')) {
@@ -774,7 +776,7 @@ final class DataClassReflector
 
         $written = [];
         foreach ($parameters as $key => $parameter) {
-            $value = self::ruleParameter($parameter);
+            $value = self::ruleParameter($parameter, $path);
             if ($value !== null) {
                 $written[] = is_string($key) ? $key.'='.$value : $value;
             }
@@ -786,30 +788,39 @@ final class DataClassReflector
     /**
      * One rule parameter as laravel-data writes it, or null where it leaves it out. A bool is `true`/`false`, a
      * list its members joined, and an enum case the value Laravel casts it to ({@see EnumCaseValue}). A field
-     * reference names its field as at the root of the request. A value only a request or the clock decides —
+     * reference names its field under `$path` ({@see fieldName()}). A value only a request or the clock decides —
      * an external reference, a date — is left out too, as nothing the build can state.
      */
-    private static function ruleParameter(mixed $value): ?string
+    private static function ruleParameter(mixed $value, string $path): ?string
     {
         if (is_array($value)) {
-            return $value === [] ? null : implode(',', array_map(static fn (mixed $item): string => self::ruleParameter($item) ?? '', $value));
+            return $value === [] ? null : implode(',', array_map(static fn (mixed $item): string => self::ruleParameter($item, $path) ?? '', $value));
         }
 
         return match (true) {
             is_string($value), is_int($value), is_float($value) => (string) $value,
             is_bool($value) => $value ? 'true' : 'false',
             $value instanceof UnitEnum => (string) EnumCaseValue::ofLive($value),
-            is_object($value) && is_a($value, self::FIELD_REFERENCE) => self::fieldName($value),
+            is_object($value) && is_a($value, self::FIELD_REFERENCE) => self::fieldName($value, $path),
             default => null,
         };
     }
 
-    /** The field a laravel-data field reference names. */
-    private static function fieldName(object $reference): ?string
+    /**
+     * The field a laravel-data field reference names: a sibling of the property, under the path of the object
+     * declaring it, unless it was written `fromRoot`. laravel-data resolves it under that object's own path —
+     * `range.min`, `ranges.0.min` — and `ranges.*.min` is that path in Laravel's own grammar, which reads the
+     * `*` as the index of the item being validated.
+     */
+    private static function fieldName(object $reference, string $path): ?string
     {
-        $name = get_object_vars($reference)['name'] ?? null;
+        $fields = get_object_vars($reference);
+        $name = $fields['name'] ?? null;
+        if (! is_string($name)) {
+            return null;
+        }
 
-        return is_string($name) ? $name : null;
+        return $path === '' || ($fields['fromRoot'] ?? null) === true ? $name : $path.'.'.$name;
     }
 
     /**
