@@ -129,3 +129,60 @@ it('ends a command-line build that runs out of memory with the notice, after the
     'testing' => ['testing'],
     'production' => ['production'],
 ]);
+
+it('ends a command-line build whose worker runs out of memory, even where that worker\'s shutdown would never end', function (): void {
+    // A worker inherits every shutdown function the build registered before forking — the framework's error
+    // handler among them, which reports the fatal on a full heap — and PHP stops at the first that fails,
+    // leaving the worker to module shutdown, where grpc without fork support hangs it. A shutdown function
+    // that never returns in a worker stands in for that here; the build must end anyway, on its own fatal
+    // and the notice explaining it.
+    $base = temporaryDirectory('console-worker-exhaustion');
+    mkdir($base.'/bootstrap/cache', 0700, true);
+    file_put_contents($base.'/docuccino.yaml', "engine:\n  mode: 'null'\n  workers: 2\n");
+
+    try {
+        $run = runPhp(<<<'PHP'
+            [, $base] = $argv;
+            $app = Orchestra\Testbench\Foundation\Application::create($base, options: ['extra' => [
+                'providers' => [Docuccino\Laravel\DocuccinoServiceProvider::class],
+                'dont-discover' => ['*'],
+            ]]);
+
+            $exit = $app->make(Illuminate\Contracts\Console\Kernel::class)->handle(
+                new Symfony\Component\Console\Input\ArgvInput(['artisan', 'docuccino:export']),
+                new Symfony\Component\Console\Output\BufferedOutput,
+            );
+            echo "\nexported: {$exit}\n";
+
+            $build = getmypid();
+            register_shutdown_function(static function () use ($build): void {
+                while (getmypid() !== $build) {
+                    usleep(100000);
+                }
+            });
+
+            $exhaust = static function (): never {
+                ini_set('memory_limit', (string) (memory_get_usage(true) + 8 * 1024 * 1024));
+                $hog = [];
+                while (true) {
+                    $hog[] = str_repeat('x', 512);
+                }
+            };
+
+            // A worker running out first, then the build where it makes what that worker left.
+            $app->make(Docuccino\Core\Pipeline\BuildWorkers::class)->later($exhaust)();
+            PHP, [$base], ini: ['memory_limit' => '128M', 'grpc.enable_fork_support' => '0'], timeout: 60.0);
+
+        $explained = strrpos($run['output'], 'Docuccino ran out of memory building your documentation');
+        $log = (string) @file_get_contents($base.'/storage/logs/laravel.log');
+
+        expect($run['exit'])->toBe(255, $run['exit'] === null ? 'the build never ended: '.$run['output'] : $run['output'])
+            ->and($run['output'])->toContain('exported: 0')
+            // One fatal reported, the build's: the worker's own ended it before any reporting could start.
+            ->and(substr_count($log, '.ERROR: Allowed memory size of'))->toBe(1, $log)
+            ->and($explained)->not->toBeFalse($run['output'])
+            ->and(trim(substr($run['output'], (int) $explained)))->toEndWith('attributes alone.');
+    } finally {
+        removeTemporaryDirectory($base);
+    }
+})->skip(fn (): bool => ! BuildWorkers::forkable(), 'Forking needs the pcntl and posix extensions.');

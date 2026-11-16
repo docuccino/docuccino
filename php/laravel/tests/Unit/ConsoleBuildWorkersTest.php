@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Composer\Autoload\ClassLoader;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Pipeline\BuildWorkers;
 use Docuccino\Laravel\Commands\MemoryLimitOption;
@@ -198,10 +199,26 @@ it('closes the Redis connections this process holds before it forks', function (
         ->and($redis->connections())->toBe([]);
 })->skip(fn (): bool => ! BuildWorkers::forkable(), 'Forking needs the pcntl and posix extensions.');
 
+it('has the core end a worker at shutdown before the adapter\'s hook, or anything the application registers, can run', function (): void {
+    // Composer loads autoload files in dependency order, before any application boots, and PHP runs shutdown
+    // functions in the order they were registered and stops at the first that fails. So core's hook is the
+    // first a worker has, and nothing it inherited — the notice's hook, the framework's error handler — can
+    // keep it from ending ({@see BuildWorkers}).
+    $files = array_values(array_map(
+        static fn (string $path): string => (string) realpath($path),
+        require dirname((string) (new ReflectionClass(ClassLoader::class))->getFileName()).'/autoload_files.php',
+    ));
+    $core = array_search((string) realpath(dirname((string) (new ReflectionClass(BuildWorkers::class))->getFileName(), 2).'/shutdown.php'), $files, true);
+    $adapter = array_search((string) realpath(dirname(__DIR__, 2).'/src/shutdown.php'), $files, true);
+
+    expect($core)->toBeInt()
+        ->and($adapter)->toBeInt()
+        ->and($core)->toBeLessThan($adapter);
+});
+
 it('keeps a worker\'s failures out of the application\'s error reporting', function (): void {
-    // A worker that dies of a fatal error runs the shutdown work it inherited, and the framework's hands
-    // the error to the application's exception handler — logs, error trackers, the console the worker
-    // shares — for a failure the build then recovers from. That path is Laravel's own, driven here.
+    // Whatever a worker hands the application's exception handler — logs, error trackers, the console the
+    // worker shares — is a failure the build then recovers from. Laravel's own path for a fatal, driven here.
     $seen = [];
     app()->instance(ExceptionHandler::class, recordingExceptionHandler($seen));
     $fatal = new FatalError('Allowed memory size of 134217728 bytes exhausted', 0, ['type' => E_ERROR, 'message' => 'Allowed memory size of 134217728 bytes exhausted', 'file' => __FILE__, 'line' => __LINE__]);

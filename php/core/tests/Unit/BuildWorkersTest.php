@@ -245,7 +245,7 @@ it('stops every worker soon after its build is killed, and leaves nothing of tha
         ->and(is_dir($this->out.'/scratch'))->toBeFalse();
 });
 
-it('ends a worker that dies of a fatal error right after the shutdown work it inherited, saying nothing', function (): void {
+it('ends a worker that dies of a fatal error before any shutdown work it inherited, saying nothing', function (): void {
     // grpc is loaded here without fork support wherever it is installed, and a forked child that reaches
     // module shutdown under it never ends — so the timeout is what this fails by on a machine that has it.
     $run = runPhp(<<<'PHP'
@@ -254,7 +254,7 @@ it('ends a worker that dies of a fatal error right after the shutdown work it in
         ini_set('error_log', $out.'/error.log');
         ini_set('display_errors', 'stderr');
 
-        // The host's own shutdown work, which every worker inherits and nothing can stop a dying one running.
+        // The host's own shutdown work, which every worker inherits: the build's to run, once.
         register_shutdown_function(static function () use ($out): void {
             file_put_contents($out.'/host-'.getmypid(), '');
         });
@@ -281,11 +281,84 @@ it('ends a worker that dies of a fatal error right after the shutdown work it in
     expect($run['exit'])->toBe(0, $run['output'])
         ->and($run['output'])->toBe('returned')
         ->and(array_keys(builtBy($this->out)))->toBe(['a', 'b', 'c'])
-        // The host's shutdown work ran in the build and in the worker that died, and nothing registered
-        // after the worker's own end did.
-        ->and(glob($this->out.'/host-*'))->toHaveCount(2)
+        // The host's shutdown work ran in the build alone: a worker is a copy of the build, so running the
+        // build's shutdown work again there is a second run of it, and the worker that died ran none.
+        ->and(glob($this->out.'/host-*'))->toHaveCount(1)
         ->and(glob($this->out.'/after-*'))->toBe([])
         ->and(is_file($this->out.'/error.log'))->toBeFalse();
+});
+
+it('ends a worker however it dies, even where the shutdown work it inherited would never end', function (string $death): void {
+    // PHP runs shutdown functions in the order they were registered and stops at the first that fails, so
+    // shutdown work registered before the build forked — a framework's error handler reporting the fatal on a
+    // full heap — could pre-empt anything a worker registers, and leave it to module shutdown, where grpc
+    // without fork support hangs a forked child. One that never returns stands in for both here: the build
+    // must still end, in its own time, and make what the worker left.
+    $run = runPhp(<<<'PHP'
+        [$out, $death] = array_slice($argv, 1);
+        $build = getmypid();
+
+        register_shutdown_function(static function () use ($build): void {
+            while (getmypid() !== $build) {
+                usleep(100000);
+            }
+        });
+
+        $die = static function () use ($death): never {
+            if ($death === 'exit') {
+                exit(0);
+            }
+
+            ini_set('memory_limit', (string) (memory_get_usage() + 4 * 1024 * 1024));
+            $hog = [];
+            while (true) {
+                $hog[] = str_repeat('x', 65536);
+            }
+        };
+
+        $workers = new Docuccino\Core\Pipeline\BuildWorkers(static fn (): int => 2);
+        $workers->run(2, [['dies'], ['a'], ['b']], static function (string $job) use ($out, $build, $die): void {
+            if ($job === 'dies' && getmypid() !== $build) {
+                $die();
+            }
+
+            file_put_contents($out.'/job-'.$job, '');
+        });
+
+        // What the worker that died left unbuilt, the build makes itself.
+        foreach (['dies', 'a', 'b'] as $job) {
+            if (! is_file($out.'/job-'.$job)) {
+                file_put_contents($out.'/job-'.$job, '');
+            }
+        }
+
+        $answer = $workers->later(static function () use ($build, $die): string {
+            if (getmypid() !== $build) {
+                $die();
+            }
+
+            return 'made here';
+        });
+
+        echo $answer(), ' ', $workers->answered();
+        PHP, [$this->out, $death], ini: ['grpc.enable_fork_support' => '0'], timeout: 60.0);
+
+    expect($run['exit'])->toBe(0, $run['exit'] === null ? 'the build never ended: '.$run['output'] : $run['output'])
+        ->and($run['output'])->toBe('made here 0')
+        ->and(array_keys(builtBy($this->out)))->toBe(['a', 'b', 'dies']);
+})->with([
+    'of a fatal error' => ['fatal'],
+    'by calling exit()' => ['exit'],
+]);
+
+it('lets every process but a worker carry on past its first shutdown function', function (): void {
+    // The hook runs first at the end of every process, so the build's own shutdown work — the framework
+    // reporting a fatal, the out-of-memory notice after it — runs behind it only if it lets the build by.
+    // Registering it again here adds a second that answers the same.
+    require dirname(__DIR__, 2).'/src/shutdown.php';
+    BuildWorkers::shutdown();
+
+    expect(posix_kill(posix_getpid(), 0))->toBeTrue();
 });
 
 it('builds alone when this machine refuses a fork, under a host that turns every warning into an exception', function (): void {

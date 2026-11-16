@@ -192,14 +192,18 @@ the same invariant: what a worker leaves unbuilt, the build makes itself, so a w
 - A worker ends with `SIGKILL`, so it never runs the build's shutdown work, and some extensions hang a
   forked child in module shutdown (grpc without `grpc.enable_fork_support`, reproduced here: a forked child
   that exits normally, or dies of a fatal error, never ends).
-- A worker that dies of a FATAL error still runs the shutdown functions it inherited — nothing can stop PHP
-  running them — so the worker registers one of its own that runs after them and ends it there, before
-  module shutdown, with PHP's own display and logging of the error switched off. The host silences what it
-  inherited: the adapter wraps the worker's exception handler in one that reports and renders nothing, since
-  Laravel's shutdown handler hands a fatal to it — wraps rather than replaces, because a build reads the
-  handler's render callbacks and a reader walks a decorator to the handler it holds — and the out-of-memory
-  notice speaks only in the process that armed it. What is left is a host shutdown function that never returns, which would hold
-  the build waiting on that worker; nothing measured does, so the wait has no deadline to get wrong.
+- A worker that dies of a FATAL error, or calls `exit()`, runs shutdown functions, and PHP stops at the first
+  one that fails — so one registered after the fork can be pre-empted by any the worker inherited (Laravel's
+  error handler running out of memory again as it reports the fatal), and the worker falls through to module
+  shutdown and hangs there, with the build waiting on it. Core's autoload file (`src/shutdown.php`) registers
+  the first shutdown function every process has, before any framework boots, and in a worker it ends the
+  process there, with PHP's own display and logging of the error switched off. Nothing inherited runs, so
+  the worker cannot hang, and the build needs no deadline on its wait: a deadline would have to sit above
+  the slowest operation, and a job that never returns hangs the build the same way without workers. The
+  adapter still wraps the worker's exception handler in one that reports and renders nothing, for what a job
+  hands it — wraps rather than replaces, because a build reads the handler's render callbacks and a reader
+  walks a decorator to the handler it holds — and the out-of-memory notice speaks only in the process that
+  armed it.
 - The adapter closes its database and Redis connections before forking, since two processes on one socket
   corrupt both. A host that cannot settle the process that way, and a machine that refuses a fork
   (`EAGAIN` warns, and Laravel makes a warning an exception), leave the build to work alone.
