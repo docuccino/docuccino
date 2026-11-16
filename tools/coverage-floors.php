@@ -98,12 +98,14 @@ const FLOORS = [
     // names, and the warning when there is none, depend on the source alone, so the real engine is driven
     // in process through its factory's adapter seam over a pass that harvests nothing (`PhpStanEngineFactory`
     // 26/26). What a found arrow function's body returns and throws stays the fixture group's (33 statements).
-    // 57 was declined at 0.22 statements of margin, the hair-trigger the policy names:
-    // Measured 57.01% (2311/4054): 56% of it is 2270.24 statements, 40.76 of margin; 57 would leave 0.22.
+    // 57 was declined there at 0.22 statements of margin, the hair-trigger the policy names. It RATCHETED
+    // 56 → 58 when whether a call keeps the object a value was read off landed in the measurable half —
+    // php-parser over the bodies the call reaches (`StateKeepingCalls`), unit-tested over real probes.
+    // Measured 58.63% (2542/4336): 58% of it is 2514.88 statements, 27.12 of margin.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
-    // coverage job's PHP 8.4 skips; a run on 8.5 reads a few statements higher. Read the same way as
+    // coverage job's PHP 8.4 skips; a run on 8.5 reads 3 statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 56, 'measured' => 57.01],
+    'inference-phpstan' => ['floor' => 58, 'measured' => 58.63],
 ];
 
 /*

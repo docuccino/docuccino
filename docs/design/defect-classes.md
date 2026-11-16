@@ -451,7 +451,9 @@ into one class did neither. Its mirror sat in the case the reader DID answer: an
 was read with its own class's helpers, so a subclass overriding the `$this->describe()` that constructor
 calls was published as the base's helper built it — a key required that the subclass never sends. Both now
 compose through an unconditional `parent::__construct()` (`ReachedStatements`), and a helper is followed
-only where the class being built runs that declaration (`ConstructionEscape::dispatches()`).
+only where the class being built runs that declaration (`ConstructionEscape::dispatches()`). A third reader,
+`ConstructorEchoes`, stopped at the constructor's own writes the same way, so that problem class titled its
+error example `"string"` where the parent wrote the reason phrase; it composes through the same call.
 
 *The tell.* A walk, a scan or a `getFileName()` that stops at the class the question was asked about,
 beside a claim in the docblock that it covers everything the class does. Reflection will not object: it

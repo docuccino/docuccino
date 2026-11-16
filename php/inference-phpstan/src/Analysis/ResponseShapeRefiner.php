@@ -649,7 +649,7 @@ final class ResponseShapeRefiner
     {
         $key = FileAnalyzer::scopeKey($scope);
 
-        return $key !== null && $this->fileAnalyzer->readHolds($scope->getFile(), $key, $after, $variable, $member);
+        return $key !== null && $this->fileAnalyzer->readHolds($scope->getFile(), $key, $after, $variable, $member, $this->touchProject(...));
     }
 
     /**

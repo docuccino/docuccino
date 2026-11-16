@@ -280,16 +280,18 @@ it('reads a member as the reason phrase of the status the response is sent with,
     'a key that is not the status' => ['statusTextOtherKey', ['title' => 'scalar', 'status' => 'statusMarker']],
     // `->setStatusCode(500)` replaced the status both members read.
     'a status restated after the body' => ['statusTextRestated', ['title' => 'scalar', 'status' => 'scalar']],
+    // Testing the response's class and reading its body change nothing it is sent with.
+    'a local named before the rendered body is read' => ['statusTextThenMessage', ['title' => ['statusText', 'scalar', 'Error'], 'status' => 'statusMarker', 'detail' => 'union']],
 ])->group('fixture');
 
-it('reads the members an object body built in place echoes of the status it is sent with', function (): void {
+it('reads the members an object body built in place echoes of the status it is sent with', function (string $method, string $thrown, string $problem, array $read): void {
     $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
         'app/Exceptions/RespondCallbacks.php',
         '',
         '',
-        line: exceptionsFixtureLine('RespondCallbacks.php', 'public function problemObject(') + 2,
+        line: exceptionsFixtureLine('RespondCallbacks.php', 'public function '.$method.'(') + 2,
         param: 'e',
-        narrowType: 'Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException',
+        narrowType: $thrown,
         every: true,
     ));
     $sites = array_values(array_filter(
@@ -298,14 +300,23 @@ it('reads the members an object body built in place echoes of the status it is s
     ));
     expect($sites)->toHaveCount(1);
 
+    // The constructor reads both off the response it is handed, which is the one sent: its status, and the
+    // phrase of that status, whichever constructor of the hierarchy writes them.
     $type = $sites[0]->type;
     expect($type)->toBeInstanceOf(ClassT::class)
-        ->and($type->typeArgs[0] ?? null)->toEqual(new ClassT('App\\Problems\\HttpProblem'))
+        ->and($type->typeArgs[0] ?? null)->toEqual(new ClassT($problem))
         ->and($type->typeArgs[2] ?? null)->toEqual(new LiteralT('application/problem+json'))
         ->and(echoedMembers($type->typeArgs[3] ?? new ArrayShapeT([])))->toBe(['status' => 'statusMarker', 'title' => ['statusText', 'scalar', 'Error']])
-        // What the members were read out of keys the fragment: the class's constructor.
-        ->and(array_map(basename(...), $analysis->dependencyFiles))->toContain('HttpProblem.php');
-})->group('fixture');
+        // What the members were read out of keys the fragment: every constructor that wrote one.
+        ->and(array_map(basename(...), $analysis->dependencyFiles))->toContain(...$read);
+})->with([
+    'built in the callback' => ['problemObject', 'Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException', 'App\\Problems\\HttpProblem', ['HttpProblem.php']],
+    'through a constructor running its parent’s' => ['problemThroughParent', 'Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException', 'App\\Problems\\InstanceProblem', ['InstanceProblem.php', 'RenderedProblem.php']],
+    'by a factory, through a constructor running its parent’s' => ['problemFactories', 'Illuminate\\Validation\\ValidationException', 'App\\Problems\\FieldProblem', ['FieldProblem.php', 'RenderedProblem.php']],
+    // `getData(true)` reads the rendered body and writes nothing of the response, so the status stays the one sent.
+    'by a factory, then the rendered body read with arguments' => ['problemFactories', 'Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException', 'App\\Problems\\DebugProblem', ['DebugProblem.php']],
+    'by a factory, then the response handed to a helper that only reads it' => ['problemReported', 'Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException', 'App\\Problems\\DebugProblem', ['DebugProblem.php']],
+])->group('fixture');
 
 // A value named before the response's status is replaced is the old status, not the one sent: no member of
 // the body may echo the status it goes out with, however it was named.
@@ -323,6 +334,7 @@ it('reads no echo of the status sent off a value named before that status was re
     'a local the body reads' => ['statusTextStale', 0, ['title' => 'scalar', 'status' => 'scalar']],
     'a body built in a local' => ['statusStaleBody', 0, ['status' => 'scalar']],
     'an object built in a local' => ['problemStale', 3, []],
+    'an object built in a local, the response then handed to a helper replacing its status' => ['problemRestatedByHelper', 3, []],
 ])->group('fixture');
 
 it('keys a phrase read through an application class by that class, whose hierarchy decides it is the table', function (): void {
