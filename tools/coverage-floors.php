@@ -47,12 +47,12 @@ const FLOORS = [
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/, the
     // contract-testing assertions. The floor sat at 96 while 97 would have been a hair-trigger, and was to
     // ratchet once the figure cleared 97.20% — about 28 statements. It has:
-    // Measured 97.25% (16289/16749): 97% of it is 16246.53 statements, 42.47 of margin (0.25pp).
+    // Measured 97.26% (16379/16840): 97% of it is 16334.80 statements, 44.20 of margin (0.26pp).
     // The margin is thinner than `core`'s, and the risk it carries is a denominator change rather than a
     // lost proof — deleting about 1,200 fully covered adapter statements would drop the ratio under 97 with
     // no change in test quality. The record check further down fires at ten statements either way, so the
     // floor is not the only thing watching this number.
-    'laravel' => ['floor' => 97, 'measured' => 97.25],
+    'laravel' => ['floor' => 97, 'measured' => 97.26],
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
     // which pcov cannot instrument either way. Its behavioural proof is the `fixture` group, not this
@@ -108,11 +108,14 @@ const FLOORS = [
     // It rose to 59.03% when a respond() guard's joined conditions came to be read one at a time: the
     // guard reader and its three-valued logic (`ConditionTree`) are unit-tested in process. 59 is declined
     // at 1.26 statements of margin, the hair-trigger the policy names.
-    // Measured 59.03% (2648/4486): 58% of it is 2601.88 statements, 46.12 of margin.
+    // Re-recorded 59.03 → 58.82 as statuses read off enum cases and a plain response's status were folded
+    // in the refiner, whose call-site paths only real analysis reaches; the grammars they apply
+    // (`CaseStatus`, `MadeResponseCall`) are unit-tested in process.
+    // Measured 58.82% (2711/4609): 58% of it is 2673.22 statements, 37.78 of margin.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads 3 statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 58, 'measured' => 59.03],
+    'inference-phpstan' => ['floor' => 58, 'measured' => 58.82],
 ];
 
 /*

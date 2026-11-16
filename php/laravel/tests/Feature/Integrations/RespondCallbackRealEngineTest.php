@@ -153,10 +153,11 @@ it('does not settle a guard on a response the callback rebinds before it returns
     $response = resolveResponse($document, $document['paths']['/api/forms/{form}']['get']['responses']['404'] ?? []);
 
     // The guard reads the rebuilt response, not the one handed in, so it settles nothing: the one return is
-    // reachable, sends a body nothing read, and the 404 stands with its body unsaid — never the framework's
-    // JSON, which the callback replaces for every error it is handed as JSON.
+    // reachable, and the 404 is what it sends — the content it was handed, re-sent under the problem media
+    // type its headers name, of a shape nothing read. Never the framework's JSON, which the callback
+    // replaces for every error it is handed as JSON.
     expect($response)->toHaveKey('description')
-        ->and($response['content'] ?? [])->toBe([]);
+        ->and($response['content'] ?? [])->toBe(['application/problem+json' => ['schema' => []]]);
 })->group('fixture');
 
 it('illustrates the title of every error with the reason phrase its status is sent with', function (string $method, string $path, string $verb, string $status, string $thrown): void {
