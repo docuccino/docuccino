@@ -629,8 +629,10 @@ argument, a local assigned once, a class's own static factory and a pinned statu
 read at a `throw`, and one grammar decides both. Only an instantiable `Throwable` counts as a class; a
 return naming none (a declared interface, an abstract base, a `mixed`) comes back typed `UnknownT` rather
 than as its declared type, so the adapter can tell an incomplete answer from a whole one without reading a
-diagnostic code. What a translation MEANS — which entry matches, what several answers amount to — stays
-the adapter's (`InferredHandler\ExceptionMapTranslator`).
+diagnostic code. An `HttpResponseException` (or a subclass) is no status but the response it carries, read
+by `carriesResponse()` as a `throw` of it is, so it comes back as the class with no status and that response
+on `ThrownException::$response`. What a translation MEANS — which entry matches, what several answers
+amount to — stays the adapter's (`InferredHandler\ExceptionMapTranslator`).
 
 `ParameterUse` judges "unchanged" off the AST, over every use of the parameter that can run before the
 return. A use is a TOUCH unless it is the receiver of a reader (`get*`/`is*`/`has*` other than

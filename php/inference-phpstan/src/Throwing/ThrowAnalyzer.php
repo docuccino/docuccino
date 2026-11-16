@@ -182,6 +182,10 @@ final class ThrowAnalyzer
      * read is {@see statusForType()} over the expression wrapped as the `throw` it stands for, so a local
      * assigned once, a static factory on the class and a pinned status all read here as they read at a throw.
      *
+     * An `HttpResponseException` — or a subclass — is the response it carries ({@see carriesResponse()}), so it
+     * answers with that response beside the class; the status its class reads as stands for a response the
+     * adapter cannot read.
+     *
      * Only classes a handler could be handed count: an instantiable `Throwable`. A return typed as an
      * interface or an abstract base names no class the response could be read from, and answers nothing.
      * Accumulates across calls, like {@see analyze()} within one body, so {@see diagnostics()} and
@@ -206,7 +210,13 @@ final class ThrowAnalyzer
             }
 
             $status = $this->statusForType($reflection->getName(), null, $thrown, $scope, $frame)['status'];
-            $results[] = new ThrownException($reflection->getName(), $status, [$frame], ThrowConfidence::Certain, ThrowDisposition::Signal);
+
+            // One that carries a response is sent as that response, read as a `throw` of it would be.
+            $before = count($this->carried);
+            $responses = $this->carriesResponse($reflection->getName(), $thrown, $scope, $frame) ? array_slice($this->carried, $before) : [null];
+            foreach ($responses as $response) {
+                $results[] = new ThrownException($reflection->getName(), $status, [$frame], ThrowConfidence::Certain, ThrowDisposition::Signal, $response);
+            }
         }
 
         return $results;

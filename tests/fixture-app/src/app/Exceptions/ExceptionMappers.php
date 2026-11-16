@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Exceptions;
 
+use App\Exceptions\Relayed\ExportRefusedException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Throwable;
@@ -43,6 +45,18 @@ class ExceptionMappers
     public function frameworkClass(): callable
     {
         return fn (ModelNotFoundException $e) => new ConflictHttpException('Gone elsewhere.', $e);
+    }
+
+    /** A missing model answered with a response of the application's own, sent as it is. */
+    public function carriedResponse(): callable
+    {
+        return fn ($e) => new HttpResponseException(response()->json(['error' => 'gone_elsewhere'], 423));
+    }
+
+    /** The same answer through a subclass's own static factory. */
+    public function carriedBySubclass(): callable
+    {
+        return fn ($e) => ExportRefusedException::locked();
     }
 
     /** A status read at run time. */
