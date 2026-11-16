@@ -13,8 +13,8 @@ use Illuminate\Http\Response;
 
 /**
  * Responses whose status is read off an enum case, written inline in every place a response takes its
- * status, through a helper handed the case or its status, and with the case chosen at run time; and a status
- * written as another class's constant.
+ * status, through a helper handed the case or its status (one hop or two), and with the case chosen at run
+ * time; and a status written as another class's constant.
  */
 class CaseStatusResponseController extends Controller
 {
@@ -109,6 +109,55 @@ class CaseStatusResponseController extends Controller
         return $this->fault(ExportFault::Gone);
     }
 
+    public function helperValueJson(): JsonResponse
+    {
+        return $this->faultJson(ExportFault::Locked);
+    }
+
+    public function helperValuePlain(): Response
+    {
+        return $this->faultPlain(ExportFault::Gone);
+    }
+
+    public function helperNamed(): JsonResponse
+    {
+        return $this->faultNamed(ExportFault::Gone);
+    }
+
+    public function helperValueChain(): JsonResponse
+    {
+        return $this->faultChained(ExportFault::Gone);
+    }
+
+    public function helperValueForwarded(): JsonResponse
+    {
+        return $this->forwardFault(ExportFault::Locked);
+    }
+
+    public function helperCaseForwarded(): JsonResponse
+    {
+        return $this->forwardRefusal(TokenRefusal::AlreadyRotated);
+    }
+
+    public function helperValueDisagreeing(Request $request): JsonResponse
+    {
+        return $this->fault($request->boolean('locked') ? ExportFault::Locked : ExportFault::Gone);
+    }
+
+    public function valueDisagreeing(Request $request): JsonResponse
+    {
+        $fault = $request->boolean('locked') ? ExportFault::Locked : ExportFault::Gone;
+
+        return new JsonResponse(['error' => $fault->name], $fault->value);
+    }
+
+    public function valueDisagreeingJson(Request $request): JsonResponse
+    {
+        $fault = $request->boolean('locked') ? ExportFault::Locked : ExportFault::Gone;
+
+        return response()->json(['error' => $fault->name], $fault->value);
+    }
+
     protected function refuse(TokenRefusal $reason): JsonResponse
     {
         return response()->json(['error' => $reason->value], $reason->status());
@@ -117,6 +166,36 @@ class CaseStatusResponseController extends Controller
     protected function fault(ExportFault $fault): JsonResponse
     {
         return new JsonResponse(['error' => $fault->name], $fault->value);
+    }
+
+    protected function faultJson(ExportFault $fault): JsonResponse
+    {
+        return response()->json(['error' => $fault->name], $fault->value);
+    }
+
+    protected function faultPlain(ExportFault $fault): Response
+    {
+        return response('', $fault->value);
+    }
+
+    protected function faultNamed(ExportFault $fault): JsonResponse
+    {
+        return response()->json(['error' => $fault->name]);
+    }
+
+    protected function faultChained(ExportFault $fault): JsonResponse
+    {
+        return response()->json(['error' => $fault->name])->setStatusCode($fault->value);
+    }
+
+    protected function forwardFault(ExportFault $fault): JsonResponse
+    {
+        return $this->fault($fault);
+    }
+
+    protected function forwardRefusal(TokenRefusal $reason): JsonResponse
+    {
+        return $this->refuse($reason);
     }
 
     /**

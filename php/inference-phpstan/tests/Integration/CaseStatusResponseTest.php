@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\DType\ArrayShapeField;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
@@ -31,7 +33,9 @@ function caseStatusResponseAnalyses(): array
         [
             'json', 'constructed', 'chain', 'earlyReturn', 'constructedValue', 'noContent', 'agreeing', 'disagreeing',
             'chainDisagreeing', 'helperCase', 'helperAgreeing', 'helperDisagreeing', 'helperStatus',
-            'constructedHelperStatus', 'helperValue', 'constant', 'chainConstant',
+            'constructedHelperStatus', 'helperValue', 'constant', 'chainConstant', 'helperValueJson',
+            'helperValuePlain', 'helperNamed', 'helperValueChain', 'helperValueForwarded', 'helperCaseForwarded',
+            'helperValueDisagreeing', 'valueDisagreeing', 'valueDisagreeingJson',
         ],
     );
 }
@@ -71,6 +75,27 @@ it('publishes the status the case maps to, wherever the response takes it', func
     '$this->refuse(Case), reading $reason->status()' => ['helperCase', 409],
     '$this->fail($body, Case->status())' => ['helperStatus', 401],
     '$this->send($body, Case->httpStatus()), the constructor' => ['constructedHelperStatus', 409],
+    // The helper's parameter may be any case, so its own type holds every backing value; the call names one
+    // case, and that case's value is the only status the server sends for it.
+    '$this->fault(Case), reading $fault->value into new JsonResponse()' => ['helperValue', 410],
+    '$this->faultJson(Case), reading $fault->value into response()->json()' => ['helperValueJson', 423],
+    '$this->faultPlain(Case), reading $fault->value into response()' => ['helperValuePlain', 410],
+    // Each hop hands the case on, so the case the outermost call names is the one the inner helper reads.
+    'a helper forwarding the case to one reading $fault->value' => ['helperValueForwarded', 423],
+    'a helper forwarding the case to one reading $reason->status()' => ['helperCaseForwarded', 409],
+])->group('fixture');
+
+it('publishes the body member a helper reads off the case it is handed', function (string $method, string $error): void {
+    // `$fault->name` in the helper is either case's name; the call names one, and the body carries that one.
+    $returns = ActionAnalysis::fromArray(caseStatusResponseAnalyses()[$method])->returns;
+    $type = $returns[0]->type;
+    expect($type)->toBeInstanceOf(ClassT::class);
+
+    expect($type->typeArgs[0] ?? null)->toEqual(new ArrayShapeT([new ArrayShapeField('error', new LiteralT($error))]));
+})->with([
+    'beside a status read off the same case' => ['helperValueJson', 'Locked'],
+    'with no status of its own' => ['helperNamed', 'Gone'],
+    'under a chain restating the status' => ['helperValueChain', 'Gone'],
 ])->group('fixture');
 
 it('publishes the one status every case chosen at run time maps to', function (string $method): void {
@@ -92,7 +117,20 @@ it('claims no single status where the cases chosen at run time disagree', functi
     'written inline' => ['disagreeing'],
     'restated by a chain' => ['chainDisagreeing'],
     'through a helper handed the case' => ['helperDisagreeing'],
+    // A backing value is no different: its type holds both codes, and it is still one case or the other.
+    '$case->value into new JsonResponse()' => ['valueDisagreeing'],
+    '$case->value into response()->json()' => ['valueDisagreeingJson'],
+    '$case->value in a helper handed the case' => ['helperValueDisagreeing'],
 ])->group('fixture');
+
+it('claims no status a chain in a helper restates off the case, rather than every code it may be', function (): void {
+    // A chain's status is not bound at the call site, so the helper's own reading is all there is: the case
+    // may be Gone or Locked, and publishing 410 and 423 would promise a 423 this call never sends.
+    $status = caseStatusResponseStatus('helperValueChain');
+
+    expect($status)->not->toBeInstanceOf(LiteralT::class)
+        ->and($status)->not->toBeInstanceOf(UnionT::class);
+})->group('fixture');
 
 it('depends on the file the status was written in', function (string $method, string $file): void {
     // The number is decided in the enum, or beside the constant, not in the controller: editing the arm, the
