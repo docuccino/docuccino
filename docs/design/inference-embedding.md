@@ -128,6 +128,13 @@ are handed the raw scope; §4b.
 3. Normalise all paths through the container's `FileHelper`.
 4. Dynamic-return-type extensions must target contracts (e.g.
    `Illuminate\Contracts\Routing\ResponseFactory`), not concrete classes, or they never fire.
+5. **Root-namespace aliases are invisible** unless declared before analysis. PHPStan finds a class it has
+   not loaded by running the autoloaders inside a stream-wrapper trap that serves every include empty, so
+   the `class_alias()` Laravel's `AliasLoader` makes on first use never succeeds there, and `\Response`,
+   `\DB` or an application's own alias is cached as no class. `FacadeAliases` declares every alias the
+   booted app's loader holds right after the bootstrap files run: ~2ms for the 50 aliases of a default
+   app, with no facade root resolved. The alias map is in `BuildFingerprint`, since adding one changes
+   what a root-namespace call reads as without touching an analysed file.
 
 All internal-API touches live in ONE adapter class per supported PHPStan minor
 (`Runtime/V2_2/RuntimeAdapter`, ~6 methods + parser-priming helper). Extension APIs

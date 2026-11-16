@@ -8,6 +8,9 @@ use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\NullT;
+use Docuccino\Core\Inference\DType\ScalarT;
+use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
@@ -30,7 +33,7 @@ function responseFacadeStatusAnalyses(): array
     return $analyses ??= FixtureRunner::analyzeMany(
         'app/Http/Controllers/ResponseFacadeStatusController.php',
         'App\\Http\\Controllers\\ResponseFacadeStatusController',
-        ['json', 'jsonOk', 'noContent', 'make', 'view', 'alias', 'caseRead', 'helperStatus', 'helperCase', 'helperMade', 'download', 'file', 'stream', 'redirect'],
+        ['json', 'jsonOk', 'noContent', 'make', 'view', 'alias', 'aliasMade', 'appAlias', 'aliasDatabase', 'aliasAuth', 'caseRead', 'helperStatus', 'helperCase', 'helperMade', 'download', 'file', 'stream', 'redirect'],
     );
 }
 
@@ -51,6 +54,11 @@ it('sends a facade call with the body and status the factory sends it with', fun
     'Response::noContent(205)' => ['noContent', new VoidT, 205],
     'Response::make(\'\', 410)' => ['make', new VoidT, 410],
     'Response::view($view, [], 410)' => ['view', new ClassT('Illuminate\\Contracts\\View\\View'), 410],
+    // A root-namespace alias is the class it names, so `\Response::` is the facade, and so is an alias the
+    // application registers itself.
+    '\\Response::json($body, 422)' => ['alias', new ArrayShapeT([new ArrayShapeField('error', new LiteralT('locked'))]), 422],
+    '\\Response::make(\'\', 410)' => ['aliasMade', new VoidT, 410],
+    '\\Reply::json($body, 422), the application\'s own alias' => ['appAlias', new ArrayShapeT([new ArrayShapeField('error', new LiteralT('locked'))]), 422],
     'Response::json($body, Case->value)' => ['caseRead', new ArrayShapeT([new ArrayShapeField('error', new LiteralT('locked'))]), 423],
     // A helper's status, and a body member read off the case it is handed, are the call site's.
     '$this->failed(409), passing its status on' => ['helperStatus', new ArrayShapeT([new ArrayShapeField('error', new LiteralT('failed'))]), 409],
@@ -83,7 +91,11 @@ it('carries the status a stream or redirect the facade makes is sent with', func
     'Response::redirectTo($url, 301)' => ['redirect', 'Illuminate\\Http\\RedirectResponse', 301],
 ])->group('fixture');
 
-it('claims nothing for the root-namespace alias, which the analyser cannot read', function (): void {
-    // PHPStan resolves no class `\Response` here, so the call has no type to read: unknown, not a guess.
-    expect(responseFacadeStatusReturn('alias'))->toBeInstanceOf(UnknownT::class);
-})->group('fixture');
+it('reads a call through any root-namespace alias as a call on the class it names', function (string $method, string $key, DType $type): void {
+    // `\DB` and `\Auth` are the framework's facades as much as `\Response` is: the count a query builder
+    // returns, and the id of whoever is signed in, which may be no one.
+    expect(responseFacadeStatusReturn($method))->toEqual(new ClassT('Illuminate\\Http\\JsonResponse', [new ArrayShapeT([new ArrayShapeField($key, $type)]), new LiteralT(200)]));
+})->with([
+    '\\DB::table(…)->count()' => ['aliasDatabase', 'archived', ScalarT::int()],
+    '\\Auth::id()' => ['aliasAuth', 'owner', UnionT::of([ScalarT::int(), ScalarT::string(), new NullT])],
+])->group('fixture');

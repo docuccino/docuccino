@@ -16,7 +16,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * Responses made through the `Response` facade and its root-namespace alias rather than `response()`: JSON
  * and no-content responses, plain and view responses, each with a status of its own; a status read off an
  * enum case, inline and through a helper handed the case or the status; and the file, stream and redirect
- * responses the same factory makes.
+ * responses the same factory makes. Beside them, the root-namespace aliases of `DB` and `Auth` and one the
+ * application adds itself (`\Reply`).
  */
 class ResponseFacadeStatusController extends Controller
 {
@@ -48,6 +49,26 @@ class ResponseFacadeStatusController extends Controller
     public function alias(): JsonResponse
     {
         return \Response::json(['error' => 'locked'], 422);
+    }
+
+    public function aliasMade(): HttpResponse
+    {
+        return \Response::make('', 410);
+    }
+
+    public function appAlias(): JsonResponse
+    {
+        return \Reply::json(['error' => 'locked'], 422);
+    }
+
+    public function aliasDatabase(): JsonResponse
+    {
+        return response()->json(['archived' => \DB::table('exports')->count()]);
+    }
+
+    public function aliasAuth(): JsonResponse
+    {
+        return response()->json(['owner' => \Auth::id()]);
     }
 
     public function caseRead(): JsonResponse

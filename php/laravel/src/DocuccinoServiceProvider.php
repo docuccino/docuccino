@@ -101,6 +101,7 @@ use Docuccino\Laravel\Webhooks\WebhookCollector;
 use Illuminate\Contracts\Auth\Access\Gate as GateContract;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Foundation\AliasLoader;
 use Illuminate\Support\Facades\Route;
 use Laravel\Passport\Passport;
 use Laravel\Passport\Scope;
@@ -297,11 +298,14 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         });
 
         // What that cache keys on beyond config and routes: the engine that resolved, its
-        // output-shaping config and the app's locked dependencies.
+        // output-shaping config, the app's locked dependencies and its class aliases.
         $this->app->bind(BuildFingerprint::class, function (Application $app): BuildFingerprint {
             $engine = $app->make(BuildConfig::class)->engine();
 
-            return new BuildFingerprint($engine, $app->basePath(), $app->make(EnginePackage::class));
+            /** @var array<string, string> $aliases */
+            $aliases = AliasLoader::getInstance()->getAliases();
+
+            return new BuildFingerprint($engine, $app->basePath(), $app->make(EnginePackage::class), $aliases);
         });
 
         $this->app->when(DocumentBuilder::class)

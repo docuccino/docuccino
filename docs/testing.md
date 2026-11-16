@@ -281,6 +281,20 @@ Consequences:
   unit tests for its pure classes (translators, registries, config objects) — not more
   subprocess fixture tests.
 
+### Why the fixture script does not fail on an empty suite
+
+Run alone, the fixture group can fail with `Tests: 1091 passed` and nothing else printed. PHPUnit fails an
+empty test suite by default, and under `--parallel` Pest decides emptiness from each worker's result,
+which counts the tests of the last file that worker ran, after the group filter. Pest also queues every
+test file, not only those with a `fixture` test, and the queue ends in `tests/tools/`, which has none. So
+the run is "empty" whenever every worker happens to finish on such a file: a race between the slowest
+fixture file and the rest of the queue. In CI's PHP 8.3 image, five of eight runs of one tree lost it.
+
+So the script passes `--do-not-fail-on-empty-test-suite`. That turns off only this verdict: a failure, an
+error or a PHPUnit warning still fails the run, and so does a missing fixture app, through
+`DOCUCCINO_REQUIRE_FIXTURE=1`. The unfiltered and `--exclude-group` runs keep the default, because their
+queues end in files that run tests.
+
 ### Why the coverage gate shares test ids
 
 A parallel coverage run merges every worker's coverage in the parent, all of it in memory at once, and
@@ -315,9 +329,9 @@ would sit too close to the figure for an ordinary change to survive it (see `lar
 |---------------------|------------|-------|--------------------------------------------------|
 | `core`              | **97.87%** | 97    | fully in-process-measurable; 0.87pp above it, ~166 statements |
 | `laravel`           | **97.27%** | 97    | ratcheted 95 → 96 → 97, the last once the figure cleared 97.20%, see below; 0.27pp above it, ~46 statements |
-| `inference-phpstan` | **58.78%** | 58    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51 → 53 → 54 → 55 → 56 → 58; 0.78pp, ~43 statements |
+| `inference-phpstan` | **58.94%** | 58    | real path is subprocess-only → `fixture`-proven; ratcheted 49 → 51 → 53 → 54 → 55 → 56 → 58; 0.94pp, ~52 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 92.79%     | —     | informational only; no longer a gate (statement sum of the rows above) |
+| Overall             | 92.81%     | —     | informational only; no longer a gate (statement sum of the rows above) |
 
 Every figure here is one `composer test:coverage` run of the whole set — CI's coverage job on PHP 8.4,
 which is what the record describes — so the three read off the same clover report and the floors file
