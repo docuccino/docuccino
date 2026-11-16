@@ -44,6 +44,26 @@ it('reports two controllers that merged into one default tag, naming both', func
         ->and($reported[0]->help)->toContain('tags.map');
 });
 
+it('reports nothing for one controller registered through the route registrar and through Route::get()', function (): void {
+    // `Route::name(…)->get(…, [Foo::class, …])` stores the class as `\Foo` and `Route::get()` as `Foo`.
+    // That is one controller, so there is no second one to collide with — and its source reads the same
+    // from either route.
+    $result = tagCollisionDocument(static function ($router): void {
+        $router->get('api/zz-ledgers', [LedgerController::class, 'index']);
+        $router->name('zz-ledgers.archive')->get('api/zz-ledgers/archive', [LedgerController::class, 'index']);
+    });
+
+    $paths = $result->document->toArray()['paths'];
+    $symbol = static fn (array $operation): array => array_values(array_filter(array_map(
+        static fn (array $record): ?string => $record['source']['symbol'] ?? null,
+        $operation['x-docuccino']['provenance'],
+    )));
+
+    expect(diagnosticsCoded($result->diagnostics, 'tags.name-collision'))->toBe([])
+        ->and(array_unique($symbol($paths['/api/zz-ledgers/archive']['get'])))->toBe([LedgerController::class.'::index'])
+        ->and($symbol($paths['/api/zz-ledgers/archive']['get']))->toBe($symbol($paths['/api/zz-ledgers']['get']));
+});
+
 it('names the controllers in FQCN order, not in the order the routes were registered', function (): void {
     // Determinism: which controller the router happened to hold first must not reach the message.
     $forwards = tagCollisionDocument(static function ($router): void {
