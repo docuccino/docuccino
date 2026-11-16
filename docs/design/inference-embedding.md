@@ -135,6 +135,12 @@ are handed the raw scope; §4b.
    booted app's loader holds right after the bootstrap files run: ~2ms for the 50 aliases of a default
    app, with no facade root resolved. The alias map is in `BuildFingerprint`, since adding one changes
    what a root-namespace call reads as without touching an analysed file.
+6. **A real-time facade fails the file that names it** unless it is declared first. Laravel's
+   `AliasLoader` writes `Facades\X` into `storage/framework/cache` and requires it, and inside the trap
+   the write does nothing and the require fails, which fails the analysis of every action in the file and
+   leaves an empty temp file in the app's storage. `RealTimeFacades` takes the facade namespace off the
+   loader at boot and declares each such class in memory as the loader's stub would, so PHPStan finds it
+   as evaluated code and `FacadeCall` resolves its root as it does any facade's.
 
 All internal-API touches live in ONE adapter class per supported PHPStan minor
 (`Runtime/V2_2/RuntimeAdapter`, ~6 methods + parser-priming helper). Extension APIs

@@ -141,12 +141,13 @@ const FLOORS = [
     // `RuntimeAdapter::holding()` run only under real analysis, the fixture group's.
     // Re-recorded 58.78 → 58.94 when content that may be JSON or text came to be read as any media
     // type and the app's root facade aliases to be declared before analysis (`FacadeAliases`, unit-tested
-    // in process).
-    // Measured 58.94% (3257/5526): 58% of it is 3205.08 statements, 51.92 of margin.
+    // in process), and 58.94 → 59.11 when real-time facades came to be declared in memory
+    // (`RealTimeFacades`, unit-tested in process).
+    // Measured 59.11% (3281/5551): 58% of it is 3219.58 statements, 61.42 of margin.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads 3 statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 58, 'measured' => 58.94],
+    'inference-phpstan' => ['floor' => 58, 'measured' => 59.11],
 ];
 
 /*

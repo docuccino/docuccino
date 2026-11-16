@@ -21,8 +21,8 @@ use Workbench\App\Http\Controllers\ArchiveFacadeController;
 /**
  * The document an application gets for responses made through the `Response` facade — JSON, no-content,
  * plain and view responses with a status of their own, one whose status a helper reads off the case it is
- * handed, and one sent with the framework's 200 — and through its root-namespace alias and an application's
- * own. Byte-locked, warm as well as cold; the scripted returns
+ * handed, and one sent with the framework's 200 — and through its root-namespace alias, an application's
+ * own and a real-time facade of the factory. Byte-locked, warm as well as cold; the scripted returns
  * are what the real engine recovers from the fixture app's same calls, which the last test holds them to.
  *
  * @return array<string, DType> action → the response it returns
@@ -45,6 +45,9 @@ function responseFacadeStatusReturns(): array
         'refuseAliased' => $sent($error('locked'), 422),
         'purgeAliased' => $sent(new VoidT, 410),
         'refuseByReply' => $sent($error('locked'), 422),
+        // A real-time facade of the factory is a facade of it too.
+        'refuseInRealTime' => $sent($error('locked'), 422),
+        'purgeInRealTime' => $sent(new VoidT, 410),
     ];
 }
 
@@ -71,6 +74,8 @@ function responseFacadeStatusRoutes(): callable
         $router->post('api/archive-facade/refuse-aliased', [ArchiveFacadeController::class, 'refuseAliased']);
         $router->delete('api/archive-facade/purge-aliased', [ArchiveFacadeController::class, 'purgeAliased']);
         $router->post('api/archive-facade/refuse-by-reply', [ArchiveFacadeController::class, 'refuseByReply']);
+        $router->post('api/archive-facade/refuse-in-real-time', [ArchiveFacadeController::class, 'refuseInRealTime']);
+        $router->delete('api/archive-facade/purge-in-real-time', [ArchiveFacadeController::class, 'purgeInRealTime']);
     };
 }
 
@@ -101,4 +106,20 @@ it('scripts what the real engine recovers from the fixture app’s same calls', 
     '\\Response::json($body, 422)' => ['refuseAliased', 'alias'],
     '\\Response::make(\'\', 410)' => ['purgeAliased', 'aliasMade'],
     '\\Reply::json($body, 422), the application\'s own alias' => ['refuseByReply', 'appAlias'],
+])->group('fixture');
+
+it('scripts what the real engine recovers from the fixture app’s calls through a real-time facade', function (string $action, string $fixtureMethod): void {
+    ensureFixtureAvailable(FixtureRunner::available());
+
+    $real = ActionAnalysis::fromArray(FixtureRunner::analyze(
+        'app/Http/Controllers/RealTimeFacadeController.php',
+        'App\\Http\\Controllers\\RealTimeFacadeController',
+        $fixtureMethod,
+    ));
+
+    expect(array_map(static fn (ReturnSite $site): DType => $site->type, $real->returns))
+        ->toEqual([responseFacadeStatusReturns()[$action]]);
+})->with([
+    'ResponseFactory::json($body, 422)' => ['refuseInRealTime', 'json'],
+    '\\Facades\\…\\ResponseFactory::make(\'\', 410)' => ['purgeInRealTime', 'make'],
 ])->group('fixture');

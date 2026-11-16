@@ -508,6 +508,10 @@ in the file being walked, and an array return is no type the trace follows:
   with and without a `Content-Type` header, and a view handed to the helper; and content of no one kind —
   what the cache holds, text or an array, a file's bytes or `false` — handed to the helper, `new Response`
   and Symfony's own response, with and without a header.
+- `app/Http/Controllers/RealTimeFacadeController.php` — responses made through a real-time facade of the
+  response factory (`Facades\Illuminate\Contracts\Routing\ResponseFactory`), imported and written out in
+  full, beside an action that uses no facade at all. Laravel writes a real-time facade into `storage/` the
+  first time it is named, so the file also proves the engine names one without writing there.
 - `app/Http/Controllers/CarriedResponseController.php` — responses handed to the framework inside an
   exception: an `HttpResponseException` carrying a JSON response from the helper, the facade and `new`, a
   plain response, a redirect and a subclass, thrown at the action and from a helper, carrying a helper's

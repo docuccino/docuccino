@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Workbench\App\Http\Controllers;
 
+use Facades\Illuminate\Contracts\Routing\ResponseFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Response;
@@ -12,7 +13,7 @@ use Workbench\App\Enums\ExportFault;
 /**
  * Responses made through the `Response` facade, each sent with the status its call names: JSON, no-content,
  * plain and view responses, one whose status a helper reads off the case it is handed, and one sent with
- * the framework's 200; and the same calls through the facade's root-namespace alias and an application's own.
+ * the framework's 200; and the same calls through its root-namespace alias, an application's own and in real time.
  */
 final class ArchiveFacadeController
 {
@@ -68,6 +69,18 @@ final class ArchiveFacadeController
     public function refuseByReply(): JsonResponse
     {
         return \Reply::json(['error' => 'locked'], 422);
+    }
+
+    /** Refuse to change a locked archive, through a real-time facade. */
+    public function refuseInRealTime(): JsonResponse
+    {
+        return ResponseFactory::json(['error' => 'locked'], 422);
+    }
+
+    /** Purge an archived entry, through a real-time facade. */
+    public function purgeInRealTime(): HttpResponse
+    {
+        return ResponseFactory::make('', 410);
     }
 
     private function faulted(ExportFault $fault): JsonResponse
