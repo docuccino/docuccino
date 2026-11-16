@@ -12,8 +12,11 @@ use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
+use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\FleetVanData;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\MutableVanData;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\OverridingVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\PaintedVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\VanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Van;
@@ -21,6 +24,7 @@ use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\VanController;
 use Docuccino\Laravel\Tests\Support\TraceScript;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
+use Spatie\LaravelData\Data;
 
 /**
  * Response links from a Data body: a response built from a model with laravel-data, linked to the
@@ -38,17 +42,31 @@ beforeEach(function (): void {
         $router->post('api/fleet/in-order', [VanController::class, 'enlistInOrder']);
         $router->post('api/unwrapped-vans', [VanController::class, 'unwrapped']);
         $router->post('api/painted-vans', [VanController::class, 'painted']);
+        $router->post('api/retitled-vans', [VanController::class, 'retitled']);
+        $router->post('api/demonstration-vans', [VanController::class, 'demonstrated']);
+        $router->post('api/described-vans', [VanController::class, 'described']);
     };
 
     $this->engine = static function (): TypeEngine {
         $returns = static fn (string $fqcn): ActionAnalysis => new ActionAnalysis(returns: [new ReturnSite(new ClassT($fqcn), new SourceLocation(''))]);
         $controller = VanController::class.'::';
         $file = dirname(__DIR__).'/Fixtures/ResponseLinks/VanController.php';
-        $walk = static fn (string $method): callable => TraceScript::forMethod($file, VanController::class, $method, [
+        $types = [
             'van' => new ClassT(Van::class),
             'data' => new ClassT(VanData::class),
-        ]);
-        $methods = ['store' => VanData::class, 'show' => VanData::class, 'byPlate' => VanData::class, 'enlist' => FleetVanData::class, 'enlistInOrder' => FleetVanData::class, 'unwrapped' => VanData::class, 'painted' => PaintedVanData::class];
+            'copy' => new ClassT(MutableVanData::class),
+            // A template bound to the base class reaches the walk as that class.
+            'meta' => new ClassT(Data::class),
+        ];
+        $walk = static fn (string $method): callable => TraceScript::forMethod($file, VanController::class, $method, $types);
+        // The walk descends into the helper `described()` hands its object to, as the engine's does.
+        $described = static function (TraceVisitor $visitor) use ($walk): void {
+            $walk('described')($visitor);
+            $walk('withMeta')($visitor);
+        };
+        $methods = ['store' => VanData::class, 'show' => VanData::class, 'byPlate' => VanData::class, 'enlist' => FleetVanData::class, 'enlistInOrder' => FleetVanData::class, 'unwrapped' => VanData::class, 'painted' => PaintedVanData::class, 'retitled' => MutableVanData::class, 'demonstrated' => OverridingVanData::class, 'described' => VanData::class];
+        $walks = array_combine(array_keys($methods), array_map($walk, array_keys($methods)));
+        $walks['described'] = $described;
 
         return WorkbenchEngine::make(
             classOverrides: [
@@ -68,6 +86,14 @@ beforeEach(function (): void {
                     new PropertyMetadata('fleetNumber', ScalarT::string()),
                     new PropertyMetadata('reg', ScalarT::string()),
                 ]),
+                MutableVanData::class => new ClassMetadata(MutableVanData::class, [
+                    new PropertyMetadata('id', ScalarT::int()),
+                    new PropertyMetadata('plate', ScalarT::string()),
+                ]),
+                OverridingVanData::class => new ClassMetadata(OverridingVanData::class, [
+                    new PropertyMetadata('id', ScalarT::int()),
+                    new PropertyMetadata('plate', ScalarT::string()),
+                ]),
                 PaintedVanData::class => new ClassMetadata(PaintedVanData::class, [
                     new PropertyMetadata('vin', ScalarT::string()),
                     new PropertyMetadata('plate', ScalarT::string()),
@@ -83,8 +109,8 @@ beforeEach(function (): void {
                 array_map($returns, $methods),
             ),
             traceOverrides: array_combine(
-                array_map(static fn (string $method): string => $controller.$method, array_keys($methods)),
-                array_map($walk, array_keys($methods)),
+                array_map(static fn (string $method): string => $controller.$method, array_keys($walks)),
+                array_values($walks),
             ),
         );
     };
