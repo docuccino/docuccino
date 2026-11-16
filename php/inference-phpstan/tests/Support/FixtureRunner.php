@@ -270,6 +270,17 @@ final class FixtureRunner
     }
 
     /**
+     * Trace a controller with the ResourceModelVisitor: the one model every construction of `$resource`
+     * the walk sees is built around, or null.
+     *
+     * @return array<string, mixed>
+     */
+    public static function traceResourceModels(string $controllerRelPath, string $class, string $method, string $resource): array
+    {
+        return self::invoke('trace-resource-models', self::path($controllerRelPath), $class, $method, $resource);
+    }
+
+    /**
      * Trace a closure located by start line with the {@see ClosureReturnProbe}: returns one entry per
      * return expression the engine handed over, with its node kind and the scope's type for it.
      *

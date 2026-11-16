@@ -33,6 +33,7 @@ declare(strict_types=1);
  *   php engine-runner.php trace-pagination-terminal <controllerFile> <class> <method>
  *   php engine-runner.php trace-created-resource    <controllerFile> <class> <method>
  *   php engine-runner.php trace-wrapped-collection  <controllerFile> <class> <method> <collectionFqcn>
+ *   php engine-runner.php trace-resource-models     <controllerFile> <class> <method> <resourceFqcn>
  *   php engine-runner.php data-response-status      <dataFile>       <class[,class…]> <ignored>
  *   php engine-runner.php trace-file-responses      <controllerFile> <class> <method>
  *   php engine-runner.php trace-closure             <file> <ignored> <ignored> <line>
@@ -84,6 +85,7 @@ use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderTraceVisitor;
 use Docuccino\Laravel\Integrations\QueryBuilder\ScopeParameterResolver;
 use Docuccino\Laravel\Integrations\SpatieData\DataResponseStatus;
 use Docuccino\Laravel\Integrations\Support\PaginationTerminalVisitor;
+use Docuccino\Laravel\Links\ResourceModelVisitor;
 
 $repoRoot = dirname(__DIR__, 4);
 $app = $repoRoot.'/tests/fixture-app/app';
@@ -686,6 +688,14 @@ $result = match ($mode) {
         $engine->trace($ref, $visitor);
 
         return ['created' => $visitor->created];
+    })(),
+    'trace-resource-models' => (static function () use ($engine, $ref, $argv): array {
+        // ResourceModelVisitor types what each construction of a resource is handed — which model a
+        // response link reads the resource's columns off.
+        $visitor = new ResourceModelVisitor;
+        $engine->trace($ref, $visitor);
+
+        return ['model' => $visitor->modelOf($argv[5] ?? ''), 'wrapped' => $visitor->wrappedModel($argv[5] ?? '')];
     })(),
     'trace-wrapped-collection' => (static function () use ($engine, $ref, $argv): array {
         // WrappedCollectionVisitor types what each construction of the collection is handed — the proof a

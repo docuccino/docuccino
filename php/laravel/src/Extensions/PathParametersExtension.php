@@ -14,7 +14,6 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Extensions\Contracts\RouteBindingFieldSchemaResolver;
-use Docuccino\Core\Extensions\Contracts\RouteBindingKeyResolver;
 use Docuccino\Core\Extensions\Contracts\RouteBindingSchemaResolver;
 use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
@@ -24,6 +23,7 @@ use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Core\Inference\DType\EnumT;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Support\PortablePattern;
+use Docuccino\Laravel\Routing\BoundColumn;
 use Docuccino\Laravel\Routing\RouteConstraints;
 use Docuccino\Laravel\Routing\RouteTemplate;
 use Docuccino\Laravel\Support\ListValueNames;
@@ -132,16 +132,16 @@ final class PathParametersExtension implements OperationExtension
                 if ($isBound && $constraint === null && ! self::declaresType($context, $name)) {
                     if (self::isCustomBound($context, $name)) {
                         $this->reportCustomBinding($context, $name);
-                    } elseif ($field !== null) {
-                        $this->reportUntypedColumn($context, $name, $context->routeBindings[$name], $field);
+                    } elseif (($column = BoundColumn::of($context, $name)) !== null) {
+                        $this->reportUntypedColumn($context, $field === null ? '{'.$name.'}' : '{'.$name.':'.$field.'}', $context->routeBindings[$name], $column);
                     } else {
-                        $this->reportUntypedBinding($context, $name, $context->routeBindings[$name]);
+                        $this->reportUntypedBinding($context, $name, $context->routeBindings[$name], BoundColumn::resolvedInCode($context, $name));
                     }
                 }
             }
 
             if ($isBound) {
-                $this->describeBinding($parameter, $context, $name, $field, $contribution);
+                $this->describeBinding($parameter, $context, $name, $contribution);
             }
         }
     }
@@ -222,13 +222,12 @@ final class PathParametersExtension implements OperationExtension
         ParameterDraft $parameter,
         RouteContext $context,
         string $name,
-        ?string $field,
         Contribution $contribution,
     ): void {
         $notes = [];
         $facts = [];
 
-        $key = $this->matchedColumn($context, $name, $field);
+        $key = BoundColumn::of($context, $name);
         if ($key !== null) {
             $facts['key'] = $key;
             $notes[] = sprintf('Matched on the resource\'s `%s`.', $key);
@@ -255,24 +254,6 @@ final class PathParametersExtension implements OperationExtension
     }
 
     /**
-     * The column the value is matched on, or null when nothing static settles it.
-     *
-     * A binder the application registered is asked FIRST and ends the question: the framework runs it
-     * before implicit binding and ignores both the route's column and the model's route key, so
-     * publishing either would name a column the server never looks at. Otherwise the route's own
-     * column wins where it names one, and the bound model's route key answers the rest
-     * ({@see RouteBindingKeyResolver}).
-     */
-    private function matchedColumn(RouteContext $context, string $name, ?string $field): ?string
-    {
-        if (self::isCustomBound($context, $name)) {
-            return null;
-        }
-
-        return $field ?? $context->routeBindingKeyName($context->routeBindings[$name]);
-    }
-
-    /**
      * The schema a bound parameter resolves to: the named column's when the route names one
      * (`{post:slug}`), else the model's route key. The two are NOT interchangeable, so an untyped column
      * falls through to the caller's string fallback rather than back to the key
@@ -292,6 +273,11 @@ final class PathParametersExtension implements OperationExtension
             return null;
         }
 
+        // A model that finds the record in code of its own may match any column, in any shape.
+        if (BoundColumn::resolvedInCode($context, $name)) {
+            return null;
+        }
+
         $modelFqcn = $context->routeBindings[$name];
 
         if ($field !== null) {
@@ -306,7 +292,12 @@ final class PathParametersExtension implements OperationExtension
             return $context->converter()->convert(new EnumT($modelFqcn, EnumReflection::names($modelFqcn)));
         }
 
-        return $context->routeBindingKeySchema($modelFqcn);
+        // A model routing on a column of its own naming answers with that column's shape, which is the
+        // column chain's question rather than the key's.
+        $keySchema = $context->routeBindingKeySchema($modelFqcn);
+        $keyName = $keySchema === null ? $context->routeBindingKeyName($modelFqcn) : null;
+
+        return $keyName === null ? $keySchema : $context->routeBindingFieldSchema($modelFqcn, $keyName);
     }
 
     /** Whether the application registered a binder of its own for this segment. */
@@ -343,18 +334,26 @@ final class PathParametersExtension implements OperationExtension
     }
 
     /** Says the binding itself went untyped, without guessing why nothing answered for it. */
-    private function reportUntypedBinding(RouteContext $context, string $name, string $modelFqcn): void
+    private function reportUntypedBinding(RouteContext $context, string $name, string $modelFqcn, bool $resolvedInCode): void
     {
         $context->components->addDiagnostic(new Diagnostic(
             severity: Severity::Info,
             code: 'route-binding.untyped',
-            message: sprintf(
-                '{%s} is bound to %s, which nothing enabled could type, so the parameter is documented as a plain string.',
-                $name,
-                $modelFqcn,
-            ),
+            message: $resolvedInCode
+                ? sprintf(
+                    '{%s} is bound to %s, which finds the record in code of its own (an overridden resolveRouteBinding() or one of its siblings), so which column it matches, and in what shape, is not read: the parameter is documented as a plain string.',
+                    $name,
+                    $modelFqcn,
+                )
+                : sprintf(
+                    '{%s} is bound to %s, which nothing enabled could type, so the parameter is documented as a plain string.',
+                    $name,
+                    $modelFqcn,
+                ),
             routeSignature: $context->route->signature($context->httpMethod()),
-            help: sprintf('Declare the segment\'s type with #[PathParameter(\'%s\', type: …)] on the action, or bind a string-backed enum or an Eloquent model with the eloquent integration enabled.', $name),
+            help: $resolvedInCode
+                ? sprintf('Declare the segment\'s type with #[PathParameter(\'%s\', type: …)] on the action where you know what the code matches on.', $name)
+                : sprintf('Declare the segment\'s type with #[PathParameter(\'%s\', type: …)] on the action, or bind a string-backed enum or an Eloquent model with the eloquent integration enabled.', $name),
         ));
     }
 
@@ -374,15 +373,14 @@ final class PathParametersExtension implements OperationExtension
     }
 
     /** Says which column went untyped, and why the parameter is a bare string because of it. */
-    private function reportUntypedColumn(RouteContext $context, string $name, string $modelFqcn, string $field): void
+    private function reportUntypedColumn(RouteContext $context, string $segment, string $modelFqcn, string $field): void
     {
         $context->components->addDiagnostic(new Diagnostic(
             severity: Severity::Info,
             code: 'route-binding.column-untyped',
             message: sprintf(
-                '{%s:%s} binds on %s::$%s, whose type could not be recovered; the parameter is documented as a plain string.',
-                $name,
-                $field,
+                '%s binds on %s::$%s, whose type could not be recovered; the parameter is documented as a plain string.',
+                $segment,
                 $modelFqcn,
                 $field,
             ),

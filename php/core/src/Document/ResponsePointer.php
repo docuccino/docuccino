@@ -2,15 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Workflows;
+namespace Docuccino\Core\Document;
 
 use Docuccino\Core\Contract\Pointer;
-use Docuccino\Core\Document\DocumentGraph;
 use Docuccino\Core\Draft\SchemaKeywords;
 
 /**
- * Whether a step's `$response.body#/pointer` reads something the operation's response actually
- * documents.
+ * Whether a `$response.body#/pointer` — a workflow step's output, a response link's parameter — reads
+ * something the response actually documents.
  *
  * **The claim is about the DOCUMENT, not about the wire.** An object schema with `properties` and no
  * `additionalProperties: false` permits members it does not name, so a pointer at an undocumented one
@@ -46,21 +45,43 @@ final class ResponsePointer
             return null;
         }
 
-        $schema = self::successSchema($operation, $doc);
+        return self::judged(self::successSchema($operation, $doc), $doc, $matches[1]);
+    }
 
+    /**
+     * The same judgement against one response the caller already chose — the one a link sits on.
+     *
+     * @param  array<string, mixed>  $response
+     * @param  array<string, mixed>  $doc
+     */
+    public static function undocumentedIn(array $response, array $doc, string $expression): ?string
+    {
+        if (preg_match(self::EXPRESSION, $expression, $matches) !== 1) {
+            return null;
+        }
+
+        return self::judged(self::jsonSchema($response), $doc, $matches[1]);
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $schema
+     * @param  array<string, mixed>  $doc
+     */
+    private static function judged(?array $schema, array $doc, string $pointer): ?string
+    {
         if ($schema === null) {
             return null;
         }
 
         $segments = array_map(
             Pointer::unescape(...),
-            array_slice(explode('/', $matches[1]), 1),
+            array_slice(explode('/', $pointer), 1),
         );
 
         /** @var array<string, bool> $seen */
         $seen = [];
 
-        return self::resolves($schema, $segments, $doc, $seen) ? null : $matches[1];
+        return self::resolves($schema, $segments, $doc, $seen) ? null : $pointer;
     }
 
     /**
@@ -90,7 +111,19 @@ final class ResponsePointer
         }
 
         $response = reset($successes);
-        $content = is_array($response) ? ($response['content'] ?? null) : null;
+
+        return is_array($response) ? self::jsonSchema(self::node($response)) : null;
+    }
+
+    /**
+     * A response's `application/json` schema, or null where it documents none.
+     *
+     * @param  array<string, mixed>  $response
+     * @return array<string, mixed>|null
+     */
+    private static function jsonSchema(array $response): ?array
+    {
+        $content = $response['content'] ?? null;
         $json = is_array($content) ? ($content['application/json'] ?? null) : null;
         $schema = is_array($json) ? ($json['schema'] ?? null) : null;
 

@@ -46,6 +46,7 @@ function allowedSwitchReads(): array
         'php/core/src/Emit/Postman/Url.php::expand' => [1, 'OAS path-parameter `required`'],
         'php/core/src/Emit/Postman/Url.php::headers' => [2, 'OAS header- and cookie-parameter `required`'],
         'php/core/src/Emit/Postman/Url.php::raw' => [1, 'a Postman query row this emitter wrote, `disabled`'],
+        'php/core/src/Links/ResponseLinks.php::internal' => [1, 'OAS operation `x-internal`'],
 
         // ---- Fragment/DType serialisation. Both ends are this package: what is read back is what
         // ---- `toArray()` wrote, so a non-boolean there is a bug in us and not a value to report.

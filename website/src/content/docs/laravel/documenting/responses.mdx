@@ -882,6 +882,99 @@ schema naming the object your generator yields would tell a consumer the body *i
 false for every stream that sends two. A client generated against that would parse the first frame and
 fail. `string` is the widest thing that stays true.
 
+## Links between operations
+
+When a response hands back an id that another endpoint takes, Docuccino says so with an OpenAPI
+[response link](https://spec.openapis.org/oas/v3.2.0.html#link-object). A viewer can offer the next call,
+and a client generator or a test tool can chain the two without you writing the glue.
+
+```php
+Route::post('/orders', [OrderController::class, 'store'])->name('orders.store');
+Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
+Route::delete('/orders/{order}', [OrderController::class, 'destroy'])->name('orders.destroy');
+
+public function store(StoreOrderRequest $request): OrderResource
+{
+    return new OrderResource(Order::create($request->validated()));
+}
+```
+
+The `201` that `store` documents now carries a link to `show` and to `destroy`:
+
+```json
+"links": {
+  "orders.show": {
+    "operationId": "orders.show",
+    "parameters": { "order": "$response.body#/data/id" }
+  }
+}
+```
+
+Docuccino writes a link only where your code proves it. The route binds an `Order`, so `{order}` is
+matched on the order's route key; the response sends that column, as it is stored, at `data.id`. Both
+halves are read from the code:
+
+- **What a route takes.** An implicit binding — a type-hinted model — or a `Route::model()` one, matched
+  on the model's route key: its primary key, or the column its `getRouteKeyName()` returns. An implicit
+  binding can also name its column, as in `{order:reference}`.
+- **What a response gives.** A model returned as it is sends each column under its own name, unless it
+  writes its own serialised form (`toArray()`, `jsonSerialize()` and the like), which may send anything
+  under any name. A resource
+  sends the columns its `toArray()` writes as `$this->column` (or `$this->getRouteKey()`). Docuccino reads which model a resource wraps from where
+  your action builds it — `new OrderResource($order)`. Only where the action builds it nowhere Docuccino
+  can see, as with `$order->toResource()`, does the resource's `@mixin` answer: one built around either of
+  two models gives nothing, whatever the `@mixin` says.
+
+The same goes for a response that already binds the model: `show` links to `destroy`, because the order
+it sends back carries the key `destroy` takes. A segment the two routes share is passed straight through
+from the request, so a nested create links to its child:
+
+```php
+Route::post('/orders/{order}/notes', [OrderNoteController::class, 'store']);
+Route::get('/orders/{order}/notes/{note}', [OrderNoteController::class, 'show'])->scopeBindings();
+```
+
+```json
+"parameters": { "order": "$request.path.order", "note": "$response.body#/data/id" }
+```
+
+A scoped child (`->scopeBindings()`) only resolves within its parent, so Docuccino fills it from a body
+only where the code proves the record belongs to the parent in the request: on the child's own
+collection, as above, or on its own path. A route like `/orders/{order}/latest-note` could return any
+note as far as the code says, so it is not linked to the scoped route.
+
+A column only counts when it reaches the wire unchanged, because the route looks a record up by what is
+stored: one an accessor rewrites, a date, or a cast other than `int` or `string` is not linked on.
+
+Nothing is matched by name. A response sending a `customer_id` is not linked to a route taking
+`{customer}`, because nothing in the code says the two are the same value. Where a binding can't be read
+— a `Route::bind()` closure, a `getRouteKeyName()` that decides at run time, a model that resolves its own
+bindings (a hashid trait) — no link is written, and the notices
+in [Diagnostics](/laravel/reference/diagnostics/#routes-operations-and-names) name the segment.
+
+A `DELETE` response leads nowhere on its own, even when it sends the record back: that record no longer
+resolves, so every route that would look it up answers `404`.
+
+A link only names what the document publishes. An older [API version](/laravel/guides/api-versioning/)
+links only to the operations that version serves, and never on a member a later version renamed: the
+older document may give that name to another field. A public operation never links on its own to one
+marked [`#[Internal]`](/laravel/reference/attributes/#internal), because the tools that strip internal
+operations would leave the link pointing at nothing. One response carries at most 50 of the links
+Docuccino works out, and the
+[`response-link.truncated`](/laravel/reference/diagnostics/#response-links) notice says when it leaves
+some out.
+
+Where you know a link the code can't show — a plain array, a value a route takes under a name of its own
+— declare it with [`#[ResponseLink]`](/laravel/reference/attributes/#responselink):
+
+```php
+#[ResponseLink('orders.show', ['order' => '$response.body#/order_id'], description: 'The order this receipt is for.')]
+public function receipt(Payment $payment): array { /* … */ }
+```
+
+The document checks it as it builds: a target, status, parameter or response member that isn't there
+is reported, and the link is left out rather than published wrong.
+
 ## Adding and refining responses
 
 Where the code can't say everything, attributes step in — field by field, so they patch inferred
@@ -891,6 +984,7 @@ responses without discarding the rest:
 | --- | --- |
 | [`#[Response]`](/laravel/reference/attributes/#response) | Add a status, or set the `description`, `type` or `mediaType` of one — repeatable for several statuses. |
 | [`#[ResponseHeader]`](/laravel/reference/attributes/#responseheader) | Document a response header on a given status (`status: 200` by default), and say with `required: true` when the server always sends it. |
+| [`#[ResponseLink]`](/laravel/reference/attributes/#responselink) | Link a response to the operation a client can call next, where Docuccino can't work the link out. |
 | [`#[IgnoreResponse]`](/laravel/reference/attributes/#ignoreresponse) | Drop an auto-inferred response by status code. |
 | [`#[Example]`](/laravel/reference/attributes/#example) | Pin the payload a reader copies — see [Example payloads](/laravel/documenting/examples/). |
 
