@@ -24,8 +24,8 @@ use Illuminate\Contracts\Config\Repository as ConfigRepository;
  * segmentation happens per document — the effective set is the route's supported modes ∩ the document's
  * allowed ones. Defers entirely when config already declares security schemes; skips `#[Unauthenticated]`.
  *
- * Whether the route runs an authenticator is the adapter's answer, handed in: the one that decides its 401,
- * read by class through the build's alias map, so an application's own alias or subclass counts.
+ * Whether the route runs an authenticator, and which guard each entry names, are the adapter's answers,
+ * handed in: read by class through the build's alias map, so an application's own alias or subclass counts.
  */
 final class SanctumSecurityExtension implements OperationExtension
 {
@@ -34,9 +34,12 @@ final class SanctumSecurityExtension implements OperationExtension
     /**
      * @param  Closure(RouteContext): bool  $authenticates  whether the route runs the framework's
      *                                                      authenticator or one the document's pattern names
+     * @param  Closure(RouteContext, string): ?string  $guardArguments  an entry's guard arguments, by class
+     *                                                                  through the build's alias map
      */
     public function __construct(
         private readonly Closure $authenticates,
+        private readonly Closure $guardArguments,
         private readonly ?ConfigRepository $config = null,
         private readonly SanctumDetector $detector = new SanctumDetector,
     ) {}
@@ -88,6 +91,7 @@ final class SanctumSecurityExtension implements OperationExtension
             AuthGuardDrivers::map($this->config?->get('auth.guards')),
             $this->defaultGuard(),
             fn (): bool => ($this->authenticates)($context),
+            fn (string $middleware): ?string => ($this->guardArguments)($context, $middleware),
         );
 
         return array_values(array_filter($supported, static fn (string $mode): bool => in_array($mode, $allowed, true)));

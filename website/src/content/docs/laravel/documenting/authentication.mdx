@@ -51,7 +51,9 @@ both of Sanctum's modes based on the middleware a route uses:
 - **Token** → an HTTP bearer scheme (`sanctumToken`). Detected from `auth:sanctum`, the bare `sanctum`
   alias, an `abilities:` / `ability:` middleware, or **any** `auth:<guard>` whose configured driver is
   `sanctum` — so a custom `auth:mobile` guard on the Sanctum driver is recognized, and multi-guard
-  lists (`auth:web,sanctum`) work.
+  lists (`auth:web,sanctum`) work. The guard is read from the authenticator's parameters however you
+  wrote it, so `signed-in:sanctum` counts too when `signed-in` is your alias for `Authenticate` or a
+  subclass of it.
 - **Stateful SPA** → a cookie-based scheme (`sanctumStateful`), documented when
   `EnsureFrontendRequestsAreStateful` is present **alongside an auth guard**: Laravel's authenticator
   in any spelling the [implicit `401`](#implicit-401) reads, including your own `Authenticate` subclass
@@ -135,7 +137,8 @@ documented with the `passport` OAuth2 scheme when it carries `scope:` / `scopes:
 middleware, **or** when one of its `auth:<guard>` middleware resolves to a `passport`-**driver**
 guard. Detection is driver-based, from `config('auth.guards')` — so a custom-named guard
 (`auth:partner` on the passport driver) is recognized, a guard on a `token`/`sanctum` driver is not
-mistaken for Passport, and multi-guard lists (`auth:web,api`) work.
+mistaken for Passport, and multi-guard lists (`auth:web,api`) work. As with Sanctum, the guard can
+come through your own alias for the authenticator (`signed-in:partner`).
 
 The authorization-code and client-credentials flows are always emitted; the password and implicit flows
 appear **only when the app opted into them** (`Passport::enablePasswordGrant()` /
@@ -192,7 +195,8 @@ Two things worth knowing:
   own narrower pattern keeps its meaning whichever spelling a route uses. Your app's own authenticator
   counts as well: a middleware extending Laravel's `Authenticate` — the one
   `app/Http/Middleware/Authenticate.php` every app upgraded from Laravel 10 still has — is read as
-  `auth`, whether or not you registered an alias for it. In the pattern, `*` stands for any run of
+  `auth`, whether or not you registered an alias for it, and so is an alias of your own for either one:
+  `signed-in:web` matches `auth*` and `auth:web`. In the pattern, `*` stands for any run of
   characters and everything else is literal, so a pattern naming a class can be written with single
   backslashes.
 - Declaring any `schemes` stands the Sanctum and Passport integrations down entirely — explicit config

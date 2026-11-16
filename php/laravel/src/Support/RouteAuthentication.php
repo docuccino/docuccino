@@ -76,12 +76,23 @@ final class RouteAuthentication
                 }
             }
 
-            if (AuthMiddlewareDetector::matchesEntry($context, $middleware)) {
+            if (AuthMiddlewareDetector::matchesEntry($context, $middleware, $this->middleware)) {
                 return self::PATTERN_REFUSAL;
             }
         }
 
         return null;
+    }
+
+    /**
+     * The guard arguments of an entry running the framework's authenticator ({@see
+     * AuthMiddlewareNames::guardArguments()}), whatever alias the application named it under: they are
+     * the middleware's parameters, so the entry is also read as the alias map resolves it.
+     */
+    public function guardArguments(RouteContext $context, string $middleware): ?string
+    {
+        return AuthMiddlewareNames::guardArguments($middleware)
+            ?? AuthMiddlewareNames::guardArguments($this->middleware->resolve($context, $middleware));
     }
 
     /**
