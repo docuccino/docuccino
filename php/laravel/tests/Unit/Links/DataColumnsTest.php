@@ -206,3 +206,30 @@ it('sends a column as stored only where the model reads its attributes as the fr
     expect($columns->sentAsStored(Van::class, 'plate', dataLinkContext()))->toBe('plate')
         ->and($columns->sentAsStored(TranslatedVan::class, 'plate', dataLinkContext()))->toBeNull();
 });
+
+/**
+ * Whether a property is a plain copy is a fact of its class, not of a construction or an operation, so a
+ * class costs its size once however often it is built. Rereading every constructor parameter for every
+ * property of every construction takes seconds here; reading each once takes a fraction of one.
+ */
+it('reads a wide class built many times in time linear in its size', function (): void {
+    $width = 2000;
+    $class = 'Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\Data\\WideVanData';
+    // Written to a file, because the constructor's body is read from the one it is declared in.
+    $file = sys_get_temp_dir().'/WideVanData.php';
+    $properties = implode(', ', array_map(static fn (int $i): string => 'public readonly string $p'.$i, range(1, $width)));
+    file_put_contents($file, '<?php namespace Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\Data; final class WideVanData extends \\Spatie\\LaravelData\\Data { public function __construct('.$properties.') {} }');
+    require_once $file;
+    $published = array_map(static fn (int $i): string => 'p'.$i, range(1, $width));
+
+    try {
+        $started = hrtime(true);
+        $carried = (new DataColumns)->carried($class, array_fill(0, 20, DataConstruction::model(Van::class)), $published, dataLinkContext());
+        $seconds = (hrtime(true) - $started) / 1e9;
+    } finally {
+        unlink($file);
+    }
+
+    expect($carried)->toHaveCount($width)
+        ->and($seconds)->toBeLessThan(3.0);
+});

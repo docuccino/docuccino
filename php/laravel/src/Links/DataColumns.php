@@ -14,7 +14,6 @@ use ReflectionAttribute;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionNamedType;
-use ReflectionParameter;
 use ReflectionProperty;
 
 /**
@@ -99,6 +98,12 @@ final class DataColumns
 
     /** @var list<string> */
     private readonly array $normalizers;
+
+    /** @var array<string, bool> class, property and path → whether the property is a plain copy */
+    private array $plain = [];
+
+    /** @var array<string, array<string, bool>> class → constructor parameter → whether it has a default */
+    private array $defaults = [];
 
     /**
      * @param  list<string>|null  $normalizers  the app's `data.normalizers`, null where it sets none
@@ -335,9 +340,19 @@ final class DataColumns
      * `string` and nothing else, no hook, nothing of laravel-data's on it but a name map or a validation rule, and no
      * global transformer for its type. Through the pipeline, also no default and no global cast.
      *
+     * A fact of the class, so read once per property however many constructions and operations ask.
+     *
      * @param  class-string  $data
      */
     private function plain(string $data, string $property, bool $fromPipeline): bool
+    {
+        return $this->plain[$data."\0".$property."\0".($fromPipeline ? 'pipeline' : 'constructor')] ??= $this->readPlain($data, $property, $fromPipeline);
+    }
+
+    /**
+     * @param  class-string  $data
+     */
+    private function readPlain(string $data, string $property, bool $fromPipeline): bool
     {
         $reflection = new ReflectionProperty($data, $property);
         $type = $reflection->getType();
@@ -356,7 +371,7 @@ final class DataColumns
             return true;
         }
 
-        $default = $reflection->isPromoted() ? self::promotedDefault($data, $property) : $reflection->hasDefaultValue();
+        $default = $reflection->isPromoted() ? ($this->defaults[$data] ??= self::defaults($data))[$property] ?? false : $reflection->hasDefaultValue();
 
         return ! $default && ! in_array($type->getName(), $this->castTypes, true);
     }
@@ -507,14 +522,19 @@ final class DataColumns
     }
 
     /**
+     * Constructor parameter → whether `from()` could fall back to its default.
+     *
      * @param  class-string  $data
+     * @return array<string, bool>
      */
-    private static function promotedDefault(string $data, string $property): bool
+    private static function defaults(string $data): array
     {
-        $parameters = (new ReflectionClass($data))->getConstructor()?->getParameters() ?? [];
-        $named = array_filter($parameters, static fn (ReflectionParameter $parameter): bool => $parameter->getName() === $property);
+        $defaults = [];
+        foreach ((new ReflectionClass($data))->getConstructor()?->getParameters() ?? [] as $parameter) {
+            $defaults[$parameter->getName()] = $parameter->isDefaultValueAvailable();
+        }
 
-        return in_array(true, array_map(static fn (ReflectionParameter $parameter): bool => $parameter->isDefaultValueAvailable(), $named), true);
+        return $defaults;
     }
 
     /**
