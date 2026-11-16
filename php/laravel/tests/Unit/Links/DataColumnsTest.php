@@ -15,6 +15,7 @@ use Docuccino\Laravel\Links\DataColumns;
 use Docuccino\Laravel\Links\DataConstruction;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\BareVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\CamelVanData;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\CollectingVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\ConstructingVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\DefaultedVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\FleetVanData;
@@ -25,6 +26,7 @@ use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\MadeVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\MutableVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\NestedInputVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\NormalisingVanData;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\OverridingVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\OwnMapperVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\PaintedVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\SerialisingVanData;
@@ -156,6 +158,11 @@ it('carries nothing that is not a plain copy of the column', function (string $d
     'a creation method of its own, through from()' => [MadeVanData::class, [DataConstruction::model(Van::class)], []],
     'a creation method of its own, by the constructor' => [MadeVanData::class, [DataConstruction::arguments(['id' => [Van::class, 'id'], 'plate' => [Van::class, 'plate']])], ['id' => [Van::class, 'id'], 'plate' => [Van::class, 'plate']]],
     'normalizers of its own' => [NormalisingVanData::class, [DataConstruction::model(Van::class)], []],
+    // Its own `from()` builds the object from whatever it likes; the constructor is still laravel-data's.
+    'a from() of its own, through it' => [OverridingVanData::class, [DataConstruction::model(Van::class)], []],
+    'a from() of its own, by the constructor' => [OverridingVanData::class, [DataConstruction::arguments(['id' => [Van::class, 'id'], 'plate' => [Van::class, 'plate']])], ['id' => [Van::class, 'id'], 'plate' => [Van::class, 'plate']]],
+    // `collect()` is read as `from()` on each item, so one of its own stands in the same way.
+    'a collect() of its own' => [CollectingVanData::class, [DataConstruction::model(Van::class)], []],
     // A column under an accessor, a cast or a date is not the value the route matches.
     'an accessor, a date cast' => [VanData::class, [DataConstruction::arguments(['id' => [Van::class, 'registered_at'], 'plate' => [Van::class, 'colour']])], []],
     // A property the model declares is read in place of the attribute of its name.

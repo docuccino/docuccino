@@ -597,11 +597,11 @@ The link then points at the member the property is sent as: `#[MapOutputName]`, 
 envelope, so `"team": "$response.body#/data/slug"` under `data.wrap`.
 
 Only a plain copy counts, because the route looks the record up by what is stored. The property is a
-`readonly` `int` or `string`, not nullable, `Lazy` or `Optional`, with no cast, transformer, `#[Computed]`
-or `#[Hidden]`, and the column has no accessor or cast of its own. A writable property could be set
-again after the copy. Anything that could step in between
-gives nothing: a class with its own `toArray()` or `transform()`, a constructor with a body, a
-`from*()` method of its own, a default `from()` could fall back to, an envelope the action changes
+`readonly` `int` or `string`, not nullable, `Lazy` or `Optional`, with no cast, transformer,
+`#[Computed]` or `#[Hidden]`, and the column has no accessor or cast of its own. A writable property
+could be set again after the copy. Anything that could step in between gives nothing: a class with its
+own `toArray()` or `transform()`, a constructor with a body, its own `from()`, `collect()` or other
+`from*()` method, a default `from()` could fall back to, an envelope the action changes
 (`->withoutWrapping()`), a custom name mapper, or a global strategy beside a class-level map. A Data
 object nested in another gives nothing either: its members sit inside a shared component, not at one
 place in the response.

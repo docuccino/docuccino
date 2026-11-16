@@ -31,9 +31,9 @@ use ReflectionProperty;
  * Only a plain copy counts: a readonly, non-nullable `int` or `string` property with nothing of
  * laravel-data's on it but a name map or a validation rule, in a class whose constructor does nothing, whose
  * own serialisation is laravel-data's, whose envelope is settled, and whose names are mapped in a way this
- * mirrors exactly.
- * On the `from()` path, also no custom `from*()`, pipeline or normalizer that could step in first, and no
- * default or global cast that could stand in for the value. Anything else gives nothing.
+ * mirrors exactly. On the `from()` path, also no `from()`, `from*()`, pipeline or normalizer of the class's
+ * own that could step in first, and no default or global cast that could stand in for the value. Anything
+ * else gives nothing.
  *
  * @internal
  */
@@ -62,8 +62,11 @@ final class DataColumns
     /** The methods a Data object is serialised and sent through. */
     private const array SERIALISATION = ['transform', 'toArray', 'jsonSerialize', 'toJson', 'all', 'toResponse', 'with', 'getAdditionalData', 'getWrap'];
 
-    /** The methods laravel-data's `from()` builds an object through before it reaches the constructor. */
-    private const array CREATION = ['normalizers', 'pipeline', 'prepareForPipeline'];
+    /**
+     * The methods laravel-data builds an object through from what `from()` or `collect()` is handed, before
+     * it reaches the constructor: the two themselves, and what they call.
+     */
+    private const array CREATION = ['from', 'collect', 'normalizers', 'pipeline', 'prepareForPipeline'];
 
     private const string MODEL_NORMALIZER = 'Spatie\\LaravelData\\Normalizers\\ModelNormalizer';
 
@@ -293,9 +296,9 @@ final class DataColumns
     }
 
     /**
-     * Whether `from()` reaches the constructor with what the normalizer read, untouched: no custom
-     * creation method it would call instead, no pipeline or normalizer of the class's own, and the first
-     * normalizer that takes the payload is `$normalizer`.
+     * Whether `from()` reaches the constructor with what the normalizer read, untouched: no `from()` of
+     * the class's own, no custom creation method it would call instead, no pipeline or normalizer of the
+     * class's own, and the first normalizer that takes the payload is `$normalizer`.
      *
      * @param  class-string  $data
      */
