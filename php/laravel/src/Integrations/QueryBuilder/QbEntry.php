@@ -22,6 +22,8 @@ namespace Docuccino\Laravel\Integrations\QueryBuilder;
  *     comparison (scope/callback/operator) keeps a scalar enum schema.
  *   - `default`: the value `->default()` was given, a list where it was given one — Spatie applies it as
  *     if it had been sent, so its shape on the schema is the parameter's to decide.
+ *   - `delimiter`: the filter's own `->delimiter()`, which its values split on in place of the configured
+ *     one. Null where it set none.
  *
  * @phpstan-type FilterDefault string|int|float|bool|list<string|int|float|bool>|null
  */
@@ -49,6 +51,7 @@ final readonly class QbEntry
         // the factory's declaring class, which is a fragment-cache dependency.
         public ?string $factoryEnum = null,
         public ?string $factoryClass = null,
+        public ?string $delimiter = null,
     ) {}
 
     /** The column a cast lookup keys on: the internal name if recovered, else the public one. */
@@ -88,6 +91,7 @@ final readonly class QbEntry
             $example ?? $this->example,
             $this->factoryEnum,
             $this->factoryClass,
+            $this->delimiter,
         );
     }
 
@@ -109,6 +113,7 @@ final readonly class QbEntry
             $this->example,
             $this->factoryEnum,
             $this->factoryClass,
+            $this->delimiter,
         );
     }
 }

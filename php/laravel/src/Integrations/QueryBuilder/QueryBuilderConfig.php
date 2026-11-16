@@ -85,6 +85,31 @@ final readonly class QueryBuilderConfig
     }
 
     /**
+     * The config one filter's values are read under: its own `->delimiter()` in place of the configured
+     * one, which is what Spatie splits that filter on. Everything else is the document's.
+     */
+    public function forFilter(QbEntry $filter): self
+    {
+        if ($filter->delimiter === null || $filter->delimiter === $this->delimiter) {
+            return $this;
+        }
+
+        return new self(
+            filter: $this->filter,
+            sort: $this->sort,
+            include: $this->include,
+            fields: $this->fields,
+            recovered: $this->recovered,
+            strict: $this->strict,
+            countSuffix: $this->countSuffix,
+            existsSuffix: $this->existsSuffix,
+            delimiter: $filter->delimiter,
+            spatieMajor: $this->spatieMajor,
+            filterDescriptions: $this->filterDescriptions,
+        );
+    }
+
+    /**
      * Built from the effective `query-builder` config bag; an empty one yields defaults, unrecovered.
      *
      * @param  array<string, mixed>  $config

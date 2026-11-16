@@ -301,6 +301,34 @@ it('degrades a non-constant ->default() to no default without dropping the entry
         ->and($facts->unresolved)->toBe([]);
 });
 
+/**
+ * Spatie splits a filter's values on its own `->delimiter()` where it set one, so the separator is part of
+ * the filter, read at the call site and in a helper's body alike — and written either side of a default,
+ * which is still the filter's default. The empty separator turns splitting off and is a value too.
+ */
+it('reads a filter\'s own ->delimiter(), at the call site and in a helper\'s body', function (string $modifiers, ?string $delimiter, ?string $default): void {
+    $called = traceQbSnippet(
+        "QueryBuilder::for(App\\Models\\User::class)->allowedFilters([AllowedFilter::exact('status'){$modifiers}])"
+    );
+    $folded = traceQbSnippet(
+        'QueryBuilder::for(App\\Models\\User::class)->allowedFilters([$this->statusFilter()])',
+        foldedReturns: ['statusFilter' => TraceScript::foldOf("AllowedFilter::exact('status'){$modifiers}")],
+    );
+
+    foreach ([$called, $folded] as $visitor) {
+        expect($visitor->facts->filters)->toHaveCount(1)
+            ->and($visitor->facts->filters[0]->delimiter)->toBe($delimiter)
+            ->and($visitor->facts->filters[0]->default)->toBe($default);
+    }
+})->with([
+    'none' => ['', null, null],
+    'a pipe' => ["->delimiter('|')", '|', null],
+    'no splitting' => ["->delimiter('')", '', null],
+    'before a default' => ["->delimiter('|')->default('draft|published')", '|', 'draft|published'],
+    'after a default' => ["->default('draft')->delimiter('|')", '|', 'draft'],
+    'set twice, the last call standing' => ["->delimiter(';')->delimiter('|')", '|', null],
+]);
+
 it('records a first-class-callable modifier as unresolved rather than peeling past it', function (): void {
     // `->default(...)` makes the whole entry a closure, not a configured filter. Peeling it would document
     // a filter the code never registers — and php-parser asserts on getArgs() for a first-class callable,
