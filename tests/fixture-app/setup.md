@@ -441,7 +441,8 @@ in the file being walked, and an array return is no type the trace follows:
   response, a redirect, a stream, a file and Symfony's own response, each handing `parent::__construct()` a
   literal, a constant, an enum case's read or a parameter of its own constructor, or setting the status in
   that constructor; two classes below the framework, a fixed JSON body, a private constructor's factory, a
-  `Responsable` rendering through the factory, and one setting its status on one branch only.
+  `Responsable` rendering through the factory, and a plain and a JSON response each setting its status on
+  one branch only.
 - `app/Http/Controllers/PlainResponseBodyController.php` and `app/Http/Responses/LockedNoticeResponse.php` —
   plain responses handed a string, nothing or an array: constructed, through the `response()` helper, the
   factory, the `Response` facade, Symfony's own response and a subclass handing its parent the content,

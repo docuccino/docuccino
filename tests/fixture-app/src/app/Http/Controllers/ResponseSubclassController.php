@@ -16,6 +16,7 @@ use App\Http\Responses\GoneResult;
 use App\Http\Responses\LockedStreamResponse;
 use App\Http\Responses\MovedResponse;
 use App\Http\Responses\PartialFileResponse;
+use App\Http\Responses\PendingJsonResponse;
 use App\Http\Responses\QuotaResponse;
 use App\Http\Responses\RetryLaterResponse;
 use App\Http\Responses\UnavailableResponse;
@@ -131,6 +132,11 @@ class ResponseSubclassController extends Controller
     public function branching(): BranchingResponse
     {
         return new BranchingResponse;
+    }
+
+    public function branchingJson(): PendingJsonResponse
+    {
+        return new PendingJsonResponse(['queued' => true]);
     }
 
     private function retry(int $status = 503): RetryLaterResponse
