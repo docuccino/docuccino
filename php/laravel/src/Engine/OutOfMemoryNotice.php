@@ -19,7 +19,8 @@ use Docuccino\Core\Pipeline\BuildWorkers;
  * stops at the first that fails, and the framework's error handler — registered while the application
  * bootstraps, before any build arms this — reports the fatal first, on a heap that is already full. So
  * {@see shutdown()} is registered from the package's autoload file, ahead of everything, and only gives the
- * shutdown work room and queues the notice behind it.
+ * shutdown work room and queues the notice behind it. Nor may it make a function's first call before it has
+ * raised the ceiling: PHP takes memory for that, and a heap that ran out may have none to give.
  *
  * Console only, armed at most once, and spoken only by the process that armed it — never by a worker
  * forked from the build, which inherits the shutdown function too ({@see BuildWorkers}). A normal
@@ -52,6 +53,10 @@ final class OutOfMemoryNotice
         // Written now, while there is memory to spare: the shutdown that reads it has none, and building the
         // text there would load classes the build may never have needed.
         self::$text = self::text((string) ini_get('memory_limit'));
+        // The shutdown runs once now, finding no exhaustion, so everything it calls before raising the ceiling
+        // has had its first call while there is memory for one.
+        self::$reserve = '';
+        self::shutdown();
         self::$reserve = str_repeat("\0", self::RESERVE);
     }
 

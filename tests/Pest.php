@@ -390,6 +390,53 @@ function runPhp(string $body, array $arguments = [], array $ini = [], float $tim
 }
 
 /**
+ * PHP for a {@see runPhp()} body that leaves the engine's compiler arena with no room for one more function's
+ * first call, which is where PHP puts that function's run-time cache. A first call made after that, once the
+ * heap has run out, has to grow the arena and cannot. Running out of memory alone leaves that to chance: how
+ * full the arena is depends on everything the process did before. Prints `arena: <growths>`, so a test can
+ * tell that the fill found the arena's edge rather than passing for want of it.
+ */
+function fillingTheArena(): string
+{
+    return <<<'PHP'
+        $fills = 40000;
+        $code = '';
+        for ($i = 0; $i < $fills; $i++) {
+            $code .= "function docuccino_fill_{$i}(\$a) { return abs(\$a); }\n";
+        }
+
+        eval($code);
+        unset($code);
+
+        // Each call is a first call taking the same few bytes, so the calls between two growths fill one block,
+        // and that many less one after a third growth leave it short of room for another.
+        $calls = 0;
+        $grows = static function () use (&$calls): bool {
+            $fill = 'docuccino_fill_'.$calls++;
+            $before = memory_get_usage();
+            $fill(1);
+
+            return memory_get_usage() - $before >= 16384;
+        };
+
+        $growths = [];
+        while ($calls < $fills && count($growths) < 3) {
+            if ($grows()) {
+                $growths[] = $calls;
+            }
+        }
+
+        if (count($growths) === 3) {
+            for ($i = 1; $i < $growths[2] - $growths[1] && $calls < $fills; $i++) {
+                $grows();
+            }
+        }
+
+        echo "\narena: ".count($growths)."\n";
+        PHP;
+}
+
+/**
  * A {@see TypeEngine} answering as `$inner` does that counts every question asked of it in the process that
  * made it. With `$deaths` set, the first forked copy of that process to ask a second question kills itself
  * there, leaving a file in `$deaths` to say so — how a test stands a worker dying with work half done.

@@ -181,6 +181,31 @@ it('still explains exhaustion when a shutdown function registered before the not
         ->and($explained)->toBeGreaterThan(max((int) $reported, (int) $again));
 });
 
+it('still explains exhaustion when the heap has no room left for a function\'s first call', function (): void {
+    // A function's first call takes memory, and a build that ran out has none to give until the notice lets
+    // go of its reserve. Any first call the shutdown work makes before that is a second fatal, and PHP runs
+    // nothing after one: no report, no notice. The build's workers are loaded, as in any build, so their
+    // hook, which runs ahead of the notice's, is held to the same.
+    $run = runPhp(<<<'PHP'
+        Docuccino\Core\Pipeline\BuildWorkers::none();
+        Docuccino\Laravel\Engine\OutOfMemoryNotice::arm();
+        PHP."\n".fillingTheArena()."\n".<<<'PHP'
+        ini_set('memory_limit', (string) (memory_get_usage(true) + 8 * 1024 * 1024));
+        $hog = [];
+        while (true) {
+            $hog[] = str_repeat('x', 512);
+        }
+        PHP, ini: ['memory_limit' => '512M', 'display_errors' => 'stderr', 'log_errors' => '0'], timeout: 30.0);
+
+    $explained = strrpos($run['output'], 'Docuccino ran out of memory building your documentation');
+
+    expect($run['output'])->toContain('arena: 3')
+        ->and($run['exit'])->toBe(255)
+        ->and(substr_count($run['output'], 'Allowed memory size of'))->toBe(1, $run['output'])
+        ->and($explained)->not->toBeFalse($run['output'])
+        ->and(trim(substr($run['output'], (int) $explained)))->toEndWith('attributes alone.');
+});
+
 it('leaves the ceiling alone when an armed build shuts down without running out', function (): void {
     // The early shutdown hook runs at the end of every console process, armed or not; only exhaustion is a
     // reason to move the ceiling past what the build asked for.

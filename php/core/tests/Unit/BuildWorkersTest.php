@@ -361,6 +361,29 @@ it('lets every process but a worker carry on past its first shutdown function', 
     expect(posix_kill(posix_getpid(), 0))->toBeTrue();
 });
 
+it('lets a build that runs out of memory past its first shutdown function, even with no room left for a first call', function (): void {
+    // The first shutdown function every process has is the worker hook, so the build's own shutdown work runs
+    // only once that has let it by. Calling into the workers there would be a method's first call, which takes
+    // memory a build that ran out has none of, and PHP would stop at that second fatal with nothing after it run.
+    $run = runPhp(<<<'PHP'
+        Docuccino\Core\Pipeline\BuildWorkers::none();
+        register_shutdown_function(static function (): void {
+            fwrite(STDOUT, "\nshut down\n");
+        });
+        PHP."\n".fillingTheArena()."\n".<<<'PHP'
+        ini_set('memory_limit', (string) (memory_get_usage(true) + 8 * 1024 * 1024));
+        $hog = [];
+        while (true) {
+            $hog[] = str_repeat('x', 512);
+        }
+        PHP, ini: ['memory_limit' => '512M', 'display_errors' => 'stdout', 'log_errors' => '0'], timeout: 30.0);
+
+    expect($run['output'])->toContain('arena: 3')
+        ->and($run['exit'])->toBe(255)
+        ->and(substr_count($run['output'], 'Allowed memory size of'))->toBe(1, $run['output'])
+        ->and(trim($run['output']))->toEndWith('shut down');
+});
+
 it('builds alone when this machine refuses a fork, under a host that turns every warning into an exception', function (): void {
     $run = runPhp(<<<'PHP'
         // One process for this user, set here rather than by a shell, since `sh` is dash on some systems and
