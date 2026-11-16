@@ -140,9 +140,13 @@ final class DataSourceVisitor implements TraceVisitor
                 'getRouteKey' => BodyColumns::ROUTE_KEY,
                 default => null,
             };
-            $model = $marker === null ? null : self::model($scope->typeOf($value->var));
+            if ($marker === null) {
+                return null;
+            }
 
-            return $model === null || $marker === null ? null : [$model, $marker];
+            $model = self::model($scope->typeOf($value->var));
+
+            return $model === null ? null : [$model, $marker];
         }
 
         return null;
