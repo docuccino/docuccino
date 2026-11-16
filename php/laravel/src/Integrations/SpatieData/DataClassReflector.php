@@ -167,6 +167,8 @@ final class DataClassReflector
     /** The attributes laravel-data writes as a rule string, from their own `keyword()` and `parameters()`. */
     private const STRING_ATTRIBUTE = 'Spatie\\LaravelData\\Attributes\\Validation\\StringValidationAttribute';
 
+    private const REQUIRING_RULE = 'Spatie\\LaravelData\\Support\\Validation\\RequiringRule';
+
     private const FIELD_REFERENCE = 'Spatie\\LaravelData\\Support\\Validation\\References\\FieldReference';
 
     /** Any `BaseData` implementor that isn't itself a collectable — the schema mapper's trigger. */
@@ -608,15 +610,49 @@ final class DataClassReflector
         return null;
     }
 
-    /** A spatie `#[Prohibited]` property is documented as never-sendable. */
-    public function isProhibited(string $fqcn, string $property): bool
+    /**
+     * What each `#[Prohibited]` on the property validates with, as laravel-data builds it: the `prohibited` rule
+     * string, or the `ProhibitedIf` object it was handed.
+     *
+     * @return list<object|string>
+     */
+    public function prohibitions(string $fqcn, string $property): array
+    {
+        $reflection = $this->property($fqcn, $property);
+        if ($reflection === null) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($reflection->getAttributes(self::VALIDATION_NS.'Prohibited') as $attribute) {
+            $rule = self::builtRule($attribute);
+            if ($rule !== null) {
+                $out[] = $rule;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Whether the property carries one of spatie's `RequiringRule` attributes — `#[Required]` and the
+     * `#[Required…]` family — which take the place of the `required` its type implies, whatever rule they go
+     * on to build: a `#[Required(new RequiredIf(false))]` builds none, and the property is not required.
+     */
+    public function statesRequiringRule(string $fqcn, string $property): bool
     {
         $reflection = $this->property($fqcn, $property);
         if ($reflection === null) {
             return false;
         }
 
-        return $reflection->getAttributes(self::VALIDATION_NS.'Prohibited') !== [];
+        foreach ($reflection->getAttributes() as $attribute) {
+            if (is_a($attribute->getName(), self::REQUIRING_RULE, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

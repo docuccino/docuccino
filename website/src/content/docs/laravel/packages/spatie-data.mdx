@@ -218,6 +218,11 @@ The escape hatches work as you'd hope:
   attribute such as `#[Enum]`, `#[In]` or `#[Exclude]` takes in place of its parameters, which is what
   laravel-data validates with. A rule object Laravel casts to a string, like `new Dimensions([...])`,
   reads as that string.
+- `#[Required(new RequiredIf(…))]` and `#[Prohibited(new ProhibitedIf(…))]` read as the condition settles
+  them, as in a form request: a literal `true` is `required` or `prohibited`, and a literal `false` is no
+  rule. Like laravel-data, `#[Required]` takes the place of the `required` the property's type implies, so
+  `#[Required(new RequiredIf(false))] public string $phone` is optional. A closure, which PHP 8.5 allows in
+  an attribute, is never called: the property is documented optional, or sendable.
 - An attribute Docuccino doesn't recognize degrades like an unknown string rule — permissive, with an
   info diagnostic — rather than inventing a constraint.
 
@@ -669,7 +674,7 @@ JSON your app actually produces and accepts:
 | `#[HiddenFromRequest]` (Docuccino) | Drops the property from the **request** body only; the response schema is untouched. |
 | `#[Computed]` / `#[WithoutValidation]` | Excluded from the request body — a computed/server-derived value is never a sendable field. |
 | `#[FromRouteParameter]` | Excluded from the request body — populated from the route binding, not the payload. |
-| `#[Prohibited]` (Spatie validation) | Excluded from the request body — documenting a field the API refuses would invite exactly that. |
+| `#[Prohibited]` (Spatie validation) | Excluded from the request body — documenting a field the API refuses would invite exactly that. Handed a `ProhibitedIf`, it is excluded only when the condition is a literal `true`; otherwise the field stays sendable. |
 | `Optional` / `Lazy` | Makes the property non-required. |
 | A constructor default | Makes the property non-required, and documents the value as `default`. |
 | `#[MapName]` / `#[MapInputName]` / `#[MapOutputName]` | Renames the property key to the mapped name, per direction. |

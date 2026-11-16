@@ -55,6 +55,20 @@ $objects = [
         ConstValue::instance(ExcludeIf::class, [ConstValue::unknown('a closure')]),
     ],
     'an exclusion unless' => [static fn () => new ExcludeUnless(false), ConstValue::instance(ExcludeUnless::class, [$string(false)])],
+    'a requirement that holds' => [static fn () => new RequiredIf(true), ConstValue::instance(RequiredIf::class, [$string(true)])],
+    'a requirement on a closure' => [
+        static fn () => new RequiredIf(static fn (): bool => true),
+        ConstValue::instance(RequiredIf::class, [ConstValue::unknown('a closure')]),
+    ],
+    'a requirement unless' => [
+        static fn () => new ($rules.'RequiredUnless')(false),
+        ConstValue::instance($rules.'RequiredUnless', [$string(false)]),
+    ],
+    'a prohibition that does not hold' => [static fn () => new ProhibitedIf(false), ConstValue::instance(ProhibitedIf::class, [$string(false)])],
+    'a prohibition unless' => [
+        static fn () => new ($rules.'ProhibitedUnless')(true),
+        ConstValue::instance($rules.'ProhibitedUnless', [$string(true)]),
+    ],
     // Laravel 13's own objects for the field-presence exclusions.
     'an exclusion with a field' => [
         static fn () => new ($rules.'ExcludeWith')('other'),
@@ -79,14 +93,14 @@ it('reads a framework rule object as the new that built it', function (Closure $
 it('reads every framework object the rules-array fold reads by its arguments', function () use ($objects): void {
     // The fold's own tables are the domain; each class in them owes a row above and a reading of its state.
     $domain = [];
-    foreach (['FACTORY_OBJECTS', 'EXCLUDE_OBJECTS', 'EXCLUDE_FIELD_OBJECTS'] as $table) {
+    foreach (['FACTORY_OBJECTS', 'CONDITIONAL_OBJECTS', 'EXCLUDE_FIELD_OBJECTS'] as $table) {
         $domain = [...$domain, ...array_keys((array) (new ReflectionClassConstant(ConstValueToRules::class, $table))->getValue())];
     }
 
     $rows = array_values(array_unique(array_map(static fn (array $row): string => (string) $row[1]->class, $objects)));
     $read = array_keys((array) (new ReflectionClassConstant(LiveRuleValue::class, 'ARGUMENTS'))->getValue());
 
-    expect($domain)->toHaveCount(10)
+    expect($domain)->toHaveCount(14)
         ->and($rows)->toEqualCanonicalizing($domain)
         ->and($read)->toEqualCanonicalizing($domain);
 });
@@ -133,9 +147,51 @@ it('reads a framework rule object Laravel casts to a string as that string', fun
 })->with([
     'a minimum width' => [static fn () => new Dimensions(['min_width' => 10])],
     'bounds set one by one' => [static fn () => (new Dimensions)->maxHeight(50)->minWidth(10)->ratio(3 / 2)],
-    'a requirement that holds' => [static fn () => new RequiredIf(true)],
-    'a requirement that does not' => [static fn () => new RequiredIf(false)],
-    'a prohibition that holds' => [static fn () => new ProhibitedIf(true)],
+]);
+
+it('reads a conditional rule object settled where it was built as the rule Laravel casts it to', function (string $class, bool $condition): void {
+    if (! class_exists($class)) {
+        $this->markTestSkipped('The installed Laravel has no '.$class.'.');
+    }
+
+    // A literal condition is what the object's own cast reads, so the field is validated with the rule it
+    // applies, or with none at all; Laravel's parser is the statement of which.
+    $rule = new $class($condition);
+
+    expect((new ConstValueToRules)->fold(LiveRuleValue::of($rule)))->toEqual((new ConstValueToRules)->fold(laravelParsedRules($rule)));
+})->with(array_merge(...array_map(
+    static fn (string $short): array => [
+        $short.'(true)' => ['Illuminate\\Validation\\Rules\\'.$short, true],
+        $short.'(false)' => ['Illuminate\\Validation\\Rules\\'.$short, false],
+    ],
+    ['RequiredIf', 'RequiredUnless', 'ProhibitedIf', 'ProhibitedUnless', 'ExcludeIf', 'ExcludeUnless'],
+)));
+
+it('reads a conditional rule object on a closure without running the closure', function (string $class, string $unknown): void {
+    if (! class_exists($class)) {
+        $this->markTestSkipped('The installed Laravel has no '.$class.'.');
+    }
+
+    // The closure answers for the request it is called in, which no build is; its answer at build time is no
+    // statement about the endpoint. So the rule stands on a condition this build cannot read.
+    $ran = false;
+    $rule = new $class(static function () use (&$ran): bool {
+        $ran = true;
+
+        return true;
+    });
+
+    $read = (new ConstValueToRules)->fold(LiveRuleValue::of($rule));
+
+    expect(array_map(static fn ($r): array => [$r->name, $r->parameters], $read))->toBe([[$unknown, []]])
+        ->and($ran)->toBeFalse();
+})->with([
+    'RequiredIf' => ['Illuminate\\Validation\\Rules\\RequiredIf', 'required_if'],
+    'RequiredUnless' => ['Illuminate\\Validation\\Rules\\RequiredUnless', 'required_unless'],
+    'ProhibitedIf' => ['Illuminate\\Validation\\Rules\\ProhibitedIf', 'prohibited_if'],
+    'ProhibitedUnless' => ['Illuminate\\Validation\\Rules\\ProhibitedUnless', 'prohibited_unless'],
+    'ExcludeIf' => ['Illuminate\\Validation\\Rules\\ExcludeIf', 'exclude_if'],
+    'ExcludeUnless' => ['Illuminate\\Validation\\Rules\\ExcludeUnless', 'exclude_unless'],
 ]);
 
 it('reads a password as the rules Laravel validates it with first', function (Closure $live, bool $checks): void {

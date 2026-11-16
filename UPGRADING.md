@@ -82,8 +82,9 @@ generated from the document changes.
 
 Only if you diff a document committed before the upgrade against a build after it, or gate it with
 `--enforce`. Eight fixes make a choice rule publish what Laravel checks, three more do the same for
-Spatie Data's rule strings, its validation attributes and the attributes that build a rule object, and
-the differ reads each as breaking where the rule is used:
+Spatie Data's rule strings, its validation attributes and the attributes that build a rule object, one
+more for a required rule on a literal condition, and the differ reads each as breaking where the rule is
+used:
 
 - **`new Enum` and `new In` publish their values.** Both were dropped, so the field published no
   `enum`. An `enum` arriving where nothing constrained the field (`schema.enum-added`) is a narrowing,
@@ -144,6 +145,14 @@ the differ reads each as breaking where the rule is used:
   constraint; it now publishes the `minLength: 10` of the `string|min:10` a password is validated with
   first, a narrowing. `#[Dimensions(minWidth: 10)]` described the image as `10`, and now as
   `min_width=10`, which is not breaking.
+- **A required or prohibited rule on a literal condition publishes what it settles to.**
+  `Rule::requiredIf(true)` and `new RequiredIf(true)` were left out with a `validation.rule-unrecoverable`
+  note, so the field was optional; it is now required (`schema.required-added`), which is breaking.
+  `Rule::prohibitedIf(true)` and `new ProhibitedIf(true)` now leave the field out, as `prohibited` does,
+  which is not breaking. The rest only widen. A Spatie Data `#[Required(new RequiredIf(false))]` replaces
+  the `required` the property's type implied, as it does in laravel-data, so the property is no longer
+  required. A `#[Prohibited(new ProhibitedIf(false))]` property was left out and is now documented. A
+  closure condition is no longer called during the build, so the field is optional, or sendable.
 
 So a gate run with `--enforce` fails on the upgrade. Your API did not change: in each case the
 document now says what your server already did. Upgrade in a pull request of its own, so the
