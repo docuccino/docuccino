@@ -13,6 +13,130 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.24.0
+
+### Breaking changes
+
+- **laravel**: read Laravel's password, file and email rule builders, and dimensions given as a keyed array, as the rules they validate with ([#769](https://github.com/docuccino/docuccino/pull/769))
+  - a field validated by `new Password`, `Password::min()`, `Rule::email()`, `new Email`, `File::types()`, `File::image()`, `Rule::file()` or `Rule::imageFile()` in a rules array now publishes the type, length or format the rule checks, and a file rule makes the request `multipart/form-data`. `docuccino:diff` reports a type arriving as breaking. Regenerate committed documents after upgrading.
+- **laravel**: document a Spatie Data request date in every format its cast reads, and leave one an app's own cast reads untyped ([#764](https://github.com/docuccino/docuccino/pull/764))
+  - a Spatie Data request date is documented as laravel-data's cast reads it. A list of formats names every format the cast tries, an application's own cast leaves the property untyped, a `!` or `|` reset is left out of the format named (so `!Y-m-d` is `format: date`), and `date_format:Y-m-d,d/m/Y` names both patterns. Most of these only widen, but where a `format` arrives or changes, a committed document diffed across the upgrade reports it as breaking. Regenerate it and review the change in its own pull request.
+- **laravel**: document a Spatie Data response date as its transformer writes it ([#762](https://github.com/docuccino/docuccino/pull/762))
+  - a Spatie Data response date is now documented as laravel-data writes it. A property with a `U` cast is now the configured date string instead of an integer, a `#[WithTransformer]` format replaces the app's, the first entry of a list-valued `data.date_format` is used, and a property with an application's own transformer is untyped. Nothing needs editing. A client generated from the document changes, and `docuccino:diff` reports the changed type as breaking.
+- **laravel**: keep what a field's rules enforce beneath the description its author writes ([#757](https://github.com/docuccino/docuccino/pull/757))
+  - An extension that reads the schema `ValidationRulesToSchema::convert()` returns now finds each field's notes under `x-docuccino.notes` rather than in its description. Render them with `SchemaNotes::rendered()` before publishing the schema any way other than a request body or a component. A `RuleTransformer` should state a fact with `$field->note()`, and `ValidationField::get('description')` no longer includes earlier notes.
+- **laravel**: a required or prohibited rule on a condition publishes what the condition settles ([#754](https://github.com/docuccino/docuccino/pull/754))
+  - a field carrying `Rule::requiredIf(true)` or `new RequiredIf(true)` now publishes as required, a narrowing `docuccino:diff` reports as breaking. Regenerate committed documents after upgrading.
+- **laravel**: read a Spatie Data attribute that builds a rule object as the object laravel-data validates with ([#752](https://github.com/docuccino/docuccino/pull/752))
+  - a field carrying `#[Password]` now publishes the `minLength` it is validated with, a narrowing `docuccino:diff` reports as breaking. Regenerate committed documents after upgrading.
+- **laravel**: read a Spatie Data validation attribute as the rule laravel-data writes for it ([#747](https://github.com/docuccino/docuccino/pull/747))
+  - a Spatie Data validation attribute now publishes the rule laravel-data writes for it. `#[GreaterThan]`, `#[GreaterThanOrEqualTo]`, `#[LessThan]` and `#[LessThanOrEqualTo]` given a number publish their bound, and `#[ListType]` types the field as an array, where nothing was published before. A committed document diffed across the upgrade reports these as breaking. Regenerate it and review the change in its own pull request.
+- **laravel**: a choice attribute on a Spatie Data array property lists the elements laravel-data checks ([#745](https://github.com/docuccino/docuccino/pull/745))
+  - a choice attribute on a Spatie Data property typed `array` now publishes its `enum` on `items` (or on `additionalProperties` for a map) instead of on the field, and `#[NotIn]` now refuses the arrays whose every value is listed. The server's behaviour has not changed. A committed document diffed across the upgrade reports these as breaking. Regenerate it and review the change in its own pull request.
+- **laravel**: split a Spatie Data rule string at its pipes as laravel-data does ([#744](https://github.com/docuccino/docuccino/pull/744))
+  - a Spatie Data `#[Rule]` string, or a string in a list in a Data class's `rules()`, now publishes every rule its pipes separate, and a `rules()` string holding `regex:` publishes its pattern. `docuccino:diff --enforce` reads the new `maxLength` or `pattern` as a narrowing. Upgrade in a pull request of its own and review what moved; see UPGRADING.md.
+- **laravel**: a choice list beside an array rule lists the elements Laravel checks ([#736](https://github.com/docuccino/docuccino/pull/736))
+  - a choice list beside `array` moves from the field to `items`, and `not_in` beside `array` now refuses the arrays whose every element is listed. A diff across the upgrade reports `schema.enum-removed` and `schema.enum-added`; regenerate and review the committed document.
+- **laravel**: read a choice list as Laravel does, keeping an empty or quoted entry and each value an #[In] is given ([#734](https://github.com/docuccino/docuccino/pull/734))
+  - a published choice list changes where a rule string quotes an entry or leaves one empty, where a Spatie `#[In]`/`#[NotIn]` is given a boolean, a value holding a comma, or a reference only a request resolves, and a `regex` holding a comma changes its `pattern`. `docuccino:diff --enforce` reports the entries leaving an `enum` and a `not` or `pattern` arriving as breaking; your API did not change. See UPGRADING.md.
+- **laravel**: publish the choices a rule object states in a Spatie Data attribute ([#733](https://github.com/docuccino/docuccino/pull/733))
+  - A request field whose Spatie Data attribute carries one of Laravel's rule objects now publishes that rule's `enum` or `not`. An `#[Enum]` with `only:`/`except:` lists only the cases it allows. So `docuccino:diff --enforce` against a document built before the upgrade reports these narrowings as breaking. The API itself did not change; review the changeset in a PR of its own (see UPGRADING.md).
+- **laravel**: a choice rule beside a type rule publishes its values in that type, so string|in:1,2 takes "1" ([#729](https://github.com/docuccino/docuccino/pull/729))
+  - a field with a type rule beside `in`, `Rule::in`, `Rule::enum` or `not_in` publishes its values in that type, so `docuccino:diff` reports values leaving an `enum` (breaking) across the upgrade, and `string` beside an int-backed `Rule::enum()` no longer refers to the enum's component. Nothing needs editing. Upgrade in a pull request of its own and read the changeset (UPGRADING.md).
+- **core**: publish the bounds a declared tagged union's rules add where client generators read them ([#728](https://github.com/docuccino/docuccino/pull/728))
+  - a field whose `#[BodyParameter]` names a tagged union the rules bound further is published as a `oneOf` of the union's members rather than a `$ref` to the union, so a generated client's type for that field becomes the members' union. `docuccino:diff` reports no change across the move.
+- **core**: escape a data-leakage pointer and name a parameter by in:name, so a safelist entry stays on its parameter ([#712](https://github.com/docuccino/docuccino/pull/712))
+  - a `lint.data-leakage` pointer is RFC 6901-escaped and names a listed parameter by `in:name` rather than its position, so a `lint.leakage.allow` entry written against the old spelling (`/paths//api/users/get/parameters/0/name`) no longer silences anything. The finding's help names the entry and the pointer to write instead (`/paths/~1api~1users/get/parameters/query:api_key/name`).
+- **laravel**: an enum case in a choice rule publishes the value Laravel compares, not its name ([#708](https://github.com/docuccino/docuccino/pull/708))
+  - `TypeScope::constantValueOf()` now folds an enum case to a `ConstValue` of kind `case` (`isCase()`, `class`, `caseName()`) instead of a scalar holding the case name, and a plain constant on an enum folds to its value. A trace visitor that read a case's name from `scalar` must read `caseName()`.
+- **core**: an @example is read against everything its schema admits, so null beside a nullable enum is null ([#697](https://github.com/docuccino/docuccino/pull/697))
+  - an `@example` (or `#[RuleSchema]` example) that has the right type but is not one of its schema's allowed values, such as `@example active` beside an enum of `draft`/`published`, is no longer published. It raises `docblock.example-untypable`, naming the values that would be accepted. It used to be published and reported by `lint.example-mismatch`, so an example kept with `lint.examples.allow` now disappears. On a validation field, an example generated from the field's other rules takes its place where they pin a value. Change the example to an allowed value.
+
+### Features
+
+- **laravel**: link a Spatie Data response built from a model ([#798](https://github.com/docuccino/docuccino/pull/798))
+- **core**: write the links known from the code as OpenAPI response links ([#797](https://github.com/docuccino/docuccino/pull/797))
+- **laravel**: accept a diagnostic at one operation, so the same code on another route still fails --fail-on ([#743](https://github.com/docuccino/docuccino/pull/743))
+
+### Bug fixes
+
+- **inference-phpstan**: publish ValidationException::errors() as the field-keyed map the server sends ([#796](https://github.com/docuccino/docuccino/pull/796))
+- **inference-phpstan**: a response reassigned from itself no longer recurses until memory runs out ([#795](https://github.com/docuccino/docuccino/pull/795))
+- address the v0.24 tip reviews' findings ([#794](https://github.com/docuccino/docuccino/pull/794))
+- **inference-phpstan**: a real-time facade no longer fails the analysis of every action in its file ([#793](https://github.com/docuccino/docuccino/pull/793))
+- **laravel**: an exception mapper answering with an HttpResponseException documents the response it carries ([#792](https://github.com/docuccino/docuccino/pull/792))
+- **inference-phpstan**: a construction, call or return an argument always throws ahead of is not documented ([#791](https://github.com/docuccino/docuccino/pull/791))
+- **laravel**: name a Spatie Data field reference in nested Data by the path laravel-data compares it at ([#789](https://github.com/docuccino/docuccino/pull/789))
+- **laravel**: state a page size's fallback in prose when it sits outside the bounds its validation publishes ([#788](https://github.com/docuccino/docuccino/pull/788))
+- **laravel**: document a Query Builder filter as one value when filter value splitting is turned off ([#787](https://github.com/docuccino/docuccino/pull/787))
+- **laravel**: publish the token, Passport and default security requirement behind an application's own authenticator alias ([#786](https://github.com/docuccino/docuccino/pull/786))
+- **inference-phpstan**: a call through a root-namespace facade alias reads as the facade it names ([#785](https://github.com/docuccino/docuccino/pull/785))
+- **inference-phpstan**: a plain response handed content that may be JSON or text documents any media type, at every status ([#784](https://github.com/docuccino/docuccino/pull/784))
+- **inference-phpstan**: a document built after another in one process keeps the responses the engine reads ([#783](https://github.com/docuccino/docuccino/pull/783))
+- **inference-phpstan**: a render callback that hands the exception to a helper documents the problem the helper's arm builds, not its status alone ([#782](https://github.com/docuccino/docuccino/pull/782))
+- **inference-phpstan**: a fluent chain documents what each link changes, on any response the application builds ([#781](https://github.com/docuccino/docuccino/pull/781))
+- **inference-phpstan**: a status or media type set on its own line on a returned response documents what it sets ([#780](https://github.com/docuccino/docuccino/pull/780))
+- **inference-phpstan**: read one copy of phpdoc-parser, so an application's newer one no longer fails every action ([#779](https://github.com/docuccino/docuccino/pull/779))
+- **laravel**: read a file or stream response's headers, name and disposition when they are passed by name ([#778](https://github.com/docuccino/docuccino/pull/778))
+- **inference-phpstan**: a response thrown inside an application's own HttpResponseException subclass documents that response rather than a 500 ([#777](https://github.com/docuccino/docuccino/pull/777))
+- **laravel**: leave an application's own keys in config/docuccino.php alone, and name the default viewer as the one serving a missing document ([#776](https://github.com/docuccino/docuccino/pull/776))
+- **laravel**: require Sanctum's session cookie on a stateful route behind an application's own authenticator alias ([#775](https://github.com/docuccino/docuccino/pull/775))
+- **laravel**: document a Query Builder filter by the delimiter it sets with ->delimiter() ([#774](https://github.com/docuccino/docuccino/pull/774))
+- **laravel**: publish a jsonPaginate() page size's default as the size it pages by when it exceeds the maximum ([#773](https://github.com/docuccino/docuccino/pull/773))
+- **laravel**: a form request that answers a failed validation or authorization its own way documents that answer, not the framework's ([#772](https://github.com/docuccino/docuccino/pull/772))
+- **laravel**: a Query Builder filter's default publishes as a value its schema allows, a list on an enum filter ([#771](https://github.com/docuccino/docuccino/pull/771))
+- **inference-phpstan**: a request refused through throw_if() or throw_unless() documents the exception it is handed ([#770](https://github.com/docuccino/docuccino/pull/770))
+- **inference-phpstan**: a helper written as a function documents what it throws and returns, as a method does ([#768](https://github.com/docuccino/docuccino/pull/768))
+- **laravel**: read Laravel's rule objects that validate as a rule string, Laravel 13's conditional ones included ([#767](https://github.com/docuccino/docuccino/pull/767))
+- **laravel**: an accepted_if or declined_if publishes only its condition, since Laravel takes any value while it fails ([#766](https://github.com/docuccino/docuccino/pull/766))
+- **inference-phpstan**: a guard helper that returns never documents what it throws, as one returning void does ([#765](https://github.com/docuccino/docuccino/pull/765))
+- **inference-phpstan**: a response thrown in an HttpResponseException, or handed to abort(), documents that response rather than a 500 ([#763](https://github.com/docuccino/docuccino/pull/763))
+- **laravel**: keep the pattern a response date is written with beneath the description its author writes ([#761](https://github.com/docuccino/docuccino/pull/761))
+- **laravel**: a JSON response's subclass returned bare documents the open JSON body its framework class sends ([#760](https://github.com/docuccino/docuccino/pull/760))
+- **laravel**: keep a Query Builder list's values, separator and default beneath the description its author writes ([#759](https://github.com/docuccino/docuccino/pull/759))
+- **inference-phpstan**: a plain response handed a string documents it as text, not JSON ([#758](https://github.com/docuccino/docuccino/pull/758))
+- **inference-phpstan**: a response class whose constructor hands its parent a status documents that status ([#756](https://github.com/docuccino/docuccino/pull/756))
+- **laravel**: keep how a path parameter resolves beneath the description its author writes ([#755](https://github.com/docuccino/docuccino/pull/755))
+- **inference-phpstan**: a stream, file or redirect made with a status documents that status ([#753](https://github.com/docuccino/docuccino/pull/753))
+- **inference-phpstan**: a response made through the Response facade documents its status and body ([#751](https://github.com/docuccino/docuccino/pull/751))
+- **laravel**: ipv4 and ipv6 publish their formats, and mac_address and hex_color the pattern Laravel checks ([#750](https://github.com/docuccino/docuccino/pull/750))
+- **laravel**: a route behind spatie/laravel-permission's middleware documents its 403 ([#749](https://github.com/docuccino/docuccino/pull/749))
+- **inference-phpstan**: a helper reading ->value off the case it is handed documents that case's status ([#748](https://github.com/docuccino/docuccino/pull/748))
+- **laravel**: a route behind Sanctum's or Passport's token middleware documents its 401 and 403 ([#746](https://github.com/docuccino/docuccino/pull/746))
+- **laravel**: a build that runs out of memory still ends with the notice and the framework's report, however full its heap ([#739](https://github.com/docuccino/docuccino/pull/739))
+- **inference-phpstan**: a plain response made with a status documents that status instead of 200 ([#737](https://github.com/docuccino/docuccino/pull/737))
+- **inference-phpstan**: a response's status read off an enum case documents the status the case maps to ([#735](https://github.com/docuccino/docuccino/pull/735))
+- **inference-phpstan**: a backed enum's from() handed a value a case backs publishes no 500 ([#732](https://github.com/docuccino/docuccino/pull/732))
+- **laravel**: settle a respond() guard joining conditions with ||, && or ! one condition at a time ([#731](https://github.com/docuccino/docuccino/pull/731))
+- **laravel**: a spatie Data class a named constructor returns unwrapped is documented at the root, not inside a second data ([#730](https://github.com/docuccino/docuccino/pull/730))
+- **laravel**: not_in no longer types the field it excludes values from, since Laravel takes a value of any other type there ([#726](https://github.com/docuccino/docuccino/pull/726))
+- **laravel**: state a token ability or permission beneath a docblock description instead of losing it to one ([#725](https://github.com/docuccino/docuccino/pull/725))
+- **core**: don't report a default-tag merge that tags.map made on purpose ([#724](https://github.com/docuccino/docuccino/pull/724))
+- **laravel**: read a route registered through the route registrar as the controller it names ([#723](https://github.com/docuccino/docuccino/pull/723))
+- **inference-phpstan**: show the value a problem constructor pins in its example wherever the problem is built by its own class name, final or not ([#722](https://github.com/docuccino/docuccino/pull/722))
+- **inference-phpstan**: title an error example with its reason phrase when a parent constructor writes it, or the response is read again after the body is built ([#721](https://github.com/docuccino/docuccino/pull/721))
+- **core**: a forked build worker that dies of a fatal error always ends, so the build never waits on it forever ([#720](https://github.com/docuccino/docuccino/pull/720))
+- **laravel**: a console build with no memory limit raises itself to 1G, and its out-of-memory notice survives the framework's shutdown ([#719](https://github.com/docuccino/docuccino/pull/719))
+- **inference-phpstan**: a thrown exception documents the status its reason enum maps the case to ([#718](https://github.com/docuccino/docuccino/pull/718))
+- **laravel**: a command-line build applies its memory limit and forks workers when APP_ENV is testing ([#717](https://github.com/docuccino/docuccino/pull/717))
+- **laravel**: a route behind Laravel's authenticator documents its 401 without security.auth_middleware ([#715](https://github.com/docuccino/docuccino/pull/715))
+- **core**: publish only the components a build reaches, and diff a fresh build against its export without phantom additions ([#713](https://github.com/docuccino/docuccino/pull/713))
+- **core**: require symfony/yaml 7.4.23 or 8.1.11, so a few hundred bytes of YAML cannot stall a read, and work with opis/json-schema 2.6.2 ([#727](https://github.com/docuccino/docuccino/pull/727))
+- **core**: keep the diff linear beside a wide union, and restate a deep 3.0 document without breaking an export, a diff or a contract check ([#709](https://github.com/docuccino/docuccino/pull/709))
+- **laravel**: Rule::notIn() and new NotIn publish the values they exclude, and Rule::array() reads as array ([#706](https://github.com/docuccino/docuccino/pull/706))
+- **laravel**: name a validation rule the build cannot read, and publish a field such a rule could loosen as optional and unconstrained ([#704](https://github.com/docuccino/docuccino/pull/704))
+- **laravel**: distinct on tags.* makes the list unique rather than each tag, and new Enum or new In publishes its values ([#699](https://github.com/docuccino/docuccino/pull/699))
+- **inference-phpstan**: analyse a closure route's action, arrow function or not ([#696](https://github.com/docuccino/docuccino/pull/696))
+- **core**: a diff reads the component behind a $ref that has a constraint beside it ([#693](https://github.com/docuccino/docuccino/pull/693))
+- **core**: a diff reads a reference wrapped in a one-branch allOf as the bare reference, when constrained or repointed ([#692](https://github.com/docuccino/docuccino/pull/692))
+- **core**: a diff reads a schema becoming a union of itself and null as the nullable widening it is ([#691](https://github.com/docuccino/docuccino/pull/691))
+- **core**: a diff reads a null admitted or withdrawn in a type union as the nullability change it is ([#690](https://github.com/docuccino/docuccino/pull/690))
+- **core**: a diff reads a one-branch allOf, anyOf or oneOf as the schema inside it ([#689](https://github.com/docuccino/docuccino/pull/689))
+- **core**: a contract check against an OpenAPI 3.0 artifact holds a payload to what 3.0 means ([#688](https://github.com/docuccino/docuccino/pull/688))
+- **core**: a diff with an OpenAPI 3.0 side compares what 3.0 means, not members it ignores ([#687](https://github.com/docuccino/docuccino/pull/687))
+- **core**: a document read at OpenAPI 3.0 and exported at 3.1 or 3.2 says what its schemas meant ([#686](https://github.com/docuccino/docuccino/pull/686))
+- **core**: an OpenAPI 3.2 export says 3.2.0, whatever version the document was read at ([#685](https://github.com/docuccino/docuccino/pull/685))
+
 ## v0.23.4
 
 ### Bug fixes
