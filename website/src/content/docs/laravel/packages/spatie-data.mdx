@@ -548,7 +548,8 @@ surfaced, because Spatie's own base implementations allow nothing:
 | `except` | Comma-separated deny-list of properties to omit from the response. |
 
 The allow-list itself isn't enumerated — reading it would mean running your method — so each parameter
-is documented as a free comma-separated string.
+is documented as a free comma-separated string. Describe one yourself with `#[QueryParameter]` and
+your prose leads, with "Values are separated by `,`." kept beneath it.
 
 ### Data classes as error bodies
 

@@ -126,6 +126,12 @@ delimiter turns splitting off entirely, so the single-value schema emits directl
   "schema": { "type": "string" } }
 ```
 
+Every sentence in that description comes from your allow-list, so a description you write with
+`#[QueryParameter('sort', description: 'How to order the list.')]` leads and those sentences stay
+beneath it as a paragraph of their own. The same goes for `include` and each fields group, under
+the comma too, where the enum carries the values but the `-` convention and an out-of-enum default
+are only in prose.
+
 The enum states what is *meaningful* whatever the strict-mode setting: an unknown sort or include is
 never useful, whether Spatie [rejects it with a `400`](#strict-mode-and-the-400-response) (strict
 mode, the default) or silently ignores it. Strict mode decides which of those the document's error

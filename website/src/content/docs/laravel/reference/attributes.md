@@ -212,8 +212,10 @@ on, which would publish a contract a generated client can build a rejected reque
 
 A `description` leads the parameter's description. What the parameter's validation rules enforce that
 no schema keyword can say ("Must be a date after from.", "Required when status is paid.") stays
-beneath it, and so does what a Query Builder filter accepts beyond its schema (a comma-separated list,
-`null`).
+beneath it, and so does what a package integration settles that the schema can't say: what a Query
+Builder filter accepts beyond its schema (a comma-separated list, `null`), the values, separator and
+default of a Query Builder `sort`, `include` or fields group, the comma a JSON:API `include`/`fields`
+or a Data request partial splits on, and how a signed link's `signature` is sent.
 
 Validation rules on a read verb become query parameters, so a `#[QueryParameter]` answers for a field
 whose rules the build cannot read statically the way a [`#[BodyParameter]`](#bodyparameter) does for a

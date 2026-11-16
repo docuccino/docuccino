@@ -106,7 +106,9 @@ what lets a collection reference the same object per item and wrap the envelope 
 ```
 
 `fields` is a **single** deep-object parameter (`fields[TYPE]=field1,field2`), not one parameter per
-type — the type keys are runtime data, so they're modeled with `additionalProperties`.
+type — the type keys are runtime data, so they're modeled with `additionalProperties`. Describe
+`include` or `fields` yourself with `#[QueryParameter]` and your prose leads, with the comma each value
+splits on kept beneath it.
 
 ## Relationships and `included`
 
