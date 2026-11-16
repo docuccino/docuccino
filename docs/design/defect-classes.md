@@ -1591,6 +1591,19 @@ format and provenance level, to "what the emission publishes unreached, the sour
 through a reachability walk of its own (`unreachableComponents()`); `AdoptedUnionGoldenTest` pins the enum
 to the documents whose trail still names it.
 
+*Two siblings, one level up.* The build published every component a producer REGISTERED, reached or not,
+while a warm cache hit re-registers only what an operation reaches. So a body registered and then not
+used was published by a cold build alone, with nothing referring to it: a `#[Response]` overriding an
+inferred response's type (the trail records the overridden `$ref` as a bare pointer, which the closure did
+not read as one), and a collection page restated inline once `with()` changes what is sent. The fix is the
+same reachability at assembly, before names settle (`ComponentRegistry::retain()`), so cold equals warm by
+construction; the trail's bare pointer reads as a reference everywhere `ComponentNames` walks one. And the
+differ reads both sides as published (`Diff\PublishedSide`), since a fresh build keeps a component its
+trail names and no exported artifact does — read as built, an unchanged branch reported it added.
+`AssemblerUnreachedComponentsTest`, `OverriddenResponseGoldenTest`, the warm-equals-cold rows in
+`ResourceCollectionOverrideGoldenTest`, `PublishedSideDiffTest` and the `DiffCommandTest` export rows
+recognise them.
+
 ## A path read from one end of a hop
 
 An exception's path from where it is raised to the response crosses every hop the analysis makes, and a

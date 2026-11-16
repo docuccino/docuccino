@@ -1399,7 +1399,10 @@ way a descriptor does, so `(new Enum(X::class))->only([…])` reads as `Rule::en
 
 `--provenance=none|winners|full`, default `winners` for committed artifacts. A component only a dropped
 member referred to — a trail's overridden value, a 3.0 artifact's webhooks — is dropped with it
-(`Emit\StrandedComponents`); one nothing referred to in the UIR either is kept.
+(`Emit\StrandedComponents`); one nothing referred to in the UIR either is kept. The overridden value of a
+`$ref` is a bare pointer in the trail, and counts as a reference like any other. The build itself publishes
+only what its operations reach (`ComponentRegistry::retain()`), and the differ reads each side without
+provenance and without what only provenance reached (`Diff\PublishedSide`).
 Mock hints: `x-docuccino.mock` = `{faker, seedGroup}` on schema properties, written by `#[Mock]` through
 core's `Extensions\Schema\MockHints` — the one reader, called by every class-hoisting mapper (core's DTO
 mapper, spatie Data, API Resource, Eloquent) and by `RecoveredRequest` for a request whose fields are named

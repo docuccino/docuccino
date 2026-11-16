@@ -87,6 +87,16 @@ final class Assembler
 
         $paths = $this->buildPaths(self::under($fragments, webhooks: false), $diagnostics);
         $webhooks = $this->buildWebhooks(self::under($fragments, webhooks: true), $diagnostics);
+
+        // Before anything is named: what no published operation reaches is not published, so a cold build
+        // agrees with a warm one, which never re-registers it. Overlays and transformers come later and
+        // keep what they leave behind.
+        $components->retain(ComponentNames::reached([
+            'paths' => $paths,
+            'webhooks' => $webhooks,
+            'components' => ['schemas' => $components->schemas(), 'responses' => $components->responses()],
+        ]));
+
         $componentSchemas = $this->buildComponents($components);
 
         $doc = [

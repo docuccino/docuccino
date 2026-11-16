@@ -504,7 +504,9 @@ version compare in full.
 The diff reads two documents and nothing else, which bounds it usefully.
 
 It compares modelled fields and schema structure, so a provenance-only difference — the same API
-described by a build that learned a field from a different layer — yields an empty changeset. It
+described by a build that learned a field from a different layer — yields an empty changeset. That
+includes a type only provenance still names, such as the one a `#[Response]` replaced: a fresh build
+keeps it beside its provenance, no exported artifact does, and the diff reads neither side with it. It
 never asks whether an example is *valid*; every published example is held to the schema beside it on
 [every build](/laravel/documenting/examples/) instead. And it cannot know whether your application
 still behaves the way either document claims: that is what

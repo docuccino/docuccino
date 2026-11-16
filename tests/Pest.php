@@ -17,6 +17,7 @@ use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
 use Docuccino\Core\Diff\SchemaComparator;
 use Docuccino\Core\Document\BlankAsNull;
+use Docuccino\Core\Document\Operation;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Draft\SchemaDraft;
@@ -1037,7 +1038,8 @@ function componentRefsIn(mixed $node, string $bucket): array
 
 /**
  * The components a document publishes that nothing in it reaches, as `section/name`: the roots are every
- * `$ref` and `discriminator.mapping` value outside `components`, closed over the components they name. A
+ * `$ref` and `discriminator.mapping` value outside `components`, closed over the components they name —
+ * and the old value of an overridden `$ref`, which a provenance trail records as a bare pointer. A
  * pointer INTO a component reaches the component. Security schemes are named by `security`, never by a
  * `$ref`, so they are not read. Every member is read wherever it sits, so a pointer an example states
  * reaches too — the error this can make is calling an orphan reached, never the reverse.
@@ -1061,6 +1063,8 @@ function unreachableComponents(array $document): array
                 $out[] = $value;
             } elseif ($key === 'mapping' && is_array($value)) {
                 $out = [...$out, ...array_values(array_filter($value, is_string(...)))];
+            } elseif ($key === 'value' && is_string($value) && ($node['field'] ?? null) === '$ref') {
+                $out[] = $value;
             }
             $out = [...$out, ...$pointers($value)];
         }
@@ -1689,14 +1693,18 @@ function emptyCollectionPositions(): array
 
 /**
  * Assemble one document over a filled component registry and hand back `components.schemas` as the
- * document publishes it — the published names, the bodies, and the node id stamped on each.
+ * document publishes it — the published names, the bodies, and the node id stamped on each. The one
+ * operation refers to every registered schema, since the build publishes only what an operation reaches.
  *
  * @return array<string, array<string, mixed>>
  */
 function assembledComponentSchemas(ComponentRegistry $components): array
 {
+    $refs = array_map(static fn (string|int $slot): array => ['$ref' => '#/components/schemas/'.$slot], array_keys($components->schemas()));
+    $operation = Operation::fromArray(['responses' => ['200' => ['description' => 'OK', 'content' => ['application/json' => ['schema' => ['anyOf' => $refs]]]]]]);
+
     $result = (new Assembler('docuccino'))->assemble(
-        [new OperationFragment('/api/reports', 'get', (new OperationDraft)->freeze(), 'GET /api/reports')],
+        [new OperationFragment('/api/reports', 'get', $operation, 'GET /api/reports')],
         new DocumentConfig('default', ['title' => 'T', 'version' => '1.0.0']),
         'doc:default',
         $components,
