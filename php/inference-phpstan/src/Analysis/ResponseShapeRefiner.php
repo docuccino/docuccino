@@ -367,12 +367,12 @@ final class ResponseShapeRefiner
             return $this->refineLocal($expr->name, $scope, $paramNames, $depth);
         }
 
-        // 4. A call into project code whose declared return erased the shape — descend and substitute. A
-        // Responsable rendering itself (`$resource->response()`) is answered by whoever wrote its
-        // `toResponse()` ({@see rendering()}), and so is `parent::toResponse()` inside the application's
-        // own ({@see parentRendering()}). One shape only: an override with several arms is several
-        // responses, which only {@see refineArms()} can carry.
-        if ($expr instanceof Node\Expr\MethodCall || $expr instanceof Node\Expr\StaticCall) {
+        // 4. A call into project code — a method or a function — whose declared return erased the shape:
+        // descend and substitute. A Responsable rendering itself (`$resource->response()`) is answered by
+        // whoever wrote its `toResponse()` ({@see rendering()}), and so is `parent::toResponse()` inside the
+        // application's own ({@see parentRendering()}). One shape only: an override with several arms is
+        // several responses, which only {@see refineArms()} can carry.
+        if ($expr instanceof Node\Expr\MethodCall || $expr instanceof Node\Expr\StaticCall || $expr instanceof Node\Expr\FuncCall) {
             if ($type instanceof ClassT && $this->isRefinable($type->fqcn)) {
                 $render = $expr instanceof Node\Expr\MethodCall ? $this->rendering($expr, $scope) : null;
                 if ($render !== null) {
@@ -501,6 +501,10 @@ final class ResponseShapeRefiner
         if ($callee === null) {
             return [RefinedResponse::renderedBy($render['receiver'])];
         }
+        $class = $callee->class;
+        if ($class === null) {
+            return null; // a `toResponse()` call resolves to a method, never a function
+        }
 
         if (! $this->budget->withinDepth($depth + 1) || ! $this->budget->withinBudget($this->adapter->normalize($callee->file))) {
             $this->budget->truncate();
@@ -510,13 +514,13 @@ final class ResponseShapeRefiner
         $this->touch($callee->file);
         $this->touch($callee->writtenIn());
 
-        $node = $this->fileAnalyzer->method($callee->file, $callee->class, $callee->method);
+        $node = $this->fileAnalyzer->callee($callee);
         if ($node === null) {
             return null;
         }
 
         $outer = $this->renderingSelf;
-        $this->renderingSelf = ['class' => $callee->class, 'receiver' => $render['receiver']];
+        $this->renderingSelf = ['class' => $class, 'receiver' => $render['receiver']];
         $read = [];
         try {
             foreach ($node->getReturnStatements() as $statement) {
@@ -1231,7 +1235,7 @@ final class ResponseShapeRefiner
      */
     private function refineCallee(Callee $callee, int $depth): ?RefinedResponse
     {
-        $key = $callee->class.'::'.$callee->method;
+        $key = $callee->key();
 
         // A memoised shape the caller has the headroom to have computed itself — anything else is
         // recomputed, and truncates honestly if the bound is genuinely spent.
@@ -1274,6 +1278,11 @@ final class ResponseShapeRefiner
             return $result;
         }
 
+        // A function's file is touched already, and a function carries no component declaration.
+        if ($callee->class === null) {
+            return $result;
+        }
+
         $written = $this->declarations->fileFor($callee->class, $callee->method);
         if ($written !== null) {
             $this->touch($written);
@@ -1302,7 +1311,7 @@ final class ResponseShapeRefiner
     {
         $this->touch($callee->file);
 
-        $node = $this->fileAnalyzer->method($callee->file, $callee->class, $callee->method);
+        $node = $this->fileAnalyzer->callee($callee);
         if ($node === null) {
             return null;
         }
@@ -1423,7 +1432,7 @@ final class ResponseShapeRefiner
         }
 
         $this->touch($factory->file);
-        $node = $this->fileAnalyzer->method($factory->file, $factory->class, $factory->method);
+        $node = $this->fileAnalyzer->callee($factory);
         if ($node === null) {
             return $child;
         }
@@ -1764,7 +1773,7 @@ final class ResponseShapeRefiner
      */
     private function argumentFor(Callee $callee, string $paramName, Node\Expr $call): array
     {
-        if (! $call instanceof Node\Expr\MethodCall && ! $call instanceof Node\Expr\StaticCall) {
+        if (! $call instanceof Node\Expr\MethodCall && ! $call instanceof Node\Expr\StaticCall && ! $call instanceof Node\Expr\FuncCall) {
             return [null, true];
         }
         if ($call->isFirstClassCallable()) {
@@ -1782,15 +1791,7 @@ final class ResponseShapeRefiner
     /** The default a callee's parameter takes when a call passes nothing for it, or null when it has none. */
     private function parameterDefault(Callee $callee, string $param): ?Type
     {
-        if (! $this->reflectionProvider->hasClass($callee->class)) {
-            return null;
-        }
-        $class = $this->reflectionProvider->getClass($callee->class);
-        if (! $class->hasNativeMethod($callee->method)) {
-            return null;
-        }
-
-        foreach ($class->getNativeMethod($callee->method)->getVariants()[0]->getParameters() as $parameter) {
+        foreach ($callee->parameters($this->reflectionProvider) as $parameter) {
             if ($parameter->getName() === $param) {
                 return $parameter->getDefaultValue();
             }
@@ -1806,16 +1807,8 @@ final class ResponseShapeRefiner
      */
     private function parameterNames(Callee $callee): array
     {
-        if (! $this->reflectionProvider->hasClass($callee->class)) {
-            return [];
-        }
-        $class = $this->reflectionProvider->getClass($callee->class);
-        if (! $class->hasNativeMethod($callee->method)) {
-            return [];
-        }
-
         $names = [];
-        foreach ($class->getNativeMethod($callee->method)->getVariants()[0]->getParameters() as $parameter) {
+        foreach ($callee->parameters($this->reflectionProvider) as $parameter) {
             $names[] = $parameter->getName();
         }
 

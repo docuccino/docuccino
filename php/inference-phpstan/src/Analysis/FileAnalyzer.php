@@ -9,11 +9,13 @@ use Docuccino\Core\Inference\DeclarationLine;
 use Docuccino\Core\Inference\LocalWrites;
 use Docuccino\Inference\PhpStan\Runtime\FileWalks;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
+use Docuccino\Inference\PhpStan\Trace\Callee;
 use PhpParser\Node;
 use PhpParser\NodeFinder;
 use PhpParser\ParserFactory;
 use PHPStan\Analyser\Scope;
 use PHPStan\Node\ClosureReturnStatementsNode;
+use PHPStan\Node\FunctionReturnStatementsNode;
 use PHPStan\Node\InArrowFunctionNode;
 use PHPStan\Node\MethodReturnStatementsNode;
 use PHPStan\Reflection\ParameterReflection;
@@ -23,11 +25,13 @@ use Throwable;
 /**
  * Parses a file once and harvests everything the engine reads out of it: the virtual
  * `MethodReturnStatementsNode`s — the node that pairs every `return` with its flow-refined scope and carries
- * the method's throw points — plus the closures and the local assignments. Memoised per file so descent
- * reuses one rich parse; the adapter's priming is what keeps the bodies from being stripped.
+ * the method's throw points — and their `FunctionReturnStatementsNode` twins, plus the closures and the local
+ * assignments. Memoised per file so descent reuses one rich parse; the adapter's priming is what keeps the
+ * bodies from being stripped.
  *
  * @phpstan-type FileHarvest array{
  *     methods: array<string, MethodReturnStatementsNode>,
+ *     functions: array<string, FunctionReturnStatementsNode>,
  *     closures: array<int, ClosureReturnStatementsNode>,
  *     arrows: array<int, array{Node\Expr\ArrowFunction, Scope}>,
  *     arrays: array<string, array<string, Node\Expr\Array_>>,
@@ -100,6 +104,14 @@ final class FileAnalyzer
         }
 
         return count($found) === 1 ? reset($found) : null;
+    }
+
+    /** The body a resolved call runs: the method's, or the function's, which the file keys by its name. */
+    public function callee(Callee $callee): MethodReturnStatementsNode|FunctionReturnStatementsNode|null
+    {
+        return $callee->class === null
+            ? $this->harvest($callee->file)['functions'][strtolower($callee->method)] ?? null
+            : $this->method($callee->file, $callee->class, $callee->method);
     }
 
     /**
@@ -358,6 +370,8 @@ final class FileAnalyzer
 
         /** @var array<string, MethodReturnStatementsNode> $methods `Class::method` → its returns */
         $methods = [];
+        /** @var array<string, FunctionReturnStatementsNode> $functions by lower-cased name, as PHP matches one */
+        $functions = [];
         /** @var array<int, ClosureReturnStatementsNode> $closures by start offset */
         $closures = [];
         /** @var array<int, array{Node\Expr\ArrowFunction, Scope}> $arrows by start offset, with the scope inside */
@@ -383,13 +397,18 @@ final class FileAnalyzer
         /** @var array<int, array{Node\Expr\CallLike, ?Node\Arg, Scope}> $handed offsets of a variable a call is made on with arguments, or handed to */
         $handed = [];
 
-        $this->walks->walk($file, function (Node $node, Scope $scope) use (&$methods, &$closures, &$arrows, &$arrays, &$locals, &$calls, &$opaque, &$evaluated, &$ternaries, &$mentions, &$members, &$written, &$handed): void {
+        $this->walks->walk($file, function (Node $node, Scope $scope) use (&$methods, &$functions, &$closures, &$arrows, &$arrays, &$locals, &$calls, &$opaque, &$evaluated, &$ternaries, &$mentions, &$members, &$written, &$handed): void {
             // Watching for these virtual nodes is the sanctioned way to pair returns with refined scope.
             // Collected first and outside the guard below, so that a reader wanting only a method body — the
             // throw analyzer, the tracer descending into a callee — never pays for the write half's failures.
             // @phpstan-ignore phpstanApi.instanceofAssumption
             if ($node instanceof MethodReturnStatementsNode) {
                 $methods[$node->getClassReflection()->getName().'::'.$node->getMethodName()] = $node;
+            }
+
+            // @phpstan-ignore phpstanApi.instanceofAssumption
+            if ($node instanceof FunctionReturnStatementsNode) {
+                $functions[strtolower($node->getFunctionReflection()->getName())] = $node;
             }
 
             // @phpstan-ignore phpstanApi.instanceofAssumption
@@ -499,6 +518,7 @@ final class FileAnalyzer
 
         return $this->cache[$normalised] = [
             'methods' => $methods,
+            'functions' => $functions,
             'closures' => $closures,
             'arrows' => $arrows,
             'arrays' => $arrays,

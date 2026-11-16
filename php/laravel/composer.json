@@ -75,7 +75,11 @@
         "psr-4": {
             "Docuccino\\Laravel\\Tests\\": "tests/",
             "Workbench\\App\\": "workbench/app/"
-        }
+        },
+        "files": [
+            "workbench/app/helpers.php",
+            "workbench/app/Support/helpers.php"
+        ]
     },
     "extra": {
         "laravel": {

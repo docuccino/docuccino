@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Enums\ExportFault;
 use App\Exceptions\ExportLockedException;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -78,4 +80,28 @@ function neverCarried(): never
 function voidCarried(): void
 {
     throw new HttpResponseException(response()->json(['error' => 'slow down'], 429));
+}
+
+/** Refuses with whatever the guard it calls refuses with. */
+function neverNested(): never
+{
+    neverCustom();
+}
+
+// Response helpers written as functions: one answering with its own status, one with the case it is handed.
+
+function gone(): JsonResponse
+{
+    return response()->json(['error' => 'gone'], 410);
+}
+
+function fault(ExportFault $fault): JsonResponse
+{
+    return new JsonResponse(['error' => $fault->name], $fault->value);
+}
+
+/** Logs the message of the exception it is handed, and nothing else: the exception goes no further. */
+function noteFailure(\Throwable $e): void
+{
+    \Illuminate\Support\Facades\Log::warning($e->getMessage());
 }

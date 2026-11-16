@@ -62,7 +62,11 @@
             "Docuccino\\Laravel\\Tests\\": "php/laravel/tests/",
             "Docuccino\\Tools\\PhpUnit\\": "tools/phpunit/",
             "Workbench\\App\\": "php/laravel/workbench/app/"
-        }
+        },
+        "files": [
+            "php/laravel/workbench/app/helpers.php",
+            "php/laravel/workbench/app/Support/helpers.php"
+        ]
     },
     "minimum-stability": "dev",
     "prefer-stable": true,

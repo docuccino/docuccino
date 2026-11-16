@@ -124,11 +124,15 @@ it('documents what a never guard written outside the controller refuses with', f
     'the form request' => ['formRequestNever', ['ExportLockedException@423'], []],
     'a trait method, abort()' => ['traitNeverAbort', ['HttpException@404'], []],
     'an injected service, a ValidationException' => ['serviceNeverValidation', ['ValidationException@422'], []],
+    // A function's body runs at the call as a method's does, so it refuses with what that body throws.
+    'a function' => ['functionNeverCustom', ['ExportLockedException@423'], []],
+    'a function, abort()' => ['functionNeverAbort', ['HttpException@404'], []],
     // A response thrown for the framework to send is the response the request is answered with.
     'a carried response, private' => ['privateNeverCarried', [], ['429']],
     'a carried response, static' => ['staticNeverCarried', [], ['429']],
     'a carried response, trait' => ['traitNeverCarried', [], ['429']],
     'a carried response, service' => ['serviceNeverCarried', [], ['429']],
+    'a carried response, function' => ['functionNeverCarried', [], ['429']],
 ])->group('fixture');
 
 it('keeps a never guard declaring it may throw anything to its declaration', function (): void {
@@ -147,4 +151,5 @@ it('depends on the file a never guard is written in', function (string $method, 
     'a trait' => ['traitNeverCustom', 'RefusesRequests.php'],
     'a service' => ['serviceNeverCustom', 'RequestGuard.php'],
     'a form request' => ['formRequestNever', 'RefusableRequest.php'],
+    'a function' => ['functionNeverCustom', 'helpers.php'],
 ])->group('fixture');

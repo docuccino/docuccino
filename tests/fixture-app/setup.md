@@ -47,11 +47,12 @@ cp -R tests/fixture-app/src/app/. tests/fixture-app/app/app/
 # 6. Overlay the tracked MODULAR sources (a `Modules\` PSR-4 root OUTSIDE app/, so the Query-Builder
 #    trace's follow-beyond hop into a Query class outside the descend scope is exercised) and register
 #    the PSR-4 root so PHPStan can reflect it, register the
-#    application's helper-function file (`app/Support/helpers.php`) as an autoloaded `files` entry, as an
-#    application does, then refresh the autoloader.
+#    application's helper-function files (the global `app/helpers.php` and the namespaced
+#    `app/Support/helpers.php`) as autoloaded `files` entries, as an application does, then refresh the
+#    autoloader.
 mkdir -p tests/fixture-app/app/modules
 cp -R tests/fixture-app/src/modules/. tests/fixture-app/app/modules/
-php -r '$f="tests/fixture-app/app/composer.json";$j=json_decode(file_get_contents($f),true);$j["autoload"]["psr-4"]["Modules\\"]="modules/";$j["autoload"]["files"]=["app/Support/helpers.php"];file_put_contents($f,json_encode($j,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES)."\n");'
+php -r '$f="tests/fixture-app/app/composer.json";$j=json_decode(file_get_contents($f),true);$j["autoload"]["psr-4"]["Modules\\"]="modules/";$j["autoload"]["files"]=["app/helpers.php","app/Support/helpers.php"];file_put_contents($f,json_encode($j,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES)."\n");'
 composer dump-autoload --working-dir=tests/fixture-app/app
 ```
 
@@ -352,7 +353,16 @@ in the file being walked, and an array return is no type the trace follows:
   under a catch of their own: swallowing it with its message logged, reporting and rethrowing it, handing
   it to a method that rethrows, taking one class, retrying from the catch — and `relay()`, which hands the
   work on to another helper, so its own body names no place the work runs. Also guard functions, each
-  written to return `never` and `void`.
+  written to return `never` and `void`, one that calls another, two response functions — one answering
+  with its own status, one with the backing value of the enum case it is handed — and `noteFailure()`,
+  which only logs the message of the exception a catch hands it.
+- `app/helpers.php` + `app/Http/Controllers/FunctionHelperController.php` — the application's GLOBAL
+  helpers, each declared inside `if (! function_exists(…))` as a Laravel application writes them: guards
+  refusing with an `HttpException`, `abort(404)`, an exception with its own status, a `ValidationException`
+  and an `HttpResponseException` carrying a response, and the two response functions. The controller
+  calls them, and the namespaced ones from `app/Support/helpers.php`, beside the same bodies written as
+  methods — the guard's taken from `RefusesRequests`, so the controller raises no error itself and stays
+  outside the throw corpus — and hands what a catch took to `noteFailure()` beside a method doing the same.
 - `app/Http/Controllers/NeverGuardController.php` + `app/Http/Controllers/Concerns/RefusesRequests.php` +
   `app/Services/RequestGuard.php` + `app/Http/Requests/RefusableRequest.php` — guard helpers written
   outside the controller that refuse a request by throwing an `HttpException`, calling `abort(404)`,

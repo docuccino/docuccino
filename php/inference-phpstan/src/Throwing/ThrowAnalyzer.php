@@ -17,7 +17,6 @@ use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Provenance\MessagePaths;
-use Docuccino\Core\Support\Fqcn;
 use Docuccino\Inference\PhpStan\Analysis\CallableBody;
 use Docuccino\Inference\PhpStan\Analysis\FileAnalyzer;
 use Docuccino\Inference\PhpStan\Analysis\ParamAccessor;
@@ -27,6 +26,7 @@ use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
 use PhpParser\Node;
 use PHPStan\Analyser\Scope;
 use PHPStan\Node\ClosureReturnStatementsNode;
+use PHPStan\Node\FunctionReturnStatementsNode;
 use PHPStan\Node\MethodReturnStatementsNode;
 use PHPStan\Reflection\ClassReflection;
 use PHPStan\Reflection\ReflectionProvider;
@@ -251,7 +251,7 @@ final class ThrowAnalyzer
      * @return list<ThrownException>
      */
     private function analyzeMethod(
-        MethodReturnStatementsNode|ClosureReturnStatementsNode $methodNode,
+        MethodReturnStatementsNode|FunctionReturnStatementsNode|ClosureReturnStatementsNode $methodNode,
         string $selfLabel,
         int $depth,
         array $visited,
@@ -324,7 +324,7 @@ final class ThrowAnalyzer
      *
      * @param  array<string, Type>  $pointed
      */
-    private function owedToRethrow(MethodReturnStatementsNode|ClosureReturnStatementsNode $body, Node $node, array $pointed, Scope $scope): bool
+    private function owedToRethrow(MethodReturnStatementsNode|FunctionReturnStatementsNode|ClosureReturnStatementsNode $body, Node $node, array $pointed, Scope $scope): bool
     {
         foreach (EnclosingCatches::rethrowsAround($body, $node, $this->keeps($scope)) as $rethrow) {
             if (! $rethrow instanceof Node\Expr\Throw_) {
@@ -341,10 +341,11 @@ final class ThrowAnalyzer
     }
 
     /**
-     * Whether the callee a catch hands its exception to provably keeps it: an application method whose body
-     * reads the parameter only through {@see EnclosingCatches::ACCESSORS}, by {@see EnclosingCatches::readsWhole()}
-     * — the grammar the catch's own hand-off is read with. Anything this build cannot read lets it out. The
-     * callee's files decide the answer either way, so they are dependencies whenever it resolves.
+     * Whether the callee a catch hands its exception to provably keeps it: an application method or function
+     * whose body reads the parameter only through {@see EnclosingCatches::ACCESSORS}, by
+     * {@see EnclosingCatches::readsWhole()} — the grammar the catch's own hand-off is read with. Anything this
+     * build cannot read lets it out. The callee's files decide the answer either way, so they are dependencies
+     * whenever it resolves.
      *
      * @return Closure(Node\Expr\CallLike, int): bool
      */
@@ -357,14 +358,15 @@ final class ThrowAnalyzer
             }
 
             $this->dependOn([$callee->file, $callee->writtenIn()]);
-            $body = $this->fileAnalyzer->method($callee->file, $callee->class, $callee->method);
+            $body = $this->fileAnalyzer->callee($callee);
             $argument = $call->getArgs()[$position] ?? null;
             if ($body === null || $argument === null) {
                 return false;
             }
 
+            $reflection = $body instanceof FunctionReturnStatementsNode ? $body->getFunctionReflection() : $body->getMethodReflection();
             $bound = null;
-            foreach (($body->getMethodReflection()->getVariants()[0] ?? null)?->getParameters() ?? [] as $index => $parameter) {
+            foreach (($reflection->getVariants()[0] ?? null)?->getParameters() ?? [] as $index => $parameter) {
                 if ($argument->name === null ? $index === $position : $parameter->getName() === $argument->name->toString()) {
                     $bound = $parameter;
                 }
@@ -591,7 +593,7 @@ final class ThrowAnalyzer
     {
         return $callee !== null
             && $this->projectFilter->isProjectFile($callee->file)
-            && $this->fileAnalyzer->method($callee->file, $callee->class, $callee->method) !== null;
+            && $this->fileAnalyzer->callee($callee) !== null;
     }
 
     /**
@@ -694,16 +696,14 @@ final class ThrowAnalyzer
 
         // Both files: the harvest comes off the declaring class's, and a trait's body is written in another.
         $this->dependOn([$callee->file, $callee->writtenIn()]);
-        $childNode = $this->fileAnalyzer->method($callee->file, $callee->class, $callee->method);
+        $childNode = $this->fileAnalyzer->callee($callee);
         if ($childNode === null) {
             return [];
         }
 
-        $childLabel = Fqcn::short($callee->class).'::'.$callee->method;
-
         return $this->analyzeMethod(
             $childNode,
-            $childLabel,
+            $callee->label(),
             $depth + 1,
             [...$visited, $key],
             [...$priorChain, $frame],
@@ -843,7 +843,7 @@ final class ThrowAnalyzer
      *
      * @return list<string>
      */
-    private function catchesAround(MethodReturnStatementsNode|ClosureReturnStatementsNode $body, Node $node, Scope $scope): array
+    private function catchesAround(MethodReturnStatementsNode|FunctionReturnStatementsNode|ClosureReturnStatementsNode $body, Node $node, Scope $scope): array
     {
         return array_map(
             static fn (Node\Name $name): string => $scope->resolveName($name),
@@ -1166,7 +1166,7 @@ final class ThrowAnalyzer
             return ThrowSiteStatus::stated([]);
         }
 
-        $body = $this->fileAnalyzer->method($callee->file, $callee->class, $callee->method);
+        $body = $this->fileAnalyzer->callee($callee);
         if ($body === null) {
             return ThrowSiteStatus::stated([]);
         }
