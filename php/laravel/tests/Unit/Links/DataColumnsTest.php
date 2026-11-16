@@ -22,6 +22,7 @@ use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\HandedMapperVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\LazyVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\LiteralVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\MadeVanData;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\MutableVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\NestedInputVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\NormalisingVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\OwnMapperVanData;
@@ -82,9 +83,6 @@ it('reads each spelling of a plain copy as the column it copies', function (stri
     // Two constructions agree on the key and not on the plate: one copies it, the other copies nothing.
     'what every construction agrees on' => [VanData::class, [DataConstruction::model(Van::class), DataConstruction::arguments(['id' => [Van::class, 'id'], 'plate' => null])], ['id' => [Van::class, 'id']]],
     'a construction the walk could not read' => [VanData::class, [DataConstruction::model(Van::class), DataConstruction::unknown()], []],
-    // With no constructor, `from()` sets each property itself; `new` hands nothing to any of them.
-    'from() a class with no constructor' => [BareVanData::class, [DataConstruction::model(Van::class)], ['id' => [Van::class, 'id'], 'plate' => [Van::class, 'plate']]],
-    'the constructor of a class with none' => [BareVanData::class, [DataConstruction::arguments(['id' => [Van::class, 'id']])], []],
     'from() a class that is not there' => [VanData::class, [DataConstruction::model('Docuccino\\Laravel\\Tests\\Fixtures\\ResponseLinks\\Missing')], []],
 ]);
 
@@ -136,6 +134,14 @@ it('carries nothing that is not a plain copy of the column', function (string $d
     // a key, may send something other than the column.
     'cast, transformed, computed, hidden, lazy, nullable or mistyped' => [PaintedVanData::class, [DataConstruction::model(Van::class)], []],
     'the same handed to the constructor' => [PaintedVanData::class, [DataConstruction::arguments(['plate' => [Van::class, 'plate'], 'id' => [Van::class, 'id'], 'model_name' => [Van::class, 'model_name'], 'make' => [Van::class, 'make'], 'mileage' => [Van::class, 'mileage'], 'weight' => [Van::class, 'weight']])], []],
+    // A writable property is the column only until something sets it again, which may be the action
+    // after it built the object: the walk does not follow every write.
+    'a writable property, through from()' => [MutableVanData::class, [DataConstruction::model(Van::class)], []],
+    'a writable property, by the constructor' => [MutableVanData::class, [DataConstruction::arguments(['id' => [Van::class, 'id'], 'plate' => [Van::class, 'plate']])], []],
+    // With no constructor, `from()` sets each property from outside, which only a writable property allows;
+    // `new` hands nothing to any of them.
+    'from() a class with no constructor' => [BareVanData::class, [DataConstruction::model(Van::class)], []],
+    'the constructor of a class with none' => [BareVanData::class, [DataConstruction::arguments(['id' => [Van::class, 'id']])], []],
     // A plain parameter is handed to the constructor body, not to the property of its name.
     'a parameter that is not promoted' => [UnpromotedVanData::class, [DataConstruction::arguments(['id' => [Van::class, 'id'], 'plate' => [Van::class, 'plate']])], ['id' => [Van::class, 'id']]],
     // A class making every property lazy sends each only on request.

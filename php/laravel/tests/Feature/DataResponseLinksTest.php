@@ -165,6 +165,8 @@ it('links a Data body built from a model to every route that binds the model on 
     'an object the action unwraps' => ['/api/unwrapped-vans', 'post', '201', []],
     // A cast, a transformer, a nullable or lazy property: none of them sends the column as stored.
     'properties that are not plain copies' => ['/api/painted-vans', 'post', '201', []],
+    // The action sets the plate again after `from()` copied it, so the body sends what it set.
+    'a writable property the action sets again' => ['/api/retitled-vans', 'post', '201', []],
 ]);
 
 it('points into the envelope a Data body is wrapped in', function (): void {

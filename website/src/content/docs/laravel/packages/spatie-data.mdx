@@ -596,9 +596,10 @@ lands in the promoted property of its name, and an array key in the property who
 The link then points at the member the property is sent as: `#[MapOutputName]`, inside the class's
 envelope, so `"team": "$response.body#/data/slug"` under `data.wrap`.
 
-Only a plain copy counts, because the route looks the record up by what is stored. The property is an
-`int` or a `string`, not nullable, `Lazy` or `Optional`, with no cast, transformer, `#[Computed]` or
-`#[Hidden]`, and the column has no accessor or cast of its own. Anything that could step in between
+Only a plain copy counts, because the route looks the record up by what is stored. The property is a
+`readonly` `int` or `string`, not nullable, `Lazy` or `Optional`, with no cast, transformer, `#[Computed]`
+or `#[Hidden]`, and the column has no accessor or cast of its own. A writable property could be set
+again after the copy. Anything that could step in between
 gives nothing: a class with its own `toArray()` or `transform()`, a constructor with a body, a
 `from*()` method of its own, a default `from()` could fall back to, an envelope the action changes
 (`->withoutWrapping()`), a custom name mapper, or a global strategy beside a class-level map. A Data

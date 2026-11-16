@@ -28,9 +28,10 @@ use ReflectionProperty;
  * - `XData::from(['slug' => $team->slug])` — a key fills the property whose input name it is, or the
  *   property of that name where its input name is not in the payload (`MapPropertiesDataPipe`).
  *
- * Only a plain copy counts: a non-nullable `int` or `string` property with nothing of laravel-data's on it
- * but a name map or a validation rule, in a class whose constructor does nothing, whose own serialisation
- * is laravel-data's, whose envelope is settled, and whose names are mapped in a way this mirrors exactly.
+ * Only a plain copy counts: a readonly, non-nullable `int` or `string` property with nothing of
+ * laravel-data's on it but a name map or a validation rule, in a class whose constructor does nothing, whose
+ * own serialisation is laravel-data's, whose envelope is settled, and whose names are mapped in a way this
+ * mirrors exactly.
  * On the `from()` path, also no custom `from*()`, pipeline or normalizer that could step in first, and no
  * default or global cast that could stand in for the value. Anything else gives nothing.
  *
@@ -327,8 +328,8 @@ final class DataColumns
     }
 
     /**
-     * Whether a property is copied through as it is handed over: public, declared `int` or `string` and
-     * nothing else, no hook, nothing of laravel-data's on it but a name map or a validation rule, and no
+     * Whether a property is copied through as it is handed over: public, readonly, declared `int` or
+     * `string` and nothing else, no hook, nothing of laravel-data's on it but a name map or a validation rule, and no
      * global transformer for its type. Through the pipeline, also no default and no global cast.
      *
      * @param  class-string  $data
@@ -337,7 +338,8 @@ final class DataColumns
     {
         $reflection = new ReflectionProperty($data, $property);
         $type = $reflection->getType();
-        if (! $reflection->isPublic() || $reflection->isStatic() || ! $type instanceof ReflectionNamedType || $type->allowsNull() || ! in_array($type->getName(), ['int', 'string'], true)) {
+        // A writable property holds the copy only until something sets it again, which the walk does not follow.
+        if (! $reflection->isPublic() || $reflection->isStatic() || ! $reflection->isReadOnly() || ! $type instanceof ReflectionNamedType || $type->allowsNull() || ! in_array($type->getName(), ['int', 'string'], true)) {
             return false;
         }
 
