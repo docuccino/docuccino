@@ -495,6 +495,11 @@ in the file being walked, and an array return is no type the trace follows:
   application's JSON, stream and redirect subclass and on one that overrides `setStatusCode()`; and a response built
   into a local by the factory, `new JsonResponse` and `new Response`, returned as it is or after its data or
   content is set.
+- `app/Http/Controllers/ReassignedResponseController.php` — responses a statement reassigns from a chain
+  made on themselves (`$response = $response->header(…)`): in a helper handed the response, with one header
+  or several, twice, through a second local and with the media type set; the helper's result named or
+  reassigned in the action; the statement inline in an action and in one handed its response; beside the
+  helper returning the chain without naming it.
 - `app/Http/Controllers/ResponseSubclassController.php` and `app/Http/Responses/` — responses the
   application derives from the framework's so that the class names its status: a plain response, a JSON
   response, a redirect, a stream, a file and Symfony's own response, each handing `parent::__construct()` a
