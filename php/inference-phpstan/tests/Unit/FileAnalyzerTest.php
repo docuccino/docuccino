@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Inference\PhpStan\Analysis\FileAnalyzer;
 use Docuccino\Inference\PhpStan\Runtime\FileWalks;
+use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Keeping\Kept;
 use Docuccino\Inference\PhpStan\Tests\Support\ScriptedRuntimeAdapter;
 use PhpParser\Node;
 use PhpParser\NodeFinder;
@@ -12,6 +13,9 @@ use PHPStan\Analyser\Scope;
 use PHPStan\Node\InArrowFunctionNode;
 use PHPStan\ShouldNotHappenException;
 use PHPStan\Type\ClosureType;
+use PHPStan\Type\IntegerType;
+use PHPStan\Type\ObjectType;
+use PHPStan\Type\Type;
 use PHPUnit\Framework\MockObject\Stub;
 
 /**
@@ -228,3 +232,33 @@ it('holds a read only while nothing after it may have changed what it gives', fu
     'the variable written after it' => ['$s = $code; $code = 503', '$s = $code', 'code', false, false],
     'an offset of it written after it' => ['$s = $code; $code[0] = 5', '$s = $code', 'code', false, false],
 ]);
+
+it('says whether a call made on a variable, or handed it, keeps the object it holds', function (string $code, string $mention, bool $kept): void {
+    // What a returned response's later statements did to it: a reader leaves it as it was built, a setter
+    // does not, and a call the walk never typed says nothing either way.
+    $source = '<?php '.$code.';';
+    $statements = (new ParserFactory)->createForNewestSupportedVersion()->parse($source) ?? [];
+    $scope = $this->createStub(Scope::class);
+    $scope->method('getFunctionName')->willReturn('render');
+    $scope->method('getType')->willReturnCallback(static fn (Node\Expr $expr): Type => match ($expr instanceof Node\Expr\Variable ? $expr->name : null) {
+        'kept' => new ObjectType(Kept::class),
+        'response' => new ObjectType('Symfony\\Component\\HttpFoundation\\Response'),
+        default => new IntegerType,
+    });
+    $walked = (new NodeFinder)->find($statements, static fn (Node $node): bool => true);
+    $analyzer = fileAnalyzerOverNodes(array_map(static fn (Node $node): array => [$node, $scope], $walked));
+    $at = (int) strpos($source, $mention);
+    $madeOn = (new NodeFinder)->findFirst($walked, static fn (Node $node): bool => $node instanceof Node\Expr\MethodCall && $node->var->getStartFilePos() === $at);
+
+    expect($analyzer->keepsAt('/x.php', $at, $madeOn instanceof Node\Expr\MethodCall ? $madeOn : null))->toBe($kept);
+})->with([
+    'a reader taking arguments' => ['$kept->decoded(true)', '$kept', true],
+    'a setter taking arguments' => ['$kept->restated(503)', '$kept', false],
+    'a reader taking none' => ['$response->getStatusCode()', '$response', true],
+    'a setter taking none' => ['$response->setNotModified()', '$response', false],
+    'nothing made on it at that offset' => ['$other = 1; $kept', '$kept', false],
+]);
+
+it('finds no body around an offset in a file the walk harvested none from', function (): void {
+    expect(fileAnalyzerOn(new ScriptedRuntimeAdapter)->bodyAround('/x.php', 10))->toBeNull();
+});

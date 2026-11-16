@@ -372,6 +372,7 @@ it('carries the class of a stream, file or redirect through every other rewrite'
         ->and($base->withComponent(new ComponentDeclaration('Moved', 'X::y'))->transport)->toBe($redirect)
         ->and($base->withPayload(null, [])->transport)->toBe($redirect)
         ->and($base->withoutStatusEchoes()->transport)->toBe($redirect)
+        ->and($base->withUnreadBody()->transport)->toBe($redirect)
         ->and((new RefinedResponse)->transport)->toBeNull();
 });
 
@@ -426,6 +427,25 @@ it('claims no status where the code replaced one it could not read', function ()
         ->and($read->withBoundStatus(new LiteralT(503))->statusUnread)->toBeFalse()
         // The payload's own status cannot stand either: the code replaced it.
         ->and(RefinedResponse::renderedBy(new ClassT('App\\Http\\Resources\\WidgetResource'))->withUnreadStatus()->toClassT(ResponseShapeRefiner::CANONICAL_RESPONSE)?->typeArgs)->toHaveCount(2);
+});
+
+it('claims no body where something the build cannot read may have rewritten it', function (): void {
+    // `$this->accept($response)` between building the response and returning it: the body it was built with,
+    // its members and what they read from may all be gone, so none of them is published; what else is known
+    // of the response stays.
+    $declaration = new ComponentDeclaration('Queued', 'X::y');
+    $built = withMembers(['type'], ['type' => ParamAccessor::identity('type')])
+        ->withBoundStatus(new LiteralT(202))
+        ->withContentType('application/problem+json')
+        ->withComponent($declaration)
+        ->withUnreadBody();
+
+    expect($built->payload)->toBeNull()
+        ->and($built->payloadMembers)->toBeNull()
+        ->and($built->payloadParamProvenance)->toBe([])
+        ->and($built->toClassT(ResponseShapeRefiner::CANONICAL_RESPONSE)?->typeArgs)
+        ->toEqual([new UnknownT('payload not folded'), new LiteralT(202), new LiteralT('application/problem+json')])
+        ->and($built->component)->toBe($declaration);
 });
 
 it('marks a table read at the status accessor as its reason phrase, and leaves one at any other key as read', function (): void {

@@ -412,6 +412,17 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    so is one passed to the constructor or forwarded to a helper's status parameter; the adapter publishes one
    response per code, and a status stated but unreadable under `default` rather than under a code the
    endpoint may never send. An inferred range (`int<200, 299>`) is not a constant and folds to nothing.
+   The same links written as STATEMENTS on a returned local (`$r->setStatusCode(202); return $r;`) are the
+   same chain spread over lines, and are read as one (`LocalRestatements`): each chain made on the local is
+   peeled by `FluentResponseChain` in the scope it runs in and folded into the next in source order, then
+   laid over the response the local was built as. A chain counts as having run only when it is an
+   expression statement straight in a block that holds the return, ahead of it; anywhere else (a branch, a
+   loop, a condition) its status JOINS the one before, since either can be sent. A plain reassignment of
+   the local drops what came before. Anything else that may change the object — a chain the reader
+   declines, a call made on it or handed it that `StateKeepingCalls` cannot show keeps it, a write through
+   it, a closure capturing it, a non-plain write after a restatement — leaves the status, media type and
+   body unknown, never the ones the object was built with. A parameter or `$this` is someone else's
+   response and is not read this way.
    A helper handing its status parameter to `response()->json($d, $code)` records the accessor exactly as
    `new JsonResponse($d, $code)` does (`ResponseFactoryCall` is the one reader of those arguments, shared
    with the return-type extension), and a call site that passes nothing binds the parameter's DEFAULT —

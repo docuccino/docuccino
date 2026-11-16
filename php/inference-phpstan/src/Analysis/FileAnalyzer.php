@@ -309,6 +309,53 @@ final class FileAnalyzer
     }
 
     /**
+     * Whether the call made on the variable mentioned at offset `$at`, or handed it there, keeps the object it
+     * holds ({@see StateKeepingCalls}). `$madeOn` is the call made on it, which the harvest records only where
+     * it takes arguments.
+     *
+     * @param  ?Closure(string): void  $touch
+     */
+    public function keepsAt(string $file, int $at, ?Node\Expr\MethodCall $madeOn, ?Closure $touch = null): bool
+    {
+        $call = $this->harvest($file)['handed'][$at] ?? null;
+        if ($call === null && $madeOn !== null) {
+            $scope = $this->scopeAtCall($file, $madeOn);
+            $call = $scope === null ? null : [$madeOn, null, $scope];
+        }
+
+        return $this->kept($call, $touch);
+    }
+
+    /**
+     * The statements of the innermost method, function or closure in the file whose body holds offset `$at`,
+     * or null where none does.
+     *
+     * @return list<Node\Stmt>|null
+     */
+    public function bodyAround(string $file, int $at): ?array
+    {
+        $harvest = $this->harvest($file);
+        $bodies = [
+            ...array_map(static fn (MethodReturnStatementsNode $node): array => $node->getStatements(), array_values($harvest['methods'])),
+            ...array_map(static fn (FunctionReturnStatementsNode $node): array => $node->getStatements(), array_values($harvest['functions'])),
+            ...array_map(static fn (ClosureReturnStatementsNode $node): array => $node->getClosureExpr()->stmts, array_values($harvest['closures'])),
+        ];
+
+        $found = null;
+        $from = -1;
+        foreach ($bodies as $statements) {
+            $statements = array_values($statements);
+            $first = $statements[0] ?? null;
+            $last = $statements[count($statements) - 1] ?? null;
+            if ($first !== null && $last !== null && $first->getStartFilePos() <= $at && $last->getEndFilePos() >= $at && $first->getStartFilePos() > $from) {
+                [$found, $from] = [$statements, $first->getStartFilePos()];
+            }
+        }
+
+        return $found;
+    }
+
+    /**
      * Whether a call keeps the object it is made on or handed, recording every file the answer was read out of.
      *
      * @param  array{Node\Expr\CallLike, ?Node\Arg, Scope}|null  $call
