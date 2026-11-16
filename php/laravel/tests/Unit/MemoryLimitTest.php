@@ -19,7 +19,8 @@ use Symfony\Component\Console\Input\ArrayInput;
 /**
  * In-process inference is bound by the calling process's memory_limit, and exhausting it is an uncatchable
  * fatal — so the knob has to be honest about what it does. It only raises: a configured ceiling that isn't
- * higher than the one in force, and an already-unlimited process, are both left alone.
+ * higher than the one in force, and an already-unlimited process, are both left alone. With nothing
+ * configured the ceiling is the default, under the same rule.
  */
 it('reads every php.ini shorthand a memory limit can use', function (string $value, ?int $bytes): void {
     expect(MemoryLimit::bytes($value))->toBe($bytes);
@@ -54,13 +55,24 @@ it('raises only towards a higher ceiling', function (?string $configured, string
     'an equal limit in other units is a no-op' => ['1024M', '1G', null],
     // The knob exists to prevent an OOM, so it never introduces one — and never removes the ceiling either.
     'an unlimited process is never capped' => ['2G', '-1', null],
-    'unlimited cannot be asked for' => ['-1', '512M', null],
-    'an overlong figure leaves the process alone' => ['9999999999999G', '512M', null],
-    'nothing configured leaves the process alone' => [null, '512M', null],
-    'a blank value leaves the process alone' => ['   ', '512M', null],
-    'an unparseable value leaves the process alone' => ['heaps', '512M', null],
+    // A ceiling the project wrote is its answer, even one below the default.
+    'a configured limit below the default applies' => ['512M', '128M', '512M'],
+    // PHP's stock 128M is less than a small application's cold build needs, so nothing configured is not
+    // "leave the process alone": the build gets the ceiling that fits it, under the same raise-only rule.
+    'nothing configured raises to the default' => [null, '128M', '1G'],
+    'nothing configured leaves a higher process alone' => [null, '2G', null],
+    'nothing configured leaves a process at the default alone' => [null, '1024M', null],
+    'nothing configured never caps an unlimited process' => [null, '-1', null],
+    // A value the knob can't use is as good as none, and none means the default — not PHP's 128M, which is
+    // the failure the default exists to prevent.
+    'a blank value raises to the default' => ['   ', '128M', '1G'],
+    'unlimited cannot be asked for, so the default applies' => ['-1', '128M', '1G'],
+    'an overlong figure raises to the default' => ['9999999999999G', '128M', '1G'],
+    'an unparseable value raises to the default' => ['heaps', '128M', '1G'],
+    'an unusable value leaves a higher process alone' => ['heaps', '2G', null],
     // A current value we can't read shouldn't block a legitimate raise.
     'an unreadable current limit still raises' => ['2G', 'unknown', '2G'],
+    'an unreadable current limit raises to the default' => [null, 'unknown', '1G'],
 ]);
 
 it('recognises memory exhaustion and only memory exhaustion', function (?array $error, bool $expected): void {
@@ -129,6 +141,58 @@ it('explains exhaustion in the process that armed the notice, and in none it for
     'the build itself' => [false, true],
     'a worker it forked' => [true, false],
 ]);
+
+it('still explains exhaustion when a shutdown function registered before the notice needs memory to run', function (): void {
+    // PHP runs shutdown functions in the order they were registered, and the first one to fail stops the
+    // rest. The framework registers its error handler's while it bootstraps, long before a build arms the
+    // notice, and that handler reports the fatal first: it loads a logger and renders the error, on a heap
+    // that is already full. Here the earlier function asks for a few megabytes, as reporting does, and
+    // leaves shutdown work of its own behind, as Collision's error page does when it first renders.
+    $run = runPhp(<<<'PHP'
+        register_shutdown_function(static function (): void {
+            if (Docuccino\Laravel\Engine\OutOfMemoryNotice::isExhaustion(error_get_last())) {
+                $report = str_repeat('r', 8 * 1024 * 1024);
+                fwrite(STDERR, "\nreported ".strlen($report)."\n");
+                register_shutdown_function(static function (): void {
+                    fwrite(STDERR, "\nrendered again\n");
+                });
+            }
+        });
+
+        Docuccino\Laravel\Engine\OutOfMemoryNotice::arm();
+
+        ini_set('memory_limit', (string) (memory_get_usage() + 4 * 1024 * 1024));
+        $hog = [];
+        while (true) {
+            $hog[] = str_repeat('x', 1024);
+        }
+        PHP, timeout: 20.0);
+
+    $reported = strpos($run['output'], 'reported 8388608');
+    $again = strpos($run['output'], 'rendered again');
+    $explained = strpos($run['output'], 'Docuccino ran out of memory building your documentation');
+
+    // The earlier function finishes its report, and the build still ends on the notice, after all of it —
+    // read off one stream, the one the notice is written to, so the order is the order it was written in.
+    expect($run['exit'])->toBe(255)
+        ->and($reported)->not->toBeFalse($run['output'])
+        ->and($again)->not->toBeFalse($run['output'])
+        ->and($explained)->not->toBeFalse($run['output'])
+        ->and($explained)->toBeGreaterThan(max((int) $reported, (int) $again));
+});
+
+it('leaves the ceiling alone when an armed build shuts down without running out', function (): void {
+    // The early shutdown hook runs at the end of every console process, armed or not; only exhaustion is a
+    // reason to move the ceiling past what the build asked for.
+    OutOfMemoryNotice::arm();
+    OutOfMemoryNotice::arm();
+    $before = ini_get('memory_limit');
+
+    OutOfMemoryNotice::shutdown();
+    OutOfMemoryNotice::shutdown();
+
+    expect(ini_get('memory_limit'))->toBe($before);
+});
 
 it('declares the flag on every command that builds a document', function (string $command): void {
     expect(Artisan::all()[$command]->getDefinition()->hasOption('memory-limit'))->toBeTrue();
