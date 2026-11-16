@@ -340,28 +340,41 @@ an operation-level declaration therefore proves partitions too, and puts back ev
 `Validation\AdoptedUnion` then decides, off the bodies alone. The declaration adopts the split when it is
 a `$ref` (with or without a `null` beside it) to a component whose body is a union of `$ref`s, and some
 property is pinned — read by `DiscriminatedUnion::pinned()`, the reading the discriminator is decided by —
-to a distinct value in every rule branch and every declared member, over the SAME set of values. The field
-becomes `{$ref, anyOf: [refinement per value]}`, plus the empty object where the rules admit one (a tagged
-member cannot describe it, so the rules add it) and `null` where the DECLARATION admits it (a declaration
-can say that, and the rules accept it — a null the server refuses is not offered). A refinement is
-`{properties: {<tag>: {const: v}, …}, required?}` holding, per member the two share, the refinement keywords
-the declared member does not state and its type does not rule out (`SchemaKeywords::survivor()`), and the
-ones it states looser than the rules (a bound by `SchemaRefinement::move()`, a value list by its members —
-beside the `$ref` both hold, so what is published is what both accept), through `items` and nested members
-and through a `$ref` the declared member makes; every member the declaration lacks, less its annotations,
-a required one reported as `attribute.body-parameter-unlisted`; and every member the rules require that
-the declared one leaves optional. Only a declaration whose type names such a union splits the object in
-place (`AdoptedUnion::namesUnion()`, the same reading): one stating no type, or another, leaves the
-object its own union, named as with no declaration. Where no value carries any of that, the `$ref` stands alone. Pinning the
-tag in each refinement is what makes it exact: a member excluded under one value is accepted and discarded
-there, so a bound applied to every value would refuse a request the server takes.
+to a distinct value in every rule branch and every declared member, over the SAME set of values. A tag
+value's refinement holds, per member the two share, the refinement keywords the declared member does not
+state and its type does not rule out (`SchemaKeywords::survivor()`), and the ones it states looser than the
+rules (a bound by `SchemaRefinement::move()`, a value list by its members — both hold, so what is published
+is what both accept), through `items` and nested members and through a `$ref` the declared member makes;
+every member the declaration lacks, less its annotations, a required one reported as
+`attribute.body-parameter-unlisted`; and every member the rules require that the declared one leaves
+optional. Only a declaration whose type names such a union splits the object in place
+(`AdoptedUnion::namesUnion()`, the same reading): one stating no type, or another, leaves the object its own
+union, named as with no declaration. Where no value carries any of that, the `$ref` stands alone.
 
-The refinement sits beside the `$ref`, never in the component, because the component is the type every
-response sending it shares. A bound the server enforces on input is no promise about output, and writing it
-into the shared body would make one route's rules move another route's response — the locality failure in
-its plainest form. Beside the `$ref` it reads, to a generator that ignores `$ref` siblings, as exactly the
-shared type; to a validator, as the server's own limits; and the 3.0 downlevel spells it `allOf: [$ref]`
-beside the `anyOf`, as for any sibling. Where the declared member accepts less than the rule — an integer
+Otherwise the field is the union's members, in the component's order: `{oneOf: [member…], discriminator}`,
+the discriminator the one the component itself is published with (`DiscriminatedUnion::discriminatorOf()`),
+a member with no refinement its bare `$ref` and one with a refinement `allOf: [{$ref: member}, refinement]`.
+Beside it go the empty object where the rules admit one (a tagged member cannot describe it, so the rules
+add it) and `null` where the DECLARATION admits it (a declaration can say that, and the rules accept it — a
+null the server refuses is not offered). Placing each refinement in its own member's branch is what makes
+it exact: a member excluded under one value is accepted and discarded there, so a bound applied to every
+value would refuse a request the server takes.
+
+The refinement is written for generators, which read neither a `$ref`'s siblings (orval, openapi-generator,
+and every 3.0 reader) nor a bound on an untyped fragment (orval reads `items: {maxLength: 8}` as
+`unknown`), and which merge an `allOf` a property at a time, the later branch's property replacing the
+earlier's whole (orval's merge, openapi-generator's `addProperties`). So the branch states the member's
+`type`, and each property it bounds is restated whole — the declared property with the rules' bounds folded
+in, a tighter rule bound replacing the declared one and two values nothing orders both kept, typed alike in
+an `allOf`. A property behind a `$ref` keeps it, the bound beside it in an `allOf` typed as its target, and
+an array there brings its target's `items`, or a generator builds a validator with no item schema. Each
+addition restates what the member already says, so none changes what the branch validates.
+
+The refinement sits in the field, never in the component, because the component is the type every response
+sending it shares. A bound the server enforces on input is no promise about output, and writing it into the
+shared body would make one route's rules move another route's response — the locality failure in its
+plainest form. The members it lists are the shared ones, so a client's types for them are the types it
+sends. Where the declared member accepts less than the rule — an integer
 under a `numeric` rule, a tighter bound or a shorter value list, a field the rules let be null — the declaration still wins, and
 `attribute.body-parameter-narrower` names each place. A declaration naming a tagged union over another tag
 or other values cannot adopt; it is written over the split as any declaration is, and
@@ -493,8 +506,8 @@ which of those two applies.
 
 **Reading through a spelling.** Two subschemas are compared keyword by keyword only once neither is
 another spelling of a schema the comparison can read directly. `SchemaComparator::compareSubschema()` asks
-four readings in order, each declining unless it applies, and compares what the first one hands back; the
-first three run only where a side spells a composition or a `$ref` with something beside it. The order is
+five readings in order, each declining unless it applies, and compares what the first one hands back; the
+first four run only where a side spells a composition or a `$ref` with something beside it. The order is
 part of the reading: a lone branch is unwrapped first, so the pointer inside it can meet the intersection
 or the resolution below.
 
@@ -522,13 +535,24 @@ or the resolution below.
    admits no null is the `Nullability` reading below. `oneOf` is exactly one, so a branch overlapping `X`
    refuses what both match: it reads this way only where every other branch's types are disjoint from
    `X`'s, and otherwise compares as written.
-3. **An intersection** (`compareIntersection()`). A pointer with an asserting sibling, against a side that
+3. **A union refined member by member** (`compareRefinedUnion()`, `Diff\RefinedUnion`). A tagged union's
+   pointer with an `anyOf` of refinements beside it, each pinning the tag to one member's value (3.0: the
+   pointer in a one-branch `allOf`), and the union's members listed with each refined one as
+   `allOf: [{$ref: member}, refinement]`, are one schema: a refinement pinned to another member's value
+   cannot hold of this one, so the intersection distributes over the members. Where one side spells each,
+   over the same members and the same discriminator, the two are compared member by member, each
+   refinement read as what it says beyond its member (`RefinedUnion::reduced()`: a keyword the member
+   states identically at the same place, through `properties`, `items` and an `allOf`, is set aside, and a
+   schema with any other subschema position is kept whole). Branch lists pair such a branch by what it
+   refines — the union by its members, a member by its pointer whether refined or bare — so the move
+   pairs inside a nullable `anyOf`, and a member refined differently is that member edited.
+4. **An intersection** (`compareIntersection()`). A pointer with an asserting sibling, against a side that
    does not spell the same pointer. 2020-12 applies `{$ref: X, …S}` as `X` and `S` both, in place, so it
    is their intersection: the pointer and its annotations are compared with the other side's pointer, read
    through as a bare one is, and `S` with the other side's siblings. An inline side is all pointer part
    and no siblings. Each part holding is enough for the intersection to, so a break in either is never
    lost, where comparing as written never looks behind the pointer at all.
-4. **Pointers resolved** (`resolvePointers()`). Two sides pointing differently are compared as the shapes
+5. **Pointers resolved** (`resolvePointers()`). Two sides pointing differently are compared as the shapes
    they name, the pointer move reported beside them; two spelling one pointer compare opaquely, the
    component's own row carrying its edits.
 

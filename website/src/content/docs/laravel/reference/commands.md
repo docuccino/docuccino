@@ -367,6 +367,13 @@ constraint beside the pointer that only restates the component still reads as ar
 which can over-report but never hides a break. Docuccino spells a hoisted shape as the pointer alone, so
 this arises only against a hand-written or third-party artifact.
 
+One intersection has a second spelling that says the same thing: a tagged union's pointer with one set
+of limits per tag beside it, `{$ref: Payment, anyOf: [...]}`, and the union's members listed with each
+member's limits joined to it, `oneOf: [{allOf: [{$ref: CardPayment}, limits]}, ...]`. Docuccino
+published the first for a `#[BodyParameter]` naming a tagged union before v0.24.0, and publishes the
+second now. The two are compared member by member, so moving between them reports nothing, and a limit
+that really changed is reported at the member it limits.
+
 A pointer the diff cannot follow — a name the document does not declare, a chain, a cycle, a pointer into
 another file — is a comparison it cannot make, and it says so rather than guessing. Where a path item or a
 request body is spelled that way on one side only, that endpoint or that body drops out of the comparison
