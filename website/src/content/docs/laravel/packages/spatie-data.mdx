@@ -372,7 +372,8 @@ status separately. A computed status falls back to `200` with a
 A `DateTimeInterface` property is documented as a string, with the `format` following your app's
 `data.date_format`: an ISO format gives `date-time` or `date`, and anything else — `d/m/Y H:i` — gives a
 plain string naming the format, because `date-time` means RFC 3339 and a claim your values fail is worse
-than none. The one property that isn't a string is a Unix timestamp:
+than none. A docblock or `#[Description]` you write for the property leads, and the sentence naming the
+format stays beneath it. The one property that isn't a string is a Unix timestamp:
 
 ```php
 #[WithCast(DateTimeInterfaceCast::class, format: 'U')]

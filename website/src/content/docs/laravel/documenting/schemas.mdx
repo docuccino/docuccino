@@ -239,8 +239,10 @@ wrote, the other what it will match.
 A cast that names its own format (`datetime:d/m/Y`, `date:d/m/Y`) never reaches the hook — Eloquent
 formats it with the parameter — so the response body is documented from that pattern: `format: date` or
 `format: date-time` where the pattern really writes one, and otherwise a plain `string` with the pattern
-named in the description. A request still accepts the domain the cast names, because the value a client
-sends is matched against the stored column and not against the serialised attribute.
+named in the description. A `@property` summary you write for the column leads, and the pattern stays
+beneath it: "Serialized using the date format "d/m/Y"." is true whatever you call the column. A request
+still accepts the domain the cast names, because the value a client sends is matched against the stored
+column and not against the serialised attribute.
 
 The same reading applies wherever else a date-time reaches the document — a DTO property, an accessor's
 return type, a webhook payload. A Carbon is documented as the RFC 3339 string it sends, not as the object

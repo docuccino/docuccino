@@ -6,6 +6,7 @@ namespace Docuccino\Laravel\Integrations\Support;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use Docuccino\Core\Draft\SchemaNotes;
 
 /**
  * A PHP `date()` format string → what a value written with it publishes. One home for the policy, because
@@ -56,7 +57,9 @@ final class DateWireFormat
 
     /**
      * The schema a value SERIALIZED with this format publishes: the `format` keyword where one is honest,
-     * else a string with the pattern named in prose — a vague true shape beats a precise false one.
+     * else a string with the pattern named in a note — a vague true shape beats a precise false one. A
+     * note ({@see SchemaNotes}) rather than the description, so prose the property's author writes leads
+     * it instead of replacing it.
      *
      * @return array<string, mixed>
      */
@@ -66,7 +69,18 @@ final class DateWireFormat
 
         return $oas !== null
             ? ['type' => 'string', 'format' => $oas]
-            : ['type' => 'string', 'description' => sprintf('Serialized using the date format "%s".', $phpFormat)];
+            : SchemaNotes::onto(['type' => 'string'], [sprintf('Serialized using the date format "%s".', $phpFormat)]);
+    }
+
+    /**
+     * What a value serialized as a Unix timestamp publishes, its meaning as a note for the reason
+     * {@see serializedSchema()} gives.
+     *
+     * @return array<string, mixed>
+     */
+    public static function timestampSchema(): array
+    {
+        return SchemaNotes::onto(['type' => 'integer'], [self::TIMESTAMP_NOTE]);
     }
 
     /** The note naming a pattern the request ACCEPTS, for a reader whose `format` keyword cannot say it. */

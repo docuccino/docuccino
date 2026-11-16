@@ -432,10 +432,11 @@ it('keeps the null on a nullable timestamp the real engine reports as a union', 
         // published the four characters instead, which the document's own example lint then reported.
         'example' => null,
     ])
-        // The `format: 'U'` cast changes the wire TYPE, and had the same hole.
+        // The `format: 'U'` cast changes the wire TYPE, and had the same hole. Its timestamp note stays
+        // beneath the docblock's sentence rather than being replaced by it.
         ->and($component['properties']['expiresAt'])->toBe([
             'type' => ['integer', 'null'],
-            'description' => 'When the listing stops accepting applications, or null if it never does.',
+            'description' => "When the listing stops accepting applications, or null if it never does.\n\nUnix timestamp (seconds).",
         ])
         // The non-null control, unchanged: a bare date-time IS the serialised string.
         ->and($component['properties']['createdAt'])->toBe([
