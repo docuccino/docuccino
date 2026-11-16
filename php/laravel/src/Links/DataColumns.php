@@ -14,6 +14,7 @@ use ReflectionAttribute;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionNamedType;
+use ReflectionParameter;
 use ReflectionProperty;
 
 /**
@@ -334,10 +335,6 @@ final class DataColumns
      */
     private function plain(string $data, string $property, bool $fromPipeline): bool
     {
-        if (! property_exists($data, $property)) {
-            return false;
-        }
-
         $reflection = new ReflectionProperty($data, $property);
         $type = $reflection->getType();
         if (! $reflection->isPublic() || $reflection->isStatic() || ! $type instanceof ReflectionNamedType || $type->allowsNull() || ! in_array($type->getName(), ['int', 'string'], true)) {
@@ -424,7 +421,7 @@ final class DataColumns
     private static function mapped(mixed $value, string $property, bool $literal): ?string
     {
         if (is_int($value)) {
-            return $literal ? (string) $value : $property;
+            $value = (string) $value;
         }
 
         if (! is_string($value) || $value === '') {
@@ -509,13 +506,10 @@ final class DataColumns
      */
     private static function promotedDefault(string $data, string $property): bool
     {
-        foreach ((new ReflectionClass($data))->getConstructor()?->getParameters() ?? [] as $parameter) {
-            if ($parameter->getName() === $property) {
-                return $parameter->isDefaultValueAvailable();
-            }
-        }
+        $parameters = (new ReflectionClass($data))->getConstructor()?->getParameters() ?? [];
+        $named = array_filter($parameters, static fn (ReflectionParameter $parameter): bool => $parameter->getName() === $property);
 
-        return false;
+        return in_array(true, array_map(static fn (ReflectionParameter $parameter): bool => $parameter->isDefaultValueAvailable(), $named), true);
     }
 
     /**
