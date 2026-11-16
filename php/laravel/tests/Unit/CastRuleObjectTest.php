@@ -22,6 +22,40 @@ use Workbench\App\Enums\WidgetStatus;
  * Laravel's code on those values and nothing else, so every way a value could reach application code — a macro,
  * a callable, a model named as a table — is refused, and so is any object the fold could not rebuild exactly.
  */
+/**
+ * The rule strings `new $class(...$args)` with its chained calls is cast to, or null.
+ *
+ * @param  list<ConstValue>  $args
+ * @param  list<array{method: string, args: list<ConstValue>}>  $chain
+ * @return list<string>|null
+ */
+function castNew(string $class, array $args, array $chain): ?array
+{
+    $written = ConstValue::instance($class, $args);
+    foreach ($chain as $call) {
+        $written = $written->withChainedCall($call['method'], $call['args']);
+    }
+
+    return CastRuleObject::castStrings(CastRuleObject::build($written));
+}
+
+/**
+ * The rule strings a static call with its chained calls is cast to, or null.
+ *
+ * @param  list<ConstValue>  $args
+ * @param  list<array{method: string, args: list<ConstValue>}>  $chain
+ * @return list<string>|null
+ */
+function castFactory(string $factory, array $args, array $chain): ?array
+{
+    $written = ConstValue::descriptor($factory, $args);
+    foreach ($chain as $call) {
+        $written = $written->withChainedCall($call['method'], $call['args']);
+    }
+
+    return CastRuleObject::castStrings(CastRuleObject::build($written));
+}
+
 beforeEach(function (): void {
     CallRecorder::$calls = 0;
 });
@@ -33,9 +67,7 @@ afterEach(function (): void {
 });
 
 it('reads a rule object built from literal values as the rule strings Laravel splits it into', function (ConstValue $written, array $expected): void {
-    $strings = $written->isDescriptor()
-        ? CastRuleObject::fromFactory((string) $written->factory, $written->args, $written->chain)
-        : CastRuleObject::fromNew((string) $written->class, $written->args, $written->chain);
+    $strings = CastRuleObject::castStrings(CastRuleObject::build($written));
 
     expect($strings)->toBe($expected);
 })->with([
@@ -74,30 +106,31 @@ it('builds nothing from a value it cannot read or a call it would not make, and 
         ->and(CallRecorder::$calls)->toBe(0);
 })->with([
     // The value would be guessed.
-    'an argument nothing can read' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::contains', [ConstValue::unknown('variable')], [])],
-    'an argument spread in' => [static fn (): ?array => CastRuleObject::fromNew('Illuminate\\Validation\\Rules\\Contains', [ConstValue::spread('unplaceable')], [])],
-    'an enum case' => [static fn (): ?array => CastRuleObject::fromNew('Illuminate\\Validation\\Rules\\Contains', [ConstValue::enumCase(WidgetStatus::class, 'Draft')], [])],
-    'a chained bound nothing can read' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::string', [], [['method' => 'max', 'args' => [ConstValue::unknown('call')]]])],
-    'too few arguments to a chained call' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::string', [], [['method' => 'between', 'args' => [ConstValue::scalar(1)]]])],
+    'an argument nothing can read' => [static fn (): ?array => castFactory('Illuminate\\Validation\\Rule::contains', [ConstValue::unknown('variable')], [])],
+    'an argument spread in' => [static fn (): ?array => castNew('Illuminate\\Validation\\Rules\\Contains', [ConstValue::spread('unplaceable')], [])],
+    'an enum case' => [static fn (): ?array => castNew('Illuminate\\Validation\\Rules\\Contains', [ConstValue::enumCase(WidgetStatus::class, 'Draft')], [])],
+    'a chained bound nothing can read' => [static fn (): ?array => castFactory('Illuminate\\Validation\\Rule::string', [], [['method' => 'max', 'args' => [ConstValue::unknown('call')]]])],
+    'too few arguments to a chained call' => [static fn (): ?array => castFactory('Illuminate\\Validation\\Rule::string', [], [['method' => 'between', 'args' => [ConstValue::scalar(1)]]])],
     // An array whose keys the fold did not read, so a constructor reading them would be rebuilt wrong.
-    'a constructor taking a keyed array' => [static fn (): ?array => CastRuleObject::fromNew('Illuminate\\Validation\\Rules\\Dimensions', [ConstValue::array([ConstValue::scalar(10)])], [])],
-    'a factory passing a keyed array on' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::dimensions', [ConstValue::array([ConstValue::scalar(10)])], [])],
+    'a constructor taking a keyed array' => [static fn (): ?array => castNew('Illuminate\\Validation\\Rules\\Dimensions', [ConstValue::array([ConstValue::scalar(10)])], [])],
+    'a factory passing a keyed array on' => [static fn (): ?array => castFactory('Illuminate\\Validation\\Rule::dimensions', [ConstValue::array([ConstValue::scalar(10)])], [])],
     'a rule object handed a value nothing can read' => [static fn (): ?object => CastRuleObject::build(ConstValue::descriptor('Illuminate\\Validation\\Rules\\File::image', [])->withChainedCall('dimensions', [ConstValue::instance(OpaqueCheck::class, [])]))],
     // Each of these would run the application's code.
-    'a macro' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::date', [], [['method' => 'recorded', 'args' => []]])],
-    'a callable named by a string' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::string', [], [['method' => 'when', 'args' => [ConstValue::scalar(true), ConstValue::scalar(CallRecorder::class.'::record')]]])],
-    'a model named as a table, with new' => [static fn (): ?array => CastRuleObject::fromNew('Illuminate\\Validation\\Rules\\Exists', [ConstValue::scalar(RecordedModel::class)], [])],
-    'a model named as a table, by the factory' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::unique', [ConstValue::scalar(RecordedModel::class)], [])],
+    'a macro' => [static fn (): ?array => castFactory('Illuminate\\Validation\\Rule::date', [], [['method' => 'recorded', 'args' => []]])],
+    'a macro called through __call()' => [static fn (): ?array => castFactory('Illuminate\\Validation\\Rule::date', [], [['method' => '__call', 'args' => [ConstValue::scalar('recorded'), ConstValue::array([])]]])],
+    'a callable named by a string' => [static fn (): ?array => castFactory('Illuminate\\Validation\\Rule::string', [], [['method' => 'when', 'args' => [ConstValue::scalar(true), ConstValue::scalar(CallRecorder::class.'::record')]]])],
+    'a model named as a table, with new' => [static fn (): ?array => castNew('Illuminate\\Validation\\Rules\\Exists', [ConstValue::scalar(RecordedModel::class)], [])],
+    'a model named as a table, by the factory' => [static fn (): ?array => castFactory('Illuminate\\Validation\\Rule::unique', [ConstValue::scalar(RecordedModel::class)], [])],
     'the password the application registered' => [static fn (): ?object => CastRuleObject::build(ConstValue::descriptor('Illuminate\\Validation\\Rules\\Password::defaults', []))],
     'the password the application registered, required' => [static fn (): ?object => CastRuleObject::build(ConstValue::descriptor('Illuminate\\Validation\\Rules\\Password::required', []))],
     'the file the application registered' => [static fn (): ?object => CastRuleObject::build(ConstValue::descriptor('Illuminate\\Validation\\Rules\\File::default', []))],
     'an application\'s own file rule' => [static fn (): ?object => CastRuleObject::build(ConstValue::instance(RecordedUpload::class, []))],
     // Not one Laravel reads as a string.
-    'a check Laravel runs' => [static fn (): ?array => CastRuleObject::fromNew('Illuminate\\Validation\\Rules\\Password', [ConstValue::scalar(8)], [])],
-    'an application rule' => [static fn (): ?array => CastRuleObject::fromNew(OpaqueCheck::class, [], [])],
-    'a macro on Rule' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::optionalSlug', [], [])],
-    'a static of another class' => [static fn (): ?array => CastRuleObject::fromFactory('App\\Support\\Rule::string', [], [])],
-    'a chained call that returns no rule' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::string', [], [['method' => '__toString', 'args' => []]])],
+    'a check Laravel runs' => [static fn (): ?array => castNew('Illuminate\\Validation\\Rules\\Password', [ConstValue::scalar(8)], [])],
+    'an application rule' => [static fn (): ?array => castNew(OpaqueCheck::class, [], [])],
+    'a macro on Rule' => [static fn (): ?array => castFactory('Illuminate\\Validation\\Rule::optionalSlug', [], [])],
+    'a static of another class' => [static fn (): ?array => castFactory('App\\Support\\Rule::string', [], [])],
+    'a chained call that returns no rule' => [static fn (): ?array => castFactory('Illuminate\\Validation\\Rule::string', [], [['method' => '__toString', 'args' => []]])],
 ]);
 
 it('runs a callable that is no literal of the build: the guard is the reason none runs above', function (): void {
@@ -111,11 +144,14 @@ it('runs a callable that is no literal of the build: the guard is the reason non
     (new Date)->recorded();
     expect(CallRecorder::$calls)->toBe(1);
 
-    (new StringRule)->when(true, CallRecorder::class.'::record');
+    (new Date)->__call('recorded', []);
     expect(CallRecorder::$calls)->toBe(2);
 
+    (new StringRule)->when(true, CallRecorder::class.'::record');
+    expect(CallRecorder::$calls)->toBe(3);
+
     new Exists(RecordedModel::class);
-    expect(CallRecorder::$calls)->toBeGreaterThan(2);
+    expect(CallRecorder::$calls)->toBeGreaterThan(3);
 
     $calls = CallRecorder::$calls;
     Password::defaults(static fn (): Password => CallRecorder::record(Password::min(12)));

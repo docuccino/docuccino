@@ -417,9 +417,9 @@ final class DataValidationRules
                 continue;
             }
 
-            $tokens = $this->reflector->validationTokens($fqcn, $property->name, rtrim($prefix, '.'));
+            [$tokens, $objects] = $this->reflector->attributeRules($fqcn, $property->name, rtrim($prefix, '.'));
             $this->dependencyFiles->add(...$this->reflector->validationEnumFiles($fqcn, $property->name));
-            [$objectRules, $opaque] = $this->ruleObjectRules($fqcn, $property->name, $key);
+            [$objectRules, $opaque] = $this->ruleObjectRules($objects, $fqcn, $property->name, $key);
             $stated = $opaque ? [] : [
                 ...array_map(RuleParsing::token(...), $tokens),
                 ...$objectRules,
@@ -684,19 +684,20 @@ final class DataValidationRules
     }
 
     /**
-     * Rules from the rule objects a property's attributes hand Laravel ({@see DataClassReflector::ruleObjects()}),
+     * Rules from the rule objects a property's attributes hand Laravel ({@see DataClassReflector::attributeRules()}),
      * read as the same `new` in a rules array reads ({@see ConstValueToRules}): a framework object as the
      * `Rule::` factory that builds it, an annotated one by its `#[RuleSchema]`. Also whether one of them has
      * content nothing can read that could loosen the rules beside it. One that does not read is recorded
      * ({@see unreadRuleObjects()}).
      *
+     * @param  list<object>  $objects
      * @return array{0: list<ValidationRule>, 1: bool}
      */
-    private function ruleObjectRules(string $fqcn, string $property, string $key): array
+    private function ruleObjectRules(array $objects, string $fqcn, string $property, string $key): array
     {
         $rules = [];
         $opaque = false;
-        foreach ($this->reflector->ruleObjects($fqcn, $property) as $object) {
+        foreach ($objects as $object) {
             $folder = new ConstValueToRules($this->customRules);
             $read = $folder->fold(LiveRuleValue::of($object));
             $this->dependencyFiles->add(...$folder->dependencyFiles());

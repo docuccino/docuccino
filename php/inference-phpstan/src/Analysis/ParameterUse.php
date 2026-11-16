@@ -13,6 +13,7 @@ use Docuccino\Inference\PhpStan\Support\SourceOrder;
 use PhpParser\Node;
 use PhpParser\NodeFinder;
 use PHPStan\Analyser\Scope;
+use WeakMap;
 
 /**
  * Reads what a callable body does with its own parameters: which parameter a return hands back unchanged
@@ -41,6 +42,15 @@ final class ParameterUse
 
     /** Header-bag writes whose first argument is the header name. */
     private const HEADER_WRITES = ['set', 'remove'];
+
+    /** @var WeakMap<Node, array{list<int>, Node\Stmt\Block, array<int, array{Node, string}>}>|null each body's parents, by its first statement */
+    private static ?WeakMap $connected = null;
+
+    /** @var WeakMap<Node, array<string, list<Node>>>|null each body's touches of a name, by its first statement */
+    private static ?WeakMap $touching = null;
+
+    /** @var WeakMap<Node, array<string, bool>>|null what a guard's operand was judged, by the question and the body */
+    private static ?WeakMap $judged = null;
 
     /**
      * The parameter `$expr` returns unchanged, or null.
@@ -185,12 +195,7 @@ final class ParameterUse
      */
     public static function reachedWhen(Node $at, Scope $scope, array $parameters, array $body): ?ConditionTree
     {
-        $root = new Node\Stmt\Block([]);
-        $parents = [];
-        foreach ($body as $node) {
-            $parents[spl_object_id($node)] = [$root, 'stmts'];
-            self::connect($node, $parents);
-        }
+        [$root, $parents] = self::connected($body);
 
         /** @var list<array{Node\Expr, bool}> $guards */
         $guards = [];
@@ -293,7 +298,7 @@ final class ParameterUse
             $parameter = self::tested($expr);
 
             return $parameter !== null && in_array($parameter, $parameters, true) && $expr->class instanceof Node\Name
-                && self::untouched($expr, $parameter, $body, rebindsOnly: true)
+                && self::judged($expr, 'untouched '.$parameter, $body, static fn (): bool => self::untouched($expr, $parameter, $body, rebindsOnly: true))
                 ? ConditionTree::leaf(new TypeCondition($parameter, $scope->resolveName($expr->class), true))
                 : ConditionTree::known(null);
         }
@@ -312,7 +317,7 @@ final class ParameterUse
         $arguments = $call === null ? null : self::literalArguments($call);
         if ($call === null || $value === null || $parameter === null || $arguments === null
             || ! $call->name instanceof Node\Identifier || ! in_array($parameter, $parameters, true)
-            || ! self::unchangedBefore($call, $parameter, $body)
+            || ! self::judged($call, 'unchanged '.$parameter, $body, static fn (): bool => self::unchangedBefore($call, $parameter, $body))
         ) {
             return ConditionTree::known(null);
         }
@@ -320,6 +325,25 @@ final class ParameterUse
         $leaf = ConditionTree::leaf(new CallCondition($parameter, $call->name->toString(), $arguments, $value));
 
         return $negated ? ConditionTree::not($leaf) : $leaf;
+    }
+
+    /**
+     * What `$judge` answers of an operand of a guard, judged once per body: the answer stands where the guard
+     * does, so it is the same for every return past it.
+     *
+     * @param  list<Node>  $body
+     * @param  callable(): bool  $judge
+     */
+    private static function judged(Node $operand, string $question, array $body, callable $judge): bool
+    {
+        $key = $question.'@'.($body === [] ? '' : spl_object_id($body[0]).'+'.count($body));
+        $answers = (self::$judged ??= new WeakMap)[$operand] ?? [];
+        if (! isset($answers[$key])) {
+            $answers[$key] = $judge();
+            self::$judged[$operand] = $answers;
+        }
+
+        return $answers[$key];
     }
 
     /**
@@ -448,14 +472,7 @@ final class ParameterUse
      */
     private static function nonePrecedes(Node $at, array $body, callable $touches): bool
     {
-        // One root over the body's statements, so any two of its nodes have an ancestor in common.
-        $root = new Node\Stmt\Block([]);
-        $parents = [];
-        foreach ($body as $node) {
-            $parents[spl_object_id($node)] = [$root, 'stmts'];
-            self::connect($node, $parents);
-        }
-
+        [$root, $parents] = self::connected($body);
         foreach ($touches($parents, $root) as $touch) {
             if (self::mayPrecede($touch, $at, $parents, $root, $body)) {
                 return false;
@@ -481,7 +498,15 @@ final class ParameterUse
      */
     private static function touches(string $name, array $body, array $parents, Node $root, bool $rebindsOnly): array
     {
-        return array_values((new NodeFinder)->find($body, static function (Node $node) use ($name, $parents, $root, $rebindsOnly): bool {
+        // The same for wherever it is asked from, so found once per body.
+        $first = $body[0] ?? null;
+        $key = $name.($rebindsOnly ? '#rebinds' : '#touches').'+'.count($body);
+        $found = $first === null ? null : ((self::$touching ??= new WeakMap)[$first] ?? [])[$key] ?? null;
+        if ($found !== null) {
+            return $found;
+        }
+
+        $found = array_values((new NodeFinder)->find($body, static function (Node $node) use ($name, $parents, $root, $rebindsOnly): bool {
             $assignment = LocalWrites::assignment($node);
             if (($assignment !== null && $assignment[0] === $name)
                 || in_array($name, LocalWrites::retires($node), true)
@@ -515,6 +540,12 @@ final class ParameterUse
 
             return $node instanceof Node\Expr\Variable && $node->name === $name && ! self::readsInPlace($node, $parents, $root);
         }));
+        if ($first !== null) {
+            self::$touching ??= new WeakMap;
+            self::$touching[$first] = [$key => $found] + (self::$touching[$first] ?? []);
+        }
+
+        return $found;
     }
 
     /** Whether the node takes a reference to the variable: a by-reference capture or array item. */
@@ -755,6 +786,36 @@ final class ParameterUse
         $index = array_search($ancestor, $path, true);
 
         return is_int($index) && $index > 0 ? $path[$index - 1] : $ancestor;
+    }
+
+    /**
+     * The body connected under one root, so any two of its nodes have an ancestor in common, with every node's
+     * parent and the slot it sits in; connected once per body.
+     *
+     * @param  list<Node>  $body
+     * @return array{Node\Stmt\Block, array<int, array{Node, string}>}
+     */
+    private static function connected(array $body): array
+    {
+        $statements = array_map(spl_object_id(...), $body);
+        $first = $body[0] ?? null;
+        $cached = $first === null ? null : (self::$connected ??= new WeakMap)[$first] ?? null;
+        if ($cached !== null && $cached[0] === $statements) {
+            return [$cached[1], $cached[2]];
+        }
+
+        $root = new Node\Stmt\Block([]);
+        $parents = [];
+        foreach ($body as $node) {
+            $parents[spl_object_id($node)] = [$root, 'stmts'];
+            self::connect($node, $parents);
+        }
+        if ($first !== null) {
+            self::$connected ??= new WeakMap;
+            self::$connected[$first] = [$statements, $root, $parents];
+        }
+
+        return [$root, $parents];
     }
 
     /**

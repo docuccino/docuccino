@@ -19,7 +19,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 29,
+                "line": 31,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::accept"
               }
             },
@@ -106,7 +106,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 47,
+                "line": 49,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::batch"
               }
             },
@@ -168,7 +168,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 101,
+                "line": 115,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::built"
               }
             },
@@ -255,7 +255,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 71,
+                "line": 73,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::cached"
               }
             },
@@ -329,6 +329,161 @@
         }
       }
     },
+    "/api/chains/export": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:mlrocsch6zdniub5",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/ResponseChainController.php",
+                "line": 79,
+                "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::export"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ]
+        },
+        "operationId": "get.api.chains.export",
+        "summary": "Download the latest export, deleted once it is sent.",
+        "tags": [
+          "ResponseChain"
+        ],
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:65vuuedrsamt447f",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "format",
+                          "type"
+                        ]
+                      }
+                    ]
+                  },
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chains/flash": {
+      "post": {
+        "x-docuccino": {
+          "id": "op:v1:gzrydgmq6qk3ir3g",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/ResponseChainController.php",
+                "line": 85,
+                "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::flash"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ]
+        },
+        "operationId": "post.api.chains.flash",
+        "summary": "Queue an export and see the export list.",
+        "tags": [
+          "ResponseChain"
+        ],
+        "responses": {
+          "303": {
+            "x-docuccino": {
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                },
+                {
+                  "producer": "inference",
+                  "layer": "inference",
+                  "fields": [
+                    "headers"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/ResponseChainController.php",
+                    "line": 85,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::flash"
+                  }
+                }
+              ]
+            },
+            "description": "See Other",
+            "headers": {
+              "Location": {
+                "description": "The URL to follow.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/chains/locked": {
       "get": {
         "x-docuccino": {
@@ -342,7 +497,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 95,
+                "line": 109,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::locked"
               }
             },
@@ -407,7 +562,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 23,
+                "line": 25,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::note"
               }
             },
@@ -485,7 +640,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 41,
+                "line": 43,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::padded"
               }
             },
@@ -547,7 +702,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 77,
+                "line": 91,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::prepared"
               }
             },
@@ -612,7 +767,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 53,
+                "line": 55,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::pretty"
               }
             },
@@ -699,7 +854,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 109,
+                "line": 123,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::refilled"
               }
             },
@@ -786,7 +941,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 89,
+                "line": 103,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::relocated"
               }
             },
@@ -830,7 +985,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                    "line": 89,
+                    "line": 103,
                     "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::relocated"
                   }
                 }
@@ -864,7 +1019,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 59,
+                "line": 61,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::remember"
               }
             },
@@ -951,7 +1106,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 83,
+                "line": 97,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::removed"
               }
             },
@@ -1038,7 +1193,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 35,
+                "line": 37,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::settle"
               }
             },
@@ -1125,7 +1280,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/ResponseChainController.php",
-                "line": 65,
+                "line": 67,
                 "symbol": "Workbench\\App\\Http\\Controllers\\ResponseChainController::unchanged"
               }
             },
@@ -1173,7 +1328,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "590dc53319dc2bd6d58af232fe7f0d7696ebecad707b415b198f4a917a62a928"
+      "contentHash": "12581503fcd598f74e06a659af3d10b6ffa143ee8795a60931c6f2576b3c261e"
     },
     "generator": {
       "name": "docuccino/laravel",

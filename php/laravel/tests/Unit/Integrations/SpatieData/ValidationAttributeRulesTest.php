@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
+use Docuccino\Laravel\Tests\Fixtures\Rules\CallRecorder;
+use Docuccino\Laravel\Tests\Fixtures\Rules\RecordedModel;
 use Illuminate\Validation\Rules\Password;
 use Spatie\LaravelData\Attributes\Validation\ObjectValidationAttribute;
 use Spatie\LaravelData\Attributes\Validation\ValidationAttribute;
@@ -10,7 +12,6 @@ use Spatie\LaravelData\Exceptions\CannotBuildValidationRule;
 use Spatie\LaravelData\Support\Validation\RuleDenormalizer;
 use Spatie\LaravelData\Support\Validation\ValidationPath;
 use Workbench\App\Enums\WidgetStatus;
-use Workbench\App\Models\Article;
 
 /*
  * The guard behind the reflector's reading of spatie validation attributes. laravel-data, not Docuccino, says
@@ -37,7 +38,8 @@ it('reads every validation attribute laravel-data ships to the rule laravel-data
 
     $sources = [
         'Dimensions' => ['minWidth: 10', '10', '10, 20, maxWidth: 100', 'maxHeight: 50, minWidth: 10', 'ratio: "3/2"', 'rule: new \Illuminate\Validation\Rules\Dimensions(["width" => 5])'],
-        'Exists' => ['"users"', '"users", "email"', 'column: "email", table: "users"', '"users", connection: "pgsql"', 'withoutTrashed: true, table: "users"', '\\'.Article::class.'::class', 'rule: new \Illuminate\Validation\Rules\Exists("users", "id")'],
+        // A table written as a model's class is read apart, below.
+        'Exists' => ['"users"', '"users", "email"', 'column: "email", table: "users"', '"users", connection: "pgsql"', 'withoutTrashed: true, table: "users"', 'rule: new \Illuminate\Validation\Rules\Exists("users", "id")'],
         'Unique' => ['"users"', 'column: "handle", table: "users"', '"users", "email", ignore: "5"', 'ignoreColumn: "uuid", ignore: "5", table: "users"', 'rule: new \Illuminate\Validation\Rules\Unique("users")'],
         'Password' => ['', '10', 'min: 10, letters: true', '10, true, mixedCase: true', 'uncompromised: true, uncompromisedThreshold: 3', 'default: true', 'rule: new \Illuminate\Validation\Rules\Password(6)'],
         'Enum' => [$status, 'enum: '.$status, 'new \Illuminate\Validation\Rules\Enum('.$status.')'],
@@ -78,7 +80,7 @@ it('reads every validation attribute laravel-data ships to the rule laravel-data
             }
 
             $reflector = new DataClassReflector;
-            $read = [...$reflector->validationTokens($carrier, 'value'), ...$reflector->ruleObjects($carrier, 'value')];
+            $read = array_merge(...$reflector->attributeRules($carrier, 'value'));
 
             $compared[$short] = true;
             if (serialize($read) !== serialize($written)) {
@@ -103,21 +105,36 @@ it('reads a password the application registers as its default by its keyword alo
         $carrier = attributeCarrier('Spatie\\LaravelData\\Attributes\\Validation\\Password', 'default: true');
         $reflector = new DataClassReflector;
 
-        expect($reflector->validationTokens($carrier, 'value'))->toBe(['password'])
-            ->and($reflector->ruleObjects($carrier, 'value'))->toBe([])
+        expect($reflector->attributeRules($carrier, 'value')[0])->toBe(['password'])
+            ->and($reflector->attributeRules($carrier, 'value')[1])->toBe([])
             // A rule object it is given wins over the default, in laravel-data as here.
-            ->and((new DataClassReflector)->ruleObjects(attributeCarrier('Spatie\\LaravelData\\Attributes\\Validation\\Password', 'default: true, rule: new \Illuminate\Validation\Rules\Password(6)'), 'value'))
+            ->and((new DataClassReflector)->attributeRules(attributeCarrier('Spatie\\LaravelData\\Attributes\\Validation\\Password', 'default: true, rule: new \Illuminate\Validation\Rules\Password(6)'), 'value')[1])
             ->toEqual([new Password(6)]);
     } finally {
         Password::$defaultCallback = null;
     }
 });
 
+it('reads a database rule whose table is a model\'s class by its keyword, never constructing the model', function (string $attribute, string $arguments, string $keyword): void {
+    // Laravel resolves such a table by constructing the model, which runs the application's boot code; the
+    // build runs none of it. `exists` and `unique` say the field names a stored record, whatever the table.
+    CallRecorder::$calls = 0;
+    $carrier = attributeCarrier('Spatie\\LaravelData\\Attributes\\Validation\\'.$attribute, $arguments);
+    $reflector = new DataClassReflector;
+
+    expect($reflector->attributeRules($carrier, 'value')[0])->toBe([$keyword])
+        ->and($reflector->attributeRules($carrier, 'value')[1])->toBe([])
+        ->and(CallRecorder::$calls)->toBe(0);
+})->with([
+    '#[Exists(Model::class)]' => ['Exists', '\\'.RecordedModel::class.'::class', 'exists'],
+    '#[Unique(table: Model::class, column: …)]' => ['Unique', 'column: "handle", table: \\'.RecordedModel::class.'::class', 'unique'],
+]);
+
 it('reads a parameter as laravel-data writes it', function (string $attribute, string $read): void {
     $class = 'Spatie\\LaravelData\\Attributes\\Validation\\'.explode('(', $attribute)[0];
     $carrier = attributeCarrier($class, substr($attribute, strlen(explode('(', $attribute)[0]) + 1, -1));
 
-    expect((new DataClassReflector)->validationTokens($carrier, 'value'))->toBe([$read]);
+    expect((new DataClassReflector)->attributeRules($carrier, 'value')[0])->toBe([$read]);
 })->with([
     // A case is the value Laravel compares, a bool is spelled out, and a null is left out.
     'a backed case' => ['RequiredIf("status", \Workbench\App\Enums\WidgetStatus::Published)', 'required_if:status,published'],
@@ -139,7 +156,7 @@ it('reads a field reference under the path laravel-data validates the declaring 
     $instance = (new ReflectionProperty($carrier, 'value'))->getAttributes()[0]->newInstance();
     $written = app(RuleDenormalizer::class)->execute($instance, ValidationPath::create(str_replace('*', $item, $path) ?: null));
 
-    $read = (new DataClassReflector)->validationTokens($carrier, 'value', $path);
+    $read = (new DataClassReflector)->attributeRules($carrier, 'value', $path)[0];
 
     expect(str_replace($path, str_replace('*', $item, $path), $read))->toBe($written);
 })->with([
@@ -155,5 +172,5 @@ it('reads a field reference under the path laravel-data validates the declaring 
 
 it('reads no rule from an attribute laravel-data cannot build either', function (): void {
     // laravel-data refuses this mode when it builds the rule, so every request carrying the field fails.
-    expect((new DataClassReflector)->validationTokens(attributeCarrier('Spatie\\LaravelData\\Attributes\\Validation\\Distinct', '"loose"'), 'value'))->toBe([]);
+    expect((new DataClassReflector)->attributeRules(attributeCarrier('Spatie\\LaravelData\\Attributes\\Validation\\Distinct', '"loose"'), 'value')[0])->toBe([]);
 });

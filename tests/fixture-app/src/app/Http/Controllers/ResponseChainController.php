@@ -9,12 +9,15 @@ use App\Http\Responses\LockedStreamResponse;
 use App\Http\Responses\MovedResponse;
 use App\Http\Responses\PinnedStatusJsonResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * Fluent chains on a response that set its content, its data, a cookie, a callback or its encoding, beside
- * the status, headers and media type the chain reader already reads; chains on an application's response
+ * the status, headers and media type the chain reader already reads; a download's and a redirect's own
+ * setters; chains on an application's response
  * subclass, one of which overrides the status setter; and a response built into a local by the factory or
  * by `new`, returned as it is. Only ever analysed, never dispatched.
  */
@@ -113,6 +116,30 @@ class ResponseChainController extends Controller
             ->expire()
             ->setProtocolVersion('1.1')
             ->withException(new \RuntimeException('queued'));
+    }
+
+    public function download(): BinaryFileResponse
+    {
+        return response()->download(storage_path('exports/latest.csv'), 'latest.csv')->deleteFileAfterSend();
+    }
+
+    public function downloadHeaders(): BinaryFileResponse
+    {
+        return response()->download(storage_path('exports/latest.csv'))
+            ->setAutoEtag()
+            ->setAutoLastModified()
+            ->setContentDisposition('attachment', 'latest.csv');
+    }
+
+    public function redirectFlash(): RedirectResponse
+    {
+        return redirect('/exports', 303)
+            ->with('status', 'queued')
+            ->withErrors(['export' => 'Already running.'])
+            ->withInput()
+            ->withCookies([cookie('export', 'queued')])
+            ->withFragment('latest')
+            ->withoutFragment();
     }
 
     public function json(): JsonResponse

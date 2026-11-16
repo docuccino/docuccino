@@ -23,7 +23,8 @@ use Workbench\App\Http\Controllers\DeferredExportController;
  * The document an application gets for a response built into a local whose status or media type a later
  * statement sets — `$response->setStatusCode(202);` on a line of its own — for a JSON, plain, streamed and
  * redirect response and one thrown for the framework to send, beside a status set on one branch, set twice,
- * set before the local is replaced, set by a helper handed the response, and set from the request.
+ * set before the local is replaced, set by a helper handed the response, a header set by one, and set from
+ * the request.
  * Byte-locked, warm as well as cold; the scripted returns are what the real engine recovers from the fixture
  * app's same calls, which the last test holds them to.
  *
@@ -48,6 +49,8 @@ function statementStatusReturns(): array
         'restart' => $sent(new ArrayShapeT([new ArrayShapeField('created', new LiteralT(true))]), 201),
         // A helper the build does not follow may have changed anything, so nothing it was built with stands.
         'hand' => new ClassT($json, [new UnknownT('payload not folded'), new UnknownT('status not folded')]),
+        // A helper that sets only a header leaves the status and the body it was built with.
+        'stamp' => $sent($queued(true), 202),
         'relay' => new ClassT($json, [$queued(true), new UnknownT('status not folded')]),
         'csv' => new ClassT($json, [new LiteralT('id,total'), new LiteralT(202), new LiteralT('text/csv')]),
         'refuse' => $sent($queued(false), 409),
@@ -76,6 +79,7 @@ function statementStatusRoutes(): callable
         $router->post('api/deferred/retry', [DeferredExportController::class, 'retry']);
         $router->post('api/deferred/restart', [DeferredExportController::class, 'restart']);
         $router->post('api/deferred/hand', [DeferredExportController::class, 'hand']);
+        $router->post('api/deferred/stamp', [DeferredExportController::class, 'stamp']);
         $router->post('api/deferred/relay', [DeferredExportController::class, 'relay']);
         $router->get('api/deferred/csv', [DeferredExportController::class, 'csv']);
         $router->post('api/deferred/refuse', [DeferredExportController::class, 'refuse']);
@@ -108,6 +112,7 @@ it('scripts what the real engine recovers from the fixture app’s same calls', 
     'setStatusCode(201), then setStatusCode(202)' => ['retry', 'twice'],
     'setStatusCode(202), then the local replaced with a 201' => ['restart', 'replaced'],
     'a helper handed the response sets 202' => ['hand', 'helper'],
+    'a helper handed the response sets a header' => ['stamp', 'helperHeader'],
     'setStatusCode($request->integer(…))' => ['relay', 'unread'],
     'header(\'Content-Type\', \'text/csv\')' => ['csv', 'header'],
     'thrown in an HttpResponseException after setStatusCode(409)' => ['refuse', 'thrown'],

@@ -71,6 +71,11 @@ it('keeps the object where nothing the call runs writes one of its own propertie
     'handed as an argument to a reader' => ['\\'.KeptReader::class.'::read($kept, 1)', true],
     'handed by name' => ['\\'.KeptReader::class.'::read(floor: 1, kept: $kept)', true],
     'handed to a reader on another object' => ['$reader->inspect($kept, 1)', true],
+    // A setter handing the object back, `->header()` among them, returns what it was called on: nothing new
+    // holds it where the caller drops that, or returns it to a caller that does.
+    'a setter handing it back, what it returns dropped' => ['$kept->chainedDropped(1)', true],
+    'handed to a helper calling such a setter' => ['\\'.KeptReader::class.'::stamp($kept, 1)', true],
+    'handed to a helper returning what such a setter returns, dropped' => ['\\'.KeptReader::class.'::stampOnward($kept, 1)', true],
 
     'a property assigned' => ['$kept->restated(503)', false],
     'a property assigned through an operator' => ['$kept->bumped(1)', false],
@@ -82,7 +87,10 @@ it('keeps the object where nothing the call runs writes one of its own propertie
     'a property a loop writes into' => ['$kept->loopedInto([1])', false],
     'a property handed to a by-reference parameter' => ['$kept->sorted(0)', false],
     'a property handed to a callee nothing names' => ['$kept->handedProperty($other)', false],
+    // What the call made in analysed code returns is that code's own to keep, which is not followed.
     'the object returned' => ['$kept->returned(1)', false],
+    'a setter handing it back, what it returns held and changed' => ['$kept->chainedKept(503)', false],
+    'the object returned from a closure the call makes' => ['$kept->returnedLater(1)', false],
     'the object assigned to another variable' => ['$kept->aliased(1)', false],
     'the object handed to a function' => ['$kept->encoded(0)', false],
     'a method of it made a callable' => ['$kept->callable(1)', false],
@@ -110,4 +118,45 @@ it('records every file the answer was read out of, a no as well, each time it is
         ->and($files(keptAt($keeping, $scope, $writer)))->toBe(['KeptReader.php'])
         // Which `counted()` the helper runs is the hierarchy's to say, so the parent's file keys it too.
         ->and($files(keptAt($keeping, $scope, '$kept->handedOn(1)')))->toBe(['Kept.php', 'KeptBase.php', 'KeptReader.php']);
+});
+
+/**
+ * A class of helpers handing a {@see Kept} on in five layers of `$width`, each to every helper of the next, the
+ * last only testing its class; written to a temp file named for the process and the width, kept until the
+ * process ends. Its name.
+ */
+function keptLayers(int $width): string
+{
+    $namespace = 'Docuccino\\Inference\\PhpStan\\Tests\\Runtime\\Layers'.$width;
+    $source = "<?php\nnamespace {$namespace};\nuse ".Kept::class.";\nfinal class Helpers {\n";
+    for ($layer = 0; $layer < 5; $layer++) {
+        for ($helper = 0; $helper < $width; $helper++) {
+            $source .= "    public static function h{$layer}_{$helper}(Kept \$kept): void {\n";
+            for ($next = 0; $layer < 4 && $next < $width; $next++) {
+                $source .= '        self::h'.($layer + 1)."_{$next}(\$kept);\n";
+            }
+            $source .= $layer === 4 ? "        if (\$kept instanceof Kept) { return; }\n    }\n" : "    }\n";
+        }
+    }
+
+    $file = sys_get_temp_dir().'/docuccino-kept-layers-'.getmypid().'-'.$width.'.php';
+    file_put_contents($file, $source."}\n");
+    // Kept until the process ends: the reader under test parses the class's file.
+    register_shutdown_function(static fn () => @unlink($file));
+    require_once $file;
+
+    return $namespace.'\\Helpers';
+}
+
+it('reads each helper once for each depth it is reached at, however many paths reach it', function (): void {
+    // Twelve helpers to a layer: 12^4 paths reach the last layer, but there are only sixty helpers to read.
+    // Reading one once per path took over a minute here.
+    $helpers = keptLayers(12);
+
+    $started = hrtime(true);
+    $kept = keptAt(new StateKeepingCalls, keptScope($this->createStub(Scope::class)), '\\'.$helpers.'::h0_0($kept)');
+    $seconds = (hrtime(true) - $started) / 1e9;
+
+    expect($kept)->toBe([true, [(string) (new ReflectionClass($helpers))->getFileName()]])
+        ->and($seconds)->toBeLessThan(5.0);
 });

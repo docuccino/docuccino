@@ -90,6 +90,19 @@ final class FluentResponseChain
         'setDate' => self::UNDOCUMENTED,
         'setVary' => self::UNDOCUMENTED,
         'expire' => self::UNDOCUMENTED,
+        // A download's own: whether the file outlives the send, and headers no fact reads.
+        'deleteFileAfterSend' => self::UNDOCUMENTED,
+        'setAutoEtag' => self::UNDOCUMENTED,
+        'setAutoLastModified' => self::UNDOCUMENTED,
+        // Content-Disposition names how the file is saved, never its media type.
+        'setContentDisposition' => self::UNDOCUMENTED,
+        // A redirect's own: what it flashes to the session, its cookies, and its target's fragment.
+        'with' => self::UNDOCUMENTED,
+        'withErrors' => self::UNDOCUMENTED,
+        'withInput' => self::UNDOCUMENTED,
+        'withCookies' => self::UNDOCUMENTED,
+        'withFragment' => self::UNDOCUMENTED,
+        'withoutFragment' => self::UNDOCUMENTED,
     ];
 
     /** Sets the status. */

@@ -411,3 +411,35 @@ it('reads what the guards on the way to a return require of the parameters, join
     'past a guard with an else' => ['if ($request->is(\'api/*\')) { return $response; } else { report($e); } return $judged;', null],
     'no guard at all' => ['return $judged;', null],
 ]);
+
+it('reads what every return of a long chain of guards requires in time that grows with what it reads, not cubically', function (string $arm): void {
+    // An exception handler's respond() callback with one guarded arm per API version, every return asked for:
+    // each guard is judged where it stands, which is the same for every return past it, so it is judged once.
+    $arms = 150;
+    $code = '';
+    for ($i = 0; $i < $arms; $i++) {
+        $code .= sprintf('if (%s) { return response()->json([\'arm\' => %d], 400); } ', sprintf($arm, $i), $i);
+    }
+    $closure = (new NodeFinder)->findFirstInstanceOf(
+        (new ParserFactory)->createForHostVersion()->parse('<?php $f = function ($response, $e, $request) { '.$code.'return $response; };') ?? [],
+        Node\Expr\Closure::class,
+    );
+    assert($closure instanceof Node\Expr\Closure);
+    $body = array_values($closure->stmts);
+    $scope = $this->createStub(Scope::class);
+    $scope->method('resolveName')->willReturnCallback(static fn (Node\Name $name): string => $name->toString());
+
+    $started = hrtime(true);
+    $guarded = 0;
+    foreach ((new NodeFinder)->findInstanceOf($body, Node\Stmt\Return_::class) as $return) {
+        $guarded += ParameterUse::reachedWhen($return, $scope, ['response', 'e', 'request'], $body) === null ? 0 : 1;
+    }
+    $seconds = (hrtime(true) - $started) / 1e9;
+
+    // Judging each guard again for every return past it took over a minute here; once each, well under a second.
+    expect($guarded)->toBe($arms + 1)
+        ->and($seconds)->toBeLessThan(10.0);
+})->with([
+    'a call on the request' => ['$request->is(\'api/v%d/*\')'],
+    'an instanceof test of the exception' => ['$e instanceof \App\Exceptions\Version%dException'],
+]);

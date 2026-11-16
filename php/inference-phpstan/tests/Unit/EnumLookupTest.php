@@ -17,7 +17,7 @@ use PHPStan\Type\Type;
  * other is a `TypeError` where the calling file declares `strict_types`, and coerced where it does not.
  */
 it('answers what from() throws for every value it may be handed', function (array $values, array $backing, bool $intBacked, bool $strict, ?array $expected): void {
-    expect(EnumLookup::outcomes($values, $backing, $intBacked, $strict))->toBe($expected);
+    expect(EnumLookup::throws($values, $backing, $intBacked, $strict)[0] ?? null)->toBe($expected);
 })->with([
     // A value a case is backed by returns that case, so neither error can happen.
     'an int a case backs' => [[423], [410, 423], true, true, []],
@@ -49,7 +49,7 @@ it('answers what from() throws for every value it may be handed', function (arra
 
 it('answers whether from() throws for every value it may be handed', function (array $values, array $backing, bool $strict, bool $expected): void {
     // Every value throwing, whichever error each throws, is what makes the call it is handed to unreachable.
-    expect(EnumLookup::always($values, $backing, true, $strict))->toBe($expected);
+    expect(EnumLookup::throws($values, $backing, true, $strict)[1] ?? false)->toBe($expected);
 })->with([
     'an int no case backs' => [[999], [410, 423], true, true],
     'an int a case backs' => [[423], [410, 423], true, false],

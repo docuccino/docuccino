@@ -179,7 +179,7 @@ final class ConstValueToRules
     /**
      * A `new X(...)` rule object documents as whatever its class declares, and a framework object as the
      * `Rule::` factory that builds it, chained calls included, as the rule string Laravel reads it as
-     * ({@see CastRuleObject}), or as the rules its state holds ({@see state()}). An unannotated class
+     * ({@see CastRuleObject}), or as the rules its state holds ({@see built()}). An unannotated class
      * contributes nothing and is named for the caller ({@see UnreadRule}).
      *
      * @return list<ValidationRule>
@@ -206,14 +206,9 @@ final class ConstValueToRules
             return $this->descriptorItem($descriptor);
         }
 
-        $strings = CastRuleObject::fromNew($class, $value->args, $value->chain);
-        if ($strings !== null) {
-            return array_map(RuleParsing::token(...), $strings);
-        }
-
-        $state = $this->state($value);
-        if ($state !== null) {
-            return $state;
+        $built = $this->built($value);
+        if ($built !== null) {
+            return $built;
         }
 
         $facts = $this->customRules->read($class);
@@ -246,14 +241,9 @@ final class ConstValueToRules
             return $rule === null ? [] : [$rule];
         }
 
-        $strings = CastRuleObject::fromFactory((string) $descriptor->factory, $descriptor->args, $descriptor->chain);
-        if ($strings !== null) {
-            return array_map(RuleParsing::token(...), $strings);
-        }
-
-        $state = $this->state($descriptor);
-        if ($state !== null) {
-            return $state;
+        $built = $this->built($descriptor);
+        if ($built !== null) {
+            return $built;
         }
 
         $string = $descriptor->chain === [] ? RuleFactories::ruleString((string) $descriptor->factory, $descriptor->args) : null;
@@ -264,15 +254,20 @@ final class ConstValueToRules
     }
 
     /**
-     * A framework rule object Laravel validates by its state, built from what is written and read as the live
-     * object is ({@see LiveRuleValue}): `Password::min(8)` as `string` and `min:8`, with a check of its own on
-     * the value named as written. Null where it is none, or cannot be built.
+     * A framework rule object built from what is written: the rule strings Laravel casts it to, or, for one it
+     * validates by its state, that state read as the live object is ({@see LiveRuleValue}): `Password::min(8)`
+     * as `string` and `min:8`, with a check of its own on the value named as written. Null where it is neither,
+     * or cannot be built.
      *
      * @return list<ValidationRule>|null
      */
-    private function state(ConstValue $written): ?array
+    private function built(ConstValue $written): ?array
     {
         $rule = CastRuleObject::build($written);
+        $strings = CastRuleObject::castStrings($rule);
+        if ($strings !== null) {
+            return array_map(RuleParsing::token(...), $strings);
+        }
         if ($rule === null || ! LiveRuleValue::readsState($rule::class)) {
             return null;
         }

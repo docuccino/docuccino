@@ -19,7 +19,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/DeferredExportController.php",
-                "line": 110,
+                "line": 119,
                 "symbol": "Workbench\\App\\Http\\Controllers\\DeferredExportController::csv"
               }
             },
@@ -537,7 +537,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/DeferredExportController.php",
-                "line": 119,
+                "line": 128,
                 "symbol": "Workbench\\App\\Http\\Controllers\\DeferredExportController::refuse"
               }
             },
@@ -624,7 +624,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/DeferredExportController.php",
-                "line": 101,
+                "line": 110,
                 "symbol": "Workbench\\App\\Http\\Controllers\\DeferredExportController::relay"
               }
             },
@@ -875,6 +875,93 @@
         }
       }
     },
+    "/api/deferred/stamp": {
+      "post": {
+        "x-docuccino": {
+          "id": "op:v1:5f26bg7awutqbfvu",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/DeferredExportController.php",
+                "line": 101,
+                "symbol": "Workbench\\App\\Http\\Controllers\\DeferredExportController::stamp"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ]
+        },
+        "operationId": "post.api.deferred.stamp",
+        "summary": "Queue an export, stamped with the API version that queued it.",
+        "tags": [
+          "DeferredExport"
+        ],
+        "responses": {
+          "202": {
+            "x-docuccino": {
+              "id": "res:v1:sdxtje37frj2dqjl",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "queued": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "queued"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/deferred/stream": {
       "get": {
         "x-docuccino": {
@@ -957,7 +1044,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "4909c95ee81c395d902e141dc3468a2bf3de0cec7d10ac280219d8003f097d8c"
+      "contentHash": "f11c1cabbe90bd4b561b814f74573a33b429e7ab89d58a4008fa41128a87aca6"
     },
     "generator": {
       "name": "docuccino/laravel",

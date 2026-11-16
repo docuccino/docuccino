@@ -221,11 +221,11 @@ it('reflects the new attribute facts off the real class', function (): void {
         ->and($reflector->propertyDefault(AccountData::class, 'country'))->toBe(['hasDefault' => true, 'value' => 'GB'])
         ->and($reflector->propertyDefault(AccountData::class, 'displayName')['hasDefault'])->toBeFalse()
         ->and($reflector->dataCollectionOf(AccountData::class, 'tags'))->toBe(TagData::class)
-        ->and($reflector->validationTokens(AccountData::class, 'code'))->toBe(['max:5'])
+        ->and($reflector->attributeRules(AccountData::class, 'code')[0])->toBe(['max:5'])
         // laravel-data validates an `#[Enum]` with the framework's `Enum` rule, so that object is what it
         // hands over, read as `Rule::enum()` is, and no token stands for it.
-        ->and($reflector->validationTokens(AccountData::class, 'status'))->toBe([])
-        ->and($reflector->ruleObjects(AccountData::class, 'status'))->toEqual([new Illuminate\Validation\Rules\Enum(AccountStatus::class)]);
+        ->and($reflector->attributeRules(AccountData::class, 'status')[0])->toBe([])
+        ->and($reflector->attributeRules(AccountData::class, 'status')[1])->toEqual([new Illuminate\Validation\Rules\Enum(AccountStatus::class)]);
 });
 
 it('separates having a default from having a documentable one', function (): void {
@@ -247,9 +247,9 @@ it('silently drops an object-valued #[Rule(new …)] but recovers the string for
     $reflector = new DataClassReflector;
 
     // A custom rule object can't be recovered statically, so no tokens — the field keeps its type.
-    expect($reflector->validationTokens(PinnedRuleData::class, 'label'))->toBe([])
+    expect($reflector->attributeRules(PinnedRuleData::class, 'label')[0])->toBe([])
         // The string escape-hatch form still lands.
-        ->and($reflector->validationTokens(PinnedRuleData::class, 'code'))->toBe(['max:5']);
+        ->and($reflector->attributeRules(PinnedRuleData::class, 'code')[0])->toBe(['max:5']);
 });
 
 it('documents a WithCast DateTimeInterfaceCast format:U property as the string the transformer writes', function (): void {

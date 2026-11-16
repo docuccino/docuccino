@@ -16,8 +16,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * Responses built into a local whose status, body or headers a later statement restates —
  * `$response->setStatusCode(202);` on a line of its own rather than chained onto the call that built it — for
  * every kind of response, and for one thrown for the framework to send; beside a status set on one branch,
- * set twice, set before the local is replaced, a helper handed the response that sets it, statements
- * setting the content or a header, and statements that only read the response. Only ever analysed, never
+ * set twice, set before the local is replaced, a helper handed the response that sets it or only a header on
+ * it, statements setting the content or a header, and statements that only read the response. Only ever analysed, never
  * dispatched.
  */
 class StatementStatusController extends Controller
@@ -108,6 +108,14 @@ class StatementStatusController extends Controller
         return $response;
     }
 
+    public function helperHeader(): JsonResponse
+    {
+        $response = response()->json(['queued' => true], 202);
+        $this->stamp($response);
+
+        return $response;
+    }
+
     public function chainedStatement(): JsonResponse
     {
         $response = response()->json(['queued' => true]);
@@ -167,5 +175,10 @@ class StatementStatusController extends Controller
     private function accept(JsonResponse $response): void
     {
         $response->setStatusCode(202);
+    }
+
+    private function stamp(JsonResponse $response): void
+    {
+        $response->header('X-Api-Version', '2');
     }
 }

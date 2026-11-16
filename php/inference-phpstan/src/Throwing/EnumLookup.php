@@ -55,38 +55,26 @@ final class EnumLookup
             $backing[] = $value[0];
         }
 
-        $thrown = self::thrown($type->getConstantScalarValues(), $backing, $backingType->isInteger()->yes(), $scope->isDeclareStrictTypes());
+        $throws = self::throws($type->getConstantScalarValues(), $backing, $backingType->isInteger()->yes(), $scope->isDeclareStrictTypes());
 
-        return $thrown === null ? null : [$enum->getName(), self::tally($thrown), ! in_array(null, $thrown, true)];
+        return $throws === null ? null : [$enum->getName(), ...$throws];
     }
 
     /**
-     * What `from()` throws over every value its argument may be. A value of the backing type finds its case
-     * or throws `ValueError`; any other is a `TypeError` in a file declaring `strict_types`, and coerced
-     * elsewhere by rules this read does not repeat, so it answers null, as it does for no value at all.
+     * What `from()` throws over every value its argument may be, each class with whether every value throws it,
+     * and whether every value throws something. A value of the backing type finds its case or throws
+     * `ValueError`; any other is a `TypeError` in a file declaring `strict_types`, and coerced elsewhere by
+     * rules this read does not repeat, so it answers null, as it does for no value at all.
      *
      * @param  list<mixed>  $values
      * @param  list<mixed>  $backing
-     * @return array<string, bool>|null class → whether every value throws it
+     * @return array{array<string, bool>, bool}|null
      */
-    public static function outcomes(array $values, array $backing, bool $intBacked, bool $strict): ?array
+    public static function throws(array $values, array $backing, bool $intBacked, bool $strict): ?array
     {
         $thrown = self::thrown($values, $backing, $intBacked, $strict);
 
-        return $thrown === null ? null : self::tally($thrown);
-    }
-
-    /**
-     * Whether `from()` throws for every value its argument may be, so a call it is an operand of is never made.
-     *
-     * @param  list<mixed>  $values
-     * @param  list<mixed>  $backing
-     */
-    public static function always(array $values, array $backing, bool $intBacked, bool $strict): bool
-    {
-        $thrown = self::thrown($values, $backing, $intBacked, $strict);
-
-        return $thrown !== null && ! in_array(null, $thrown, true);
+        return $thrown === null ? null : [self::tally($thrown), ! in_array(null, $thrown, true)];
     }
 
     /**

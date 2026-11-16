@@ -143,11 +143,14 @@ const FLOORS = [
     // type and the app's root facade aliases to be declared before analysis (`FacadeAliases`, unit-tested
     // in process), and 58.94 → 59.11 when real-time facades came to be declared in memory
     // (`RealTimeFacades`, unit-tested in process).
-    // Measured 59.11% (3281/5551): 58% of it is 3219.58 statements, 61.42 of margin.
+    // Re-recorded 59.11 → 59.53 when a body handing back the object it was followed for, a respond()
+    // callback's guards and a helper reached by many paths came to be read once each (`StateKeepingCalls`,
+    // `ParameterUse`, unit-tested in process).
+    // Measured 59.53% (3364/5651): 58% of it is 3277.58 statements, 86.42 of margin.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads 3 statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 58, 'measured' => 59.11],
+    'inference-phpstan' => ['floor' => 58, 'measured' => 59.53],
 ];
 
 /*

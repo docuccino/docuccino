@@ -135,6 +135,31 @@ class Kept extends KeptBase
         return $this;
     }
 
+    public function chained(int $floor): static
+    {
+        $this->counted($floor);
+
+        return $this;
+    }
+
+    public function chainedDropped(int $floor): void
+    {
+        $this->chained($floor);
+    }
+
+    public function chainedKept(int $code): void
+    {
+        $alias = $this->chained($code);
+        $alias->restated($code);
+    }
+
+    public function returnedLater(int $floor): Closure
+    {
+        return function (): static {
+            return $this;
+        };
+    }
+
     public function delegatedChange(int $code): void
     {
         $this->restated($code);

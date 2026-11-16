@@ -18,7 +18,7 @@ function fluentChainLinks(): array
 
 it('names only setters the framework\'s responses declare as handing themselves back', function (string $name): void {
     $declared = array_values(array_filter(
-        ['Illuminate\\Http\\JsonResponse', 'Illuminate\\Http\\Response'],
+        ['Illuminate\\Http\\JsonResponse', 'Illuminate\\Http\\Response', 'Illuminate\\Http\\RedirectResponse', 'Symfony\\Component\\HttpFoundation\\BinaryFileResponse'],
         static fn (string $class): bool => method_exists($class, $name),
     ));
     expect($declared)->not->toBe([]);
