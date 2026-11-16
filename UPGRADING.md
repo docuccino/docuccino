@@ -81,7 +81,7 @@ generated from the document changes.
 ### What `docuccino:diff` reports across this upgrade
 
 Only if you diff a document committed before the upgrade against a build after it, or gate it with
-`--enforce`. Seven fixes make a choice rule publish what Laravel checks, an eighth does the same for a
+`--enforce`. Eight fixes make a choice rule publish what Laravel checks, a ninth does the same for a
 Spatie Data rule string, and the differ reads each as breaking where the rule is used:
 
 - **`new Enum` and `new In` publish their values.** Both were dropped, so the field published no
@@ -124,6 +124,12 @@ Spatie Data rule string, and the differ reads each as breaking where the rule is
   on `items` (`schema.enum-added`), a narrowing, so breaking. `array|not_in:a,b` published a `not` that
   excluded no array; it now refuses the arrays whose every element is listed, `[]` among them, and its
   new list arriving is breaking too.
+- **A choice attribute on a Spatie Data array property lists the elements.** laravel-data adds `array`
+  to every property typed `array`, so an `#[In]`, `#[NotIn]` or `#[Rule('in:…')]` on one reads as the
+  bullet above, a map's values being its elements. `#[In('a', 'b')]` on a `list<string>` published
+  `enum` on the array, and on an `array<string, string>` on the object, refusing every value the server
+  takes; the `enum` now sits on `items`, or on `additionalProperties` for a map. `#[NotIn]` now
+  refuses the arrays or maps whose every value is listed. The differ reads both as the bullet above.
 
 So a gate run with `--enforce` fails on the upgrade. Your API did not change: in each case the
 document now says what your server already did. Upgrade in a pull request of its own, so the
