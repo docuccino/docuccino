@@ -121,11 +121,16 @@ const FLOORS = [
     // parameter lookup the refiner and the return folder share moved onto `Callee`, where a function's is
     // read by name, and is unit-tested in process; the descent into the function's body is the fixture
     // group's. 59 is out of reach: 59% of the denominator is 2925.81 statements, above the 2924 covered.
-    // Measured 58.96% (2924/4959): 58% of it is 2876.22 statements, 47.78 of margin.
+    // Re-recorded when what `throw_if()` and `throw_unless()` are handed came to be read as the `throw`
+    // it stands for: which argument is thrown and how (`HandedException`) and whether a guard's
+    // condition can throw at all (`GuardCondition`) are unit-tested in process, while the analyser that
+    // sends each read down the literal-throw path is the fixture group's. The floor stays 58: 59 would
+    // leave under six statements for the subprocess-only engine code still landing in this release.
+    // Measured 59.11% (2984/5048): 58% of it is 2927.84 statements, 56.16 of margin.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads 3 statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 58, 'measured' => 58.96],
+    'inference-phpstan' => ['floor' => 58, 'measured' => 59.11],
 ];
 
 /*

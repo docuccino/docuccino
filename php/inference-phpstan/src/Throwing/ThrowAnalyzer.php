@@ -29,6 +29,7 @@ use PHPStan\Node\ClosureReturnStatementsNode;
 use PHPStan\Node\FunctionReturnStatementsNode;
 use PHPStan\Node\MethodReturnStatementsNode;
 use PHPStan\Reflection\ClassReflection;
+use PHPStan\Reflection\FunctionReflection;
 use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\Type\NeverType;
 use PHPStan\Type\ObjectType;
@@ -95,6 +96,9 @@ final class ThrowAnalyzer
     /** The catches a callee writes around where it runs a closure it was handed. */
     private readonly CalleeCatches $calleeCatches;
 
+    /** What `throw_if()` and `throw_unless()` throw, off the argument they are handed. */
+    private readonly HandedException $handedException;
+
     public function __construct(
         private readonly ReflectionProvider $reflectionProvider,
         // Descend scope: how far this build may WALK, which is what `project_paths` bounds.
@@ -126,6 +130,7 @@ final class ThrowAnalyzer
         $this->unreadStatuses = new UnreadStatuses;
         $this->skippedDescents = new SkippedDescents($this->declaredFilter);
         $this->calleeCatches = new CalleeCatches($this->reflectionProvider, $this->calleeResolver, $this->appFilter);
+        $this->handedException = new HandedException($this->reflectionProvider);
     }
 
     /**
@@ -445,6 +450,19 @@ final class ThrowAnalyzer
             $explicit = $this->calleeResolver->reached($node, $scope)?->getThrowType() !== null;
         }
 
+        // `throw_if()` and `throw_unless()` throw what they are handed, read as the `throw` written for it.
+        $handed = $this->handedThrows($node, $scope, $callee);
+        if ($handed !== null) {
+            $results = [];
+            foreach ($handed as [$throw, $throwScope, $thrownType]) {
+                foreach ($this->applyExplicit(null, $throw, $throwScope, $thrownType, $priorChain, $frame, $caught, []) as $result) {
+                    $results[] = $result;
+                }
+            }
+
+            return $results;
+        }
+
         // `from()` on a backed enum handed a constant throws only what that value can. The enum's cases
         // decide it, so its files are dependencies even where nothing is left to publish.
         $certain = [];
@@ -514,6 +532,10 @@ final class ThrowAnalyzer
 
         if ($thrower === null || $this->readsCalleeBody($callee)) {
             return null;
+        }
+
+        if ($this->neverThrows($node, $scope)) {
+            return [];
         }
 
         // `abort()` handed a response rather than a status throws an `HttpResponseException` carrying it.
@@ -594,6 +616,44 @@ final class ThrowAnalyzer
         return $callee !== null
             && $this->projectFilter->isProjectFile($callee->file)
             && $this->fileAnalyzer->callee($callee) !== null;
+    }
+
+    /**
+     * The throws a call to Laravel's `throw_if()` or `throw_unless()` makes, each the `throw` of what it is
+     * handed ({@see HandedException}): none where its condition never throws, and null for any other call or
+     * one whose argument cannot be read, which its `@throws` then answers for. Gated on the callee as the
+     * registry is ({@see readsCalleeBody()}): an application's own `throw_if()` is read as its body says.
+     *
+     * @return list<array{Node\Expr\Throw_, Scope, Type}>|null
+     */
+    private function handedThrows(Node $node, Scope $scope, ?Callee $callee): ?array
+    {
+        if (! $node instanceof Node\Expr\FuncCall
+            || $callee === null
+            || ! HandedException::handles($callee->method)
+            || $this->readsCalleeBody($callee)
+        ) {
+            return null;
+        }
+
+        $function = $this->calleeResolver->reached($node, $scope);
+        if (! $function instanceof FunctionReflection) {
+            return null;
+        }
+
+        if (GuardCondition::neverThrows($function, $node, $scope)) {
+            return [];
+        }
+
+        return $this->handedException->of($node, $function, $scope, $this->closureArgument(...));
+    }
+
+    /** Whether a call is one of Laravel's conditional throwers handed a condition it never throws on. */
+    private function neverThrows(Node $node, Scope $scope): bool
+    {
+        $function = $node instanceof Node\Expr\FuncCall ? $this->calleeResolver->reached($node, $scope) : null;
+
+        return $function instanceof FunctionReflection && GuardCondition::neverThrows($function, $node, $scope);
     }
 
     /**
@@ -1178,14 +1238,17 @@ final class ThrowAnalyzer
         $readings = [];
         foreach ($body->getStatementResult()->getThrowPoints() as $throwPoint) {
             $node = $throwPoint->getNode();
-            if (! $node instanceof Node\Expr\Throw_
-                || ! in_array($fqcn, $this->concreteClasses($throwPoint->getType()), true)
-            ) {
-                continue;
-            }
-
             $scope = $this->fileAnalyzer->stableScope($throwPoint->getScope());
-            $readings[] = [...$this->atThrowSite($fqcn, $node, $scope), 'file' => $scope->getFile()];
+
+            // A `throw_if()` there is the `throw` of what it is handed, as it is at a call site.
+            $calleeHere = $node instanceof Node\Expr\FuncCall ? $this->calleeResolver->resolve($node, $scope) : null;
+            $sites = $this->handedThrows($node, $scope, $calleeHere) ?? [[$node, $scope, $throwPoint->getType()]];
+
+            foreach ($sites as [$site, $siteScope, $type]) {
+                if ($site instanceof Node\Expr\Throw_ && in_array($fqcn, $this->concreteClasses($type), true)) {
+                    $readings[] = [...$this->atThrowSite($fqcn, $site, $siteScope), 'file' => $siteScope->getFile()];
+                }
+            }
         }
 
         return ThrowSiteStatus::stated($readings);

@@ -609,6 +609,19 @@ value written in your code is checked against the cases, so a lookup that can't 
 `ValueError` that `from()` throws when no case matches, or the `TypeError` it throws for a value of the
 wrong type. A value chosen at run time may match none, so that `500` stays.
 
+`throw_if()` and `throw_unless()` are read as the `throw` they stand for. Hand one an exception, or a class
+name followed by the arguments its constructor takes, and the endpoint documents the status that
+construction gives:
+
+```php
+throw_if($export->isLocked(), ExportLockedException::class, 423, 'The export is locked.'); // a 423
+throw_unless($export->isFresh(), new Refused(TokenRefusal::Expired));                      // a 401
+```
+
+A message on its own is the `RuntimeException` Laravel makes of it, documented as a `500`. A guard handed a
+condition it can never throw on, such as `abort_if(false, 403)` or a `throw_if()` on a class constant that
+is `false`, documents nothing.
+
 A reason chosen at run time — `new Refused($reason)` — is whichever status that case maps to. When every
 case maps to the same status, that's the status; otherwise no single number is true, so the error is filed
 under the [stand-in status](#when-a-500-is-a-stand-in) with an
@@ -637,7 +650,7 @@ the response reads: `response()->json()`, the `Response` facade, `new JsonRespon
 builds it, and the `throw` can sit in a helper the action calls. A status chosen at run time is
 documented under `default`, as it is for a response you return. Handing a response to `abort()`,
 `abort_if()` or `abort_unless()` throws the same exception, so `abort(response()->json([…], 423))` is
-documented the same way.
+documented the same way, as is an `HttpResponseException` handed to `throw_if()` or `throw_unless()`.
 
 ### When a `500` is a stand-in
 

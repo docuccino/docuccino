@@ -1119,6 +1119,13 @@ to the one date policy's form, so an entry cannot be added without its bytes bei
 fixtures that separate the cases are a declaration writing a string and an identical one writing an
 integer.
 
+Laravel's `throw_if($condition, $exception, ...$parameters)` is the same shape in a vendor declaration.
+Its `@throws TException` resolves to the class of the instance it is handed, and to nothing for a class
+name, so layer 1 published an HttpException with no status, filed as vendor plumbing, or no error at all,
+while the construction that states the status sat in the argument. The fix reads the argument as the
+`throw` it stands for (`HandedException`) and sends it down the literal-throw path, so the status, a
+carried response and a catch are read as they are for a `throw` written out.
+
 ## An invariant every producer has to remember
 
 A string an application chose — a route, a class, a config key, a message something threw — reaches a
