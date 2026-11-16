@@ -233,6 +233,26 @@ Each field becomes one query parameter carrying that field's schema; a rule that
 description (`in:` on an enum class, a `required_if`, a date format) puts it on the parameter's
 `description` rather than inside its schema.
 
+A description you write with [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter) leads,
+and what the rules enforce stays beneath it. "Must be a date after from." is true whatever you call
+the parameter, so your prose doesn't replace it. The same goes for a body field you describe with
+`#[BodyParameter]`:
+
+```php
+// rules: 'until' => ['sometimes', 'date', 'after:from']
+#[QueryParameter('until', description: 'End of the range.')]
+```
+
+```yaml
+- name: until
+  in: query
+  required: false
+  description: |-
+    End of the range.
+
+    Must be a date after from.
+```
+
 List endpoints also get their filters, sorts, includes, and pagination inferred straight from
 [Spatie Query Builder](/laravel/packages/query-builder/) — no annotation needed. To add or patch one
 parameter by hand, reach for [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter).
@@ -758,7 +778,7 @@ like `min:8` would:
 | `pattern` | A bare ECMA-262 `pattern`, like `regex:…`. |
 | `min` / `max` | The type-aware size keywords, like `min:` / `max:`. |
 | `format` | A `format`, unless the type rule already implied one. |
-| `description` | The property description (appended to any note the other rules produced). |
+| `description` | The property description, with any note the other rules produced kept beneath it. |
 | `example` | The property `example`, typed to match the field. |
 
 <Aside>
@@ -970,6 +990,8 @@ still stands: `currency` gets `GBP` from its own `in:` list.
 
 None of this changes what the endpoint accepts. Prose rides on the fields the rules named; it never
 adds one, never drops one and never touches a constraint. A docblock is documentation, not validation.
+Nor does it hide what the rules enforce: where a rule writes a note ("Must be a date after from.",
+"Required when status is paid."), the property's own prose leads and the note stays beneath it.
 
 ## Validation rule reference
 

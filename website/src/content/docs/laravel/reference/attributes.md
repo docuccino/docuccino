@@ -210,6 +210,11 @@ parameter an integration already proved required stays required. That is why the
 a declaration written to document a `type:` must not quietly de-require a parameter the server insists
 on, which would publish a contract a generated client can build a rejected request from.
 
+A `description` leads the parameter's description. What the parameter's validation rules enforce that
+no schema keyword can say ("Must be a date after from.", "Required when status is paid.") stays
+beneath it, and so does what a Query Builder filter accepts beyond its schema (a comma-separated list,
+`null`).
+
 Validation rules on a read verb become query parameters, so a `#[QueryParameter]` answers for a field
 whose rules the build cannot read statically the way a [`#[BodyParameter]`](#bodyparameter) does for a
 body: name the parameter and
@@ -346,6 +351,16 @@ else; on a field the rules didn't document, it is a string.
 // rules: 'nickname' => ['required', 'string', 'max:30']
 #[BodyParameter(name: 'nickname', type: 'string', description: 'Display name')]
 // publishes {type: string, maxLength: 30, description: "Display name"}, still required
+```
+
+A `description:` leads the field's description, and a note the rules wrote stays beneath it — a
+date bound, a "Required when …" condition, a file size — because what the server enforces is true
+whatever the field is called:
+
+```php
+// rules: 'until' => ['sometimes', 'date', 'after:from']
+#[BodyParameter(name: 'until', description: 'End of the range.')]
+// publishes description: "End of the range.\n\nMust be a date after from."
 ```
 
 A `type:` naming a tagged union over an object your rules split by a tag adopts the rules' shapes rather

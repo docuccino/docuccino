@@ -247,6 +247,11 @@ These are the five you'll reach for most:
 | `RuleTransformer` | Map a validation rule to schema keywords. | `supports(ValidationRule $rule): bool`, `apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void`, `handledRuleNames(): array` |
 | `DocumentTransformer` | Post-process the whole finished document. | `transform(UirDocumentDraft $document, DocumentContext $context): void` |
 
+A `RuleTransformer` that states a fact no schema keyword can carry, the way `after:from` does, writes it
+with `$field->note('Must be a date after from.')` rather than into the field's `description`. Notes are
+published beneath whatever description the field ends up with, so a docblock or a
+`#[BodyParameter(description: …)]` written over it later keeps your sentence.
+
 And these cover the rest of the surface:
 
 | Contract | Implement it to… | Methods |
@@ -410,8 +415,11 @@ response or schema draft too.
 A **`ParameterDraft`** offers `setDescription(?string, $by)`, `declareDescriptionNote(string, $by)`
 (the same note an operation takes, added beneath whichever description wins), `setRequired(?bool, $by)`,
 `setDeprecated(?bool, $by)`, `set(field, value, $by)`, and `schema()` (a `SchemaDraft` whose own
-`set(keyword, value, $by)` builds the parameter's JSON Schema); `setDocuccinoFact(key, value)` records a
-representation-independent semantic fact.
+`set(keyword, value, $by)` builds the parameter's JSON Schema, and whose `declareDescriptionNote()` does
+the same for a deepObject member); `setDocuccinoFact(key, value)` records a
+representation-independent semantic fact. Where the description you write already states the note —
+a filter whose own sentence ends with what it accepts — pass `inOwnDescription: true`: the note then
+appears only beneath a description someone else wrote over yours.
 
 A **`ResponseDraft`** — which you also construct directly, `new ResponseDraft($status)`, when an
 `ExceptionToResponse` returns one — offers `setDescription(?string, $by)`, `setRef(?string, $by)`,

@@ -173,9 +173,9 @@ final class ChoiceRuleTransformer implements RuleTransformer
      * {@see EnumComponent::description()} on the same terms as any other schema class's.
      *
      * A description already on the field is this field's own and outranks the type's; a `#[RuleSchema]`
-     * one arrives after this rule ({@see RuleOrdering}) and appends to this, as it appends to any note an
-     * earlier rule left — which is the `$ref` form's two descriptions flattened into the one slot an
-     * inline field has.
+     * one arrives after this rule ({@see RuleOrdering}) and appends to this — which is the `$ref` form's
+     * two descriptions flattened into the one slot an inline field has. The notes rules state stand
+     * beneath whichever it is.
      */
     private function describe(string $fqcn, ValidationField $field, SchemaContext $context): void
     {

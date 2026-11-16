@@ -9,6 +9,9 @@ use Docuccino\Core\Document\Operation;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\PatchGuard;
 use Docuccino\Core\Patch\PatchResult;
+use Docuccino\Core\Provenance\OverrodeEntry;
+use Docuccino\Core\Provenance\Provenance;
+use Docuccino\Core\Provenance\ProvenanceRecord;
 use Docuccino\Core\Support\Hydrate;
 
 /**
@@ -383,6 +386,47 @@ final class OperationDraft
      * The request body with a declared `description` on it, untouched where the body is shaped like
      * nothing this recognises. Nothing in the build derives request-body prose, so the declaration wins.
      */
+    /**
+     * The body with the notes its schemas carry beside their descriptions rendered beneath them
+     * ({@see SchemaNotes}): every writer that patches a body has had its turn by the time it freezes.
+     */
+    private static function withRenderedNotes(mixed $body): mixed
+    {
+        if (! is_array($body) || ! is_array($body['content'] ?? null)) {
+            return $body;
+        }
+
+        foreach ($body['content'] as $mediaType => $media) {
+            if (is_array($media) && is_array($media['schema'] ?? null)) {
+                $media['schema'] = SchemaNotes::rendered($media['schema']);
+                $body['content'][$mediaType] = $media;
+            }
+        }
+
+        return $body;
+    }
+
+    /**
+     * The trail with each displaced body as it would have published ({@see withRenderedNotes()}): what a
+     * producer lost is read back as the document it would have been.
+     */
+    private static function withRenderedOverrides(Provenance $provenance): Provenance
+    {
+        $records = [];
+        foreach ($provenance->records as $record) {
+            $overrode = array_map(
+                static fn (OverrodeEntry $entry): OverrodeEntry => $entry->field === 'requestBody'
+                    ? new OverrodeEntry($entry->field, self::withRenderedNotes($entry->value), $entry->producer)
+                    : $entry,
+                $record->overrode,
+            );
+
+            $records[] = new ProvenanceRecord($record->producer, $record->layer, $record->fields, $record->source, $record->confidence, $overrode);
+        }
+
+        return new Provenance($records);
+    }
+
     private function withRequestDescription(mixed $body): mixed
     {
         if ($this->requestDescription === null || ! is_array($body)) {
@@ -437,6 +481,7 @@ final class OperationDraft
         );
 
         if (isset($resolved['requestBody'])) {
+            $resolved['requestBody'] = self::withRenderedNotes($resolved['requestBody']);
             $resolved['requestBody'] = $this->withRequestExamples($resolved['requestBody']);
             $resolved['requestBody'] = $this->withRequestDescription($resolved['requestBody']);
         }
@@ -455,7 +500,7 @@ final class OperationDraft
 
         $docuccino = new NodeExtension(
             id: $this->id,
-            provenance: $this->guard->provenance($this->descriptionNotes->provenance()),
+            provenance: self::withRenderedOverrides($this->guard->provenance($this->descriptionNotes->provenance())),
         );
 
         return new Operation(

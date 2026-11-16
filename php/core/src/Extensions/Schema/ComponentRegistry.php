@@ -6,6 +6,7 @@ namespace Docuccino\Core\Extensions\Schema;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
+use Docuccino\Core\Draft\SchemaNotes;
 use Docuccino\Core\Identity\IdentityGenerator;
 use Docuccino\Core\Support\Json;
 
@@ -112,12 +113,16 @@ final class ComponentRegistry
      * A structurally-identical re-registration of the same identity is deduped; see {@see mergesInto()}
      * for why two identities are never merged, however alike their bytes.
      *
+     * A component is published as registered, so the notes a schema carries beside its descriptions are
+     * rendered beneath them here ({@see SchemaNotes}).
+     *
      * @param  array<string, mixed>  $schema
      */
     public function registerSchema(string $name, array $schema, ?string $schemaId = null): string
     {
         $this->revision++;
         $base = self::sanitize($name);
+        $schema = SchemaNotes::rendered($schema);
 
         if ($schemaId !== null) {
             // Same identity (same class FQCN) already registered — reuse it, so one class is one

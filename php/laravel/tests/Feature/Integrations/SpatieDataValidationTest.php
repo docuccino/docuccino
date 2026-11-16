@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Draft\SchemaNotes;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\Context\AttributeSet;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
@@ -226,7 +227,7 @@ it('reads an attribute that builds a rule object as the rules Laravel validates 
     $ruleSet = $rules->build($carrier, new ClassMetadata($carrier, [new PropertyMetadata('value', $type)]), new NullTypeEngine, null, $context);
     $converted = (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert((new RuleOrdering)->order((new RuleSetNormalizer)->normalize($ruleSet)), $context);
 
-    expect(array_diff_key($converted->schema['properties']['value'], ['example' => true]))->toBe($schema)
+    expect(array_diff_key(SchemaNotes::rendered($converted->schema)['properties']['value'], ['example' => true]))->toBe($schema)
         ->and(array_map(static fn (array $note): string => $note['rule'], $rules->unreadRuleObjects()))->toBe($unread)
         ->and(array_filter($converted->diagnostics, static fn ($d): bool => $d->code === 'validation.rule-unhandled'))->toBe([]);
 })->with([

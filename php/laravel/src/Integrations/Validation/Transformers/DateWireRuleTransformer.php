@@ -46,7 +46,7 @@ final class DateWireRuleTransformer implements RuleTransformer
         if ($format === DateWireFormat::UNIX) {
             $field->setType('integer');
             $field->remove('format');
-            $field->set('description', DateWireFormat::TIMESTAMP_NOTE);
+            $field->replaceNotes(DateWireFormat::TIMESTAMP_NOTE);
 
             return;
         }
@@ -60,7 +60,7 @@ final class DateWireRuleTransformer implements RuleTransformer
             // Nothing names this pattern's values, so the coarse rule's guess goes with it rather than
             // outliving the rule that displaced it.
             $field->remove('format');
-            $field->set('description', DateWireFormat::expected($format));
+            $field->replaceNotes(DateWireFormat::expected($format));
         }
 
         $field->proposeExample(DateWireFormat::example($format));
