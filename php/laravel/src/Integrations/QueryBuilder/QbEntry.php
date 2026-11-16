@@ -20,10 +20,15 @@ namespace Docuccino\Laravel\Integrations\QueryBuilder;
  *     factory's body — whose `#[QueryParameter]` or `__invoke` body the extension reads.
  *   - `enumTyped`: drives comma/whereIn array modelling. Only the whereIn kinds set it — a single-value
  *     comparison (scope/callback/operator) keeps a scalar enum schema.
+ *   - `default`: the value `->default()` was given, a list where it was given one — Spatie applies it as
+ *     if it had been sent, so its shape on the schema is the parameter's to decide.
+ *
+ * @phpstan-type FilterDefault string|int|float|bool|list<string|int|float|bool>|null
  */
 final readonly class QbEntry
 {
     /**
+     * @param  FilterDefault  $default
      * @param  array<string, mixed>|null  $columnSchema
      */
     public function __construct(
@@ -31,7 +36,7 @@ final readonly class QbEntry
         public string $kind,
         public ?string $internal = null,
         public bool $hasDefault = false,
-        public string|int|float|bool|null $default = null,
+        public string|int|float|bool|array|null $default = null,
         public bool $nullable = false,
         public ?string $comment = null,
         public ?array $columnSchema = null,
@@ -58,13 +63,14 @@ final readonly class QbEntry
      * alongside the schema.
      *
      * @param  array<string, mixed>|null  $columnSchema
+     * @param  FilterDefault  $default
      */
     public function withColumn(
         ?array $columnSchema,
         bool $enumTyped,
         ?string $comment = null,
         bool $hasDefault = false,
-        string|int|float|bool|null $default = null,
+        string|int|float|bool|array|null $default = null,
         mixed $example = null,
     ): self {
         return new self(

@@ -780,17 +780,108 @@ it('leaves an untypable filter untyped only where the kind is user code', functi
     'unknown kind' => ['no-such-kind', 'string'],
 ]);
 
-it('carries a constant ->default() onto the schema as the single value (not a wrapped list)', function (): void {
+/**
+ * OAS: a schema's `default` MUST conform to that schema. Spatie applies a filter's default exactly as if
+ * it had been sent — split on the delimiter, then matched — so on the whereIn array the default is the
+ * list that request is: one value a list of one, a delimited string its parts, a list as written. A
+ * default no request the schema allows could send (a list where one value goes, a string where an
+ * integer goes, `null`, which a filter admits only in prose) is stated in the description instead of
+ * published as a value the schema itself calls invalid.
+ */
+it('publishes a filter default as an instance of the schema beside it, and in prose where it cannot be', function (QbEntry $filter, string $delimiter, ?array $default, string $notes): void {
+    $byName = specsByName((new QueryBuilderParameters)->build(
+        factsWith(function (QueryBuilderFacts $f) use ($filter): void {
+            $f->filters = [$filter];
+        }),
+        bracketedPolicy(),
+        new QueryBuilderConfig(delimiter: $delimiter),
+    ));
+    $spec = $byName['filter['.$filter->name.']'];
+
+    if ($default === null) {
+        expect($spec->schema)->not->toHaveKey('default');
+    } else {
+        expect($spec->schema['default'])->toBe($default[0]);
+    }
+    expect((string) $spec->notes)->toBe($notes);
+})->with([
+    'one value on the whereIn array is a list of one' => [
+        (new QbEntry('status', 'exact', hasDefault: true, default: 'published'))->withColumn(enumColumnSchema(), enumTyped: true),
+        ',', [['published']], 'Accepts a comma-separated list of values (matched as `whereIn`).',
+    ],
+    'a delimited string on the whereIn array is the list it splits into' => [
+        (new QbEntry('status', 'exact', hasDefault: true, default: 'draft,published'))->withColumn(enumColumnSchema(), enumTyped: true),
+        ',', [['draft', 'published']], 'Accepts a comma-separated list of values (matched as `whereIn`).',
+    ],
+    'a list on the whereIn array is that list' => [
+        (new QbEntry('status', 'exact', hasDefault: true, default: ['draft', 'archived']))->withColumn(enumColumnSchema(), enumTyped: true),
+        ',', [['draft', 'archived']], 'Accepts a comma-separated list of values (matched as `whereIn`).',
+    ],
+    'a value outside the item enum is no list the array allows' => [
+        (new QbEntry('status', 'exact', hasDefault: true, default: 'live'))->withColumn(enumColumnSchema(), enumTyped: true),
+        ',', null, 'Accepts a comma-separated list of values (matched as `whereIn`). Defaults to `live`.',
+    ],
+    'null is matched as absent values, which the type does not admit' => [
+        (new QbEntry('status', 'exact', hasDefault: true, default: null, nullable: true))->withColumn(enumColumnSchema(), enumTyped: true),
+        ',', null, 'Accepts a comma-separated list of values (matched as `whereIn`). Accepts `null` to filter for absent values. Defaults to `null`.',
+    ],
+    'one value where nothing splits stays the value' => [
+        (new QbEntry('status', 'exact', hasDefault: true, default: 'published'))->withColumn(enumColumnSchema(), enumTyped: true),
+        '', ['published'], '',
+    ],
+    'a list where nothing splits has no single value to be' => [
+        (new QbEntry('status', 'exact', hasDefault: true, default: ['draft', 'published']))->withColumn(enumColumnSchema(), enumTyped: true),
+        '', null, 'Defaults to `draft`, `published`.',
+    ],
+    'a string under another separator is the string a request sends' => [
+        (new QbEntry('status', 'exact', hasDefault: true, default: 'draft|published'))->withColumn(enumColumnSchema(), enumTyped: true),
+        '|', ['draft|published'], 'Accepts a `|`-separated list of values (matched as `whereIn`). Values: draft, published, archived.',
+    ],
+    'a scalar on a scalar column stays the scalar' => [
+        (new QbEntry('score', 'exact', hasDefault: true, default: 10))->withColumn(['type' => 'integer'], enumTyped: false),
+        ',', [10], '',
+    ],
+    'a list on a scalar column has no single value to be' => [
+        (new QbEntry('score', 'exact', hasDefault: true, default: [10, 20]))->withColumn(['type' => 'integer'], enumTyped: false),
+        ',', null, 'Defaults to `10`, `20`.',
+    ],
+    'a string on an integer column is not an integer' => [
+        (new QbEntry('score', 'exact', hasDefault: true, default: '10'))->withColumn(['type' => 'integer'], enumTyped: false),
+        ',', null, 'Defaults to `10`.',
+    ],
+    'a boolean on a boolean column' => [
+        (new QbEntry('active', 'exact', hasDefault: true, default: false))->withColumn(['type' => 'boolean'], enumTyped: false),
+        ',', [false], '',
+    ],
+    'a boolean on a string is stated as the word a request sends' => [
+        new QbEntry('name', 'partial', hasDefault: true, default: true),
+        ',', null, 'Defaults to `true`.',
+    ],
+    'a soft-delete mode is one of its enum' => [
+        new QbEntry('trashed', 'trashed', hasDefault: true, default: 'with'),
+        ',', ['with'], '',
+    ],
+    'a filter whose user code types it holds its default to nothing' => [
+        new QbEntry('mood', 'callback', hasDefault: true, default: ['calm', 'busy']),
+        ',', [['calm', 'busy']], '',
+    ],
+]);
+
+it('publishes a filter default inside the deepObject property it belongs to, as the same instance', function (): void {
     $facts = factsWith(function (QueryBuilderFacts $f): void {
         $f->filters = [
-            (new QbEntry('status', 'exact', hasDefault: true, default: 'published'))
-                ->withColumn(enumColumnSchema(), enumTyped: true),
+            (new QbEntry('status', 'exact', hasDefault: true, default: 'published'))->withColumn(enumColumnSchema(), enumTyped: true),
+            (new QbEntry('score', 'exact', hasDefault: true, default: [10, 20]))->withColumn(['type' => 'integer'], enumTyped: false),
         ];
     });
 
-    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy()));
+    $spec = (new QueryBuilderParameters)->build($facts, deepObjectPolicy())[0];
+    $properties = $spec->schema['properties'];
 
-    expect($byName['filter[status]']->schema)->toBe(['type' => 'array', 'items' => enumColumnSchema(), 'default' => 'published']);
+    expect($properties['status']['default'])->toBe(['published'])
+        ->and($properties['score'])->not->toHaveKey('default')
+        ->and($properties['score']['description'])->toBe('Exact match on `score`. Defaults to `10`, `20`.')
+        ->and($spec->propertyNotes['score'])->toBe('Defaults to `10`, `20`.');
 });
 
 it('appends the nullable note to the description without adding a null enum case', function (): void {
