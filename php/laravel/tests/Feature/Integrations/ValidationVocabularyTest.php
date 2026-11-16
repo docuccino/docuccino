@@ -145,7 +145,13 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'uuid' => [[['uuid']], ['format' => 'uuid', 'type' => 'string', 'example' => '3fa85f64-5717-4562-b3fc-2c963f66afa6']],
     'ulid' => [[['ulid']], ['format' => 'ulid', 'type' => 'string', 'example' => '01ARZ3NDEKTSV4RRFFQ69G5FAV']],
     'url' => [[['url']], ['format' => 'uri', 'type' => 'string', 'example' => 'https://example.com']],
+    // Either family: no standard format names both, and `anyOf` of the two would hand a generated client
+    // a union for one string. Validators ignore a format they don't know, so the document is wider, not wrong.
     'ip' => [[['ip']], ['format' => 'ip', 'type' => 'string', 'example' => '192.0.2.1']],
+    // One family: JSON Schema's `ipv4` and `ipv6` are the addresses `filter_var` takes under each flag
+    // (`FormatRulesGoldenTest` holds the two to Laravel value by value).
+    'ipv4' => [[['ipv4']], ['format' => 'ipv4', 'type' => 'string', 'example' => '192.0.2.1']],
+    'ipv6' => [[['ipv6']], ['format' => 'ipv6', 'type' => 'string', 'example' => '2001:db8::1']],
     'date' => [[['date']], ['format' => 'date', 'type' => 'string', 'example' => '2024-01-01']],
 
     // ChoiceRuleTransformer — string set and numeric set, plus the enum-FQCN note. A validation set is
@@ -234,6 +240,10 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'digits_between' => [[['digits_between', ['2', '5']]], ['pattern' => '^\\d{2,5}$', 'type' => 'string', 'example' => '12']],
     'max_digits' => [[['max_digits', ['4']]], ['pattern' => '^\\d{1,4}$', 'type' => 'string', 'example' => '1']],
     'min_digits' => [[['min_digits', ['2']]], ['pattern' => '^\\d{2,}$', 'type' => 'string', 'example' => '12']],
+
+    // FixedPatternRuleTransformer — no format names these, so the pattern Laravel checks is published whole.
+    'mac_address' => [[['mac_address']], ['pattern' => '^(?:[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}|[0-9a-fA-F]{2}(?:-[0-9a-fA-F]{2}){5}|[0-9a-fA-F]{4}(?:\\.[0-9a-fA-F]{4}){2})$', 'type' => 'string', 'example' => '00:00:5E:00:53:01']],
+    'hex_color' => [[['hex_color']], ['pattern' => '^#(?:(?:[0-9a-fA-F]{3}){1,2}|(?:[0-9a-fA-F]{4}){1,2})\\n?$', 'type' => 'string', 'example' => '#000000']],
 
     // JsonRuleTransformer — a string carrying a JSON document.
     'json' => [[['json']], ['contentMediaType' => 'application/json', 'type' => 'string', 'example' => '{}']],
@@ -1031,9 +1041,9 @@ it('refuses a stated example the field\'s value list does not hold', function ()
 });
 
 it('raises an info diagnostic for a rule no transformer handles', function (): void {
-    // `mac_address` is outside the mapped vocabulary, so the field stays permissive and the unhandled
+    // `lowercase` is outside the mapped vocabulary, so the field stays permissive and the unhandled
     // contract holds.
-    $result = convertLaravelRules(['token' => 'string|mac_address']);
+    $result = convertLaravelRules(['token' => 'string|lowercase']);
 
     expect($result->schema['properties']['token'])->toBe(['type' => 'string'])
         ->and($result->diagnostics)->toHaveCount(1)

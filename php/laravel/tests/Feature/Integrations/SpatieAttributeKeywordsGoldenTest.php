@@ -69,10 +69,9 @@ it('emits validation attributes named apart from their rules byte-identical to t
  * Each row says whether laravel-data takes the body, by the rules it hands Laravel, and whether the document does.
  * laravel-data writes an attribute's rule from the attribute's own keyword, so `#[GreaterThan(5)]` is `gt:5` and
  * `#[ListType]` is `list`, and its parameters in the order the attribute declares them, however they were written.
- * The two answer alike, but where the rule vocabulary has no reader for the keyword: there the document takes
- * more than the server, and never less.
+ * The two answer alike.
  */
-it('takes every value laravel-data takes through an attribute named apart from its rule', function (array $body, bool $accepted, ?bool $documented = null): void {
+it('takes every value laravel-data takes through an attribute named apart from its rule', function (array $body, bool $accepted): void {
     $document = json_decode((new UirEmitter)->emit(spatieAttributeKeywordsBuild()->document), flags: JSON_THROW_ON_ERROR);
     $document->{'$ref'} = '#/components/schemas/AttributeKeywordDataRequest';
 
@@ -80,7 +79,7 @@ it('takes every value laravel-data takes through an attribute named apart from i
     app()->forgetInstance(DataConfig::class);
 
     expect(Validator::make($body, AttributeKeywordData::getValidationRules($body))->passes())->toBe($accepted)
-        ->and((new SchemaValidator)->validate(json_decode((string) json_encode((object) $body), flags: JSON_THROW_ON_ERROR), $document)->isValid())->toBe($documented ?? $accepted);
+        ->and((new SchemaValidator)->validate(json_decode((string) json_encode((object) $body), flags: JSON_THROW_ON_ERROR), $document)->isValid())->toBe($accepted);
 })->with([
     'every field left out' => [[], true],
     // `list` takes an array whose keys run from zero, which JSON writes as an array, and refuses an object.
@@ -104,7 +103,7 @@ it('takes every value laravel-data takes through an attribute named apart from i
     'past the upper bound' => [['count' => 11], false],
     'an IPv4 address' => [['v4' => '192.0.2.1'], true],
     'an IPv6 address' => [['v6' => '2001:db8::1'], true],
-    // No reader of `ipv4` or `ipv6` states a format yet, so the document takes an address of the other kind.
-    'an IPv6 address where IPv4 is asked' => [['v4' => '2001:db8::1'], false, true],
-    'an IPv4 address where IPv6 is asked' => [['v6' => '192.0.2.1'], false, true],
+    // `ipv4` and `ipv6` are JSON Schema formats of their own, so an address of the other family is refused by both.
+    'an IPv6 address where IPv4 is asked' => [['v4' => '2001:db8::1'], false],
+    'an IPv4 address where IPv6 is asked' => [['v6' => '192.0.2.1'], false],
 ]);

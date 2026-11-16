@@ -80,7 +80,7 @@ taken from a running app. `✓` means built-in support; `—` means not supporte
 
 Both tools read the same rules, but they get them differently: Scribe instantiates your form request
 and calls `rules()`, which resolves rules assembled at runtime and needs the method to be safe to call;
-Docuccino reads the rule list statically and maps 80 named Laravel rules onto schema constraints, so
+Docuccino reads the rule list statically and maps 84 named Laravel rules onto schema constraints, so
 `starts_with:INV` lands as a `pattern` and `between:1,5` as `minimum`/`maximum` in the schema, rather
 than as prose beside the parameter.
 
@@ -268,7 +268,7 @@ carefully before you switch — for some teams they're the whole reason to stay.
   documents the response's *shape*, not a rendered instance of it.
 - **Closure rules.** Scribe's `docs()` method on a custom `Rule` object now has a direct counterpart —
   [`#[RuleSchema]`](/laravel/documenting/requests/#documenting-a-custom-rule) on the rule class, read
-  wherever the rule object appears — and Docuccino maps the whole string-rule vocabulary besides: 80
+  wherever the rule object appears — and Docuccino maps the whole string-rule vocabulary besides: 84
   named Laravel rules, from `alpha` and `starts_with` patterns to `const` for `accepted`/`declined`, date
   comparisons, numeric bounds, `not_in` and `distinct`, plus `Rule::enum` (including `->only()` /
   `->except()`), `Rule::in`, `Rule::notIn`, `Rule::array`, `Rule::exists` and `Rule::unique`. A
