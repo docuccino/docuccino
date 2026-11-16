@@ -392,37 +392,48 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    peelable chain, since the stub's `@template` bounds parameterise a plain `new JsonResponse(…)` with
    nothing at all.
 
-   The grammar is one rule, and the guard is the same function as the fold: a call whose RECEIVER is one of
-   the four response classes is a MUTATOR, peeled only when it is `setStatusCode`, `header` or `withHeaders`
-   AND the installed framework declares it returning the object it was called on (native `static`, or the
-   `@return $this` the header setters carry) — read off the resolved vendor code, so a release that moves
-   either fact degrades rather than publishing this major's dialect. Any other mutator refuses the WHOLE
-   chain: `->setData($other)` returns `static` exactly as the status setter does, and passing the receiver's
-   payload through it would publish a body that was replaced. A call whose receiver is not a response is a
-   producer — that is the base, and mechanism 1 takes it from there. Peeling is not a call hop, so it costs
-   no depth and adds no dependency file: the only thing newly read is vendor reflection, which
-   `BuildFingerprint` already covers through the app's `composer.lock`.
-   `withStatus()` is deliberately absent (PSR-7's setter; no response class here declares it), and so are
-   SUBCLASSES of the four — a strict receiver check is what keeps `(new StreamedResponse(…))->setStatusCode(202)`
-   out, since everything recovered here is emitted as a `JsonResponse` and a streamed body is not one.
-   A link that will not read is reported UNKNOWN in the one fact it could have set, never refused: a header
-   link drops whatever media type the receiver carried but keeps the status, and a `->setStatusCode()` that
-   will not fold drops the receiver's status but keeps the body — each is the one thing the other cannot
-   have touched. A status is read as EVERY constant it can be (`$ok ? 200 : 503`, `ScalarFold::ints()`), and
-   so is one passed to the constructor or forwarded to a helper's status parameter; the adapter publishes one
-   response per code, and a status stated but unreadable under `default` rather than under a code the
-   endpoint may never send. An inferred range (`int<200, 299>`) is not a constant and folds to nothing.
-   The same links written as STATEMENTS on a returned local (`$r->setStatusCode(202); return $r;`) are the
-   same chain spread over lines, and are read as one (`LocalRestatements`): each chain made on the local is
-   peeled by `FluentResponseChain` in the scope it runs in and folded into the next in source order, then
-   laid over the response the local was built as. A chain counts as having run only when it is an
-   expression statement straight in a block that holds the return, ahead of it; anywhere else (a branch, a
-   loop, a condition) its status JOINS the one before, since either can be sent. A plain reassignment of
-   the local drops what came before. Anything else that may change the object — a chain the reader
-   declines, a call made on it or handed it that `StateKeepingCalls` cannot show keeps it, a write through
-   it, a closure capturing it, a non-plain write after a restatement — leaves the status, media type and
-   body unknown, never the ones the object was built with. A parameter or `$this` is someone else's
-   response and is not read this way.
+   The grammar is one rule, and the guard is the same function as the fold: a call whose RECEIVER is a
+   response the refiner reads where it is built — one of the four, a file, stream or redirect, or an
+   application's subclass of any of them (`ResponseShapeRefiner::responseRoot()`) — is a LINK when the
+   installed framework declares it returning the object it was called on (native `static`, or the
+   `@return $this` the header setters carry), read off the resolved vendor code so a release that moves
+   that fact degrades rather than publishing this major's dialect. A call whose receiver is not a response
+   is a producer — that is the base, and mechanism 1 takes it from there. Each link is read for the three
+   facts the document carries, through a table (`FluentResponseChain::LINKS`): `setStatusCode` the status,
+   `header`/`withHeaders` the media type, `setContent`/`setData` the body (read as the constructor reads the
+   same argument), `setEncodingOptions` the body only for a flag that reshapes it, `setCallback` the body
+   and the media type unless the callback is null, `setNotModified` a 304 with no body, `withoutHeader` the
+   media type only for a name that may be `Content-Type`, and a cookie, cache-header, charset or protocol
+   setter nothing. `prepare()` and the `send…()` methods are left out on purpose: `prepare()` may label,
+   strip or re-status the response for a request this does not read. A link outside the table, a
+   call it cannot name, and a setter an application's subclass OVERRIDES may have touched any of the three,
+   so all three are unknown and only the class stands — never the receiver's shape passed through a call
+   returning `static`, which would publish a body or status the link replaced. A subclass is safe to chain
+   because the receiver's own fold emits a file, stream or redirect subclass as its own class, so laying
+   facts over it can never turn a streamed body into JSON. Peeling is not a call hop, so it costs no depth
+   and adds no dependency file: the only thing newly read is vendor reflection, which `BuildFingerprint`
+   already covers through the app's `composer.lock`. `withStatus()` is deliberately absent (PSR-7's setter;
+   no response class here declares it).
+   A link that will not read is reported UNKNOWN in the facts it could have set, never refused: a header
+   link drops whatever media type the receiver carried but keeps the status, a `->setStatusCode()` that will
+   not fold drops the receiver's status but keeps the body, and a `->setData()` that will not fold opens the
+   body but keeps the status — each keeps what the link cannot have touched. A status is read as EVERY
+   constant it can be (`$ok ? 200 : 503`, `ScalarFold::ints()`), and so is one passed to the constructor or
+   forwarded to a helper's status parameter; the adapter publishes one response per code, and a status
+   stated but unreadable under `default` rather than under a code the endpoint may never send. An inferred
+   range (`int<200, 299>`) is not a constant and folds to nothing. The same links written as STATEMENTS on a
+   returned local (`$r->setStatusCode(202); return $r;`) are the same chain spread over lines, and are read
+   as one (`LocalRestatements`): each chain made on the local is peeled by `FluentResponseChain` in the
+   scope it runs in and folded into the next in source order, then laid over the response the local was
+   built as. The local is read as what it was assigned BEFORE its resolved type, since `new JsonResponse(…)`
+   types it as the stub's erased generic. A chain counts as having run only when it is an expression
+   statement straight in a block that holds the return, ahead of it; anywhere else (a branch, a loop, a
+   condition) its status JOINS the one before, since either can be sent. A plain reassignment of the local
+   drops what came before. Anything else that may change the object — a chain the reader declines, a call
+   made on it or handed it that `StateKeepingCalls` cannot show keeps it, a write through it, a closure
+   capturing it, a non-plain write after a restatement — leaves the status, media type and body unknown,
+   never the ones the object was built with. A parameter or `$this` is someone else's response and is not
+   read this way.
    A helper handing its status parameter to `response()->json($d, $code)` records the accessor exactly as
    `new JsonResponse($d, $code)` does (`ResponseFactoryCall` is the one reader of those arguments, shared
    with the return-type extension), and a call site that passes nothing binds the parameter's DEFAULT —

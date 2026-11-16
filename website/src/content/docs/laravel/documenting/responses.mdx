@@ -498,7 +498,9 @@ return new InvoiceLockedResponse($invoice, 409); // → 409 with that body
 
 The same holds for a class that extends a redirect, stream or file response, for a status set by
 `$this->setStatusCode(…)` once the parent's constructor has run, for a class two levels below the
-framework's, and for a static factory such as `InvoiceGoneResponse::make()`. A class that sets its status
+framework's, for a static factory such as `InvoiceGoneResponse::make()`, and for anything you chain onto
+one: `(new InvoiceLockedResponse($invoice))->setStatusCode(409)` is a `409` with that body. A setter your
+class overrides is yours to define, so a chain through it leaves the status and body unknown. A class that sets its status
 on only one branch of its constructor states no one status, so it's documented as the framework class it
 extends: a JSON response as `200` with an open `application/json` body, a redirect as `3XX` with its
 `Location`. A response class from a package is documented the same way, because only your application's
@@ -518,9 +520,25 @@ return $response; // → 202 with that body, as application/vnd.queue+json
 The last statement to run wins, and replacing the variable starts over. A status set on only some paths
 is one more the response can be sent with, so `if ($deferred) { $response->setStatusCode(202); }` is
 documented as `200` and `202`. The same goes for a response you throw inside an `HttpResponseException`.
-Anything else that may change the response, such as handing it to a method of yours or calling
-`setContent()`, leaves its status and body unknown, so it's documented under `default` with an open body
-rather than as the response you built.
+Anything else that may change the response, such as handing it to a method of yours, leaves its status and
+body unknown, so it's documented under `default` with an open body rather than as the response you built.
+
+Each call you chain, or make on a line of its own, changes only what it can change:
+
+```php
+return response('queued', 202)->setContent('accepted');               // → 202, the text "accepted"
+return response()->json($queued, 202)->setData($accepted);            // → 202 with $accepted's shape
+return response()->json($queued, 202)->cookie('queued', '1');         // → 202 with $queued's shape
+return response()->json($queued, 202)->withCallback($request->query('callback')); // → 202, open body
+```
+
+`setContent()` and `setData()` replace the body and leave the status. A cookie, a cache header
+(`setMaxAge()`, `setPublic()`, `setEtag()` and the rest), the charset and removing a header other than
+`Content-Type` change nothing the document describes. `setNotModified()` is a `304` with no body. A JSONP
+callback, or `setEncodingOptions()` with `JSON_FORCE_OBJECT` or `JSON_NUMERIC_CHECK`, changes the body in a
+way that can't be named, so the body is left open. Any other call, such as `prepare($request)`, may change
+anything, so only the response's class is kept: its status and body are documented under `default` with
+an open body.
 
 A status Docuccino can't read at all, such as `->setStatusCode($upstream->status())`, is not documented
 under a code the endpoint may never send. Its body goes under `default` ("any status") and an

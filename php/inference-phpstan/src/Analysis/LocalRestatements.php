@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Inference\PhpStan\Analysis;
 
 use Closure;
+use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\LocalWrites;
@@ -23,7 +24,7 @@ use PhpParser\NodeFinder;
  *
  * @phpstan-import-type PeeledChain from FluentResponseChain
  *
- * @phpstan-type Restated array{status: LiteralT|UnionT|null, statusUnknown: bool, contentType: string|null, contentTypeUnknown: bool, mayAlsoBe: list<LiteralT|UnionT>, bodyUnknown: bool}
+ * @phpstan-type Restated array{status: LiteralT|UnionT|null, statusUnknown: bool, contentType: string|null, contentTypeUnknown: bool, mayAlsoBe: list<LiteralT|UnionT>, body: DType|null, bodyUnknown: bool}
  *
  * @internal
  */
@@ -108,7 +109,7 @@ final class LocalRestatements
     /** @return Restated */
     private static function nothing(): array
     {
-        return ['status' => null, 'statusUnknown' => false, 'contentType' => null, 'contentTypeUnknown' => false, 'mayAlsoBe' => [], 'bodyUnknown' => false];
+        return ['status' => null, 'statusUnknown' => false, 'contentType' => null, 'contentTypeUnknown' => false, 'mayAlsoBe' => [], 'body' => null, 'bodyUnknown' => false];
     }
 
     /**
@@ -126,13 +127,16 @@ final class LocalRestatements
         if ($chain['contentType'] !== null || $chain['contentTypeUnknown']) {
             $state = ['contentType' => $chain['contentType'], 'contentTypeUnknown' => $chain['contentTypeUnknown']] + $state;
         }
+        if ($chain['body'] !== null || $chain['bodyUnknown']) {
+            $state = ['body' => $chain['body'], 'bodyUnknown' => $chain['bodyUnknown']] + $state;
+        }
 
         return $state;
     }
 
     /**
      * A chain that may not have run: its status is one more the response can be sent with, and a media type
-     * set on one path and not another is no one media type.
+     * or a body set on one path and not another is no one media type or body.
      *
      * @param  Restated  $state
      * @param  PeeledChain  $chain
@@ -148,6 +152,9 @@ final class LocalRestatements
         if ($chain['contentType'] !== null || $chain['contentTypeUnknown']) {
             $state = ['contentType' => null, 'contentTypeUnknown' => true] + $state;
         }
+        if ($chain['body'] !== null || $chain['bodyUnknown']) {
+            $state = ['body' => null, 'bodyUnknown' => true] + $state;
+        }
 
         return $state;
     }
@@ -155,7 +162,7 @@ final class LocalRestatements
     /** @return Restated */
     private static function unread(): array
     {
-        return ['status' => null, 'statusUnknown' => true, 'contentType' => null, 'contentTypeUnknown' => true, 'mayAlsoBe' => [], 'bodyUnknown' => true];
+        return ['status' => null, 'statusUnknown' => true, 'contentType' => null, 'contentTypeUnknown' => true, 'mayAlsoBe' => [], 'body' => null, 'bodyUnknown' => true];
     }
 
     /** Whether a chain was peeled all the way down to the local itself. */

@@ -58,7 +58,7 @@ final class WebhookReceiptController
         ))->header((string) config('webhooks.correlation_header'), $request->string('delivery_id')->toString());
     }
 
-    /** Fills the body in after the response object exists, which is not a shape the engine follows. */
+    /** Fills the body in after the response object exists. */
     public function digest(): JsonResponse
     {
         return (new JsonResponse)

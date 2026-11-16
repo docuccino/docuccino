@@ -84,16 +84,16 @@ final class ResponseShapeRefiner
     ];
 
     /** The responses whose body is JSON; the rest of {@see RESPONSE_FQCNS} send their content as it is. */
-    private const JSON_FQCNS = [
+    public const JSON_FQCNS = [
         'Illuminate\\Http\\JsonResponse',
         'Symfony\\Component\\HttpFoundation\\JsonResponse',
     ];
 
     /** Laravel's plain response, which morphs an array handed to it into JSON. */
-    private const PLAIN_RESPONSE = 'Illuminate\\Http\\Response';
+    public const PLAIN_RESPONSE = 'Illuminate\\Http\\Response';
 
     /** What `view()` renders, and so the body of a response the factory makes of a view. */
-    private const VIEW = 'Illuminate\\Contracts\\View\\View';
+    public const VIEW = 'Illuminate\\Contracts\\View\\View';
 
     /** The canonical FQCN the recovered shape is emitted under (the shape the pipeline unwraps). */
     public const CANONICAL_RESPONSE = 'Illuminate\\Http\\JsonResponse';
@@ -141,10 +141,10 @@ final class ResponseShapeRefiner
     ) {
         $this->budget = new DescentBudget($maxDepth, $fileBudget);
         $this->declarations = new ComponentDeclarations($reflectionProvider);
-        $this->fluentChain = new FluentResponseChain($reflectionProvider, $translator, $this->statusIn(...));
         $this->echoes = new ConstructorEchoes($this->touchProject(...));
         $bodies = new AnalyzedBodies($fileAnalyzer, $caseStatus);
         $this->subclasses = SubclassStatus::ofResponses($bodies, $appFilter, self::roots());
+        $this->fluentChain = new FluentResponseChain($reflectionProvider, $translator, $this->statusIn(...), $this->chainedRoot(...), $this->payloadOf(...));
         $this->subclassArguments = new ParentArgument($bodies, $appFilter);
         $this->enumFolder = new EnumAccessorFolder(
             $this->fileAnalyzer,
@@ -192,6 +192,35 @@ final class ResponseShapeRefiner
         $file = $root === null || $root === $fqcn || ! class_exists($fqcn) ? false : (new ReflectionClass($fqcn))->getFileName();
 
         return $file !== false && $this->appFilter->isProjectFile($file);
+    }
+
+    /**
+     * The framework response a class is, or the one an application's subclass derives from
+     * ({@see isResponseSubclass()}); null for anything the refiner does not read where it is built.
+     */
+    public function responseRoot(string $fqcn): ?string
+    {
+        return match (true) {
+            self::isResponseFqcn($fqcn), self::isTransportFqcn($fqcn) => $fqcn,
+            $this->isResponseSubclass($fqcn) => $this->subclasses->root($fqcn),
+            default => null,
+        };
+    }
+
+    /**
+     * {@see responseRoot()} for a chain's receiver. What a link on an application's subclass does turns on
+     * which class declares it, and an override can be added to any file of its hierarchy, so all are read.
+     */
+    private function chainedRoot(string $fqcn): ?string
+    {
+        $root = $this->responseRoot($fqcn);
+        if ($root !== null && $root !== $fqcn) {
+            foreach (DeclarationFiles::of($fqcn) as $file) {
+                $this->touchProject($file);
+            }
+        }
+
+        return $root;
     }
 
     /** Any kind of response the refiner reads where it was built. */
@@ -266,7 +295,8 @@ final class ResponseShapeRefiner
      * fold to more than the erased generic the stub's `@template` bounds leave behind, a fluent chain,
      * whose links can restate a status the receiver's own type carries unchanged
      * ({@see FluentResponseChain}), and a `response()->json()` whose status is a read on an enum case, which
-     * its type carries as a bare int, or as every code where the cases disagree ({@see CaseStatus}). A
+     * its type carries as a bare int, or as every code where the cases disagree ({@see CaseStatus}). A local
+     * qualifies where what it holds does, or where a statement restates it ({@see LocalRestatements}). A
      * factory call's status is read either way, so where it was written is recorded when the harvest keeps
      * the type.
      */
@@ -276,7 +306,10 @@ final class ResponseShapeRefiner
             return true;
         }
         if ($expr instanceof Node\Expr\Variable) {
-            return $this->restated($expr, $scope) !== null;
+            // A local is read as what it was assigned, so it outranks its type wherever that would.
+            $assigned = $this->assignment($expr, $scope);
+
+            return $this->restated($expr, $scope) !== null || ($assigned !== null && $this->outranksResolvedType($assigned[0], $assigned[1]));
         }
 
         $status = $expr instanceof Node\Expr\MethodCall || $expr instanceof Node\Expr\StaticCall ? $this->factoryStatus($expr, $scope) : null;
@@ -371,24 +404,23 @@ final class ResponseShapeRefiner
             return $this->foldTransport($transport, $scope, $paramNames);
         }
 
-        // 2. Type system already carries the shape (`response()->json([...], 422)`, via our extension).
+        // 2. A response built into a local and then returned (`$r = Problem::make(…); …; return $r;`) — the
+        // idiomatic shape whenever the protocol headers the exception carries have to be copied onto the
+        // response before it goes out. The variable's own type is the bare class, or the erased generic of a
+        // `new JsonResponse(…)`, so the shape lives in what was assigned to it ({@see refineLocal()}).
         $type = $this->translator->translate($scope->getType($expr));
+        if ($expr instanceof Node\Expr\Variable && $type instanceof ClassT && $this->isRefinable($type->fqcn)) {
+            $local = $this->refineLocal($expr, $scope, $paramNames, $depth);
+            if ($local !== null || $type->typeArgs === []) {
+                return $local;
+            }
+        }
+
+        // 3. Type system already carries the shape (`response()->json([...], 422)`, via our extension).
         if ($type instanceof ClassT && self::isResponseFqcn($type->fqcn) && $type->typeArgs !== []) {
             $refined = $this->fromTypeArgs($type);
 
             return $expr instanceof Node\Expr\MethodCall || $expr instanceof Node\Expr\StaticCall ? $this->factoryAccessors($refined, $expr, $scope, $paramNames) : $refined;
-        }
-
-        // 3. A response built into a local and then returned (`$r = Problem::make(…); …; return $r;`) — the
-        // idiomatic shape whenever the protocol headers the exception carries have to be copied onto the
-        // response before it goes out. The variable's own type is the bare class, so the shape lives in what
-        // was assigned to it ({@see refineLocal()}).
-        if ($expr instanceof Node\Expr\Variable
-            && is_string($expr->name)
-            && $type instanceof ClassT
-            && $this->isRefinable($type->fqcn)
-        ) {
-            return $this->refineLocal($expr->name, $scope, $paramNames, $depth);
         }
 
         // 4. A call into project code — a method or a function — whose declared return erased the shape:
@@ -608,24 +640,31 @@ final class ResponseShapeRefiner
      *
      * @param  list<string>  $paramNames
      */
-    private function refineLocal(string $name, Scope $scope, array $paramNames, int $depth): ?RefinedResponse
+    private function refineLocal(Node\Expr\Variable $local, Scope $scope, array $paramNames, int $depth): ?RefinedResponse
+    {
+        $assignment = $this->assignment($local, $scope);
+
+        return $assignment === null ? null : $this->refineExpr($assignment[0], $assignment[1], $paramNames, $depth);
+    }
+
+    /**
+     * The one expression a local is assigned ({@see refineLocal()}), and the scope it is assigned in.
+     *
+     * @return array{Node\Expr, Scope}|null
+     */
+    private function assignment(Node\Expr\Variable $local, Scope $scope): ?array
     {
         $key = FileAnalyzer::scopeKey($scope);
-        if ($key === null) {
+        if ($key === null || ! is_string($local->name)) {
             return null;
         }
 
-        $assignment = $this->fileAnalyzer->localAssignments($scope->getFile())[$key][$name] ?? null;
-        if ($assignment === null) {
+        $assignment = $this->fileAnalyzer->localAssignments($scope->getFile())[$key][$local->name] ?? null;
+        if ($assignment === null || $assignment[0] instanceof Node\Expr\Variable) {
             return null;
         }
 
-        [$assigned, $assignedScope] = $assignment;
-        if ($assigned instanceof Node\Expr\Variable) {
-            return null;
-        }
-
-        return $this->refineExpr($assigned, $this->fileAnalyzer->stableScope($assignedScope), $paramNames, $depth);
+        return [$assignment[0], $this->fileAnalyzer->stableScope($assignment[1])];
     }
 
     /**
@@ -672,7 +711,6 @@ final class ResponseShapeRefiner
      */
     private function restate(RefinedResponse $built, array $restated, Node\Expr\Variable $local): ?RefinedResponse
     {
-        $built = $restated['bodyUnknown'] ? $built->withUnreadBody() : $built;
         [$status, $unknown] = [$restated['status'], $restated['statusUnknown']];
         if ($restated['mayAlsoBe'] !== [] && ! $unknown) {
             $before = $status ?? ($built->statusSource === null && ! $built->statusOfPayload ? $built->status : null);
@@ -686,6 +724,8 @@ final class ResponseShapeRefiner
             'statusUnknown' => $unknown,
             'contentType' => $restated['contentType'],
             'contentTypeUnknown' => $restated['contentTypeUnknown'],
+            'body' => $restated['body'],
+            'bodyUnknown' => $restated['bodyUnknown'],
         ]);
     }
 
@@ -998,8 +1038,9 @@ final class ResponseShapeRefiner
     private function bare(Node\Expr $receiver, Scope $scope): RefinedResponse
     {
         $type = $this->translator->translate($scope->getType($receiver));
+        $root = $type instanceof ClassT ? $this->responseRoot($type->fqcn) : null;
 
-        return $type instanceof ClassT && self::isTransportFqcn($type->fqcn)
+        return $type instanceof ClassT && $root !== null && self::isTransportFqcn($root)
             ? RefinedResponse::transported($type->fqcn, null, null)
             : new RefinedResponse;
     }

@@ -54,6 +54,8 @@ it('documents the status a statement sets on the returned local, for every kind 
     'response()->stream($cb)' => ['stream', 'Symfony\\Component\\HttpFoundation\\StreamedResponse', 202],
     'redirect($url)' => ['redirect', 'Illuminate\\Http\\RedirectResponse', 303],
     'new JsonResponse(…)' => ['constructed', STATEMENT_STATUS_JSON, 202],
+    // An application's subclass sends the status its framework parent's setter sets, as the parent would.
+    'new GoneJsonResponse' => ['subclass', STATEMENT_STATUS_JSON, 404],
     // The last one to run is the one sent.
     'setStatusCode(201), then setStatusCode(202)' => ['twice', STATEMENT_STATUS_JSON, 202],
     'setStatusCode(202)->header(…) as one statement' => ['chainedStatement', STATEMENT_STATUS_JSON, 202],
@@ -86,12 +88,21 @@ it('claims no status where a statement sets one nobody can read', function (): v
     expect(statementStatusReturn('unread')->typeArgs[1] ?? null)->toEqual(new UnknownT('status not folded'));
 })->group('fixture');
 
-it('claims nothing the response was built with where something the build cannot read may have changed it', function (string $method): void {
-    // A helper handed the response, `setContent()`, and a setter on an application's subclass, which the
-    // chain reader does not read: each may have replaced the status and the body, so neither the 200 nor the
-    // 410 nor the body it was built with is published.
-    expect(statementStatusReturn($method))->toEqual(new ClassT(STATEMENT_STATUS_JSON, [new UnknownT('payload not folded'), new UnknownT('status not folded')]));
-})->with(['helper', 'content', 'subclass'])->group('fixture');
+it('claims nothing the response was built with where something the build cannot read may have changed it', function (): void {
+    // A helper handed the response may have replaced the status and the body, so neither the 200 nor the body
+    // it was built with is published.
+    expect(statementStatusReturn('helper'))->toEqual(new ClassT(STATEMENT_STATUS_JSON, [new UnknownT('payload not folded'), new UnknownT('status not folded')]));
+})->group('fixture');
+
+it('documents the body a statement replaces, beside the status it leaves alone', function (string $method, ArrayShapeT|LiteralT $body, int $status, ?string $mediaType): void {
+    // `setContent()` replaces the content and nothing else, so the 202 the response was built with is still
+    // the one sent; a status set on an application's subclass leaves the body its constructor handed the
+    // framework's.
+    expect(statementStatusReturn($method))->toEqual(new ClassT(STATEMENT_STATUS_JSON, [$body, new LiteralT($status), ...($mediaType === null ? [] : [new LiteralT($mediaType)])]));
+})->with([
+    'setContent(\'accepted\')' => ['content', new LiteralT('accepted'), 202, 'text/html'],
+    'setStatusCode(404) on new GoneJsonResponse' => ['subclass', new ArrayShapeT([new ArrayShapeField('message', new LiteralT('This resource is gone.'))]), 404, null],
+])->group('fixture');
 
 it('documents the media type a header statement sets', function (): void {
     expect(statementStatusReturn('header'))->toEqual(new ClassT(STATEMENT_STATUS_JSON, [new LiteralT('id,total'), new LiteralT(202), new LiteralT('text/csv')]));

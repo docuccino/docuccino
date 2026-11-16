@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Inference\PhpStan\Analysis\LocalRestatements;
 use PhpParser\Node;
@@ -20,8 +21,9 @@ use PhpParser\ParserFactory;
 /**
  * The restatements of `$response` ahead of where the last `$returned` in a function body written as `$code`
  * names it, with a chain reader that knows `setStatusCode(<int>)`, `setStatusCode(<anything else>)` as unread,
- * `header(<name>, <string>)`, and declines `setContent()`; and a keeping question answering yes for
- * `getStatusCode()`, `duplicate()` and the response handed to `logged()`.
+ * `header(<name>, <string>)`, `setData(<array>)` as an empty object and `setContent()` as an unread body, and
+ * declines `fresh()`; and a keeping question answering yes for `getStatusCode()`, `duplicate()` and the response
+ * handed to `logged()`.
  *
  * @return array<string, mixed>|null
  */
@@ -39,7 +41,7 @@ function localRestatementsOf(string $code, string $returned = 'return $response;
     }
 
     $peel = static function (Node\Expr\MethodCall $call): ?array {
-        $chain = ['status' => null, 'statusUnknown' => false, 'contentType' => null, 'contentTypeUnknown' => false];
+        $chain = ['status' => null, 'statusUnknown' => false, 'contentType' => null, 'contentTypeUnknown' => false, 'body' => null, 'bodyUnknown' => false];
         $current = $call;
         while ($current instanceof Node\Expr\MethodCall) {
             $name = $current->name instanceof Node\Identifier ? $current->name->toString() : '';
@@ -51,7 +53,9 @@ function localRestatementsOf(string $code, string $returned = 'return $response;
                 'header' => ($arguments[0] ?? null) instanceof Node\Scalar\String_ && $arguments[0]->value === 'Content-Type' && ($arguments[1] ?? null) instanceof Node\Scalar\String_
                     ? ['contentType' => $arguments[1]->value]
                     : [],
-                'setContent' => false,
+                'setData' => ['body' => new ArrayShapeT([])],
+                'setContent' => ['bodyUnknown' => true],
+                'fresh' => false,
                 default => null,
             };
             if ($link === null) {
@@ -64,6 +68,9 @@ function localRestatementsOf(string $code, string $returned = 'return $response;
                 [$chain['status'], $chain['statusUnknown']] = [$link['status'] ?? null, $link['statusUnknown'] ?? false];
             }
             $chain['contentType'] ??= $link['contentType'] ?? null;
+            if ($chain['body'] === null && ! $chain['bodyUnknown']) {
+                [$chain['body'], $chain['bodyUnknown']] = [$link['body'] ?? null, $link['bodyUnknown'] ?? false];
+            }
             $current = $current->var;
         }
 
@@ -81,7 +88,7 @@ function localRestatementsOf(string $code, string $returned = 'return $response;
  */
 function localRestatement(array $restated): array
 {
-    return $restated + ['status' => null, 'statusUnknown' => false, 'contentType' => null, 'contentTypeUnknown' => false, 'mayAlsoBe' => [], 'bodyUnknown' => false];
+    return $restated + ['status' => null, 'statusUnknown' => false, 'contentType' => null, 'contentTypeUnknown' => false, 'mayAlsoBe' => [], 'body' => null, 'bodyUnknown' => false];
 }
 
 it('reads a status set on a line of its own as the one the response is sent with', function (string $code, array $restated): void {
@@ -101,6 +108,10 @@ it('reads a status set on a line of its own as the one the response is sent with
     'set unread, then set' => ['$response = make(); $response->setStatusCode($code); $response->setStatusCode(202); return $response;', ['status' => new LiteralT(202)]],
     'its media type set by a header' => ['$response = make(); $response->header(\'Content-Type\', \'text/csv\'); return $response;', ['contentType' => 'text/csv']],
     'a status and a media type set in one chain' => ['$response = make(); $response->setStatusCode(202)->header(\'Content-Type\', \'text/csv\'); return $response;', ['status' => new LiteralT(202), 'contentType' => 'text/csv']],
+    // A body replaced on a line of its own is the body sent, and leaves the status as it was.
+    'its body set' => ['$response = make(); $response->setData([]); return $response;', ['body' => new ArrayShapeT([])]],
+    'its body set nobody can read' => ['$response = make(); $response->setContent($text); return $response;', ['bodyUnknown' => true]],
+    'its body set unread, then set' => ['$response = make(); $response->setContent($text); $response->setData([]); return $response;', ['body' => new ArrayShapeT([])]],
 ]);
 
 it('joins a status set on only some paths to the one before it', function (string $code, array $restated): void {
@@ -114,13 +125,15 @@ it('joins a status set on only some paths to the one before it', function (strin
     // The media type on one path is not the media type.
     'a media type on a branch' => ['$response = make(); if (ready()) { $response->header(\'Content-Type\', \'text/csv\'); } return $response;', ['contentTypeUnknown' => true]],
     'an unread status on a branch' => ['$response = make(); if (ready()) { $response->setStatusCode($code); } return $response;', ['statusUnknown' => true]],
+    // Nor is the body on one path the body.
+    'a body on a branch' => ['$response = make(); if (ready()) { $response->setData([]); } return $response;', ['bodyUnknown' => true]],
 ]);
 
 it('leaves nothing of the response standing where something nobody read may have changed it', function (string $code): void {
     expect(localRestatementsOf($code))->toEqual(localRestatement(['statusUnknown' => true, 'contentTypeUnknown' => true, 'bodyUnknown' => true]));
 })->with([
     'handed to a call that changes it' => ['$response = make(); accept($response); return $response;'],
-    'a chain the reader declines' => ['$response = make(); $response->setContent(\'done\'); return $response;'],
+    'a chain the reader declines' => ['$response = make(); $response->fresh(); return $response;'],
     'a call made on it that changes it' => ['$response = make(); $response->setNotModified(); return $response;'],
     'a chain ending in a call the reader cannot follow' => ['$response = make(); if ($response->setStatusCode(202)->isOk()) { log(); } return $response;'],
     'a nullsafe call made on it' => ['$response = make(); $response?->setStatusCode(202); return $response;'],
