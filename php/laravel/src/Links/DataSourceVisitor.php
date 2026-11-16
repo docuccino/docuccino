@@ -6,8 +6,10 @@ namespace Docuccino\Laravel\Links;
 
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Core\Inference\DType\IntersectionT;
 use Docuccino\Core\Inference\DType\ListT;
 use Docuccino\Core\Inference\DType\MapT;
+use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeScope;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
@@ -22,8 +24,9 @@ use Traversable;
  * exactly one model class; {@see DataColumns} decides what laravel-data does with it.
  *
  * Anything else a Data class meets is a construction that names nothing — another static call on it (a
- * custom `from*()`, a factory), an argument unpacked, an instance method called on one (`withoutWrapping()`,
- * `additional()`) — and so stands against every property it might have set.
+ * custom `from*()`, a factory), an argument unpacked, an instance method called on something that may be
+ * one of its objects (`withoutWrapping()`, `additional()`, through its own type or one it extends) — and so
+ * stands against every property it might have set.
  *
  * @internal
  */
@@ -32,6 +35,9 @@ final class DataSourceVisitor implements TraceVisitor
     /** @var array<string, list<DataConstruction>> Data class → what each construction of it was built from */
     private array $built = [];
 
+    /** @var array<string, true> each class an instance method was called on, the receiver typed as it */
+    private array $called = [];
+
     public function enterNode(Node $node, TypeScope $scope): bool
     {
         if ($node instanceof Node\Expr\New_ && $node->class instanceof Node\Name && DataClassReflector::isData($node->class->toString())) {
@@ -39,9 +45,8 @@ final class DataSourceVisitor implements TraceVisitor
         } elseif ($node instanceof Node\Expr\StaticCall && $node->class instanceof Node\Name && DataClassReflector::isData($node->class->toString())) {
             $this->built[$node->class->toString()][] = self::staticCall($node, $scope);
         } elseif ($node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\NullsafeMethodCall) {
-            $receiver = $scope->typeOf($node->var);
-            if ($receiver instanceof ClassT && DataClassReflector::isData($receiver->fqcn)) {
-                $this->built[$receiver->fqcn][] = DataConstruction::unknown();
+            foreach (self::classes($scope->typeOf($node->var)) as $receiver) {
+                $this->called[$receiver] = true;
             }
         }
 
@@ -56,7 +61,20 @@ final class DataSourceVisitor implements TraceVisitor
      */
     public function constructionsOf(string $data): ?array
     {
-        return $this->built[$data] ?? null;
+        $built = $this->built[$data] ?? null;
+        if ($built === null) {
+            return null;
+        }
+
+        // A receiver typed as the class, or as any class or interface it extends (a helper's `Data $data`, a
+        // template bound to one), may be one of its objects, and the call may change what it sends.
+        foreach (array_keys($this->called) as $receiver) {
+            if (is_a($data, $receiver, true)) {
+                return [...$built, DataConstruction::unknown()];
+            }
+        }
+
+        return $built;
     }
 
     private static function staticCall(Node\Expr\StaticCall $call, TypeScope $scope): DataConstruction
@@ -150,6 +168,24 @@ final class DataSourceVisitor implements TraceVisitor
         }
 
         return null;
+    }
+
+    /**
+     * Every class `$type` may be an object of.
+     *
+     * @return list<string>
+     */
+    private static function classes(DType $type): array
+    {
+        if ($type instanceof ClassT) {
+            return [$type->fqcn];
+        }
+
+        if ($type instanceof UnionT || $type instanceof IntersectionT) {
+            return array_merge(...array_map(self::classes(...), $type->members));
+        }
+
+        return [];
     }
 
     /** The one model class `$type` is, or null. */

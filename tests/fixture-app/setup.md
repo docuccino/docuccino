@@ -191,7 +191,8 @@ them.
 - `app/Http/Controllers/LinkedCourierController.php` + `app/Data/CourierData.php` + `app/Models/Courier.php` — one
   Data class built from a model in each of the ways an action builds one (`from()` a model, `collect()` models, the
   constructor by name and by position, the model's own `toDTO()`, `from()` an array), and from either of two models,
-  a `find()` that may be null, and an object the action then unwraps: which model column each property copies.
+  a `find()` that may be null, an object the action then unwraps, and one a helper typed on the base class changes:
+  which model column each property copies.
 
 ### Closures located by line
 

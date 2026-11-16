@@ -169,6 +169,8 @@ it('links a Data body built from a model to every route that binds the model on 
     'a writable property the action sets again' => ['/api/retitled-vans', 'post', '201', []],
     // The class's own `from()` decides what the object is built from, whatever it was handed.
     'a from() the class writes itself' => ['/api/demonstration-vans', 'post', '201', []],
+    // A helper typed on the base class adds a `plate` of its own over the copied one.
+    'an object a helper changes through the base class' => ['/api/described-vans', 'post', '201', []],
 ]);
 
 it('points into the envelope a Data body is wrapped in', function (): void {

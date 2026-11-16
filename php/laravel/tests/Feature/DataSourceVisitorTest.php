@@ -58,4 +58,9 @@ it('reads what each construction of a Data class is built from, on the real engi
         ['kind' => 'model', 'model' => 'App\\Models\\Courier', 'sources' => []],
         ['kind' => 'unknown', 'model' => null, 'sources' => []],
     ]],
+    // A helper typed on the base class, through a template, adds members over the copied ones.
+    'an object a helper changes through the base class' => ['described', [
+        ['kind' => 'model', 'model' => 'App\\Models\\Courier', 'sources' => []],
+        ['kind' => 'unknown', 'model' => null, 'sources' => []],
+    ]],
 ])->group('fixture');
