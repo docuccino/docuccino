@@ -235,6 +235,22 @@
               "_2"
             ]
           },
+          "either": {
+            "type": "boolean",
+            "enum": [
+              true,
+              false
+            ],
+            "example": true,
+            "x-enum-varnames": [
+              "True",
+              "False"
+            ],
+            "x-enumNames": [
+              "True",
+              "False"
+            ]
+          },
           "grade": {
             "type": "string",
             "enum": [
@@ -269,6 +285,22 @@
             ],
             "x-enumNames": [
               "True"
+            ]
+          },
+          "quoted": {
+            "type": "string",
+            "enum": [
+              "x,y",
+              "z"
+            ],
+            "example": "x,y",
+            "x-enum-varnames": [
+              "XY",
+              "Z"
+            ],
+            "x-enumNames": [
+              "XY",
+              "Z"
             ]
           },
           "rank": {
@@ -314,7 +346,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "9376b19a92899f3e95329c7b433bf0bf5e05e102cda167aa8fe6bb2730b9d382"
+      "contentHash": "7fc3df6ad28c81accff3a38c72044e3c582bf62aa14b0c79aaeb2cc0614932d0"
     },
     "generator": {
       "name": "docuccino/laravel",

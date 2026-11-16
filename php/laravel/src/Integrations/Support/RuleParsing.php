@@ -9,7 +9,8 @@ use Docuccino\Core\Extensions\Validation\ValidationRule;
 /**
  * Statically parses recovered Laravel rule strings into {@see ValidationRule}s — never executing
  * anything. A pipe string (`'required|max:100'`) splits into tokens; a token (`'in:a,b'`) splits
- * into a name plus comma parameters. Array-form rules feed their string items through {@see token()}.
+ * into a name plus its parameters, read as Laravel reads them. Array-form rules feed their string items
+ * through {@see token()}.
  */
 final class RuleParsing
 {
@@ -37,11 +38,29 @@ final class RuleParsing
         }
 
         $name = substr($token, 0, $colon);
-        $parameters = array_values(array_filter(
-            array_map('trim', explode(',', substr($token, $colon + 1))),
-            static fn (string $parameter): bool => $parameter !== '',
-        ));
 
-        return ValidationRule::of($name, $parameters);
+        return ValidationRule::of($name, self::parameters($name, substr($token, $colon + 1)));
+    }
+
+    /**
+     * A token's parameters as Laravel's `ValidationRuleParser` reads them: a regex is one parameter, commas,
+     * quotes and all, and anything else is a CSV row, so `in:"a,b",""` lists `a,b` and the empty string.
+     *
+     * @return list<string>
+     */
+    private static function parameters(string $name, string $parameters): array
+    {
+        if (in_array(strtolower(trim($name)), ['regex', 'not_regex', 'notregex'], true)) {
+            return [trim($parameters)];
+        }
+
+        if (trim($parameters) === '') {
+            return [];
+        }
+
+        return array_map(
+            static fn (?string $parameter): string => trim((string) $parameter),
+            str_getcsv($parameters, escape: '\\'),
+        );
     }
 }

@@ -15,6 +15,7 @@ use Docuccino\Core\Inference\DType\MapT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Support\Fqcn;
 use Docuccino\Laravel\Integrations\Support\EnumCaseValue;
+use Docuccino\Laravel\Integrations\Validation\LiveRuleValue;
 use Illuminate\Support\Str;
 use ReflectionAttribute;
 use ReflectionClass;
@@ -128,6 +129,12 @@ final class DataClassReflector
         'Spatie\\LaravelData\\Attributes\\Validation\\Exclude' => 'Illuminate\\Validation\\Rules\\ExcludeIf',
     ];
 
+    /** Attributes that build a framework choice object from the values they are given, by its class. */
+    private const CHOICE_ATTRIBUTES = [
+        'Spatie\\LaravelData\\Attributes\\Validation\\In' => 'Illuminate\\Validation\\Rules\\In',
+        'Spatie\\LaravelData\\Attributes\\Validation\\NotIn' => 'Illuminate\\Validation\\Rules\\NotIn',
+    ];
+
     private const VALIDATION_PATH = 'Spatie\\LaravelData\\Support\\Validation\\ValidationPath';
 
     /**
@@ -176,14 +183,14 @@ final class DataClassReflector
         'BooleanType' => 'boolean', 'ArrayType' => 'array', 'Alpha' => 'alpha', 'AlphaNumeric' => 'alpha_num',
         'AlphaDash' => 'alpha_dash', 'Date' => 'date', 'Json' => 'json', 'IP' => 'ip',
         'Max' => 'max', 'Min' => 'min', 'Size' => 'size', 'Between' => 'between',
-        'In' => 'in', 'NotIn' => 'not_in', 'Regex' => 'regex', 'DateFormat' => 'date_format',
+        'Regex' => 'regex', 'DateFormat' => 'date_format',
         'MaxDigits' => 'max_digits', 'MinDigits' => 'min_digits', 'DigitsBetween' => 'digits_between',
         'StartsWith' => 'starts_with', 'EndsWith' => 'ends_with',
     ];
 
     /** Rules that carry comma-separated parameters (`max:100`, `in:a,b`); others are bare (`required`). */
     private const VALUE_RULES = [
-        'max', 'min', 'size', 'between', 'in', 'not_in', 'regex', 'date_format',
+        'max', 'min', 'size', 'between', 'regex', 'date_format',
         'max_digits', 'min_digits', 'digits_between', 'starts_with', 'ends_with',
     ];
 
@@ -404,10 +411,10 @@ final class DataClassReflector
 
     /**
      * The rule OBJECTS a property's validation attributes hand Laravel: any a `#[Rule(...)]` carries, bare
-     * or inside an array, the `Enum` rule an `#[Enum]` builds, and the object an `#[In]`, `#[NotIn]` or
-     * `#[Exclude]` is given in place of its parameters. An `#[Enum]` is built the way laravel-data builds
-     * it, so its `only`/`except` narrow it; one that cannot be built fails every request, and hands over
-     * nothing.
+     * or inside an array, the `Enum` rule an `#[Enum]` builds, the object an `#[In]`, `#[NotIn]` or
+     * `#[Exclude]` is given in place of its parameters, and the `In`/`NotIn` an `#[In]`/`#[NotIn]` builds
+     * from its values otherwise. An `#[Enum]` is built the way laravel-data builds it, so its `only`/`except`
+     * narrow it; one that cannot be built fails every request, and hands over nothing.
      *
      * @return list<object>
      */
@@ -427,7 +434,7 @@ final class DataClassReflector
                 continue;
             }
 
-            $given = self::givenObject($attribute);
+            $given = self::givenObject($attribute) ?? self::builtChoice($attribute);
             if ($given !== null) {
                 $out[] = $given;
 
@@ -453,13 +460,39 @@ final class DataClassReflector
 
     /**
      * Whether an attribute validates with a rule object rather than its own keyword ({@see ruleObjects()}):
-     * an `#[Enum]` always does.
+     * an `#[Enum]`, `#[In]` and `#[NotIn]` always do.
      *
      * @param  ReflectionAttribute<object>  $attribute
      */
     private static function handsOverObject(ReflectionAttribute $attribute): bool
     {
-        return $attribute->getName() === self::ENUM_ATTRIBUTE || self::givenObject($attribute) !== null;
+        return $attribute->getName() === self::ENUM_ATTRIBUTE
+            || isset(self::CHOICE_ATTRIBUTES[$attribute->getName()])
+            || self::givenObject($attribute) !== null;
+    }
+
+    /**
+     * The `In`/`NotIn` an `#[In]`/`#[NotIn]` builds from its values, flattened as laravel-data flattens them,
+     * or null for any other attribute. Each value stays as written, so the list reads as `Rule::in()` does
+     * ({@see LiveRuleValue}): `true` as `"1"` and `false` as `""`, the strings Laravel compares, and a
+     * reference only a request resolves as a value this build cannot read.
+     *
+     * @param  ReflectionAttribute<object>  $attribute
+     */
+    private static function builtChoice(ReflectionAttribute $attribute): ?object
+    {
+        $class = self::CHOICE_ATTRIBUTES[$attribute->getName()] ?? null;
+        if ($class === null) {
+            return null;
+        }
+
+        $values = [];
+        $arguments = $attribute->getArguments();
+        array_walk_recursive($arguments, static function (mixed $value) use (&$values): void {
+            $values[] = $value;
+        });
+
+        return new $class($values);
     }
 
     /**
@@ -692,9 +725,9 @@ final class DataClassReflector
     }
 
     /**
-     * Attribute arguments as a comma-joined rule parameter string: `Between(1, 10)` → `"1,10"`,
-     * `In(['a','b'])` → `"a,b"`. An enum case is the value Laravel casts it to, so `In(Status::Open)` is
-     * `"open"` ({@see EnumCaseValue}). Other non-scalars are dropped.
+     * Attribute arguments as a comma-joined rule parameter string, as laravel-data writes a string rule's:
+     * `Between(1, 10)` → `"1,10"`, and a boolean as `true`/`false`. An enum case is the value Laravel casts
+     * it to, so `StartsWith(Status::Open)` is `"open"` ({@see EnumCaseValue}). Other non-scalars are dropped.
      *
      * @param  array<array-key, mixed>  $arguments
      */

@@ -142,6 +142,22 @@
               "_2"
             ]
           },
+          "either": {
+            "type": "boolean",
+            "enum": [
+              true,
+              false
+            ],
+            "example": true,
+            "x-enum-varnames": [
+              "True",
+              "False"
+            ],
+            "x-enumNames": [
+              "True",
+              "False"
+            ]
+          },
           "grade": {
             "type": "string",
             "enum": [
@@ -176,6 +192,22 @@
             ],
             "x-enumNames": [
               "True"
+            ]
+          },
+          "quoted": {
+            "type": "string",
+            "enum": [
+              "x,y",
+              "z"
+            ],
+            "example": "x,y",
+            "x-enum-varnames": [
+              "XY",
+              "Z"
+            ],
+            "x-enumNames": [
+              "XY",
+              "Z"
             ]
           },
           "rank": {

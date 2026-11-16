@@ -158,6 +158,15 @@
         },
         "type": "object",
         "properties": {
+          "agreed": {
+            "type": "boolean",
+            "not": {
+              "enum": [
+                false
+              ]
+            },
+            "example": true
+          },
           "code": {
             "type": "string",
             "not": {
@@ -182,6 +191,22 @@
               "Blue"
             ]
           },
+          "consent": {
+            "type": "boolean",
+            "enum": [
+              true,
+              false
+            ],
+            "example": true,
+            "x-enum-varnames": [
+              "True",
+              "False"
+            ],
+            "x-enumNames": [
+              "True",
+              "False"
+            ]
+          },
           "mark": {
             "type": "string",
             "not": {
@@ -202,6 +227,22 @@
             ],
             "maxLength": 3,
             "example": "exa"
+          },
+          "pair": {
+            "type": "string",
+            "enum": [
+              "a,b",
+              "c"
+            ],
+            "example": "a,b",
+            "x-enum-varnames": [
+              "AB",
+              "C"
+            ],
+            "x-enumNames": [
+              "AB",
+              "C"
+            ]
           },
           "phase": {
             "type": "string",
@@ -229,6 +270,22 @@
           },
           "priority": {
             "$ref": "#/components/schemas/WidgetPriority"
+          },
+          "quoted": {
+            "type": "string",
+            "enum": [
+              "x,y",
+              "z"
+            ],
+            "example": "x,y",
+            "x-enum-varnames": [
+              "XY",
+              "Z"
+            ],
+            "x-enumNames": [
+              "XY",
+              "Z"
+            ]
           },
           "size": {
             "type": "string",
@@ -348,7 +405,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "8ae963cab2710a71207c1129553542f6196dfb75af30d539a526b7c7261e5c8f"
+      "contentHash": "114ce2dfa542dd3dd146b6cd1d2b45f3ef3a60b32f874a5043f349522c3bd0ba"
     },
     "generator": {
       "name": "docuccino/laravel",

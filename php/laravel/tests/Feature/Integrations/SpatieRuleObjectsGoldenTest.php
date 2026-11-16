@@ -14,6 +14,7 @@ use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Pipeline\GenerationResult;
+use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\RuleObjectChoicesController;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\RuleObjectChoicesData;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
@@ -42,6 +43,7 @@ function spatieRuleObjectsBuild(): GenerationResult
     bootLaravelData(null);
 
     $string = ScalarT::string();
+    $optional = new ClassT(DataClassReflector::OPTIONAL);
     $engine = static fn (): TypeEngine => WorkbenchEngine::make(
         classOverrides: [
             RuleObjectChoicesData::class => new ClassMetadata(RuleObjectChoicesData::class, [
@@ -55,6 +57,10 @@ function spatieRuleObjectsBuild(): GenerationResult
                 new PropertyMetadata('colour', $string),
                 new PropertyMetadata('mark', $string),
                 new PropertyMetadata('note', UnionT::of([$string, new NullT])),
+                new PropertyMetadata('consent', UnionT::of([ScalarT::bool(), $optional])),
+                new PropertyMetadata('agreed', UnionT::of([ScalarT::bool(), $optional])),
+                new PropertyMetadata('pair', UnionT::of([$string, $optional])),
+                new PropertyMetadata('quoted', UnionT::of([$string, $optional])),
             ]),
         ],
         analysisOverrides: [
@@ -125,4 +131,17 @@ it('takes every value laravel-data takes through a rule object, and refuses the 
     // `new ExcludeIf(false)` excludes nothing, so the field's other rules still hold.
     'a short note' => [['note' => 'abc'], true, false],
     'a note past its maximum' => [['note' => 'abcd'], false, false],
+    // An `#[In([true, false])]` builds `in:"1",""`: the strings PHP makes of the two booleans, so both pass.
+    'consent given' => [['consent' => true], true, false],
+    'consent refused' => [['consent' => false], true, false],
+    'consent as a zero' => [['consent' => 0], false, false],
+    // `#[NotIn([false])]` excludes `""`, which is how Laravel compares `false`.
+    'an agreement' => [['agreed' => true], true, false],
+    'a refusal to agree' => [['agreed' => false], false, false],
+    // Each value is one entry of the list the attribute builds, comma and all.
+    'a pair holding a comma' => [['pair' => 'a,b'], true, false],
+    'half of that pair' => [['pair' => 'a'], false, false],
+    // Laravel reads `in:"x,y",z` as CSV: the quotes enclose an entry, and are no part of it.
+    'a quoted entry' => [['quoted' => 'x,y'], true, false],
+    'a quoted entry with its quotes' => [['quoted' => '"x'], false, false],
 ]);
