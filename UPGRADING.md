@@ -6,6 +6,11 @@ full record either way.
 
 ## v0.24.0
 
+Three changes, each for a different reader, and a last part on what a diff across the upgrade
+reports, for anyone who compares or gates a committed document.
+
+### A pointer in `lint.leakage.allow`
+
 Only if `lint.leakage.allow` lists a JSON pointer. Names are unaffected, and so is the response
 recorder's redaction.
 
@@ -19,6 +24,61 @@ recorder's redaction.
 - **An entry spelled the old way silences nothing.** The finding comes back, and its help names the
   entry that stopped matching and the pointer to write instead. Replace the one with the other. If
   your parameters were reordered after you wrote the entry, check that it is the parameter you meant.
+
+### An example its schema does not allow
+
+Only if an `@example`, or a `#[RuleSchema]` example, is not one of the values its schema allows and
+you kept it, under `lint.examples.allow` or past the `lint.example-mismatch` warning.
+
+- **Such an example is no longer published.** One with the right type but outside the values its
+  schema allows, such as `@example active` beside an enum of `draft` and `published`, used to be
+  published and reported. Now it is left out, and `docblock.example-untypable` names the values that
+  would be accepted. The allow entry that kept it keeps nothing: the example is gone from the
+  document. On a validation field, an example generated from the field's other rules takes its place
+  where they pin a value; elsewhere the member has no example.
+- **Change the example to an allowed value.** The `lint.examples.allow` entry then has nothing left to
+  accept, and you can remove it.
+- **Some examples now come out as the value they spell.** An example is read against everything its
+  schema admits, so `@example null` beside a nullable enum is `null`, and `@example 3` on a nullable
+  integer is `3`, where they were the strings `"null"` and `"3"`. That needs nothing from you, and
+  `docuccino:diff` never reads a changed example as breaking.
+
+### An enum case in a choice rule
+
+Only a trace visitor in an extension needs editing. But a document whose choice rules or filter
+defaults name an enum case changes, so read the first point even if you write no extensions.
+
+- **A choice rule publishes the value Laravel compares.** `Rule::in()`, `new In`, `Rule::notIn()`,
+  `new NotIn` and `Rule::array()` given enum cases, a Query Builder filter's `->default()` given a case,
+  and Spatie Data's `#[In]` and `#[NotIn]` given cases now publish each case's backing value: `'draft'`
+  where it was `'Draft'`, and integers for an int-backed enum. That is the value Laravel compares a
+  request against. A pure enum's case is still its name. A constant that names a case reads as that
+  case, and a plain constant on an enum as its value, where both were the constant's name. A rule
+  that lists every case of one enum refers to that enum's component.
+- **A trace visitor reads `caseName()`.** Only if your extension implements `TraceVisitor`.
+  `TypeScope::constantValueOf()` folds an enum case to a `ConstValue` of kind `case`, where it was a
+  scalar holding the case's name: `isCase()` is true, `class` holds the enum and `caseName()` the
+  case. A plain constant on an enum folds to its value. Read the name from `caseName()` rather than
+  `scalar`.
+
+### What `docuccino:diff` reports across this upgrade
+
+Only if you diff a document committed before the upgrade against a build after it, or gate it with
+`--enforce`. Three fixes make a choice rule publish what Laravel checks, and the differ reads each as
+breaking where the rule is used:
+
+- **`new Enum` and `new In` publish their values.** Both were dropped, so the field published no
+  `enum`. An `enum` arriving where nothing constrained the field (`schema.enum-added`) is a narrowing,
+  and a narrowing is breaking.
+- **`Rule::notIn()` and `new NotIn` publish the values they exclude.** They were dropped too. A `not`
+  arriving (`schema.not-added`) is a narrowing in the same way.
+- **An enum case publishes its backing value**, as above. The case's name leaving and its value
+  arriving are reported together, and a value leaving an `enum` (`schema.enum-value-removed`) is
+  breaking.
+
+So a gate run with `--enforce` fails on the upgrade. Your API did not change: in each case the
+document now says what your server already did. Upgrade in a pull request of its own, so the
+changeset holds only what the upgrade moved, and read it before you merge.
 
 ## v0.23.0
 
