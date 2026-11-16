@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Laravel\Commands\MemoryLimitOption;
+use Docuccino\Laravel\Commands\StartsConsoleBuild;
 use Docuccino\Laravel\Config\BuildConfig;
 use Docuccino\Laravel\Engine\ConsoleBuild;
 use Docuccino\Laravel\Engine\EnginePackage;
@@ -10,11 +11,10 @@ use Docuccino\Laravel\Engine\LazyTypeEngine;
 use Docuccino\Laravel\Engine\MemoryLimit;
 use Docuccino\Laravel\Engine\OutOfMemoryNotice;
 use Docuccino\Laravel\Engine\TypeEngineFactory;
-use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Support\Facades\Artisan;
+use Symfony\Component\Console\Command\Command as SymfonyCommand;
 use Symfony\Component\Console\Input\ArgvInput;
 use Symfony\Component\Console\Input\ArrayInput;
-use Symfony\Component\Console\Output\NullOutput;
 
 /**
  * In-process inference is bound by the calling process's memory_limit, and exhausting it is an uncatchable
@@ -141,11 +141,7 @@ it('does not offer the flag on the command that builds nothing', function (): vo
 it('captures the flag into the engine bag the factory reads', function (): void {
     setBuild('engine.memory_limit', '512M');
 
-    MemoryLimitOption::capture(new CommandStarting(
-        'docuccino:export',
-        new ArgvInput(['artisan', 'docuccino:export', '--memory-limit=3G']),
-        new NullOutput,
-    ));
+    MemoryLimitOption::capture(new ArgvInput(['artisan', 'docuccino:export', '--memory-limit=3G']));
 
     // The flag wins over the configured ceiling, which is the whole point of the two being one lever.
     expect(MemoryLimitOption::requested())->toBe('3G')
@@ -155,24 +151,7 @@ it('captures the flag into the engine bag the factory reads', function (): void 
 it('leaves the configured ceiling alone when no flag was passed', function (): void {
     setBuild('engine.memory_limit', '512M');
 
-    MemoryLimitOption::capture(new CommandStarting(
-        'docuccino:export',
-        new ArgvInput(['artisan', 'docuccino:export']),
-        new NullOutput,
-    ));
-
-    expect(MemoryLimitOption::requested())->toBeNull()
-        ->and(app(BuildConfig::class)->engine()['memory_limit'])->toBe('512M');
-});
-
-it('ignores the flag for commands that are not ours', function (): void {
-    setBuild('engine.memory_limit', '512M');
-
-    MemoryLimitOption::capture(new CommandStarting(
-        'migrate',
-        new ArgvInput(['artisan', 'migrate', '--memory-limit=3G']),
-        new NullOutput,
-    ));
+    MemoryLimitOption::capture(new ArgvInput(['artisan', 'docuccino:export']));
 
     expect(MemoryLimitOption::requested())->toBeNull()
         ->and(app(BuildConfig::class)->engine()['memory_limit'])->toBe('512M');
@@ -183,11 +162,7 @@ it('ignores the flag on one of our commands called in-process', function (): voi
     // Artisan::call() is not what started the process it runs in.
     setBuild('engine.memory_limit', '512M');
 
-    MemoryLimitOption::capture(new CommandStarting(
-        'docuccino:export',
-        new ArrayInput(['command' => 'docuccino:export', '--memory-limit' => '3G']),
-        new NullOutput,
-    ));
+    MemoryLimitOption::capture(new ArrayInput(['command' => 'docuccino:export', '--memory-limit' => '3G']));
 
     expect(MemoryLimitOption::requested())->toBeNull()
         ->and(app(BuildConfig::class)->engine()['memory_limit'])->toBe('512M');
@@ -202,17 +177,26 @@ it('refuses to tune the process until one of our commands has started', function
     expect(ConsoleBuild::active())->toBeFalse()
         ->and(app(TypeEngineFactory::class)->mayTuneProcess())->toBeFalse();
 
-    MemoryLimitOption::capture(new CommandStarting('docuccino:export', new ArgvInput(['artisan', 'docuccino:export']), new NullOutput));
+    MemoryLimitOption::capture(new ArgvInput(['artisan', 'docuccino:export']));
 
     expect(ConsoleBuild::active())->toBeTrue()
         ->and(app(TypeEngineFactory::class)->mayTuneProcess())->toBeTrue();
 });
 
-it('is not marked a console build by somebody else\'s command', function (): void {
-    MemoryLimitOption::capture(new CommandStarting('migrate', new ArgvInput(['artisan', 'migrate']), new NullOutput));
+it('lets every command of ours mark its run a console build', function (): void {
+    // The mark is each command's own act ({@see StartsConsoleBuild}), so one that forgets it builds under
+    // PHP's ceiling, unexplained and alone. Read off the commands the application has registered.
+    $ours = array_filter(
+        Artisan::all(),
+        static fn (SymfonyCommand $command): bool => str_starts_with((string) $command->getName(), 'docuccino:'),
+    );
+    $marking = array_filter(
+        $ours,
+        static fn (SymfonyCommand $command): bool => in_array(StartsConsoleBuild::class, class_uses_recursive($command), true),
+    );
 
-    expect(ConsoleBuild::active())->toBeFalse()
-        ->and(app(TypeEngineFactory::class)->mayTuneProcess())->toBeFalse();
+    expect(count($ours))->toBeGreaterThanOrEqual(10)
+        ->and(array_keys($marking))->toBe(array_keys($ours));
 });
 
 it('raises the ceiling for a console build before the engine exists, and boots nothing', function (): void {

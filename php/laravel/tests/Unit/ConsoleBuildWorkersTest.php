@@ -11,12 +11,9 @@ use Docuccino\Laravel\Engine\TypeEngineFactory;
 use Docuccino\Laravel\Integrations\InferredHandler\HandlerReflector;
 use Docuccino\Laravel\Integrations\InferredHandler\RenderCallback;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
-use Illuminate\Console\Events\CommandStarting;
-use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Redis\Connector;
 use Illuminate\Foundation\Bootstrap\HandleExceptions;
-use Illuminate\Foundation\Console\Kernel as FoundationConsoleKernel;
 use Illuminate\Redis\Connections\Connection;
 use Illuminate\Redis\RedisManager;
 use Illuminate\Support\Facades\Artisan;
@@ -25,7 +22,6 @@ use Symfony\Component\Console\Input\ArgvInput;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\StringInput;
-use Symfony\Component\Console\Output\NullOutput;
 use Symfony\Component\ErrorHandler\Error\FatalError;
 
 /*
@@ -38,7 +34,7 @@ use Symfony\Component\ErrorHandler\Error\FatalError;
 /** Mark this process as started to run `docuccino:export`, the way `php artisan docuccino:export` starts it. */
 function markConsoleBuild(): void
 {
-    MemoryLimitOption::capture(new CommandStarting('docuccino:export', new ArgvInput(['artisan', 'docuccino:export']), new NullOutput));
+    MemoryLimitOption::capture(new ArgvInput(['artisan', 'docuccino:export']));
 }
 
 /**
@@ -103,13 +99,13 @@ it('builds in one process on the console for a count it cannot read', function (
 ])->skip(fn (): bool => ! BuildWorkers::forkable(), 'Forking needs the pcntl and posix extensions.');
 
 it('is no console build when a Docuccino command is called in-process', function (InputInterface $input): void {
-    // Artisan::call() from a queued job, an HTTP request or an Octane worker reports the command starting
-    // too, handed an ArrayInput or a StringInput. That process serves other work — a transaction open
+    // Artisan::call() from a queued job, an HTTP request or an Octane worker starts the command too, handed
+    // an ArrayInput or a StringInput. That process serves other work — a transaction open
     // around the call, sockets it shares, a memory ceiling it runs every other job under — so a build
     // inside it neither forks nor tunes it.
     setBuild('engine.workers', 4);
 
-    MemoryLimitOption::capture(new CommandStarting('docuccino:export', $input, new NullOutput));
+    MemoryLimitOption::capture($input);
 
     expect(ConsoleBuild::active())->toBeFalse()
         ->and(app(TypeEngineFactory::class)->mayTuneProcess())->toBeFalse()
@@ -120,13 +116,8 @@ it('is no console build when a Docuccino command is called in-process', function
 ]);
 
 it('leaves a job\'s open transaction alone when the job calls the export in-process', function (): void {
-    // Outside a test suite the framework reports every command it starts to CommandStarting, Artisan::call()
-    // included — which is what a queued job or a controller calling the export gets.
-    $kernel = app(ConsoleKernel::class);
-    assert($kernel instanceof FoundationConsoleKernel);
-    $kernel->rerouteSymfonyCommandEvents();
-    $kernel->setArtisan(null);
-
+    // Artisan::call() runs the command whole, its own initialize() included — which is what a queued job or
+    // a controller calling the export gets.
     setBuild('engine.workers', 3);
     $engine = countingEngine(WorkbenchEngine::make());
     app()->instance(TypeEngine::class, $engine);
@@ -150,7 +141,7 @@ it('leaves a job\'s open transaction alone when the job calls the export in-proc
 it('stays a console build when it calls a Docuccino command of its own', function (): void {
     // `docuccino:install` runs the export in-process, and the process is still the one it was started as.
     markConsoleBuild();
-    MemoryLimitOption::capture(new CommandStarting('docuccino:export', new ArrayInput(['command' => 'docuccino:export']), new NullOutput));
+    MemoryLimitOption::capture(new ArrayInput(['command' => 'docuccino:export']));
 
     expect(ConsoleBuild::active())->toBeTrue();
 });
