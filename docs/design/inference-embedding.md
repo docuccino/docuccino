@@ -535,6 +535,17 @@ JsonResponse) return $response;` however the guard is spelled). What a call MEAN
 parameter holds at run time, stay the adapter's. A `match` arm is read in the return's own scope, which has
 narrowed nothing, so a guard spelled as an arm condition proves neither kind of fact.
 
+A scope proves a guard's parts only where the guard pins each one: inside `if (A || B)` PHPStan knows the
+whole and neither half. So each site also carries the guards on its way, read off the source
+(`ReturnSite::$reachedWhen`, a `ConditionTree`): the condition of every `if` branch, `elseif`, `else` and
+ternary arm around it, and the negated condition of every earlier `if` in its statement lists that leaves on
+every branch, with `&&`, `||` and `!` kept. Its leaves are the same two kinds of fact; anything else is an
+unknown, so a disjunction with an unreadable half rules nothing out. A test of the narrowed parameter is
+answered by the harvest, against the narrowed class, by the same `isSuperTypeOf` question that decides
+reachability; the adapter answers the rest, in three values. A leaf reads the value as it was handed, so an
+`instanceof` test counts only where the name is held there, and a call only where nothing before it could
+have written its receiver, reading a literal-argument call in another guard's condition as a question.
+
 A scope answers about the value a name holds THERE, so every one of those facts — a call's answer, a class
 test, and the narrowed parameter's own type — is read only for a parameter nothing that can run first has
 rebound (`ParameterUse::heldAt()`): a write `LocalWrites` names, or a reference taken with `use (&…)` or

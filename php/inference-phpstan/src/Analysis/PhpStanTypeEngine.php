@@ -13,6 +13,7 @@ use Docuccino\Core\Inference\CallCondition;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\ComponentDeclaration;
+use Docuccino\Core\Inference\ConditionTree;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\NullT;
@@ -59,7 +60,7 @@ use Throwable;
  * method is total — a failure becomes `UnknownT` plus a warning diagnostic, never an exception.
  *
  * @phpstan-type Probes array{calls: list<Node\Expr\MethodCall>, tests: list<Node\Expr\Instanceof_>}
- * @phpstan-type NarrowedSite array{pos: int, line: int, type: DType, component: ComponentDeclaration|null, guard: list<list<string>>, delegates: bool, echoes: string|null, conditions: list<CallCondition>, typeConditions: list<TypeCondition>, scope: Scope|null, expr: Node\Expr|null, foldScope: Scope}
+ * @phpstan-type NarrowedSite array{pos: int, line: int, type: DType, component: ComponentDeclaration|null, guard: list<list<string>>, delegates: bool, echoes: string|null, conditions: list<CallCondition>, typeConditions: list<TypeCondition>, reachedWhen: ConditionTree|null, scope: Scope|null, expr: Node\Expr|null, foldScope: Scope}
  *
  * @internal
  */
@@ -559,12 +560,18 @@ final class PhpStanTypeEngine implements TypeEngine
         if ($every) {
             // Reaching every site means asking each one, and PHPStan's own type for the parameter there is the
             // better answer where it has one: after `if ($e instanceof A) { return …; }` it says `$e` is
-            // anything BUT an A, which no guard of required classes can spell.
-            $admitted = array_values(array_filter(
-                $satisfiable,
-                fn (array $candidate): bool => $candidate['scope'] === null
-                    || ! $candidate['scope']->getType($subject)->isSuperTypeOf(new ObjectType($narrowTo))->no(),
-            ));
+            // anything BUT an A, which no guard of required classes can spell. Where a guard joins its test
+            // with another condition the scope proves neither, so the test is answered here, by the same reading.
+            $admitted = [];
+            foreach ($satisfiable as $candidate) {
+                $candidate['reachedWhen'] = self::answerSubject($candidate['reachedWhen'], $subject, $narrowTo);
+                if ($candidate['reachedWhen']?->evaluate(static fn (): ?bool => null) === false) {
+                    continue;
+                }
+                if ($candidate['scope'] === null || ! $candidate['scope']->getType($subject)->isSuperTypeOf(new ObjectType($narrowTo))->no()) {
+                    $admitted[] = $candidate;
+                }
+            }
 
             return ['returns' => $this->returnSites($admitted, $callable), 'diagnostics' => [], 'sites' => $admitted];
         }
@@ -585,7 +592,7 @@ final class PhpStanTypeEngine implements TypeEngine
     private function returnSites(array $sites, CallableRef $callable): array
     {
         return array_map(
-            static fn (array $s): ReturnSite => new ReturnSite($s['type'], new SourceLocation($callable->file, $s['line']), $s['component'], $s['echoes'], $s['conditions'], $s['typeConditions']),
+            static fn (array $s): ReturnSite => new ReturnSite($s['type'], new SourceLocation($callable->file, $s['line']), $s['component'], $s['echoes'], $s['conditions'], $s['typeConditions'], $s['reachedWhen']),
             $sites,
         );
     }
@@ -612,6 +619,29 @@ final class PhpStanTypeEngine implements TypeEngine
             ...$this->branches($expr->if, $truthy, $file),
             ...$this->branches($expr->else, $falsey, $file),
         ];
+    }
+
+    /**
+     * `$guard` with each test of the narrowed parameter answered for a value of `$narrowTo`: true where every
+     * such value passes, false where none can, and left for the host where a subclass may go either way.
+     */
+    private static function answerSubject(?ConditionTree $guard, Node\Expr $subject, string $narrowTo): ?ConditionTree
+    {
+        if ($guard === null || ! $subject instanceof Variable) {
+            return $guard;
+        }
+
+        $answered = $guard->answered(static function (CallCondition|TypeCondition $leaf) use ($subject, $narrowTo): ?bool {
+            if (! $leaf instanceof TypeCondition || $leaf->parameter !== $subject->name) {
+                return null;
+            }
+
+            $passes = (new ObjectType($leaf->class))->isSuperTypeOf(new ObjectType($narrowTo));
+
+            return $passes->maybe() ? null : $passes->yes();
+        });
+
+        return $answered->constrains() ? $answered : null;
     }
 
     /**
@@ -680,6 +710,7 @@ final class PhpStanTypeEngine implements TypeEngine
             'echoes' => $every ? ParameterUse::echoed($expr, $body->parameters, $body->nodes) : null,
             'conditions' => ParameterUse::conditionsAt($scope, $probes['calls'], $held),
             'typeConditions' => ParameterUse::typeConditionsAt($scope, $probes['tests'], $held),
+            'reachedWhen' => $every ? ParameterUse::reachedWhen($positioned, $scope, $body->parameters, $body->nodes) : null,
             'scope' => $typesParameter && ! $rebound ? $scope : null,
             'expr' => $expr,
             'foldScope' => $scope,

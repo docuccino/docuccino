@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\ConditionTree;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
@@ -56,9 +57,12 @@ function respondTypeGuardAnalysis(): ActionAnalysis
         new LiteralT('application/problem+json'),
     ]);
 
+    // The guard as written, beside what the scope proves of it: one test, so the two say the same.
+    $json = ConditionTree::leaf(new TypeCondition('response', JsonResponse::class, true));
+
     return new ActionAnalysis(returns: [
-        new ReturnSite(new ClassT(Response::class), new SourceLocation(''), returnsParameter: 'response', typeConditions: [new TypeCondition('response', JsonResponse::class, false)]),
-        new ReturnSite($problem, new SourceLocation(''), typeConditions: [new TypeCondition('response', JsonResponse::class, true)]),
+        new ReturnSite(new ClassT(Response::class), new SourceLocation(''), returnsParameter: 'response', typeConditions: [new TypeCondition('response', JsonResponse::class, false)], reachedWhen: ConditionTree::not($json)),
+        new ReturnSite($problem, new SourceLocation(''), typeConditions: [new TypeCondition('response', JsonResponse::class, true)], reachedWhen: $json),
     ]);
 }
 

@@ -265,7 +265,9 @@ problem+json and every other route keeps the framework's body. A branch on the c
 is handed — `if (! $response instanceof JsonResponse) { return $response; }` — is settled the same way:
 Laravel renders every error it sends as JSON with a `JsonResponse`, so for those the pass-through is never
 taken. An `HttpResponseException` sends the response it carries, whatever its class, so both of its answers
-stand. A branch Docuccino cannot settle without a
+stand. Conditions joined in one guard with `||`, `&&` or `!` are settled the same way, each on its own:
+`if (! $response instanceof JsonResponse || $e instanceof HttpResponseException)` passes nothing through
+for a JSON error on an `api/*` route, because neither half holds there. A branch Docuccino cannot settle without a
 live request — `$request->expectsJson()`, or a path pattern that turns on a parameter's value or on
 whether an optional one was given — publishes both answers side by side, since the server really does send either
 one; where both answers use the same media type, that media type gets a schema that constrains nothing
