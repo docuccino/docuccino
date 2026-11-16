@@ -53,7 +53,9 @@ both of Sanctum's modes based on the middleware a route uses:
   `sanctum` — so a custom `auth:mobile` guard on the Sanctum driver is recognized, and multi-guard
   lists (`auth:web,sanctum`) work.
 - **Stateful SPA** → a cookie-based scheme (`sanctumStateful`), documented when
-  `EnsureFrontendRequestsAreStateful` is present **alongside an auth guard**. Because `statefulApi()`
+  `EnsureFrontendRequestsAreStateful` is present **alongside an auth guard**: Laravel's authenticator
+  in any spelling the [implicit `401`](#implicit-401) reads, including your own `Authenticate` subclass
+  under whatever alias you gave it. Because `statefulApi()`
   prepends that middleware to the whole `api` group, requiring the guard too means public routes
   (login, register) are left unsecured rather than falsely cookie-protected. OpenAPI can't model the
   CSRF handshake structurally, so the scheme's description explains the `X-XSRF-TOKEN` flow.
