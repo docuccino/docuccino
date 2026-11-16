@@ -71,6 +71,7 @@ use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
 use Docuccino\Laravel\Integrations\SpatieData\ReadDate;
+use Docuccino\Laravel\Integrations\SpatieData\SpatieDataDigestContributor;
 use Docuccino\Laravel\Integrations\SpatieData\WrapResolver;
 use Docuccino\Laravel\Integrations\SpatieData\WrittenDate;
 use Docuccino\Laravel\Integrations\Support\DateWireFormat;
@@ -487,7 +488,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
                 wrap: new WrapResolver(self::stringConfig('data.wrap')),
                 globalInputMapper: self::stringConfig('data.name_mapping_strategy.input'),
                 globalOutputMapper: self::stringConfig('data.name_mapping_strategy.output'),
-                normalizers: is_array(config('data.normalizers')) ? array_values(array_filter(config('data.normalizers'), is_string(...))) : null,
+                normalizers: SpatieDataDigestContributor::normalizers(config('data.normalizers')),
                 castTypes: array_keys(self::dataClassMap('data.casts', [])),
                 transformerTypes: array_keys(self::dataClassMap('data.transformers', [])),
             );

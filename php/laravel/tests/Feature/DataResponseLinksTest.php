@@ -19,12 +19,15 @@ use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\MutableVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\OverridingVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\PaintedVanData;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Data\VanData;
+use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\PlateNormalizer;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\Van;
 use Docuccino\Laravel\Tests\Fixtures\ResponseLinks\VanController;
 use Docuccino\Laravel\Tests\Support\TraceScript;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
 use Spatie\LaravelData\Data;
+use Spatie\LaravelData\Normalizers\ModelNormalizer;
+use Spatie\LaravelData\Normalizers\ObjectNormalizer;
 
 /**
  * Response links from a Data body: a response built from a model with laravel-data, linked to the
@@ -223,6 +226,28 @@ it('rebuilds a Data body\'s links when the normalizers reading a model change', 
             ->and(dataLinksOf($warm, '/api/vans', 'post', '201'))->toBe([])
             // Built by the constructor, untouched by the normalizers.
             ->and(dataLinksOf($warm, '/api/vans/{van}', 'get', '200'))->toHaveKey('get.api.plated-vans.@van');
+    } finally {
+        removeFragmentCacheDir($dir);
+    }
+});
+
+/**
+ * laravel-data takes a normalizer as an object as readily as by its class name. One the application wrote,
+ * put before the model's, may rewrite what `from()` reads; laravel-data's own handed over as an object does
+ * not. A warm build after one replaces the other must write what a cold one does.
+ */
+it('reads a normalizer handed over as an object as the class it is', function (): void {
+    $dir = fragmentCacheDir('data-links-objects');
+
+    try {
+        config(['data.normalizers' => [new ObjectNormalizer, ModelNormalizer::class]]);
+        $cold = emittedArray(localityBuild($this->routes, $this->engine));
+
+        config(['data.normalizers' => [new PlateNormalizer, ModelNormalizer::class]]);
+        $warm = emittedArray(localityBuild($this->routes, $this->engine));
+
+        expect(dataLinksOf($cold, '/api/vans', 'post', '201'))->toHaveKey('get.api.plated-vans.@van')
+            ->and(dataLinksOf($warm, '/api/vans', 'post', '201'))->toBe([]);
     } finally {
         removeFragmentCacheDir($dir);
     }

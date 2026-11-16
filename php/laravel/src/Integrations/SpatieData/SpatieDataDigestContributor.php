@@ -36,8 +36,22 @@ final class SpatieDataDigestContributor implements EnvironmentDigestContributor
             'casts',
             $this->json('data.casts'),
             'normalizers',
-            $this->json('data.normalizers'),
+            json_encode(self::normalizers($this->config->get('data.normalizers'))) ?: '',
         ]);
+    }
+
+    /**
+     * The app's `data.normalizers` by class, null where it sets none. laravel-data takes an object as
+     * readily as a class name, and an object is the class it is: dropped, a normalizer that rewrites a
+     * model would go unseen, and encoded as JSON, every one would read `{}`.
+     *
+     * @return list<string>|null
+     */
+    public static function normalizers(mixed $configured): ?array
+    {
+        return is_array($configured)
+            ? array_map(static fn (mixed $normalizer): string => is_string($normalizer) ? $normalizer : get_debug_type($normalizer), array_values($configured))
+            : null;
     }
 
     /** Any value, lists and maps included, in one spelling per value. */
