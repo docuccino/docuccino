@@ -305,6 +305,10 @@ final class PhpStanTypeEngine implements TypeEngine
         if (! $type instanceof ClassT) {
             return [['type' => $type, 'component' => null]];
         }
+        if (ResponseShapeRefiner::isTransportFqcn($type->fqcn)) {
+            // A file, stream or redirect: the status its call states, on the class it already is.
+            return ResponseArms::sites($this->refiner()->refineArms($expr, $scope), $type, $type->fqcn);
+        }
         if (! ResponseShapeRefiner::isResponseFqcn($type->fqcn)) {
             // The router sends a returned Responsable as its `toResponse()`, so an application-written one
             // answers for the object rather than the class's own shape.

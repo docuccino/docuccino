@@ -124,6 +124,21 @@ it('publishes a return site once per arm, and as the resolved type when nothing 
         ->and(ResponseArms::sites([new RefinedResponse], $resolved, $json)[0]['type'])->toBe($resolved);
 });
 
+it('publishes a stream, file or redirect arm as its own class whatever the site resolved to', function (): void {
+    // A helper declared `: Response` that returns `response()->stream($cb, 202)` sends a stream, not JSON.
+    $json = 'Illuminate\\Http\\JsonResponse';
+    $streamed = 'Symfony\\Component\\HttpFoundation\\StreamedResponse';
+    $arm = RefinedResponse::transported($streamed, new LiteralT(202), null);
+
+    expect(ResponseArms::sites([$arm], new ClassT('Symfony\\Component\\HttpFoundation\\Response'), $json)[0]['type'])
+        ->toEqual(new ClassT($streamed, [new UnknownT('payload not folded'), new LiteralT(202)]))
+        // A chain's status over a stream keeps the stream.
+        ->and(ResponseArms::laid(RefinedResponse::transported($streamed, null, null), armChain(202))?->toClassT($json))
+        ->toEqual(new ClassT($streamed, [new UnknownT('payload not folded'), new LiteralT(202)]))
+        // A chain that states nothing over a stream that carries nothing leaves the bare class to answer.
+        ->and(ResponseArms::laid(RefinedResponse::transported($streamed, null, null), armChain()))->toBeNull();
+});
+
 it('takes the status echoes out of a body whose status a chain restates, and only then', function (array $chain, bool $echoes): void {
     // `new JsonResponse(['status' => $code, …], $code)->setStatusCode(500)` sends 500 beside a body that says
     // `$code`: the member no longer echoes the status it is sent with.
