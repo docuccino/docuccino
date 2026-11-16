@@ -18,8 +18,11 @@ use Docuccino\Core\Extensions\Validation\ValidationRule;
 use Docuccino\Core\Extensions\Validation\ValidationSchema;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\ClassMetadata;
+use Docuccino\Core\Inference\DType\ArrayShapeField;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\ListT;
+use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
@@ -27,9 +30,11 @@ use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Integrations\FormRequest\ConstValueToRules;
+use Docuccino\Laravel\Integrations\FormRequest\ShapeToRuleSet;
 use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
 use Docuccino\Laravel\Integrations\SpatieData\DataRequestExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
+use Docuccino\Laravel\Integrations\Support\RuleDialect;
 use Docuccino\Laravel\Integrations\Validation\LiveRuleValue;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
@@ -252,6 +257,25 @@ it('still lets a rules() override prohibit a field property inference documented
 
     expect(array_keys($rules->fields))->toBe(['name']);
 });
+
+it('reads the rule strings of a rules() array as its reader splits them, on the engine\'s literal path too', function (RuleDialect $dialect, array $overridden, array $pattern): void {
+    // A Data class's rules() is read by laravel-data, which splits a string in a list at its pipes and keeps a
+    // string holding a regex whole; a Form Request's by Laravel, which does neither (each reference is checked
+    // in RuleParsingTest). The engine's constant array shape owes the same answer as the traced array.
+    $shape = new ArrayShapeT([
+        new ArrayShapeField('overridden', new ArrayShapeT([new ArrayShapeField(0, new LiteralT('string|max:3'))])),
+        new ArrayShapeField('overriddenPattern', new LiteralT('regex:/^(ab|cd)$/')),
+    ]);
+
+    $fields = (new ShapeToRuleSet(dialect: $dialect))->convert($shape)->fields;
+    $read = static fn (string $field): array => array_map(static fn (ValidationRule $rule): array => [$rule->name, $rule->parameters], $fields[$field]);
+
+    expect($read('overridden'))->toBe($overridden)
+        ->and($read('overriddenPattern'))->toBe($pattern);
+})->with([
+    'laravel-data' => [RuleDialect::LaravelData, [['string', []], ['max', ['3']]], [['regex', ['/^(ab|cd)$/']]]],
+    'Laravel' => [RuleDialect::Laravel, [['string|max', ['3']]], [['regex', ['/^(ab']], ['cd)$/', []]]],
+]);
 
 it('appends rather than replaces under #[MergeValidationRules]', function (string $fqcn): void {
     // Spatie's resolver `merge`s the override into what it inferred when the class carries the attribute,

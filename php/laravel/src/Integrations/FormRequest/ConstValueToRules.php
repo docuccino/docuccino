@@ -11,6 +11,7 @@ use Docuccino\Core\Inference\ConstValue;
 use Docuccino\Core\Support\Fqcn;
 use Docuccino\Laravel\Integrations\Support\DependencyFileSet;
 use Docuccino\Laravel\Integrations\Support\EnumCaseValue;
+use Docuccino\Laravel\Integrations\Support\RuleDialect;
 use Docuccino\Laravel\Integrations\Support\RuleParsing;
 use Docuccino\Laravel\Integrations\Validation\CustomRuleReader;
 use Docuccino\Laravel\Integrations\Validation\RuleFactories;
@@ -67,6 +68,7 @@ final class ConstValueToRules
 
     public function __construct(
         private readonly CustomRuleReader $customRules = new CustomRuleReader,
+        private readonly RuleDialect $dialect = RuleDialect::Laravel,
     ) {
         $this->dependencyFiles = new DependencyFileSet;
         $this->losses = new RuleLosses;
@@ -81,7 +83,7 @@ final class ConstValueToRules
         $this->losses = new RuleLosses;
 
         if ($value->isScalar() && is_string($value->scalar)) {
-            return RuleParsing::tokens($value->scalar);
+            return $this->dialect->field($value->scalar);
         }
 
         $out = [];
@@ -143,7 +145,7 @@ final class ConstValueToRules
     private function item(ConstValue $item): array
     {
         return match (true) {
-            $item->isScalar() => is_string($item->scalar) ? [RuleParsing::token($item->scalar)] : [],
+            $item->isScalar() => is_string($item->scalar) ? $this->dialect->listed($item->scalar) : [],
             $item->isDescriptor() => $this->descriptorItem($item),
             $item->isInstance() => $this->instance($item),
             // A spread, a value from a call or a variable, a nested array: any of them could be `nullable`
