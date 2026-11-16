@@ -81,7 +81,7 @@ generated from the document changes.
 ### What `docuccino:diff` reports across this upgrade
 
 Only if you diff a document committed before the upgrade against a build after it, or gate it with
-`--enforce`. Four fixes make a choice rule publish what Laravel checks, and the differ reads each as
+`--enforce`. Five fixes make a choice rule publish what Laravel checks, and the differ reads each as
 breaking where the rule is used:
 
 - **`new Enum` and `new In` publish their values.** Both were dropped, so the field published no
@@ -96,6 +96,14 @@ breaking where the rule is used:
   `"1"` and `"2"` where it published `1` and `2`, and `string` beside `Rule::enum()` of an int-backed
   enum lists the cases' strings where it referred to the enum's component. A value of no such type
   leaves the list (`integer|in:1,any` publishes `[1]`), and a value leaving an `enum` is breaking.
+- **A rule object in a Spatie Data attribute publishes its values.** `#[Rule(new Enum(…))]`, a
+  `new In`/`new NotIn` in a `#[Rule([…])]` list, and the object an `#[Enum]`, `#[In]` or `#[NotIn]` takes
+  in place of its parameters were dropped, so the field published no `enum` or `not`; one arriving is a
+  narrowing. An `#[Enum]` with `only:` or `except:` listed every case, and the cases they leave out now
+  leave the `enum`. An `#[Exclude(new ExcludeIf(false))]` excludes nothing, so the rules beside it,
+  which it dropped, now publish. An `#[Enum]` refers to the enum's component, as `Rule::enum()` does,
+  where it listed the same values inline: the differ reports the component and its case descriptions
+  arriving, neither of them breaking.
 
 So a gate run with `--enforce` fails on the upgrade. Your API did not change: in each case the
 document now says what your server already did. Upgrade in a pull request of its own, so the

@@ -222,7 +222,10 @@ it('reflects the new attribute facts off the real class', function (): void {
         ->and($reflector->propertyDefault(AccountData::class, 'displayName')['hasDefault'])->toBeFalse()
         ->and($reflector->dataCollectionOf(AccountData::class, 'tags'))->toBe(TagData::class)
         ->and($reflector->validationTokens(AccountData::class, 'code'))->toBe(['max:5'])
-        ->and($reflector->validationTokens(AccountData::class, 'status'))->toBe(['in:active,suspended']);
+        // laravel-data validates an `#[Enum]` with the framework's `Enum` rule, so that object is what it
+        // hands over, read as `Rule::enum()` is, and no token stands for it.
+        ->and($reflector->validationTokens(AccountData::class, 'status'))->toBe([])
+        ->and($reflector->ruleObjects(AccountData::class, 'status'))->toEqual([new Illuminate\Validation\Rules\Enum(AccountStatus::class)]);
 });
 
 it('separates having a default from having a documentable one', function (): void {

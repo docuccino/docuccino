@@ -22,6 +22,7 @@ use ReflectionIntersectionType;
 use ReflectionNamedType;
 use ReflectionProperty;
 use ReflectionUnionType;
+use Throwable;
 use UnitEnum;
 
 /**
@@ -116,6 +117,18 @@ final class DataClassReflector
     private const RULE_ATTRIBUTE = 'Spatie\\LaravelData\\Attributes\\Validation\\Rule';
 
     private const ENUM_ATTRIBUTE = 'Spatie\\LaravelData\\Attributes\\Validation\\Enum';
+
+    /**
+     * Attributes that take one of the framework's rule objects in place of their own parameters, by that
+     * object's class: laravel-data validates with the object itself when it is the only argument.
+     */
+    private const OBJECT_ATTRIBUTES = [
+        'Spatie\\LaravelData\\Attributes\\Validation\\In' => 'Illuminate\\Validation\\Rules\\In',
+        'Spatie\\LaravelData\\Attributes\\Validation\\NotIn' => 'Illuminate\\Validation\\Rules\\NotIn',
+        'Spatie\\LaravelData\\Attributes\\Validation\\Exclude' => 'Illuminate\\Validation\\Rules\\ExcludeIf',
+    ];
+
+    private const VALIDATION_PATH = 'Spatie\\LaravelData\\Support\\Validation\\ValidationPath';
 
     /**
      * spatie's built-in name mappers → the transform each applies. A mapper class passed to
@@ -332,14 +345,8 @@ final class DataClassReflector
                 continue;
             }
 
-            // `#[Enum(Status::class)]` expands to `in:` over the backing values — the class name itself
-            // is not an allowed value.
-            if ($name === self::ENUM_ATTRIBUTE) {
-                $token = $this->enumAttributeToken($attribute->getArguments());
-                if ($token !== null) {
-                    $tokens[] = $token;
-                }
-
+            // These validate with the rule object they build or are given ({@see ruleObjects()}).
+            if (self::handsOverObject($attribute)) {
                 continue;
             }
 
@@ -396,12 +403,15 @@ final class DataClassReflector
     }
 
     /**
-     * The classes of any rule OBJECTS a property's `#[Rule(new Iban)]` attributes carry — spatie's one
-     * attribute that takes one. Only the class is used; its `#[RuleSchema]` is the documented contract.
+     * The rule OBJECTS a property's validation attributes hand Laravel: any a `#[Rule(...)]` carries, bare
+     * or inside an array, the `Enum` rule an `#[Enum]` builds, and the object an `#[In]`, `#[NotIn]` or
+     * `#[Exclude]` is given in place of its parameters. An `#[Enum]` is built the way laravel-data builds
+     * it, so its `only`/`except` narrow it; one that cannot be built fails every request, and hands over
+     * nothing.
      *
-     * @return list<string>
+     * @return list<object>
      */
-    public function ruleObjectClasses(string $fqcn, string $property): array
+    public function ruleObjects(string $fqcn, string $property): array
     {
         $reflection = $this->property($fqcn, $property);
         if ($reflection === null) {
@@ -410,6 +420,20 @@ final class DataClassReflector
 
         $out = [];
         foreach ($reflection->getAttributes() as $attribute) {
+            if ($attribute->getName() === self::ENUM_ATTRIBUTE) {
+                $rule = self::builtRule($attribute);
+                $out = $rule === null ? $out : [...$out, $rule];
+
+                continue;
+            }
+
+            $given = self::givenObject($attribute);
+            if ($given !== null) {
+                $out[] = $given;
+
+                continue;
+            }
+
             if ($attribute->getName() !== self::RULE_ATTRIBUTE) {
                 continue;
             }
@@ -419,12 +443,54 @@ final class DataClassReflector
             $arguments = $attribute->getArguments();
             array_walk_recursive($arguments, static function (mixed $value) use (&$out): void {
                 if (is_object($value)) {
-                    $out[] = $value::class;
+                    $out[] = $value;
                 }
             });
         }
 
         return $out;
+    }
+
+    /**
+     * Whether an attribute validates with a rule object rather than its own keyword ({@see ruleObjects()}):
+     * an `#[Enum]` always does.
+     *
+     * @param  ReflectionAttribute<object>  $attribute
+     */
+    private static function handsOverObject(ReflectionAttribute $attribute): bool
+    {
+        return $attribute->getName() === self::ENUM_ATTRIBUTE || self::givenObject($attribute) !== null;
+    }
+
+    /**
+     * The framework rule object an `#[In]`, `#[NotIn]` or `#[Exclude]` was given as its only argument, or null.
+     *
+     * @param  ReflectionAttribute<object>  $attribute
+     */
+    private static function givenObject(ReflectionAttribute $attribute): ?object
+    {
+        $class = self::OBJECT_ATTRIBUTES[$attribute->getName()] ?? null;
+        $arguments = array_values($attribute->getArguments());
+
+        return $class !== null && count($arguments) === 1 && $arguments[0] instanceof $class ? $arguments[0] : null;
+    }
+
+    /**
+     * The rule object an `#[Enum]` validates with, built by the attribute itself, or null where it cannot
+     * be built — an argument this version does not take, or a reference only a request can resolve.
+     *
+     * @param  ReflectionAttribute<object>  $attribute
+     */
+    private static function builtRule(ReflectionAttribute $attribute): ?object
+    {
+        try {
+            $instance = $attribute->newInstance();
+            $rule = method_exists($instance, 'getRule') ? $instance->getRule(new (self::VALIDATION_PATH)) : null;
+        } catch (Throwable) {
+            return null;
+        }
+
+        return is_object($rule) ? $rule : null;
     }
 
     /**
@@ -443,30 +509,6 @@ final class DataClassReflector
         });
 
         return $out;
-    }
-
-    /**
-     * `in:v1,v2` from a `#[Enum(Status::class)]` attribute's enum backing values, or null when the
-     * class argument is missing / not a resolvable enum.
-     *
-     * @param  array<array-key, mixed>  $arguments
-     */
-    private function enumAttributeToken(array $arguments): ?string
-    {
-        $class = null;
-        array_walk_recursive($arguments, static function (mixed $value) use (&$class): void {
-            if ($class === null && is_string($value) && $value !== '') {
-                $class = ltrim($value, '\\');
-            }
-        });
-
-        if ($class === null) {
-            return null;
-        }
-
-        $values = array_map(strval(...), EnumReflection::values($class));
-
-        return $values === [] ? null : 'in:'.implode(',', $values);
     }
 
     /**
