@@ -6,7 +6,6 @@ namespace Docuccino\Laravel\Integrations\Validation;
 
 use Docuccino\Core\Inference\ConstValue;
 use Docuccino\Laravel\Integrations\FormRequest\ConstValueToRules;
-use Illuminate\Validation\ValidationRuleParser;
 use ReflectionObject;
 use Stringable;
 use UnitEnum;
@@ -15,8 +14,8 @@ use UnitEnum;
  * A rule value that already exists — an attribute's argument, built by PHP — as the {@see ConstValue} the
  * `new` that built it folds to, so {@see ConstValueToRules} reads `#[Rule(new Enum(X::class))]` exactly as it
  * reads `new Enum(X::class)` in a rules array. A framework rule object keeps its constructor's arguments in
- * its own state, and is read back from there. One Laravel casts to a rule string is that string, and a
- * `Password` the rules it runs; any other object is its class alone.
+ * its own state, and is read back from there. One Laravel casts to a rule string ({@see CastRuleObject}) is that
+ * string, and a `Password` the rules it runs; any other object is its class alone.
  */
 final class LiveRuleValue
 {
@@ -52,17 +51,6 @@ final class LiveRuleValue
      */
     private const ENUM_SELECTORS = ['only', 'except'];
 
-    /**
-     * The objects Laravel runs as rules of their own rather than casting them to a string
-     * ({@see ValidationRuleParser}).
-     */
-    private const RUN_AS_RULES = [
-        'Illuminate\\Contracts\\Validation\\Rule',
-        'Illuminate\\Contracts\\Validation\\ValidationRule',
-        'Illuminate\\Contracts\\Validation\\InvokableRule',
-        'Illuminate\\Contracts\\Validation\\CompilableRules',
-    ];
-
     /** The checks a `Password` runs on the value after its own rules, none of which a schema states. */
     private const PASSWORD_CHECKS = ['mixedCase', 'letters', 'numbers', 'symbols', 'uncompromised'];
 
@@ -84,7 +72,7 @@ final class LiveRuleValue
             return self::password($rule);
         }
 
-        if (! isset(self::ARGUMENTS[$class]) && self::castToString($rule)) {
+        if (! isset(self::ARGUMENTS[$class]) && $rule instanceof Stringable && CastRuleObject::casts($class)) {
             return ConstValue::scalar((string) $rule);
         }
 
@@ -106,27 +94,6 @@ final class LiveRuleValue
         }
 
         return $value;
-    }
-
-    /**
-     * A framework rule object Laravel validates with as its string cast: one of its own, not run as a rule
-     * itself, that has one. Only the framework's are cast here, so no application code runs.
-     *
-     * @phpstan-assert-if-true Stringable $rule
-     */
-    private static function castToString(object $rule): bool
-    {
-        if (! str_starts_with($rule::class, self::RULES) || ! $rule instanceof Stringable) {
-            return false;
-        }
-
-        foreach (self::RUN_AS_RULES as $contract) {
-            if ($rule instanceof $contract) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     /**

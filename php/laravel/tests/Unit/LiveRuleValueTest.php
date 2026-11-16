@@ -149,6 +149,30 @@ it('reads a framework rule object Laravel casts to a string as that string', fun
     'bounds set one by one' => [static fn () => (new Dimensions)->maxHeight(50)->minWidth(10)->ratio(3 / 2)],
 ]);
 
+it('reads a rule object that holds on another field as the string it casts to, as a rules array reads it', function (string $class, array $arguments): void {
+    // Laravel reads each by the rule string it stands for, so the attribute's object, the same object written
+    // with new in a rules array, and the rules Laravel's parser makes of it are one rule.
+    $rule = new $class(...$arguments);
+    $written = ConstValue::instance($class, array_map(
+        static fn (mixed $value): ConstValue => is_array($value) ? ConstValue::array(array_map(ConstValue::scalar(...), $value)) : ConstValue::scalar($value),
+        $arguments,
+    ));
+
+    $live = (new ConstValueToRules)->fold(LiveRuleValue::of($rule));
+
+    expect($live)->not->toBe([])
+        ->and($live)->toEqual((new ConstValueToRules)->fold(laravelParsedRules($rule)))
+        ->and($live)->toEqual((new ConstValueToRules)->fold(ConstValue::array([$written])));
+})->with([
+    'accepted on a value' => [$rules.'AcceptedIf', ['kind', 'business']],
+    'declined on any of several' => [$rules.'DeclinedIf', ['kind', ['business', 'charity']]],
+    'missing on a value' => [$rules.'MissingIf', ['kind', 'business']],
+    'present unless a value' => [$rules.'PresentUnless', ['kind', 'person']],
+    'required with fields' => [$rules.'RequiredWith', [['vat', 'company']]],
+    'required once accepted' => [$rules.'RequiredIfAccepted', ['newsletter']],
+    'prohibiting a field' => [$rules.'Prohibits', ['alias']],
+])->skip(! class_exists($rules.'AcceptedIf'), 'This Laravel builds these rules as strings, not objects.');
+
 it('reads a conditional rule object settled where it was built as the rule Laravel casts it to', function (string $class, bool $condition): void {
     if (! class_exists($class)) {
         $this->markTestSkipped('The installed Laravel has no '.$class.'.');

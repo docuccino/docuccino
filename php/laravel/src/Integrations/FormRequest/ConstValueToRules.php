@@ -13,6 +13,7 @@ use Docuccino\Laravel\Integrations\Support\DependencyFileSet;
 use Docuccino\Laravel\Integrations\Support\EnumCaseValue;
 use Docuccino\Laravel\Integrations\Support\RuleDialect;
 use Docuccino\Laravel\Integrations\Support\RuleParsing;
+use Docuccino\Laravel\Integrations\Validation\CastRuleObject;
 use Docuccino\Laravel\Integrations\Validation\CustomRuleReader;
 use Docuccino\Laravel\Integrations\Validation\RuleFactories;
 use Docuccino\Laravel\Integrations\Validation\RuleLosses;
@@ -176,8 +177,9 @@ final class ConstValueToRules
 
     /**
      * A `new X(...)` rule object documents as whatever its class declares, and a framework object as the
-     * `Rule::` factory that builds it, chained calls included. An unannotated class contributes nothing
-     * and is named for the caller ({@see UnreadRule}).
+     * `Rule::` factory that builds it, chained calls included, or as the rule string Laravel reads it as
+     * ({@see CastRuleObject}). An unannotated class contributes nothing and is named for the caller
+     * ({@see UnreadRule}).
      *
      * @return list<ValidationRule>
      */
@@ -203,6 +205,11 @@ final class ConstValueToRules
             return $this->descriptorItem($descriptor);
         }
 
+        $strings = CastRuleObject::fromNew($class, $value->args, $value->chain);
+        if ($strings !== null) {
+            return array_map(RuleParsing::token(...), $strings);
+        }
+
         $facts = $this->customRules->read($class);
 
         $this->dependencyFiles->add($facts->file);
@@ -218,7 +225,8 @@ final class ConstValueToRules
 
     /**
      * A factory call in the rules list, or a framework object read as one. A `Rule::` static that returns
-     * a rule string reads as that string, so `Rule::nullable()` is `'nullable'`. A descriptor that does not
+     * a rule string reads as that string, so `Rule::nullable()` is `'nullable'`, and one that builds an object
+     * Laravel reads as a rule string reads as that ({@see CastRuleObject}). A descriptor that does not
      * read is left out like any other unread rule.
      *
      * @return list<ValidationRule>
@@ -230,6 +238,11 @@ final class ConstValueToRules
         if ($rule !== false) {
             // One that reads to nothing has either said why ({@see $widened}) or excludes nothing.
             return $rule === null ? [] : [$rule];
+        }
+
+        $strings = CastRuleObject::fromFactory((string) $descriptor->factory, $descriptor->args, $descriptor->chain);
+        if ($strings !== null) {
+            return array_map(RuleParsing::token(...), $strings);
         }
 
         $string = $descriptor->chain === [] ? RuleFactories::ruleString((string) $descriptor->factory, $descriptor->args) : null;

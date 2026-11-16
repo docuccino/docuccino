@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Inference\ConstValue;
+use Docuccino\Core\Support\Fqcn;
 use Docuccino\Laravel\Integrations\FormRequest\ConstValueToRules;
+use Docuccino\Laravel\Integrations\Validation\CastRuleObject;
 use Docuccino\Laravel\Integrations\Validation\RuleFactories;
 use Docuccino\Laravel\Tests\Fixtures\Rules\BankReference;
 use Docuccino\Laravel\Tests\Fixtures\Rules\LegacyStringRule;
@@ -270,9 +272,10 @@ it('leaves out a rule it cannot read that can only refuse values, keeps the rest
     'a closure' => [ConstValue::instance('Closure', []), 'a closure'],
     'Password::min()' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\Password::min', [ConstValue::scalar(8)]), 'Password::min(…)'],
     'File::types()' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\File::types', [ConstValue::scalar('pdf')]), 'File::types(…)'],
-    'Rule::contains()' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::contains', [ConstValue::scalar('root')]), 'Rule::contains(…)'],
+    'Rule::contains() with values nothing can read' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::contains', [ConstValue::unknown('variable')]), 'Rule::contains(…)'],
+    'Rule::string() with a bound nothing can read' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::string', [])->withChainedCall('max', [ConstValue::unknown('call')]), 'Rule::string(…)'],
     'new Password()' => [ConstValue::instance('Illuminate\\Validation\\Rules\\Password', [ConstValue::scalar(8)]), 'new Illuminate\\Validation\\Rules\\Password'],
-    'new Contains()' => [ConstValue::instance('Illuminate\\Validation\\Rules\\Contains', [ConstValue::array([ConstValue::scalar('root')])]), 'new Illuminate\\Validation\\Rules\\Contains'],
+    'new Contains() with values nothing can read' => [ConstValue::instance('Illuminate\\Validation\\Rules\\Contains', [ConstValue::array([ConstValue::scalar('root'), ConstValue::spread('spread array item')])]), 'new Illuminate\\Validation\\Rules\\Contains'],
 ]);
 
 it('gives up a field one of whose rules has content it cannot read, and names that rule', function (ConstValue $opaque, string $named): void {
@@ -482,38 +485,79 @@ it('folds every framework factory and rule object that applies a rule on a condi
     }
 });
 
-it('folds a framework rule object written with new as the Rule factory that builds it', function (): void {
-    // `new Enum(X::class)` is the object `Rule::enum(X::class)` returns, so the two are one rule however
-    // it is written. Every factory whose descriptor folds is asked, and the class it builds is Laravel's
-    // own answer, by calling it.
-    // A static that returns a rule string builds no object, and reads as its string (below).
+it('folds every object a Rule static builds, written either way, to the rules Laravel reads it as', function (): void {
+    // Every static of the installed `Rule` that builds one of the framework's rule objects is called with
+    // literal arguments named for its parameters, and the object built as `new` with the same arguments.
+    // Laravel validates with one that casts to a string as the rules its own parser reads off it, so each
+    // spelling owes exactly those. `Exists` and `Unique` are read by name alone: the table and column decide
+    // nothing the document states. The rest are checks run on the value, read alike however written.
     $samples = [
-        'array' => [[['a', 'b']], [ConstValue::array([ConstValue::scalar('a'), ConstValue::scalar('b')])]],
-        'enum' => [[WidgetStatus::class], [ConstValue::scalar(WidgetStatus::class)]],
-        'exists' => [['users'], [ConstValue::scalar('users')]],
-        'in' => [[['a', 'b']], [ConstValue::array([ConstValue::scalar('a'), ConstValue::scalar('b')])]],
-        'notIn' => [[['a', 'b']], [ConstValue::array([ConstValue::scalar('a'), ConstValue::scalar('b')])]],
-        'unique' => [['users'], [ConstValue::scalar('users')]],
+        'anotherField' => 'kind', 'otherField' => 'kind', 'field' => 'kind', 'value' => 'business',
+        'fields' => ['vat', 'company'], 'keys' => ['name', 'email'], 'values' => ['a', 'b'], 'table' => 'users',
+        'type' => WidgetStatus::class, 'pattern' => '/^[a-z]+$/', 'rules' => ['string'], 'ability' => 'update',
     ];
+    $conditional = ['excludeIf', 'excludeUnless', 'requiredIf', 'requiredUnless', 'prohibitedIf', 'prohibitedUnless'];
+    $literal = static fn (mixed $value): ConstValue => is_array($value)
+        ? ConstValue::array(array_map(static fn (string $item): ConstValue => ConstValue::scalar($item), $value))
+        : ConstValue::scalar(is_scalar($value) ? $value : null);
+    $read = static function (array $rules): array {
+        return array_map(static fn ($rule): array => [ValidationRuleParser::parse($rule->name)[0], $rule->parameters], $rules);
+    };
+    $laravel = static function (object $rule): array {
+        $pieces = (new ValidationRuleParser([]))->explode(['field' => [$rule]])->rules['field'];
 
-    $folding = array_values(array_filter(
-        array_map(static fn (ReflectionMethod $method): string => $method->getName(), (new ReflectionClass(Rule::class))->getMethods(ReflectionMethod::IS_STATIC)),
-        static fn (string $name): bool => ! isset(array_flip(['excludeIf', 'excludeUnless', 'requiredIf', 'requiredUnless', 'prohibitedIf', 'prohibitedUnless', 'excludeWith', 'excludeWithout'])[$name])
-            && RuleFactories::builtClass($name) !== null
-            && (new ConstValueToRules)->fold(ConstValue::descriptor('Illuminate\\Validation\\Rule::'.$name, [ConstValue::scalar(WidgetStatus::class)])) !== [],
-    ));
-    sort($folding);
+        // An empty parameter list (`dimensions:`) parses as one null, which states no parameter.
+        return array_map(static function ($piece): array {
+            [$name, $parameters] = ValidationRuleParser::parse((string) $piece);
 
-    expect($folding)->toBe(array_keys($samples));
+            return [$name, $parameters === [null] ? [] : $parameters];
+        }, $pieces);
+    };
 
-    foreach ($samples as $factory => [$arguments, $folded]) {
-        $class = get_class(Rule::{$factory}(...$arguments));
-        $asObject = (new ConstValueToRules)->fold(ConstValue::instance($class, $folded));
-        $asFactory = (new ConstValueToRules)->fold(ConstValue::descriptor('Illuminate\\Validation\\Rule::'.$factory, $folded));
+    $statics = array_filter(
+        (new ReflectionClass(Rule::class))->getMethods(ReflectionMethod::IS_STATIC),
+        static fn (ReflectionMethod $method): bool => ! in_array($method->getName(), $conditional, true)
+            && str_starts_with((string) RuleFactories::builtClass($method->getName()), 'Illuminate\\Validation\\Rules\\'),
+    );
 
-        expect($asObject)->not->toBe([], $class)
-            ->and($asObject)->toEqual($asFactory);
+    $cast = 0;
+    foreach ($statics as $static) {
+        $name = $static->getName();
+        $values = [];
+        foreach ($static->getParameters() as $parameter) {
+            if (! $parameter->isOptional()) {
+                expect(array_key_exists($parameter->getName(), $samples))->toBeTrue("Rule::{$name}() takes \${$parameter->getName()}, which needs a sample.");
+                $values[] = $samples[$parameter->getName()];
+            }
+        }
+
+        $object = Rule::{$name}(...$values);
+        $class = $object::class;
+        $folded = array_map($literal, $values);
+        $asFactory = (new ConstValueToRules)->fold(ConstValue::array([ConstValue::descriptor('Illuminate\\Validation\\Rule::'.$name, $folded)]));
+        $asObject = (new ConstValueToRules)->fold(ConstValue::array([ConstValue::instance($class, $folded)]));
+
+        if (! CastRuleObject::casts($class)) {
+            expect($asObject)->toEqual($asFactory, $name);
+
+            continue;
+        }
+
+        $cast++;
+        if (in_array($class, ['Illuminate\\Validation\\Rules\\Exists', 'Illuminate\\Validation\\Rules\\Unique'], true)) {
+            expect($read($asFactory))->toBe([[ValidationRuleParser::parse(Fqcn::short($class))[0], []]], $name)
+                ->and($asObject)->toEqual($asFactory, $name);
+
+            continue;
+        }
+
+        expect($read($asFactory))->toBe($laravel($object), "Rule::{$name}()")
+            ->and($read($asObject))->toBe($laravel(new $class(...$values)), "new {$class}");
     }
+
+    // In, NotIn, ArrayRule, Exists, Unique, Contains, DoesntContain, Date, Dimensions, Numeric and StringRule,
+    // on every Laravel this supports.
+    expect($cast)->toBeGreaterThanOrEqual(11);
 });
 
 it('folds new Enum beside the rules written with it', function (): void {
