@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\ExportLockedException;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Services\ExportProbeQuery;
@@ -23,6 +24,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * Spike C — exception-flow analysis targets.
@@ -1356,5 +1359,420 @@ class ThrowsController extends Controller
     public function enumReasonThroughFactory(): void
     {
         throw \App\Exceptions\RotationRefused::because(\App\Enums\TokenRefusal::AlreadyRotated);
+    }
+
+    /**
+     * A guard helper refusing with an `HttpException` with its status written, written as a private method returning `never`.
+     */
+    public function neverHelperHttp(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->refuseNeverHttp();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A guard helper refusing with an `HttpException` with its status written, written as a static method returning `never`.
+     */
+    public function neverStaticHelperHttp(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            self::refuseNeverHttpStatically();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A guard helper refusing with an `HttpException` with its status written, written as a private method returning `void`.
+     */
+    public function voidHelperHttp(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->refuseVoidHttp();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A guard helper refusing with an `HttpException` with its status written, written as a static method returning `void`.
+     */
+    public function voidStaticHelperHttp(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            self::refuseVoidHttpStatically();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A guard helper refusing with `abort(404)`, written as a private method returning `never`.
+     */
+    public function neverHelperAbort(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->refuseNeverAbort();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A guard helper refusing with `abort(404)`, written as a static method returning `never`.
+     */
+    public function neverStaticHelperAbort(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            self::refuseNeverAbortStatically();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A guard helper refusing with `abort(404)`, written as a private method returning `void`.
+     */
+    public function voidHelperAbort(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->refuseVoidAbort();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A guard helper refusing with `abort(404)`, written as a static method returning `void`.
+     */
+    public function voidStaticHelperAbort(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            self::refuseVoidAbortStatically();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A guard helper refusing with an exception whose status is written at the `throw`, written as a private method returning `never`.
+     */
+    public function neverHelperCustom(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->refuseNeverCustom();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A guard helper refusing with an exception whose status is written at the `throw`, written as a static method returning `never`.
+     */
+    public function neverStaticHelperCustom(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            self::refuseNeverCustomStatically();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A guard helper refusing with an exception whose status is written at the `throw`, written as a private method returning `void`.
+     */
+    public function voidHelperCustom(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->refuseVoidCustom();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A guard helper refusing with an exception whose status is written at the `throw`, written as a static method returning `void`.
+     */
+    public function voidStaticHelperCustom(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            self::refuseVoidCustomStatically();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A guard helper refusing with a `ValidationException`, written as a private method returning `never`.
+     */
+    public function neverHelperValidation(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->refuseNeverValidation();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A guard helper refusing with a `ValidationException`, written as a static method returning `never`.
+     */
+    public function neverStaticHelperValidation(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            self::refuseNeverValidationStatically();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A guard helper refusing with a `ValidationException`, written as a private method returning `void`.
+     */
+    public function voidHelperValidation(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->refuseVoidValidation();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A guard helper refusing with a `ValidationException`, written as a static method returning `void`.
+     */
+    public function voidStaticHelperValidation(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            self::refuseVoidValidationStatically();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A `never` guard helper that throws one of two errors, chosen by its argument, and its `void` twin.
+     */
+    public function neverHelperEither(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->refuseEitherNever($request->boolean('gone'));
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function voidHelperEither(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->refuseEitherVoid($request->boolean('gone'));
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A `never` guard helper that refuses by calling another.
+     */
+    public function neverHelperNested(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->refuseNeverNested();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A `never` guard helper that declares what it throws, which is read as declared.
+     */
+    public function neverHelperDeclared(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->refuseNeverDeclared();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Guard helpers that say they never return only in a docblock: `@return never`, `@phpstan-return never`
+     * and `@return noreturn`.
+     */
+    public function neverHelperDocblock(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->refuseDocumentedNever();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function neverHelperPhpstanDocblock(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->refusePhpstanDocumentedNever();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function neverHelperNoreturn(Request $request): JsonResponse
+    {
+        if ($request->boolean('refuse')) {
+            $this->refuseDocumentedNoreturn();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A `never` guard helper called inside a catch that takes one of the two errors it throws.
+     */
+    public function neverHelperCaught(Request $request): JsonResponse
+    {
+        try {
+            $this->refuseEitherNever($request->boolean('gone'));
+        } catch (ExportLockedException) {
+            return response()->json(['ok' => false]);
+        }
+    }
+
+    private function refuseNeverHttp(): never
+    {
+        throw new HttpException(409, 'The export already exists.');
+    }
+
+    private function refuseVoidHttp(): void
+    {
+        throw new HttpException(409, 'The export already exists.');
+    }
+
+    private function refuseNeverAbort(): never
+    {
+        abort(404);
+    }
+
+    private function refuseVoidAbort(): void
+    {
+        abort(404);
+    }
+
+    private function refuseNeverCustom(): never
+    {
+        throw new ExportLockedException(423, 'The export is locked.');
+    }
+
+    private function refuseVoidCustom(): void
+    {
+        throw new ExportLockedException(423, 'The export is locked.');
+    }
+
+    private function refuseNeverValidation(): never
+    {
+        throw ValidationException::withMessages(['name' => 'The name is taken.']);
+    }
+
+    private function refuseVoidValidation(): void
+    {
+        throw ValidationException::withMessages(['name' => 'The name is taken.']);
+    }
+
+    private static function refuseNeverHttpStatically(): never
+    {
+        throw new HttpException(409, 'The export already exists.');
+    }
+
+    private static function refuseVoidHttpStatically(): void
+    {
+        throw new HttpException(409, 'The export already exists.');
+    }
+
+    private static function refuseNeverAbortStatically(): never
+    {
+        abort(404);
+    }
+
+    private static function refuseVoidAbortStatically(): void
+    {
+        abort(404);
+    }
+
+    private static function refuseNeverCustomStatically(): never
+    {
+        throw new ExportLockedException(423, 'The export is locked.');
+    }
+
+    private static function refuseVoidCustomStatically(): void
+    {
+        throw new ExportLockedException(423, 'The export is locked.');
+    }
+
+    private static function refuseNeverValidationStatically(): never
+    {
+        throw ValidationException::withMessages(['name' => 'The name is taken.']);
+    }
+
+    private static function refuseVoidValidationStatically(): void
+    {
+        throw ValidationException::withMessages(['name' => 'The name is taken.']);
+    }
+
+    private function refuseEitherNever(bool $gone): never
+    {
+        if ($gone) {
+            throw new HttpException(410, 'The export is gone.');
+        }
+
+        throw new ExportLockedException(423, 'The export is locked.');
+    }
+
+    private function refuseEitherVoid(bool $gone): void
+    {
+        if ($gone) {
+            throw new HttpException(410, 'The export is gone.');
+        }
+
+        throw new ExportLockedException(423, 'The export is locked.');
+    }
+
+    private function refuseNeverNested(): never
+    {
+        $this->refuseNeverCustom();
+    }
+
+    /**
+     * @throws ExportLockedException
+     */
+    private function refuseNeverDeclared(): never
+    {
+        throw new ExportLockedException(423, 'The export is locked.');
+    }
+
+    /**
+     * @return never
+     */
+    private function refuseDocumentedNever()
+    {
+        throw new ExportLockedException(423, 'The export is locked.');
+    }
+
+    /**
+     * @phpstan-return never
+     */
+    private function refusePhpstanDocumentedNever()
+    {
+        throw new ExportLockedException(423, 'The export is locked.');
+    }
+
+    /**
+     * @return noreturn
+     */
+    private function refuseDocumentedNoreturn()
+    {
+        throw new ExportLockedException(423, 'The export is locked.');
     }
 }

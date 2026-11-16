@@ -436,6 +436,11 @@ final class ThrowAnalyzer
             }
             $explicit = $declared !== null;
             $type = $declared ?? new ObjectType(Throwable::class);
+        } elseif ($explicit && $node instanceof Node\Expr\CallLike && $this->isBareThrowable($type)) {
+            // A callee that never returns and declares nothing gets an explicit bare `Throwable` from the
+            // analyser, which names nothing: it is the undeclared call it would be typed `void`, and is
+            // read as one, as {@see pointOutsideTry()} reads it. A declared `@throws` stays authoritative.
+            $explicit = $this->calleeResolver->reached($node, $scope)?->getThrowType() !== null;
         }
 
         // `from()` on a backed enum handed a constant throws only what that value can. The enum's cases

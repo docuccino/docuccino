@@ -1525,7 +1525,10 @@ repeated the mistake one level up: it counted every catch as taking what it name
 rethrows its own variable takes nothing — `catch (\Exception $e) { report($e); throw $e; }` around an
 undeclared call published nothing at all, because the rethrow's `$e` is typed as the catch. And the same
 again one call away: a catch that hands `$e` to a helper that rethrows it (`$this->fail($e)`) has no
-`throw` of its own to see, and was read as taking everything it names.
+`throw` of its own to see, and was read as taking everything it names. And a call to a helper returning
+`never` that declares nothing: the analyser marks it as throwing a bare `Throwable` EXPLICITLY, which is
+how it records that the call does not return, and an explicit point was read as a declaration naming
+nothing, so the helper's own throws were never read — the same helper typed `void` documented them.
 
 *The tell.* A decision keyed on a point's or a type's exact shape where the fact behind it is written in
 the source — a `catch`, a `try`, a branch — in a form no minor can change.
