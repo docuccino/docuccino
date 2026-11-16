@@ -956,6 +956,7 @@ final class PhpStanTypeEngine implements TypeEngine
             // Vendor still never folds.
             $this->appFilter,
             $this->adapter->reflectionProvider(),
+            $this->classMetadataFactory,
             $this->config->traceDepth,
             $this->config->fileBudget,
         );

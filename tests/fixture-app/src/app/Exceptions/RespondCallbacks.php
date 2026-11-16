@@ -6,15 +6,19 @@ namespace App\Exceptions;
 
 use App\Http\Responses\ApiResponse;
 use App\Problems\DebugProblem;
+use App\Problems\ErrorProblem;
 use App\Problems\FieldProblem;
 use App\Problems\HttpProblem;
 use App\Problems\InstanceProblem;
+use App\Problems\LinkedProblem;
+use App\Problems\SentProblem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\GoneHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
@@ -246,6 +250,55 @@ class RespondCallbacks
             }
 
             return DebugProblem::reported($response);
+        };
+    }
+
+    /** The problem built by the name of a class other problems extend, from the rendered response. */
+    public function problemByName(): callable
+    {
+        return function (Response $response): Response {
+            if (! $response instanceof JsonResponse) {
+                return $response;
+            }
+
+            return (new JsonResponse(new ErrorProblem($response), $response->getStatusCode(), $response->headers->all()))
+                ->header('Content-Type', 'application/problem+json');
+        };
+    }
+
+    /** The same problem through a factory on it that builds `self`. */
+    public function problemFromSelf(): callable
+    {
+        return fn (Response $response): Response => $response instanceof JsonResponse ? ErrorProblem::from($response) : $response;
+    }
+
+    /** The same problem through a factory on it that builds whichever class it is called on. */
+    public function problemFromStatic(): callable
+    {
+        return fn (Response $response): Response => $response instanceof JsonResponse ? ErrorProblem::make($response) : $response;
+    }
+
+    /** A retired resource answered with a problem that sends itself, built by the name of a class other problems extend. */
+    public function problemSendingItself(): callable
+    {
+        return function (Response $response, Throwable $e, Request $request): Response {
+            if ($e instanceof GoneHttpException) {
+                return (new SentProblem(410, 'Gone'))->toResponse($request);
+            }
+
+            return $response;
+        };
+    }
+
+    /** A retired resource answered with a problem that serialises itself as something other than its properties. */
+    public function problemSerialisingItself(): callable
+    {
+        return function (Response $response, Throwable $e): Response {
+            if ($e instanceof GoneHttpException) {
+                return new JsonResponse(new LinkedProblem(410, 'Gone'), 410, ['Content-Type' => 'application/problem+json']);
+            }
+
+            return $response;
         };
     }
 

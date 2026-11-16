@@ -266,6 +266,13 @@ clone-with may re-initialise from anywhere. Each of those leaves the declared ty
 hierarchy's source, so what it cannot see is not covered: a closure bound into the class's scope from
 elsewhere, and `unserialize()`, which restores whatever the payload holds.
 
+Finality is what lets the schema speak for every instance. A response body built where the response is,
+by the class's own name (`new Problem(…)`, `new self(…)`, `new parent(…)`), is exactly that class, so the
+constructor that ran is that class's whether or not it is final: the engine reads the same rule with
+finality set aside (`ClassMetadataFactory::exactValues()`) and carries the value in that response's member
+map, which its example reads. The schema, shared with every subclass's instance, still pins nothing. `new
+static(…)` may build a subclass, so it carries nothing.
+
 ### Tagged request objects
 
 The request side of the same union, recovered from validation rules rather than classes. An object whose

@@ -347,6 +347,13 @@ the schema, and every member whose value is a constant is pinned with a JSON-Sch
 A `status` member that carries the response's status code is filled with **this response's** — the `403`
 arm says `403`, a `404` arm says `404` — even when the status itself was computed dynamically.
 
+A body that is an object is read the same way. A `readonly` member its constructor sets once from a
+constant, like `$this->type = 'about:blank'`, shows that value in the example wherever the object is built
+by its class's own name: `new ApiProblem(…)`, or `new self(…)` in a factory on it. That holds whether or
+not the class is `final`, because nothing else's constructor ran. The schema is different: every class
+extending `ApiProblem` shares it, so it pins the member with `const` only when the class is `final`. A
+`new static(…)` may build one of those subclasses, so its example shows the member's type instead.
+
 ### Examples are completed, not withheld
 
 `detail` is `$e->getMessage()` — no static value, and **required**, so an example omitting it would fail

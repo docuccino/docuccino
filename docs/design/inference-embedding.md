@@ -444,7 +444,9 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    member map, keyed by property, for each public readonly property its constructor's reached top-level
    statements write from such a read, or promotes from one, or that the `parent::__construct()` they reach
    writes off an argument it is handed (`ConstructorEchoes`). A chain's `->setStatusCode()` replaces the status the body echoed, so it widens
-   every marker back to what the member was read as.
+   every marker back to what the member was read as. Built by its class's own name, the object also
+   carries each member its constructor writes once from a literal, final class or not (`exactValues()`,
+   rule in `uir-and-extensions.md` §Discriminated unions); `new static` carries none.
 3. **Enum-case accessor folding** (the final hop). When the call site binds a concrete enum case,
    `EnumAccessorFolder` resolves the accessors the callee applied to it: `->value`/`->name` from the
    case by reflection — VENDOR-SAFE, no body analysed; a no-arg `->method()` only for a PROJECT enum, by
@@ -461,7 +463,8 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    The construction site is either the receiver of the response-producing call or one project hop away
    through a factory that returns the object (`ProblemData::make(…)->toResponse(…)`); a deeper chain is a
    guess about which `new` produced it, so it declines. `??` reads through its left side, which is how an
-   app spells "absent unless supplied".
+   app spells "absent unless supplied". Beside the arguments, an object built by its class's own name
+   carries the members its constructor writes once from a literal, as in mechanism 2.
 
    Being SUPPLIED is the fact this exists to carry, and it cuts both ways: an argument passed here puts the
    member in this response even where the class declares it optional, and an argument this call site did not
