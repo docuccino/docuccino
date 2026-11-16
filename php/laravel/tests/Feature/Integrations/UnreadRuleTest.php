@@ -125,7 +125,9 @@ it('documents a FormRequest field without the rule it cannot read, and names the
         'token' => ['required', 'string'],
         'slug' => ['required', 'string'],
         'member' => ['required', 'integer'],
-        'password' => ['required', 'string'],
+        // Laravel validates a password with `string` and its minimum before its checks of its own, so those
+        // are documented beside the written `string`, and only the mixed-case check is named.
+        'password' => ['required', 'string', 'string', 'min'],
     ]);
 
     $notes = unreadRuleNotes($context);

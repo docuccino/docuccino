@@ -6,13 +6,19 @@ use Docuccino\Core\Inference\ConstValue;
 use Docuccino\Core\Support\Fqcn;
 use Docuccino\Laravel\Integrations\FormRequest\ConstValueToRules;
 use Docuccino\Laravel\Integrations\Validation\CastRuleObject;
+use Docuccino\Laravel\Integrations\Validation\LiveRuleValue;
 use Docuccino\Laravel\Integrations\Validation\RuleFactories;
 use Docuccino\Laravel\Tests\Fixtures\Rules\BankReference;
 use Docuccino\Laravel\Tests\Fixtures\Rules\LegacyStringRule;
 use Docuccino\Laravel\Tests\Fixtures\Rules\OpaqueCheck;
 use Docuccino\Laravel\Tests\Fixtures\Rules\TenantMember;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Email;
+use Illuminate\Validation\Rules\File;
+use Illuminate\Validation\Rules\ImageFile;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationRuleParser;
 use Workbench\App\Enums\FormChannel;
 use Workbench\App\Enums\WidgetPriority;
@@ -270,11 +276,13 @@ it('leaves out a rule it cannot read that can only refuse values, keeps the rest
     'a rule object chained after new' => [ConstValue::instance(OpaqueCheck::class, [])->withChainedCall('strict', []), 'new '.OpaqueCheck::class],
     'a rule object of a class this build cannot load' => [ConstValue::instance('App\\Rules\\Missing', []), 'new App\\Rules\\Missing'],
     'a closure' => [ConstValue::instance('Closure', []), 'a closure'],
-    'Password::min()' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\Password::min', [ConstValue::scalar(8)]), 'Password::min(…)'],
-    'File::types()' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\File::types', [ConstValue::scalar('pdf')]), 'File::types(…)'],
+    // What the application registered at boot, which no file the build keys on states.
+    'Password::defaults()' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\Password::defaults', []), 'Password::defaults(…)'],
+    'File::default()' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\File::default', []), 'File::default(…)'],
+    'File::types() with values nothing can read' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\File::types', [ConstValue::unknown('variable')]), 'File::types(…)'],
     'Rule::contains() with values nothing can read' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::contains', [ConstValue::unknown('variable')]), 'Rule::contains(…)'],
     'Rule::string() with a bound nothing can read' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::string', [])->withChainedCall('max', [ConstValue::unknown('call')]), 'Rule::string(…)'],
-    'new Password()' => [ConstValue::instance('Illuminate\\Validation\\Rules\\Password', [ConstValue::scalar(8)]), 'new Illuminate\\Validation\\Rules\\Password'],
+    'new Password() with a minimum nothing can read' => [ConstValue::instance('Illuminate\\Validation\\Rules\\Password', [ConstValue::unknown('call')]), 'new Illuminate\\Validation\\Rules\\Password'],
     'new Contains() with values nothing can read' => [ConstValue::instance('Illuminate\\Validation\\Rules\\Contains', [ConstValue::array([ConstValue::scalar('root'), ConstValue::spread('spread array item')])]), 'new Illuminate\\Validation\\Rules\\Contains'],
 ]);
 
@@ -299,6 +307,108 @@ it('gives up a field one of whose rules has content it cannot read, and names th
     'a rule object Laravel casts to a string' => [ConstValue::instance(LegacyStringRule::class, []), 'new '.LegacyStringRule::class],
     'a value from a call or a variable' => [ConstValue::unknown('non-constant array item'), 'a value this build cannot read'],
     'a nested array' => [ConstValue::array([ConstValue::scalar('nullable')]), 'a nested array'],
+]);
+
+it('reads a rule object Laravel validates by its state as the rules it runs, so the field takes all the object takes', function (ConstValue $written, Closure $live, Closure $samples, bool $checks): void {
+    // Laravel validates a password, file or email object with a rule list its state builds, and a password then
+    // runs checks of its own. The fold, rebuilt as rule strings and handed to Laravel, must take every value the
+    // object takes; with no check of its own beside it, it must take nothing more either.
+    $folder = new ConstValueToRules;
+    $rules = $folder->fold($written);
+    $strings = array_map(static fn ($rule): string => $rule->parameters === [] ? $rule->name : $rule->name.':'.implode(',', $rule->parameters), $rules);
+
+    expect($strings)->not->toBeEmpty();
+    foreach ($samples() as $label => $value) {
+        $byObject = Validator::make(['f' => $value], ['f' => [$live()]])->passes();
+        $byRules = Validator::make(['f' => $value], ['f' => $strings])->passes();
+
+        expect(! $byObject || $byRules)->toBeTrue((string) $label);
+        if (! $checks) {
+            expect($byRules)->toBe($byObject, (string) $label);
+        }
+    }
+
+    // The same object PHP built reads alike, whichever path it reached the fold by.
+    $fromLive = new ConstValueToRules;
+    expect($fromLive->fold(LiveRuleValue::of($live())))->toEqual($rules)
+        ->and($folder->unread() !== [])->toBe($checks)
+        ->and($fromLive->unread() !== [])->toBe($checks);
+})->with([
+    'new Password()' => [
+        ConstValue::instance('Illuminate\\Validation\\Rules\\Password', [ConstValue::scalar(8)]),
+        static fn () => new Password(8),
+        static fn (): array => ['seven' => 'abcdefg', 'eight' => 'abcdefgh', 'a number' => 12345678, 'nothing' => null],
+        false,
+    ],
+    'Password::min() bounded both ways, with rules of its own' => [
+        ConstValue::descriptor('Illuminate\\Validation\\Rules\\Password::min', [ConstValue::scalar(8)])->withChainedCall('max', [ConstValue::scalar(12)])->withChainedCall('rules', [ConstValue::array([ConstValue::scalar('alpha')])]),
+        static fn () => Password::min(8)->max(12)->rules(['alpha']),
+        static fn (): array => ['eight letters' => 'abcdefgh', 'thirteen letters' => 'abcdefghijklm', 'with a digit' => 'abcdefg1'],
+        false,
+    ],
+    'Password::min() needing letters in both cases' => [
+        ConstValue::descriptor('\\Illuminate\\Validation\\Rules\\Password::min', [ConstValue::scalar(8)])->withChainedCall('letters', [])->withChainedCall('mixedCase', []),
+        static fn () => Password::min(8)->letters()->mixedCase(),
+        static fn (): array => ['lower case' => 'abcdefgh', 'mixed case' => 'abcdEFGH', 'short' => 'aB'],
+        true,
+    ],
+    'Rule::email() compliant with the RFC' => [
+        ConstValue::descriptor('Illuminate\\Validation\\Rule::email', [])->withChainedCall('rfcCompliant', []),
+        static fn () => Rule::email()->rfcCompliant(),
+        static fn (): array => ['an address' => 'ada@example.com', 'no address' => 'ada', 'a number' => 5],
+        false,
+    ],
+    'new Email()' => [
+        ConstValue::instance('Illuminate\\Validation\\Rules\\Email', []),
+        static fn () => new Email,
+        static fn (): array => ['an address' => 'ada@example.com', 'no address' => 'ada'],
+        false,
+    ],
+    'File::types() under a size' => [
+        ConstValue::descriptor('Illuminate\\Validation\\Rules\\File::types', [ConstValue::array([ConstValue::scalar('pdf')])])->withChainedCall('max', [ConstValue::scalar('1mb')]),
+        static fn () => File::types(['pdf'])->max('1mb'),
+        static fn (): array => [
+            'a small pdf' => UploadedFile::fake()->create('a.pdf', 10, 'application/pdf'),
+            'a large pdf' => UploadedFile::fake()->create('b.pdf', 2000, 'application/pdf'),
+            'a text file' => UploadedFile::fake()->create('c.txt', 10, 'text/plain'),
+            'a string' => 'a.pdf',
+        ],
+        false,
+    ],
+    'File::image() within dimensions' => [
+        ConstValue::descriptor('Illuminate\\Validation\\Rules\\File::image', [])->withChainedCall('dimensions', [ConstValue::descriptor('Illuminate\\Validation\\Rule::dimensions', [])->withChainedCall('maxWidth', [ConstValue::scalar(100)])]),
+        static fn () => File::image()->dimensions(Rule::dimensions()->maxWidth(100)),
+        static fn (): array => [
+            'a narrow image' => UploadedFile::fake()->image('a.png', 50, 50),
+            'a wide image' => UploadedFile::fake()->image('b.png', 200, 50),
+            'a text file' => UploadedFile::fake()->create('c.txt', 10, 'text/plain'),
+        ],
+        false,
+    ],
+    'Rule::imageFile() written with new' => [
+        ConstValue::instance('Illuminate\\Validation\\Rules\\ImageFile', [])->withChainedCall('max', [ConstValue::scalar(5)]),
+        static fn () => (new ImageFile)->max(5),
+        static fn (): array => ['a small image' => UploadedFile::fake()->image('a.png', 10, 10), 'a large file' => UploadedFile::fake()->image('b.png', 10, 10)->size(50)],
+        false,
+    ],
+]);
+
+it('leaves a rule object Laravel validates by its state out where the build would run the application\'s code', function (ConstValue $written, string $named): void {
+    // Each answers with what the application registered at boot, or a callable, which nothing here runs.
+    Password::defaults(static fn () => Password::min(12));
+
+    try {
+        $folder = new ConstValueToRules;
+        expect($folder->fold(ConstValue::array([ConstValue::scalar('string'), $written])))->toHaveCount(1)
+            ->and($folder->unread())->toBe([$named]);
+    } finally {
+        Password::$defaultCallback = null;
+    }
+})->with([
+    'Password::defaults()' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\Password::defaults', []), 'Password::defaults(…)'],
+    'Password::required()' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\Password::required', []), 'Password::required(…)'],
+    'Email::default()' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\Email::default', []), 'Email::default(…)'],
+    'a password checked by a callable' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\Password::min', [ConstValue::scalar(8)])->withChainedCall('when', [ConstValue::scalar(true), ConstValue::scalar('trim')]), 'Password::min(…)'],
 ]);
 
 it('reads a framework rule object narrowed by a chained call as the factory chain that builds it', function (): void {

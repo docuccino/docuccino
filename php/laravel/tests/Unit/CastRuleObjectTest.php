@@ -7,8 +7,13 @@ use Docuccino\Laravel\Integrations\Validation\CastRuleObject;
 use Docuccino\Laravel\Tests\Fixtures\Rules\CallRecorder;
 use Docuccino\Laravel\Tests\Fixtures\Rules\OpaqueCheck;
 use Docuccino\Laravel\Tests\Fixtures\Rules\RecordedModel;
+use Docuccino\Laravel\Tests\Fixtures\Rules\RecordedUpload;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Date;
+use Illuminate\Validation\Rules\Email;
 use Illuminate\Validation\Rules\Exists;
+use Illuminate\Validation\Rules\File;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\Rules\StringRule;
 use Workbench\App\Enums\WidgetStatus;
 
@@ -23,6 +28,8 @@ beforeEach(function (): void {
 
 afterEach(function (): void {
     Date::flushMacros();
+    Password::$defaultCallback = null;
+    File::$defaultCallback = null;
 });
 
 it('reads a rule object built from literal values as the rule strings Laravel splits it into', function (ConstValue $written, array $expected): void {
@@ -38,6 +45,20 @@ it('reads a rule object built from literal values as the rule strings Laravel sp
     'Rule::numeric() as a bounded integer' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::numeric', [])->withChainedCall('integer', [])->withChainedCall('min', [ConstValue::scalar(1)]), ['numeric', 'integer', 'min:1']],
     'Rule::contains() over a list' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::contains', [ConstValue::array([ConstValue::scalar('a'), ConstValue::scalar('b')])]), ['contains:"a","b"']],
     'new Dimensions with no constraints, then one set' => [ConstValue::instance('Illuminate\\Validation\\Rules\\Dimensions', [])->withChainedCall('minWidth', [ConstValue::scalar(10)]), ['dimensions:min_width=10']],
+    // Its keys are its constraints' names, so the array is built at the keys written.
+    'new Dimensions with keyed constraints' => [ConstValue::instance('Illuminate\\Validation\\Rules\\Dimensions', [ConstValue::array([ConstValue::scalar(10), ConstValue::scalar(20)], ['min_width', 'max_height'])]), ['dimensions:min_width=10,max_height=20']],
+    'Rule::dimensions() with keyed constraints, then one more' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::dimensions', [ConstValue::array([ConstValue::scalar(10)], ['min_width'])])->withChainedCall('maxWidth', [ConstValue::scalar(90)]), ['dimensions:min_width=10,max_width=90']],
+]);
+
+it('builds a rule object Laravel validates by its state as PHP builds it from the same literals', function (ConstValue $written, Closure $expected): void {
+    expect(CastRuleObject::build($written))->toEqual($expected());
+})->with([
+    'new Password()' => [ConstValue::instance('Illuminate\\Validation\\Rules\\Password', [ConstValue::scalar(8)]), static fn () => new Password(8)],
+    'Password::min() with checks' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\Password::min', [ConstValue::scalar(8)])->withChainedCall('letters', [])->withChainedCall('mixedCase', []), static fn () => Password::min(8)->letters()->mixedCase()],
+    'File::types() under a size' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\File::types', [ConstValue::array([ConstValue::scalar('pdf')])])->withChainedCall('max', [ConstValue::scalar(1024)]), static fn () => File::types(['pdf'])->max(1024)],
+    'File::image() handed dimensions' => [ConstValue::descriptor('Illuminate\\Validation\\Rules\\File::image', [])->withChainedCall('dimensions', [ConstValue::descriptor('Illuminate\\Validation\\Rule::dimensions', [])->withChainedCall('maxWidth', [ConstValue::scalar(10)])]), static fn () => File::image()->dimensions(Rule::dimensions()->maxWidth(10))],
+    'Rule::email()' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::email', [])->withChainedCall('rfcCompliant', [ConstValue::scalar(true)]), static fn () => Rule::email()->rfcCompliant(true)],
+    'Rule::dimensions() with keyed constraints' => [ConstValue::descriptor('Illuminate\\Validation\\Rule::dimensions', [ConstValue::array([ConstValue::scalar(10)], ['min_width'])]), static fn () => Rule::dimensions(['min_width' => 10])],
 ]);
 
 it('builds nothing from a value it cannot read or a call it would not make, and runs no application code', function (Closure $build): void {
@@ -46,6 +67,8 @@ it('builds nothing from a value it cannot read or a call it would not make, and 
 
         return $this;
     });
+    Password::defaults(static fn (): Password => CallRecorder::record(Password::min(12)));
+    File::defaults(static fn (): File => CallRecorder::record(File::types(['pdf'])));
 
     expect($build())->toBeNull()
         ->and(CallRecorder::$calls)->toBe(0);
@@ -56,14 +79,19 @@ it('builds nothing from a value it cannot read or a call it would not make, and 
     'an enum case' => [static fn (): ?array => CastRuleObject::fromNew('Illuminate\\Validation\\Rules\\Contains', [ConstValue::enumCase(WidgetStatus::class, 'Draft')], [])],
     'a chained bound nothing can read' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::string', [], [['method' => 'max', 'args' => [ConstValue::unknown('call')]]])],
     'too few arguments to a chained call' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::string', [], [['method' => 'between', 'args' => [ConstValue::scalar(1)]]])],
-    // A folded array has lost its keys, so a constructor reading them would be rebuilt wrong.
+    // An array whose keys the fold did not read, so a constructor reading them would be rebuilt wrong.
     'a constructor taking a keyed array' => [static fn (): ?array => CastRuleObject::fromNew('Illuminate\\Validation\\Rules\\Dimensions', [ConstValue::array([ConstValue::scalar(10)])], [])],
     'a factory passing a keyed array on' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::dimensions', [ConstValue::array([ConstValue::scalar(10)])], [])],
+    'a rule object handed a value nothing can read' => [static fn (): ?object => CastRuleObject::build(ConstValue::descriptor('Illuminate\\Validation\\Rules\\File::image', [])->withChainedCall('dimensions', [ConstValue::instance(OpaqueCheck::class, [])]))],
     // Each of these would run the application's code.
     'a macro' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::date', [], [['method' => 'recorded', 'args' => []]])],
     'a callable named by a string' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::string', [], [['method' => 'when', 'args' => [ConstValue::scalar(true), ConstValue::scalar(CallRecorder::class.'::record')]]])],
     'a model named as a table, with new' => [static fn (): ?array => CastRuleObject::fromNew('Illuminate\\Validation\\Rules\\Exists', [ConstValue::scalar(RecordedModel::class)], [])],
     'a model named as a table, by the factory' => [static fn (): ?array => CastRuleObject::fromFactory('Illuminate\\Validation\\Rule::unique', [ConstValue::scalar(RecordedModel::class)], [])],
+    'the password the application registered' => [static fn (): ?object => CastRuleObject::build(ConstValue::descriptor('Illuminate\\Validation\\Rules\\Password::defaults', []))],
+    'the password the application registered, required' => [static fn (): ?object => CastRuleObject::build(ConstValue::descriptor('Illuminate\\Validation\\Rules\\Password::required', []))],
+    'the file the application registered' => [static fn (): ?object => CastRuleObject::build(ConstValue::descriptor('Illuminate\\Validation\\Rules\\File::default', []))],
+    'an application\'s own file rule' => [static fn (): ?object => CastRuleObject::build(ConstValue::instance(RecordedUpload::class, []))],
     // Not one Laravel reads as a string.
     'a check Laravel runs' => [static fn (): ?array => CastRuleObject::fromNew('Illuminate\\Validation\\Rules\\Password', [ConstValue::scalar(8)], [])],
     'an application rule' => [static fn (): ?array => CastRuleObject::fromNew(OpaqueCheck::class, [], [])],
@@ -88,4 +116,45 @@ it('runs a callable that is no literal of the build: the guard is the reason non
 
     new Exists(RecordedModel::class);
     expect(CallRecorder::$calls)->toBeGreaterThan(2);
+
+    $calls = CallRecorder::$calls;
+    Password::defaults(static fn (): Password => CallRecorder::record(Password::min(12)));
+    Password::defaults();
+    expect(CallRecorder::$calls)->toBe($calls + 1);
+
+    new RecordedUpload;
+    expect(CallRecorder::$calls)->toBe($calls + 2);
+});
+
+it('builds every static of a rule read by its state that reads nothing registered, and no other', function (): void {
+    // Read off the installed classes: a static whose body reaches the registered default answers with the
+    // application's code, so it is never called; every other one builds from its arguments as PHP does.
+    $samples = ['size' => 8, 'mimetypes' => ['pdf'], 'allowSvg' => false];
+    $built = 0;
+    foreach ([Password::class, File::class, Email::class] as $class) {
+        $file = (new ReflectionClass($class))->getFileName();
+        foreach ((new ReflectionClass($class))->getMethods(ReflectionMethod::IS_STATIC) as $static) {
+            // A trait's statics (`macro()`, `flushMacros()`) build no rule.
+            if (! $static->isPublic() || $static->getFileName() !== $file) {
+                continue;
+            }
+
+            $lines = file((string) $static->getFileName()) ?: [];
+            $body = implode('', array_slice($lines, (int) $static->getStartLine() - 1, (int) $static->getEndLine() - (int) $static->getStartLine() + 1));
+            $values = array_map(static fn (ReflectionParameter $parameter): mixed => $samples[$parameter->getName()] ?? null, $static->getParameters());
+            $written = ConstValue::descriptor($class.'::'.$static->getName(), array_map(static fn (mixed $value): ConstValue => is_array($value) ? ConstValue::array(array_map(ConstValue::scalar(...), $value)) : ConstValue::scalar($value), $values));
+
+            if (preg_match('/default|static::\$/i', $body) === 1) {
+                expect(CastRuleObject::build($written))->toBeNull($class.'::'.$static->getName());
+
+                continue;
+            }
+
+            $built++;
+            expect(CastRuleObject::build($written))->toEqual($static->invoke(null, ...$values), $class.'::'.$static->getName());
+        }
+    }
+
+    // Password::min(), File::image() and File::types(), on every Laravel this supports.
+    expect($built)->toBeGreaterThanOrEqual(3);
 });

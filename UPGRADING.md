@@ -133,8 +133,8 @@ or whose `data.date_format` is a list, changes, and a client generated from it c
 Only if you diff a document committed before the upgrade against a build after it, or gate it with
 `--enforce`. Eight fixes make a choice rule publish what Laravel checks, three more do the same for
 Spatie Data's rule strings, its validation attributes and the attributes that build a rule object, one
-more for a required rule on a literal condition, and the differ reads each as breaking where the rule is
-used:
+more for a required rule on a literal condition, another for Laravel's password, file and email builders,
+and the differ reads each as breaking where the rule is used:
 
 - **`new Enum` and `new In` publish their values.** Both were dropped, so the field published no
   `enum`. An `enum` arriving where nothing constrained the field (`schema.enum-added`) is a narrowing,
@@ -203,6 +203,14 @@ used:
   the `required` the property's type implied, as it does in laravel-data, so the property is no longer
   required. A `#[Prohibited(new ProhibitedIf(false))]` property was left out and is now documented. A
   closure condition is no longer called during the build, so the field is optional, or sendable.
+- **Laravel's password, file and email builders publish what they check.** In a rules array,
+  `new Password(8)` and `Password::min(8)` were left out with a `validation.rule-unrecoverable` note;
+  they now publish the `type: string` and `minLength: 8` of the `string|min:8` a password is validated
+  with first. `Rule::email()` publishes `type: string` and `format: email`, and `File::types([…])`,
+  `File::image()` and `Rule::file()` publish a binary upload, which makes the request
+  `multipart/form-data`. A `type` arriving where the field had none (`schema.type-added`) is a
+  narrowing. Dimensions given as a keyed array, to `new Dimensions([…])` or `Rule::dimensions([…])`, are
+  now described on the field, which is not breaking.
 
 So a gate run with `--enforce` fails on the upgrade. Your API did not change: in each case the
 document now says what your server already did. Upgrade in a pull request of its own, so the

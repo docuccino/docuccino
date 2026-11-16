@@ -14,9 +14,10 @@ use Throwable;
 /**
  * One of Laravel's own rule objects that its validator reads as the rule string it casts to, rather than
  * running it as a check: `Rule::string()->min(2)`, `Rule::acceptedIf('kind', 'business')`. Written with values
- * at the call, it is built and read by Laravel's own parser. Building runs only Laravel's constructor, `Rule::`
- * static and builder methods, on literal values: never a macro, a callable or a model, so nothing of the
- * application's runs.
+ * at the call, it is built and read by Laravel's own parser. One it reads by its state instead (`Password`,
+ * `File`, `Email`) is built the same way and read as {@see LiveRuleValue} reads it. Building runs only Laravel's
+ * constructor, `Rule::` static, the rule's own statics that read nothing registered, and builder methods, on
+ * literal values: never a macro, a callable or a model, so nothing of the application's runs.
  */
 final class CastRuleObject
 {
@@ -36,8 +37,17 @@ final class CastRuleObject
     /** The trait that resolves a model class written as a table by constructing the model, application code. */
     private const DATABASE_RULE = 'Illuminate\\Validation\\Rules\\DatabaseRule';
 
-    /** Rule objects whose constructor takes a keyed array, which a folded array, its keys gone, cannot rebuild. */
+    /** Rule objects whose constructor reads an array's keys, built only from an array whose keys the fold read. */
     private const KEYED_CONSTRUCTORS = ['Illuminate\\Validation\\Rules\\Dimensions'];
+
+    /**
+     * The statics of a rule class that build from their arguments alone. Its others (`Password::defaults()`,
+     * `File::default()`) answer with what the application registered, which is its code.
+     */
+    private const OWN_FACTORIES = [
+        'illuminate\\validation\\rules\\password' => ['min'],
+        'illuminate\\validation\\rules\\file' => ['image', 'types'],
+    ];
 
     /** Whether Laravel validates with a rule object of this class as its string: one of its own, no check itself. */
     public static function casts(string $class): bool
@@ -66,24 +76,7 @@ final class CastRuleObject
      */
     public static function fromNew(string $class, array $args, array $chain): ?array
     {
-        $class = ltrim($class, '\\');
-        if (! self::buildable($class) || ($args !== [] && in_array($class, self::KEYED_CONSTRUCTORS, true))) {
-            return null;
-        }
-
-        $constructor = (new ReflectionClass($class))->getConstructor();
-        $values = self::literals($args);
-        if ($values === null || ($constructor !== null && ! self::takesNoCallable($constructor))) {
-            return null;
-        }
-
-        try {
-            $rule = new $class(...$values);
-        } catch (Throwable) {
-            return null;
-        }
-
-        return self::chained($rule, $chain);
+        return self::castStrings(self::buildNew($class, $args, $chain));
     }
 
     /**
@@ -97,15 +90,20 @@ final class CastRuleObject
      */
     public static function fromFactory(string $factory, array $args, array $chain): ?array
     {
-        $method = RuleFactories::staticOf($factory);
-        $class = $method === null ? null : RuleFactories::builtClass($method->getName());
-        if ($method === null || $class === null || ! self::buildable($class) || ($args !== [] && in_array($class, self::KEYED_CONSTRUCTORS, true))) {
-            return null;
-        }
+        return self::castStrings(self::buildFactory($factory, $args, $chain));
+    }
 
-        $rule = self::invoke($method, null, $args);
-
-        return is_object($rule) && self::buildable($rule::class) ? self::chained($rule, $chain) : null;
+    /**
+     * The framework rule object a `new` or a static call written in a rules list builds, chained calls
+     * included, where every value is a literal and every step is one this builds; null otherwise.
+     */
+    public static function build(ConstValue $written): ?object
+    {
+        return match (true) {
+            $written->isInstance() => self::buildNew((string) $written->class, $written->args, $written->chain),
+            $written->isDescriptor() => self::buildFactory((string) $written->factory, $written->args, $written->chain),
+            default => null,
+        };
     }
 
     /**
@@ -130,10 +128,99 @@ final class CastRuleObject
     }
 
     /**
+     * @param  list<ConstValue>  $args
      * @param  list<array{method: string, args: list<ConstValue>}>  $chain
+     */
+    private static function buildNew(string $class, array $args, array $chain): ?object
+    {
+        $class = ltrim($class, '\\');
+        if (! class_exists($class) || ! self::buildable($class) || ! self::keysRead($class, $args)) {
+            return null;
+        }
+
+        $constructor = (new ReflectionClass($class))->getConstructor();
+        $values = self::literals($args);
+        if ($values === null || ($constructor !== null && ! self::takesNoCallable($constructor))) {
+            return null;
+        }
+
+        try {
+            $rule = new $class(...$values);
+        } catch (Throwable) {
+            return null;
+        }
+
+        return self::chained($rule, $chain);
+    }
+
+    /**
+     * @param  list<ConstValue>  $args
+     * @param  list<array{method: string, args: list<ConstValue>}>  $chain
+     */
+    private static function buildFactory(string $factory, array $args, array $chain): ?object
+    {
+        $method = RuleFactories::staticOf($factory);
+        $class = $method === null ? null : RuleFactories::builtClass($method->getName());
+        if ($method === null) {
+            $method = self::ownFactory($factory);
+            $class = $method?->class;
+        }
+
+        if ($method === null || $class === null || ! self::buildable($class) || ! self::keysRead($class, $args)) {
+            return null;
+        }
+
+        $rule = self::invoke($method, null, $args);
+
+        return is_object($rule) && self::buildable($rule::class) ? self::chained($rule, $chain) : null;
+    }
+
+    /**
      * @return list<string>|null
      */
-    private static function chained(object $rule, array $chain): ?array
+    private static function castStrings(?object $rule): ?array
+    {
+        return $rule instanceof Stringable && self::casts($rule::class) ? self::strings($rule) : null;
+    }
+
+    /** A static of a rule class that builds from its arguments alone ({@see OWN_FACTORIES}). */
+    private static function ownFactory(string $factory): ?ReflectionMethod
+    {
+        [$class, $name] = array_pad(explode('::', ltrim($factory, '\\'), 2), 2, '');
+        if (! in_array(strtolower($name), self::OWN_FACTORIES[strtolower($class)] ?? [], true) || ! method_exists($class, $name)) {
+            return null;
+        }
+
+        $method = new ReflectionMethod($class, $name);
+
+        return $method->isPublic() && $method->isStatic() ? $method : null;
+    }
+
+    /**
+     * Whether a constructor that reads its array's keys is handed only arrays whose keys the fold read. Any
+     * other is built from the values alone, which is all it reads.
+     *
+     * @param  list<ConstValue>  $args
+     */
+    private static function keysRead(string $class, array $args): bool
+    {
+        if (! in_array($class, self::KEYED_CONSTRUCTORS, true)) {
+            return true;
+        }
+
+        foreach ($args as $arg) {
+            if ($arg->isArray() && $arg->items !== [] && $arg->keys === null) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  list<array{method: string, args: list<ConstValue>}>  $chain
+     */
+    private static function chained(object $rule, array $chain): ?object
     {
         foreach ($chain as $call) {
             // A method the class does not declare is a macro, which is the application's code.
@@ -149,7 +236,7 @@ final class CastRuleObject
             }
         }
 
-        return $rule instanceof Stringable ? self::strings($rule) : null;
+        return $rule;
     }
 
     /**
@@ -173,11 +260,12 @@ final class CastRuleObject
     }
 
     /**
-     * @phpstan-assert-if-true class-string<Stringable> $class
+     * Whether this builds an object of the class: one Laravel casts to a rule string, or one {@see LiveRuleValue}
+     * reads by its state, that resolves no model.
      */
     private static function buildable(string $class): bool
     {
-        if (! self::casts($class)) {
+        if (! self::casts($class) && ! LiveRuleValue::readsState($class)) {
             return false;
         }
 
@@ -204,7 +292,8 @@ final class CastRuleObject
     }
 
     /**
-     * The values a list of arguments states, or null unless each is a scalar or a list of them.
+     * The values a list of arguments states, or null unless each is a scalar, an array of them with the keys
+     * written, or a framework rule object this builds ({@see build()}).
      *
      * @param  list<ConstValue>  $args
      * @return list<mixed>|null
@@ -213,20 +302,57 @@ final class CastRuleObject
     {
         $values = [];
         foreach ($args as $arg) {
-            if ($arg->isScalar()) {
-                $values[] = $arg->scalar;
+            $value = match (true) {
+                $arg->isScalar() => [$arg->scalar],
+                $arg->isArray() => self::literalArray($arg),
+                default => self::nested($arg),
+            };
 
-                continue;
-            }
-
-            $items = $arg->isArray() ? self::literals($arg->items) : null;
-            if ($items === null) {
+            if ($value === null) {
                 return null;
             }
 
-            $values[] = $items;
+            $values[] = $value[0];
         }
 
         return $values;
+    }
+
+    /**
+     * The array a literal array states, each item at the key written beside it, wrapped; null where an item is
+     * no literal.
+     *
+     * @return array{0: array<array-key, mixed>}|null
+     */
+    private static function literalArray(ConstValue $array): ?array
+    {
+        $items = self::literals($array->items);
+        if ($items === null) {
+            return null;
+        }
+
+        $built = [];
+        foreach ($items as $index => $item) {
+            $key = $array->keys[$index] ?? null;
+            if ($key === null) {
+                $built[] = $item;
+            } else {
+                $built[$key] = $item;
+            }
+        }
+
+        return [$built];
+    }
+
+    /**
+     * A rule object written as an argument, built, wrapped; null where it is none this builds.
+     *
+     * @return array{0: object}|null
+     */
+    private static function nested(ConstValue $written): ?array
+    {
+        $rule = self::build($written);
+
+        return $rule === null ? null : [$rule];
     }
 }
