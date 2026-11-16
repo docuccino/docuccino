@@ -15,6 +15,7 @@ declare(strict_types=1);
  * Usage (one mode per invocation — each maps 1:1 onto a FixtureRunner method):
  *   php engine-runner.php analyze                   <controllerFile> <class> <method>
  *   php engine-runner.php analyze-with-config       <controllerFile> <class> <method> <userNeon>
+ *   php engine-runner.php analyze-core-first        <controllerFile> <class> <method>
  *   php engine-runner.php analyze-repeat           <controllerFile> <class> <method> <otherMethod>
  *   php engine-runner.php analyze-many              <controllerFile> <class> <method,method,…>
  *   php engine-runner.php analyze-many-narrow       <controllerFile> <class> <method,method,…>
@@ -56,6 +57,7 @@ use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Support\AtomicFile;
+use Docuccino\Core\TypeGrammar\PhpDocParserStack;
 use Docuccino\Inference\PhpStan\Analysis\EngineConfig;
 use Docuccino\Inference\PhpStan\Analysis\PhpStanEngineFactory;
 use Docuccino\Inference\PhpStan\Analysis\PhpStanTypeEngineBuilder;
@@ -209,6 +211,12 @@ $adapterFactory = new class($countedAdapters) extends RuntimeAdapterFactory
     }
 };
 
+// analyze-core-first builds core's docblock parser before the engine exists, as a build does when it reads a
+// route's docblock before the first action is analysed.
+if ($mode === 'analyze-core-first') {
+    new PhpDocParserStack;
+}
+
 $scopes = new AnalysisScopes($app);
 $declaredPaths = $scopes->declared();
 $descendPaths = $mode === 'analyze-many-narrow'
@@ -253,6 +261,19 @@ $qbHarvest = static function () use ($engine, $ref): array {
 
 $result = match ($mode) {
     'analyze', 'analyze-with-config' => $engine->analyzeAction($ref)->toArray(),
+    // Which copy of phpdoc-parser each loaded class came from — the phar's or the application's.
+    'analyze-core-first' => [...$engine->analyzeAction($ref)->toArray(), 'phpDocParserCopies' => (static function (array $copies): array {
+        $copies = array_values(array_unique($copies));
+        sort($copies);
+
+        return $copies;
+    })(array_map(
+        static fn (string $class): string => str_starts_with((string) (new ReflectionClass($class))->getFileName(), 'phar://') ? 'phar' : 'vendor',
+        array_values(array_filter(
+            [...get_declared_classes(), ...get_declared_interfaces(), ...get_declared_traits()],
+            static fn (string $class): bool => str_starts_with($class, 'PHPStan\\PhpDocParser\\'),
+        )),
+    ))],
     // One engine, the same ActionRef twice — what every version document in an export run does. The
     // engine's per-ref memo has to serve the second ask the FIRST ask's own object (nothing else can
     // return an identical instance, since both the analysis and its failure arm always construct a new

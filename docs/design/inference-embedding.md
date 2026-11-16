@@ -18,6 +18,14 @@ findings are inlined below.
   are PHP-Scoper-prefixed. `PhpParser\*` and `PHPStan\PhpDocParser\*` resolve from the
   HOST's composer packages → we require `nikic/php-parser ^5`; `phpstan/phpdoc-parser ^2` arrives
   through `docuccino/core`, which owns the phpdoc grammar.
+- …until PHPStan loads its first scoped (`_PHPStan_…`) class. That requires the phar's own composer
+  autoloader, which registers AHEAD of the host's and also maps `PHPStan\PhpDocParser\` — to the copy
+  bundled in the phar. A build reads route docblocks with core's parser before the engine boots, so
+  without intervention the classes loaded by then are the host's and every later one the phar's; where
+  the two versions differ (phpdoc-parser 2.3.8 beside phpstan 2.2.16, which bundles 2.3.5), a newer
+  `TypeParser` meets an older `TokenIterator` and every action fails. `PhpDocParserCopy::complete()`
+  runs just before the container boots: once any host class is loaded it loads the rest of the host's
+  copy, and while none is it leaves every class to the phar's.
 - A scoped private PHPStan copy is IMPOSSIBLE while reusing Larastan (identical FQCNs
   can't coexist; Larastan binds unprefixed `PHPStan\*`). → **Share the host's PHPStan.**
   Larastan 3.x requires `phpstan/phpstan ^2.2`, so one version satisfies everyone.

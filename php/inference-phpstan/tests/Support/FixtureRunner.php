@@ -50,6 +50,17 @@ final class FixtureRunner
     }
 
     /**
+     * As {@see analyze()}, with core's docblock parser built before the engine, plus `phpDocParserCopies`:
+     * the copies of phpdoc-parser (`phar`, `vendor`) the process's loaded classes came from.
+     *
+     * @return array<string, mixed>
+     */
+    public static function analyzeCoreFirst(string $controllerRelPath, string $class, string $method): array
+    {
+        return self::invoke('analyze-core-first', self::path($controllerRelPath), $class, $method);
+    }
+
+    /**
      * Every named method analysed by ONE engine, keyed by method name — the shape a sweep over a whole
      * controller needs, since a subprocess per action pays for a container boot per action.
      *
