@@ -79,7 +79,7 @@ it('states the corpus size wherever the product quotes it', function (): void {
     expect($actions)->toBeGreaterThan(20);
 
     $quoting = [
-        'php/inference-phpstan/src/Throwing/HttpExceptionStatus.php',
+        'php/inference-phpstan/src/Throwing/SubclassStatus.php',
         'docs/design/inference-embedding.md',
     ];
 

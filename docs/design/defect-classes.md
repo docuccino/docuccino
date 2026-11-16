@@ -408,7 +408,7 @@ reflection one question gets an answer about the wrong file — or a reader that
 declared code never sees half of what builds it. Both halves publish a confident answer for a class the
 code contradicts.
 
-*Instances.* `HttpExceptionStatus::agreed()` folded the `new`s a class writes of ITSELF out of its own
+*Instances.* `SubclassStatus::agreed()` folded the `new`s a class writes of ITSELF out of its own
 file alone, so a subclass with one factory at 413 under a base whose `new static(503)` also builds it
 answered 413 — a precise false status, at exactly the throw points (a trait's guard, a `@throws`, a
 rethrow) the read exists for. Its trait gate asked `getTraitNames()`, which reports the class's OWN traits,
@@ -969,7 +969,7 @@ answer. One `ProjectFilter` answered both, so a class in a modular root was trea
 
 *Instances.* The response-shape refiner declined to fold a render helper written in a `Modules\…` root,
 which the prime-scoped filter in `PhpStanEngineFactory` fixed for the refiner and the enum folder alone.
-Three more sites went on asking the descend scope: `HttpExceptionStatus`/`FactoryStatus` refused to read
+Three more sites went on asking the descend scope: `SubclassStatus`/`FactoryStatus` refused to read
 the status a modular exception class pins on itself, so the document published a placeholder 500 for an
 exception whose 409 was two lines into a file the build was holding open; `UnreadStatus`'s actionability
 called that class foreign, so `ForeignClass` — the one reason with no remedy — dropped the notice and the
@@ -1061,7 +1061,7 @@ constructor that makes named factories worth having.
 
 *Instances, and the two that already carry their gate.* The `@throws` short-circuit is the one that
 shipped. A constructor parameter's DEFAULT is the same shape — it states what a call leaving the slot
-empty passes, not what every instance carries — and `HttpExceptionStatus` only reads it as a pin where the
+empty passes, not what every instance carries — and `SubclassStatus` only reads it as a pin where the
 class controls every construction (private constructor, no trait, no write to the parameter). A bare
 METHOD NAME is the third: `KnownThrowers` is keyed on one, which is a guess about a callee rather than a
 fact, so it speaks only for callees this build cannot read. Two of the three were already gated; the tell

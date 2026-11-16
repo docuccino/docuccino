@@ -51,7 +51,7 @@ final class ParsedBodies implements ClassBodies
         );
     }
 
-    public function foldStatus(string $file, Node\Expr $expr, Node\Expr\New_|Node\Expr\StaticCall $at, ?ParamAccessor $read): array
+    public function foldStatus(string $file, Node\Expr $expr, Node\Expr\New_|Node\Expr\StaticCall|Node\Expr\MethodCall $at, ?ParamAccessor $read): array
     {
         if ($read === null) {
             $status = self::constantInt($expr);

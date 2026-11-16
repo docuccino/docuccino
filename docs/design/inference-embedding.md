@@ -849,7 +849,7 @@ A subclass that IS a status states it in its own `parent::__construct()`, which 
 see, so five reads sit under layer 1 and answer in this order — most specific first, each speaking only
 where the one above it could not:
 
-- **What the class pins on every instance** (`HttpExceptionStatus`) — a constant reaching the parent call,
+- **What the class pins on every instance** (`SubclassStatus`) — a constant reaching the parent call,
   or, for a class only it can construct (private constructor, no trait, no write to the parameter before it
   is forwarded), the one status every `new` it writes of itself folds to: one leaving the slot empty takes
   the constructor's default, one writing it takes its own literal, and they either agree or the class pins
@@ -869,7 +869,7 @@ where the one above it could not:
   either agree or the callee states nothing. A `throw` there that presents no construction at all — a
   rethrow, one hop further down — takes the whole reading with it rather than letting the rest agree for a
   subset, and the class's own agreement is then still entitled to answer.
-- **What the class's own constructions agree on** (`HttpExceptionStatus::agreed()`) — the same fold as the
+- **What the class's own constructions agree on** (`SubclassStatus::agreed()`) — the same fold as the
   first read, without the private-constructor condition, and therefore a weaker claim: the constructions
   are a subset of the application's rather than all of them. It answers only where the throw point carried
   NO construction for the reads above to fold and no declaring callee built one either, which is where the
@@ -912,7 +912,7 @@ parameter after forwarding it makes the two disagree, and the end scope names a 
 received.
 
 **A slot can be read through the enum case it holds.** `parent::__construct($reason->status(), …)` forwards
-the `$reason` slot together with the read (`HttpExceptionStatus::statusRead()`, a `ParamAccessor` of kind
+the `$reason` slot together with the read (`SubclassStatus::statusRead()`, a `ParamAccessor` of kind
 `Method` or `Value`), and every fold above then applies that read to the case the construction passes
 (`CaseStatus`, through `EnumAccessorFolder`). A subclass handing that parent a bare `$reason` forwards the
 same read on its own parameter; one handing it `$x->method()` is a read of a read and forwards nothing.
@@ -935,6 +935,19 @@ for `$case->value` too, whose PHPStan type already holds every backing value: wh
 parameter stays the accessor the call site binds — `$this->fault(Fault::Gone)` is that one case's status,
 and a `response()->json()` there no longer keeps the union its type carries. A type that is not wholly enum
 cases (an interface, a nullable) states none.
+
+**A response class the application derives is the same read rooted elsewhere.** `class GoneResponse extends
+Response` handing `parent::__construct('', 410)` states its status exactly where an exception subclass does,
+so `SubclassStatus` is one walk with a ROOT per family: `HttpException` at argument 0, and each framework
+response the refiner reads (`ResponseShapeRefiner::roots()`) at the parameter its installed constructor names
+`status`, with that parameter's default. The response family adds two facts the exception family has no use
+for. A `$this->setStatusCode(…)` the constructor makes as one of its own statements AFTER the parent call
+replaces what the parent was handed, and any other placement of one (before it, in a branch, twice) states
+nothing. And a slot a `parent::__construct()` leaves empty passes the parent's default — the root's, or the
+application constructor's — which holds for exceptions too. The refiner binds a forwarded slot at the `new`
+the way a `throw new` is bound, and reads a JSON or plain response's BODY off the same constructors
+(`ParentArgument`); a file, stream or redirect keeps its own class (`RefinedResponse::$transport`). Only a
+class in the application's files is read: a package's subclass stays the bare class it is typed as.
 
 **Every file the status was read from is a dependency.** The class's whole hierarchy, the factory's file,
 and two the body itself does not name: the file a callee's body is WRITTEN in — PHP reports a

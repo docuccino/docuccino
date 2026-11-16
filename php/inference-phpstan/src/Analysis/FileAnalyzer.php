@@ -32,7 +32,7 @@ use Throwable;
  *     arrows: array<int, array{Node\Expr\ArrowFunction, Scope}>,
  *     arrays: array<string, array<string, Node\Expr\Array_>>,
  *     locals: array<string, array<string, array{Node\Expr, Scope}|null>>,
- *     calls: array<int, Scope>,
+ *     calls: array<string, Scope>,
  *     branches: array<string, array{Scope, Scope}>,
  *     mentions: array<string, array<string, list<int>>>,
  *     members: array<int, true>,
@@ -209,9 +209,9 @@ final class FileAnalyzer
     }
 
     /**
-     * The scope PHPStan resolved AT one construction or static call, or null where the file holds no such
-     * call at that position. Keyed by start offset rather than by node identity: the same file parses to
-     * fresh nodes whenever a recorded walk has been discarded, and an offset survives that where an object
+     * The scope PHPStan resolved AT one construction, static or method call, or null where the file holds no such
+     * call at that position. Keyed by span rather than by node identity: the same file parses to
+     * fresh nodes whenever a recorded walk has been discarded, and a span survives that where an object
      * handle does not.
      *
      * This is the scope a reader folding one ARGUMENT of that call must use. The method's end scope answers
@@ -219,11 +219,9 @@ final class FileAnalyzer
      * reassigns its status parameter after forwarding it makes the two disagree, with the end scope naming
      * a value the callee never received.
      */
-    public function scopeAtCall(string $file, Node\Expr\New_|Node\Expr\StaticCall $call): ?Scope
+    public function scopeAtCall(string $file, Node\Expr\New_|Node\Expr\StaticCall|Node\Expr\MethodCall $call): ?Scope
     {
-        $position = $call->getStartFilePos();
-
-        return $position < 0 ? null : ($this->harvest($file)['calls'][$position] ?? null);
+        return $call->getStartFilePos() < 0 ? null : ($this->harvest($file)['calls'][self::spanKey($call)] ?? null);
     }
 
     /**
@@ -368,7 +366,7 @@ final class FileAnalyzer
         $arrays = [];
         /** @var array<string, array<string, array{Node\Expr, Scope}|null>> $locals */
         $locals = [];
-        /** @var array<int, Scope> $calls the scope at each construction/static call, by start offset */
+        /** @var array<string, Scope> $calls the scope at each call a status read folds an argument of, by span */
         $calls = [];
         /** @var array<string, true> $opaque scopes where a write named no single local */
         $opaque = [];
@@ -408,13 +406,14 @@ final class FileAnalyzer
                 $arrows[$node->getOriginalNode()->getStartFilePos()] = [$node->getOriginalNode(), $scope];
             }
 
-            // The two call forms whose arguments a status read folds ({@see scopeAtCall()}), paired with the
-            // scope they are evaluated in. Collected here rather than on a walk of their own, so the pairing
-            // is the same walk's and costs nothing beyond the entry.
-            if (($node instanceof Node\Expr\New_ || $node instanceof Node\Expr\StaticCall)
+            // The call forms whose arguments a status read folds ({@see scopeAtCall()}), paired with the scope
+            // they are evaluated in. Collected here rather than on a walk of their own, so the pairing is the
+            // same walk's and costs nothing beyond the entry. Keyed by span, since `Foo::make()->send()` starts
+            // two of them at one offset.
+            if (($node instanceof Node\Expr\New_ || $node instanceof Node\Expr\StaticCall || $node instanceof Node\Expr\MethodCall)
                 && $node->getStartFilePos() >= 0
             ) {
-                $calls[$node->getStartFilePos()] = $scope;
+                $calls[self::spanKey($node)] = $scope;
             }
 
             // A ternary's branches are paired with their scopes once the walk is done, since which of a node

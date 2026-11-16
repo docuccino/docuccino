@@ -32,8 +32,10 @@ use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Support\ResponseFactoryCall;
 use Docuccino\Inference\PhpStan\Support\ScalarFold;
 use Docuccino\Inference\PhpStan\Support\TransportResponseCall;
+use Docuccino\Inference\PhpStan\Throwing\AnalyzedBodies;
 use Docuccino\Inference\PhpStan\Throwing\CaseStatus;
 use Docuccino\Inference\PhpStan\Throwing\ConstantSource;
+use Docuccino\Inference\PhpStan\Throwing\SubclassStatus;
 use Docuccino\Inference\PhpStan\Trace\Callee;
 use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
 use Docuccino\Inference\PhpStan\Translation\TypeTranslator;
@@ -43,6 +45,7 @@ use PHPStan\Reflection\ParameterReflection;
 use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\Type\ObjectType;
 use PHPStan\Type\Type;
+use ReflectionClass;
 
 /**
  * Recovers the real response shape when a handler builds its response through a project helper whose
@@ -76,6 +79,12 @@ final class ResponseShapeRefiner
         'Symfony\\Component\\HttpFoundation\\Response',
     ];
 
+    /** The responses whose body is JSON; the rest of {@see RESPONSE_FQCNS} send their content as it is. */
+    private const JSON_FQCNS = [
+        'Illuminate\\Http\\JsonResponse',
+        'Symfony\\Component\\HttpFoundation\\JsonResponse',
+    ];
+
     /** What `view()` renders, and so the body of a response the factory makes of a view. */
     private const VIEW = 'Illuminate\\Contracts\\View\\View';
 
@@ -96,6 +105,12 @@ final class ResponseShapeRefiner
 
     /** Reads which members of an object body its constructor takes off its parameters. */
     private readonly ConstructorEchoes $echoes;
+
+    /** Reads the status a response class the application derives hands its framework parent. */
+    private readonly SubclassStatus $subclasses;
+
+    /** …and the body and headers it hands it. */
+    private readonly ParentArgument $subclassArguments;
 
     /**
      * The object whose application-written `toResponse()` is being read, and the class that wrote it: inside
@@ -121,6 +136,9 @@ final class ResponseShapeRefiner
         $this->declarations = new ComponentDeclarations($reflectionProvider);
         $this->fluentChain = new FluentResponseChain($reflectionProvider, $translator, $this->statusIn(...));
         $this->echoes = new ConstructorEchoes($this->touchProject(...));
+        $bodies = new AnalyzedBodies($fileAnalyzer, $caseStatus);
+        $this->subclasses = SubclassStatus::ofResponses($bodies, $appFilter, self::roots());
+        $this->subclassArguments = new ParentArgument($bodies, $appFilter);
         $this->enumFolder = new EnumAccessorFolder(
             $this->fileAnalyzer,
             $this->appFilter,
@@ -128,6 +146,17 @@ final class ResponseShapeRefiner
                 $this->touch($file);
             },
         );
+    }
+
+    /**
+     * Every framework response the refiner reads where it is built, which an application's own response
+     * class derives from ({@see isResponseSubclass()}).
+     *
+     * @return list<string>
+     */
+    public static function roots(): array
+    {
+        return [...self::RESPONSE_FQCNS, ...TransportResponseCall::CLASSES];
     }
 
     /** Whether a FQCN is a bare response type worth enriching — the harvest's gate before descending. */
@@ -145,10 +174,23 @@ final class ResponseShapeRefiner
         return in_array($fqcn, TransportResponseCall::CLASSES, true);
     }
 
-    /** Either kind of response the refiner reads where it was built. */
-    private static function isRefinable(string $fqcn): bool
+    /**
+     * Whether a FQCN is a response class the application derives from one of the framework's, whose own
+     * constructor may name its status ({@see SubclassStatus}). Only one written in the application's own
+     * files: a package's constructor is not read, so its class stays the bare response it is typed as.
+     */
+    public function isResponseSubclass(string $fqcn): bool
     {
-        return self::isResponseFqcn($fqcn) || self::isTransportFqcn($fqcn);
+        $root = $this->subclasses->root($fqcn);
+        $file = $root === null || $root === $fqcn || ! class_exists($fqcn) ? false : (new ReflectionClass($fqcn))->getFileName();
+
+        return $file !== false && $this->appFilter->isProjectFile($file);
+    }
+
+    /** Any kind of response the refiner reads where it was built. */
+    private function isRefinable(string $fqcn): bool
+    {
+        return self::isResponseFqcn($fqcn) || self::isTransportFqcn($fqcn) || $this->isResponseSubclass($fqcn);
     }
 
     /** Null when nothing better than the bare type is recoverable. */
@@ -275,11 +317,15 @@ final class ResponseShapeRefiner
             }
         }
 
-        // 1. `new JsonResponse($body, $status, [headers])` — fold the constructor arguments directly.
+        // 1. `new JsonResponse($body, $status, [headers])` — fold the constructor arguments directly — or
+        // `new GoneResponse(…)`, whose own constructor hands its framework parent the status and body.
         if ($expr instanceof Node\Expr\New_ && $expr->class instanceof Node\Name) {
             $class = $scope->resolveName($expr->class);
             if (self::isResponseFqcn($class)) {
                 return $this->foldConstructor($expr, $class, $scope, $paramNames);
+            }
+            if ($this->isResponseSubclass($class)) {
+                return $this->foldSubclass($expr, $class, $scope, $paramNames);
             }
         }
 
@@ -311,7 +357,7 @@ final class ResponseShapeRefiner
         if ($expr instanceof Node\Expr\Variable
             && is_string($expr->name)
             && $type instanceof ClassT
-            && self::isRefinable($type->fqcn)
+            && $this->isRefinable($type->fqcn)
         ) {
             return $this->refineLocal($expr->name, $scope, $paramNames, $depth);
         }
@@ -322,7 +368,7 @@ final class ResponseShapeRefiner
         // own ({@see parentRendering()}). One shape only: an override with several arms is several
         // responses, which only {@see refineArms()} can carry.
         if ($expr instanceof Node\Expr\MethodCall || $expr instanceof Node\Expr\StaticCall) {
-            if ($type instanceof ClassT && self::isRefinable($type->fqcn)) {
+            if ($type instanceof ClassT && $this->isRefinable($type->fqcn)) {
                 $render = $expr instanceof Node\Expr\MethodCall ? $this->rendering($expr, $scope) : null;
                 if ($render !== null) {
                     return ResponseArms::single($this->renderArms($render, $depth, $paramNames));
@@ -664,6 +710,161 @@ final class ResponseShapeRefiner
 
         // A status stated and unread replaced the default the bare class would publish.
         return $status === null && $statusSource === null ? $refined->withUnreadStatus() : $refined;
+    }
+
+    /**
+     * Fold `new GoneResponse(…)`, a response class the application derives from the framework's: the status
+     * its constructors hand the framework's ({@see SubclassStatus}) — fixed by the class, or a parameter of
+     * its own constructor filled here, as a `throw new` fills an exception's — and, for a JSON or plain
+     * response, the body and media type they hand it ({@see ParentArgument}). A class that states nothing
+     * this can read is left the bare class it is typed as, and so is a file, stream or redirect sent with its
+     * root's default.
+     *
+     * @param  list<string>  $paramNames  the current function's parameter names
+     */
+    private function foldSubclass(Node\Expr\New_ $new, string $class, Scope $scope, array $paramNames): ?RefinedResponse
+    {
+        $root = $this->subclasses->root($class) ?? $class;
+        foreach ($this->subclasses->filesFor($class) as $file) {
+            $this->touchProject($file);
+        }
+
+        $args = $new->isFirstClassCallable()
+            ? ArgumentSlots::of([])
+            : ArgumentSlots::of($new->getArgs(), $this->constructorParameterNames($class));
+
+        $stated = $this->subclassStatus($class, $args, $scope, $paramNames);
+        if ($stated === null) {
+            return null;
+        }
+        [$status, $statusSource] = $stated;
+
+        if (self::isTransportFqcn($root)) {
+            if ($status instanceof LiteralT && $status->value === $this->subclasses->rootDefault($root)) {
+                return null;
+            }
+            $refined = RefinedResponse::transported($class, $status, $statusSource);
+
+            return $status === null && $statusSource === null ? $refined->withUnreadStatus() : $refined;
+        }
+
+        [$payload, $provenance, $statusTexts] = $this->subclassBody($class, $root, $args, $scope, $paramNames);
+        $contentType = $this->subclassContentType($class, $root, $args, $scope);
+
+        // As for the factory's plain response ({@see foldMade()}): its default status over content nothing
+        // read is what the bare class already says.
+        if ($payload === null && $statusSource === null && $contentType === null && ! in_array($root, self::JSON_FQCNS, true)
+            && $status instanceof LiteralT && $status->value === $this->subclasses->rootDefault($root)
+        ) {
+            return null;
+        }
+
+        return RefinedResponse::fromConstructor($payload, $status, $statusSource, $contentType, $provenance, $statusTexts);
+    }
+
+    /**
+     * The status a construction of a derived response is sent with, or the parameter of the enclosing
+     * function it reads; null where the class states nothing. The class's slot is read at this call exactly
+     * as the root's own constructor's would be — a literal, a constant, a read on an enum case, a choice —
+     * through whatever read the class applies to it (`$fault->statusCode()`); a slot left empty takes the
+     * class's default.
+     *
+     * @param  list<string>  $paramNames
+     * @return array{LiteralT|UnionT|null, ParamAccessor|null}|null
+     */
+    private function subclassStatus(string $class, ArgumentSlots $args, Scope $scope, array $paramNames): ?array
+    {
+        $pinned = $this->subclasses->pinned($class);
+        if ($pinned !== null) {
+            return [new LiteralT($pinned), null];
+        }
+
+        $slot = $this->subclasses->statusParameter($class);
+        if ($slot === null) {
+            return null;
+        }
+
+        $argument = $args->at($slot);
+        if ($argument === null) {
+            $default = $args->knows($slot) ? $this->constructorDefault($class, $slot) : null;
+
+            return [ScalarFold::statusOf($default), null];
+        }
+
+        $read = $this->subclasses->statusRead($class);
+        if ($read === null) {
+            return $this->resolveStatus($argument, $scope, $paramNames);
+        }
+
+        $codes = $this->statusIn($argument, $scope, $read);
+
+        return [$codes, $codes === null ? $this->rehomeAccessor($argument, $read, $paramNames) : null];
+    }
+
+    /**
+     * The body a derived JSON or plain response is sent with: what its constructors fix, typed where it is
+     * written, or what this construction passes to the parameter they hand through, or that parameter's
+     * default. A plain response's content is read as the factory's is ({@see MadeResponseCall}): provably
+     * empty is no body, and anything else a string sent as it is, whose shape is not read. Nothing, where
+     * neither.
+     *
+     * @param  list<string>  $paramNames
+     * @return array{?DType, array<string, ParamAccessor>, array<string, array{ParamAccessor, ?LiteralT}>}
+     */
+    private function subclassBody(string $class, string $root, ArgumentSlots $args, Scope $scope, array $paramNames): array
+    {
+        $landing = $this->subclassArguments->body($class, $root);
+        $body = $landing === null || isset($landing['expr']) ? null : $args->at($landing['parameter']);
+        $type = match (true) {
+            $landing === null => null,
+            isset($landing['expr']) => $this->fileAnalyzer->scopeAtCall($landing['file'], $landing['call'])?->getType($landing['expr']),
+            $body !== null => $scope->getType($body),
+            $args->knows($landing['parameter']) => $this->constructorDefault($class, $landing['parameter']),
+            default => null,
+        };
+
+        if ($type === null || ! in_array($root, self::JSON_FQCNS, true)) {
+            return [$type !== null && MadeResponseCall::isEmpty($type) ? new VoidT : null, [], []];
+        }
+
+        // A JSON response handed no data sends `{}`, which no `null` describes.
+        $payload = $type->isNull()->yes() ? null : $this->payloadOf($type);
+
+        return [$payload, ...($body === null ? [[], []] : $this->bodyProvenance($body, $scope, $paramNames))];
+    }
+
+    /**
+     * The media type a `Content-Type` header names in the headers a derived response hands the framework's —
+     * fixed by its constructors, or passed by this construction — read as `new JsonResponse()`'s are.
+     */
+    private function subclassContentType(string $class, string $root, ArgumentSlots $args, Scope $scope): ?string
+    {
+        $landing = $this->subclassArguments->headers($class, $root);
+        if ($landing === null) {
+            return null;
+        }
+
+        if (isset($landing['expr'])) {
+            $at = $this->fileAnalyzer->scopeAtCall($landing['file'], $landing['call']);
+
+            return $at === null ? null : ContentTypeHeader::inArray($landing['expr'], $at);
+        }
+
+        $headers = $args->at($landing['parameter']);
+
+        return $headers === null ? null : ContentTypeHeader::inArray($headers, $scope);
+    }
+
+    /** The default a class's constructor gives one parameter, as the analyser reads the declaration. */
+    private function constructorDefault(string $class, int $index): ?Type
+    {
+        if (! $this->reflectionProvider->hasClass($class) || ! $this->reflectionProvider->getClass($class)->hasConstructor()) {
+            return null;
+        }
+
+        $parameters = $this->reflectionProvider->getClass($class)->getConstructor()->getVariants()[0]->getParameters();
+
+        return ($parameters[$index] ?? null)?->getDefaultValue();
     }
 
     /** What a chain's receiver is when nothing was recovered of it: nothing, but of its own class. */

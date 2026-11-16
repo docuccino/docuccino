@@ -436,6 +436,12 @@ in the file being walked, and an array return is no type the trace follows:
   `Response` and `Redirect` facades and `new`, the status a literal, a constant, an enum case's read, a
   named argument, a choice, a chain, a local or a helper's parameter; beside the calls that take no status,
   one sent with the framework's default, and one whose status nothing can read.
+- `app/Http/Controllers/ResponseSubclassController.php` and `app/Http/Responses/` — responses the
+  application derives from the framework's so that the class names its status: a plain response, a JSON
+  response, a redirect, a stream, a file and Symfony's own response, each handing `parent::__construct()` a
+  literal, a constant, an enum case's read or a parameter of its own constructor, or setting the status in
+  that constructor; two classes below the framework, a fixed JSON body, a private constructor's factory, a
+  `Responsable` rendering through the factory, and one setting its status on one branch only.
 - `app/Http/Controllers/DashboardPageController.php` — a Blade page: `view('…')` behind a declared
   `: View` (the contract) and behind no return type at all. Proof that the engine hands back the CONCRETE
   `Illuminate\View\View` either way, so recognising only the contract would miss every real app.

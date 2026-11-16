@@ -20,7 +20,7 @@ use Docuccino\Inference\PhpStan\Tests\Support\HttpProbeRows;
 use Docuccino\Inference\PhpStan\Tests\Support\ParsedBodies;
 use Docuccino\Inference\PhpStan\Tests\Support\RecordingBodies;
 use Docuccino\Inference\PhpStan\Throwing\ClassBodies;
-use Docuccino\Inference\PhpStan\Throwing\HttpExceptionStatus;
+use Docuccino\Inference\PhpStan\Throwing\SubclassStatus;
 use PhpParser\Node;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -31,9 +31,9 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  * the same bodies and folds the same constants is the fixture group's job ({@see ThrowStatusTest});
  * everything the read DECIDES is decided here.
  */
-function httpStatuses(bool $projectSeesTheFile = true): HttpExceptionStatus
+function httpStatuses(bool $projectSeesTheFile = true): SubclassStatus
 {
-    return new HttpExceptionStatus(new ParsedBodies, httpProjectFilter($projectSeesTheFile));
+    return SubclassStatus::ofHttpExceptions(new ParsedBodies, httpProjectFilter($projectSeesTheFile));
 }
 
 function httpProjectFilter(bool $sees): ProjectFilter
@@ -72,7 +72,7 @@ it('reads one class\'s own constructions once, however many routes throw it', fu
     // The memo holds its NULLS too, which a return value cannot show: a class that agrees on nothing is
     // the commonest answer, and re-reading it per route would re-parse the same body for every throw.
     $bodies = new RecordingBodies(new ParsedBodies);
-    $statuses = new HttpExceptionStatus($bodies, httpProjectFilter(true));
+    $statuses = SubclassStatus::ofHttpExceptions($bodies, httpProjectFilter(true));
 
     $agreed = $statuses->agreed(ProbeBranchingFactory::class);
     $folds = count($bodies->folded);
@@ -206,7 +206,7 @@ it('states nothing about a class whose body it cannot read', function (): void {
             return [];
         }
 
-        public function foldStatus(string $file, Node\Expr $expr, Node\Expr\New_|Node\Expr\StaticCall $at, ?ParamAccessor $read): array
+        public function foldStatus(string $file, Node\Expr $expr, Node\Expr\New_|Node\Expr\StaticCall|Node\Expr\MethodCall $at, ?ParamAccessor $read): array
         {
             return ['status' => null, 'files' => []];
         }
@@ -217,7 +217,7 @@ it('states nothing about a class whose body it cannot read', function (): void {
         }
     };
 
-    $statuses = new HttpExceptionStatus($blind, httpProjectFilter(true));
+    $statuses = SubclassStatus::ofHttpExceptions($blind, httpProjectFilter(true));
 
     expect($statuses->pinned(ProbePinned::class))->toBeNull()
         ->and($statuses->pinned(ProbeFactory::class))->toBeNull()
@@ -228,7 +228,7 @@ it('states nothing about a class whose body it cannot read', function (): void {
 });
 
 it('answers an HttpException subclass and nothing else', function (string $fqcn, bool $is): void {
-    expect(httpStatuses()->isHttpException($fqcn))->toBe($is);
+    expect(httpStatuses()->governs($fqcn))->toBe($is);
 })->with([
     'a subclass' => [ProbePinned::class, true],
     'the class itself' => [HttpException::class, true],

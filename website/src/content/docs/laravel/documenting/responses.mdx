@@ -459,6 +459,37 @@ return back(303);                                                        // → 
 `download()`, `file()`, `streamDownload()` and `eventStream()` take no status, so they're documented as
 `200`.
 
+Your own response class is read the same way. The status its constructor hands the framework's is the
+status the class is sent with, and for a JSON or plain response, so is the body:
+
+```php
+class InvoiceGoneResponse extends Response
+{
+    public function __construct()
+    {
+        parent::__construct('', 410);
+    }
+}
+
+class InvoiceLockedResponse extends JsonResponse
+{
+    public function __construct(array $invoice, int $status = 423)
+    {
+        parent::__construct(['invoice' => $invoice], $status);
+    }
+}
+
+return new InvoiceGoneResponse;                  // → 410, no body
+return new InvoiceLockedResponse($invoice);      // → 423 with that body
+return new InvoiceLockedResponse($invoice, 409); // → 409 with that body
+```
+
+The same holds for a class that extends a redirect, stream or file response, for a status set by
+`$this->setStatusCode(…)` once the parent's constructor has run, for a class two levels below the
+framework's, and for a static factory such as `InvoiceGoneResponse::make()`. A class that sets its status
+on only one branch of its constructor states no one status, so it's documented as the framework class it
+extends.
+
 A status Docuccino can't read at all, such as `->setStatusCode($upstream->status())`, is not documented
 under a code the endpoint may never send. Its body goes under `default` ("any status") and an
 `inferred-response.status-unread` info diagnostic names the action. Name the codes it sends with
