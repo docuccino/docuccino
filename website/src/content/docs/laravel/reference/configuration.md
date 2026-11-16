@@ -1029,6 +1029,9 @@ So the build tells you, in one of two ways:
 - A `docuccino.yaml` beside the leftovers — [`config.stale-php-keys`](/laravel/reference/diagnostics/)
   warns and names them. Nothing is lost; the YAML says what the document is.
 
+Only keys that name a build setting count. `config/docuccino.php` is your application's file too, so a
+key of your own there, like `links` or `requires`, is left alone and reported by neither.
+
 Both name the exact keys, so moving them is a copy under the same names into `docuccino.yaml`, then a
 delete from `config/docuccino.php`. Four keys are the exception.
 
@@ -1084,7 +1087,9 @@ return [
 The `documents` map here is keyed the way `docuccino.yaml` keys it, and holds nothing but each
 document's `viewer`. A document declared there and absent here has no page to serve, which is what an
 export-only document is; a viewer keyed by a document the build does not define registers routes that
-fail every request, and the build says so with `config.viewer-orphan`.
+fail every request, and the build says so with `config.viewer-orphan`. Leave `documents` out and the
+shipped one applies, serving a document named `default`. If `docuccino.yaml` names its documents
+otherwise, set `documents` here to the viewers you want, or to `[]` for none.
 
 The file is plain data — no imports, no class references, `env()` the only call it makes — so it stays
 safe to load where Docuccino itself isn't installed. A `--no-dev` production boot loads every file in
