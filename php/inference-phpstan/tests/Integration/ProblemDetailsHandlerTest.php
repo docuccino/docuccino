@@ -83,7 +83,7 @@ it('answers each exception with the problem the helper’s arm builds for it', f
     ]],
     // The extension members the arm hands the problem are spread into its body.
     'built by a helper handed the exception' => ['Illuminate\\Validation\\ValidationException', null, [
-        'type' => 'https://errors.test/problems/validation', 'title' => 'Unprocessable Content', 'status' => 'scalar', 'detail' => 'scalar', 'instance' => 'scalar', 'errors' => 'list',
+        'type' => 'https://errors.test/problems/validation', 'title' => 'Unprocessable Content', 'status' => 'scalar', 'detail' => 'scalar', 'instance' => 'scalar', 'errors' => 'map',
     ]],
     // A parameter the factory does not pass on takes its default, and an extension it passes none of adds nothing.
     'built by a factory' => ['Illuminate\\Auth\\AuthenticationException', 401, [

@@ -79,7 +79,7 @@ function statusTextProblemArray(): ClassT
             new ArrayShapeField('type', new LiteralT('about:blank')),
             new ArrayShapeField('title', new StatusTextMarkerT(ScalarT::string(), new LiteralT('Error'))),
             new ArrayShapeField('status', new StatusMarkerT),
-            new ArrayShapeField('errors', new ListT(new UnknownT('mixed')), optional: true),
+            new ArrayShapeField('errors', new MapT(ScalarT::string(), new ListT(ScalarT::string())), optional: true),
         ]),
         new UnknownT('status not folded'),
         new LiteralT('application/problem+json'),

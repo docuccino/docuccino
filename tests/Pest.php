@@ -158,6 +158,17 @@ use Workbench\App\Http\Requests\StoreVersionedFormRequest;
 uses()->in(dirname(__DIR__).'/php/core/tests');
 uses(TestCase::class)->in(dirname(__DIR__).'/php/laravel/tests');
 
+// What one test makes loadable must not outlive it in the worker.
+uses()->afterEach(function (): void {
+    forgetFixtureAppClasses();
+})->in(
+    dirname(__DIR__).'/php/core/tests',
+    dirname(__DIR__).'/php/inference-phpstan/tests',
+    dirname(__DIR__).'/php/attributes/tests',
+    dirname(__DIR__).'/php/laravel/tests',
+    dirname(__DIR__).'/tests/tools',
+);
+
 /**
  * Bind the deterministic workbench stub {@see TypeEngine} the Laravel feature tests build against.
  */
@@ -2837,25 +2848,26 @@ function loadFixtureAppVersionChanges(): void
 }
 
 /**
- * Makes the fixture app's classes under `App\<directory>\` loadable in THIS process, for a test that
- * reflects the very class the real engine analysed rather than a twin of it. Only for classes whose
+ * Makes the fixture app's classes under `App\<directory>\` loadable for the rest of THIS test, for a test
+ * that reflects the very class the real engine analysed rather than a twin of it. Only for classes whose
  * dependencies this process also has, for the reason {@see loadFixtureAppVersionChanges()} gives.
  *
- * Registered once per directory per process and idempotent, because a Pest worker runs many tests.
+ * The loader is removed after the test ({@see forgetFixtureAppClasses()}), because a Pest worker runs many
+ * test files and one reflecting a scripted `App\…` class must not find it loadable because of whichever
+ * file ran before it. A class the test did load stays defined: PHP cannot unload one.
  */
 function loadFixtureAppClasses(string $directory): void
 {
-    static $registered = [];
+    $loaders = &fixtureAppClassLoaders();
 
-    if (isset($registered[$directory])) {
+    if (isset($loaders[$directory])) {
         return;
     }
 
-    $registered[$directory] = true;
     $prefix = 'App\\'.$directory.'\\';
     $root = FixtureRunner::appRoot().'/app/'.$directory.'/';
 
-    spl_autoload_register(static function (string $class) use ($prefix, $root): void {
+    $loaders[$directory] = static function (string $class) use ($prefix, $root): void {
         if (! str_starts_with($class, $prefix)) {
             return;
         }
@@ -2865,7 +2877,29 @@ function loadFixtureAppClasses(string $directory): void
         if (is_file($file)) {
             require_once $file;
         }
-    });
+    };
+
+    spl_autoload_register($loaders[$directory]);
+}
+
+/** Removes every loader {@see loadFixtureAppClasses()} registered; run after each test. */
+function forgetFixtureAppClasses(): void
+{
+    $loaders = &fixtureAppClassLoaders();
+
+    foreach ($loaders as $loader) {
+        spl_autoload_unregister($loader);
+    }
+
+    $loaders = [];
+}
+
+/** @return array<string, Closure(string): void> the loaders registered in this process, by directory */
+function &fixtureAppClassLoaders(): array
+{
+    static $loaders = [];
+
+    return $loaders;
 }
 
 /**

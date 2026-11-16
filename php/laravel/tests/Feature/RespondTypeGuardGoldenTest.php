@@ -10,6 +10,7 @@ use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\ListT;
 use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\MapT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\StatusMarkerT;
 use Docuccino\Core\Inference\DType\StatusTextMarkerT;
@@ -51,7 +52,7 @@ function respondTypeGuardAnalysis(): ActionAnalysis
             // The callback reads both off the rendered response: the reason phrase and the code it is sent with.
             new ArrayShapeField('title', new StatusTextMarkerT(ScalarT::string(), new LiteralT('Error'))),
             new ArrayShapeField('status', new StatusMarkerT),
-            new ArrayShapeField('errors', new ListT(new UnknownT('mixed')), optional: true),
+            new ArrayShapeField('errors', new MapT(ScalarT::string(), new ListT(ScalarT::string())), optional: true),
         ]),
         new UnknownT('status not folded'),
         new LiteralT('application/problem+json'),

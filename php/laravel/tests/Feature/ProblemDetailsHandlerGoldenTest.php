@@ -11,6 +11,7 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\ListT;
 use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\MapT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\ReturnSite;
@@ -20,6 +21,7 @@ use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
+use Docuccino\Laravel\Extensions\MessageBagTypeToSchema;
 use Docuccino\Laravel\Integrations\InferredHandler\ReceivedException;
 use Docuccino\Laravel\Testing\ApiContract;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
@@ -85,7 +87,7 @@ function problemDetailsResponse(string $thrown): DType
             'Unprocessable Content',
             ScalarT::int(),
             ScalarT::string(),
-            [new ArrayShapeField('errors', new ListT(new UnknownT('mixed')))],
+            [new ArrayShapeField('errors', new MapT(ScalarT::string(), new ListT(ScalarT::string())))],
         ),
         AuthenticationException::class => $problem($blank, 'Unauthenticated', new LiteralT(401), new LiteralT('Sign in to continue.')),
         NotFoundHttpException::class => $problem($blank, 'Request refused', new UnknownT('mixed'), ScalarT::string()),
@@ -161,6 +163,12 @@ it('publishes the problem each error is answered with, byte-identically', functi
     expect($deferred)->toHaveCount(1)
         ->and($deferred[0]->message)->toContain('ProblemException')
         ->and($deferred[0]->message)->not->toContain('OrderConflictException');
+
+    // The validation problem's `errors` are its failed fields, each to its messages: the one errors map the
+    // framework's own 422 and a message bag are published as.
+    $document = json_decode((new UirEmitter)->emit($warm->document), true);
+    expect($document['paths']['/api/problems/invalid']['post']['responses']['422']['content']['application/problem+json']['schema']['properties']['errors'] ?? null)
+        ->toBe(MessageBagTypeToSchema::SCHEMA);
 });
 
 it('documents the problem the server really sends for each error', function (string $action, int $status): void {
@@ -178,13 +186,13 @@ it('documents the problem the server really sends for each error', function (str
     }
 })->with([
     'a problem built in an arm' => ['conflict', 409],
+    // Its `errors` are `ValidationException::errors()`: each field's messages, keyed by the field.
+    'a problem carrying the failed fields' => ['invalid', 422],
     'a problem a factory builds' => ['unauthenticated', 401],
     'a problem whose status the exception carries' => ['missing', 404],
     'the default arm' => ['failed', 500],
     // Not `carried`: the problem a ProblemException carries was chosen where it was thrown, which no arm
-    // states, so the document cannot say which one the server sends. Not `invalid` either: its `errors`
-    // are what `ValidationException::errors()` declares, a bare `array`, which the build reads as a list
-    // where the server sends an object keyed by field.
+    // states, so the document cannot say which one the server sends.
 ]);
 
 it('scripts what the real engine recovers from the fixture app’s same handler', function (): void {

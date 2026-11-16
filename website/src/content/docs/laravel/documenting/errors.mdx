@@ -304,6 +304,9 @@ so the response falls back to the status Docuccino inferred for the exception it
 guessing. When the status comes from an **enum case** the arm names explicitly, Docuccino folds it — see
 [enum-backed problem types](#enum-backed-problem-types) below.
 
+A failed validation's messages, `$e->errors()`, are published as the map Laravel sends them as: each
+field to its list of messages, the same `errors` the framework's own `422` carries.
+
 An `application/problem+json` factory is documented under `application/problem+json`, whether the helper
 passes the label as a constructor argument or writes it onto the response it returns:
 
