@@ -413,7 +413,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             $vendor = new VendorRoutePolicy($app->basePath('vendor'));
 
             return new QueryBuilderParametersExtension(
-                QueryBuilderConfig::fromArray($config, self::spatieQueryBuilderMajor()),
+                QueryBuilderConfig::fromInstalled($config, self::spatieQueryBuilderVersion()),
                 isVendorFile: $vendor->isVendorFile(...),
             );
         });
@@ -422,7 +422,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             /** @var array<string, mixed> $config */
             $config = (array) config('query-builder', []);
 
-            return new QueryBuilderConfigDigestContributor(QueryBuilderConfig::fromArray($config, self::spatieQueryBuilderMajor()));
+            return new QueryBuilderConfigDigestContributor(QueryBuilderConfig::fromInstalled($config, self::spatieQueryBuilderVersion()));
         });
 
         // Passport's oauth2 scheme (and the cache digest below) need facts that only live on the
@@ -539,20 +539,20 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
     }
 
     /**
-     * The installed spatie/laravel-query-builder major, off Composer's runtime API. No extra cache
+     * The installed spatie/laravel-query-builder version, off Composer's runtime API. No extra cache
      * keying: the app's composer.lock is already in {@see BuildFingerprint}, so an upgrade retires
      * warm fragments on its own.
      */
-    private static function spatieQueryBuilderMajor(): int
+    private static function spatieQueryBuilderVersion(): ?string
     {
         if (! class_exists(InstalledVersions::class)) {
-            return QueryBuilderConfig::majorOf(null);
+            return null;
         }
 
         try {
-            return QueryBuilderConfig::majorOf(InstalledVersions::getVersion('spatie/laravel-query-builder'));
+            return InstalledVersions::getVersion('spatie/laravel-query-builder');
         } catch (Throwable) {
-            return QueryBuilderConfig::majorOf(null);
+            return null;
         }
     }
 

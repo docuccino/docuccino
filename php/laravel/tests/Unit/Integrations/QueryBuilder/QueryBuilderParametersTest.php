@@ -240,6 +240,35 @@ it('reads a filter with its own delimiter under that delimiter, and every other 
 ]);
 
 /**
+ * With `filter_value_splitting_enabled` off, Spatie hands a filter without a delimiter of its own the raw
+ * value, so `filter[status]=draft,published` is matched as the one value `draft,published`: the filter
+ * takes a single value and is published as one, exactly as under an empty delimiter. A filter with its own
+ * delimiter still splits on it, and the sorts, which the switch does not reach, keep the configured comma.
+ */
+it('publishes a filter without its own delimiter as a single value when splitting is off', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->sorts = [new QbEntry('name', 'default')];
+        $f->filters = [
+            (new QbEntry('status', 'exact'))->withColumn(enumColumnSchema(), enumTyped: true),
+            (new QbEntry('commas', 'exact', internal: 'status', delimiter: ','))->withColumn(enumColumnSchema(), enumTyped: true),
+        ];
+    });
+    $parameters = new QueryBuilderParameters;
+
+    $off = specsByName($parameters->build($facts, bracketedPolicy(), new QueryBuilderConfig(filterSplitting: false)));
+    $unsplit = specsByName($parameters->build($facts, bracketedPolicy(), new QueryBuilderConfig(delimiter: '')));
+    $on = specsByName($parameters->build($facts, bracketedPolicy(), new QueryBuilderConfig));
+
+    expect($off['filter[status]']->schema)->toBe(enumColumnSchema())
+        ->and($off['filter[status]']->style)->toBeNull()
+        ->and((string) $off['filter[status]']->description)->not->toContain('comma-separated')
+        ->and($off['filter[status]']->schema)->toBe($unsplit['filter[status]']->schema)
+        ->and($off['filter[commas]']->schema)->toBe($on['filter[commas]']->schema)
+        ->and($off['filter[commas]']->style)->toBe('form')
+        ->and($off['sort']->schema)->toBe($on['sort']->schema);
+});
+
+/**
  * Below spatie/laravel-query-builder v7 the enum grammar itself is unproven — the explicit factory
  * minted Count/Exists + partials there, and the old config keys are not read — so sort, include and
  * the fields groups all degrade to the vague-true plain string: defaults in prose, no separator note

@@ -11,8 +11,8 @@ use Workbench\App\Models\Gadget;
 
 /**
  * Enum filters that split their values on a separator of their own, set with `->delimiter()`, beside one
- * splitting on the configured comma: a pipe, no splitting at all, and a pipe written before and after a
- * default.
+ * splitting on the configured comma: a pipe, no splitting at all, a pipe written before and after a
+ * default, and the comma named outright.
  */
 final class FilterDelimitersController
 {
@@ -28,6 +28,7 @@ final class FilterDelimitersController
                 AllowedFilter::exact('unsplit', 'status')->delimiter(''),
                 AllowedFilter::exact('piped_default', 'status')->delimiter('|')->default('draft|published'),
                 AllowedFilter::exact('default_then_piped', 'status')->default('draft')->delimiter('|'),
+                AllowedFilter::exact('commas', 'status')->delimiter(','),
             ])
             ->paginate(20);
     }
