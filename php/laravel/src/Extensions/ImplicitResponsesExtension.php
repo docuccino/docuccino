@@ -40,7 +40,7 @@ use ReflectionClass;
  *  | 401    | the route runs an authenticator ({@see RouteAuthentication}) AND is not `#[Unauthenticated]` |
  *  | 422    | validation rules were recovered (Data / FormRequest / inline / action rules()), body or query |
  *  | 404    | the route has ≥1 model-bound path parameter (one 404 per operation, not per param) |
- *  | 403    | `can:` / `signed` / `verified` middleware, or a FormRequest `authorize()` not `return true` |
+ *  | 403    | `can:` / `signed` / `verified` middleware, an auth package's scope or ability middleware naming one, or a FormRequest `authorize()` not `return true` |
  *
  * The 403 is inferred from the PRESENCE of a gate, which is right for `signed`/`verified` and only
  * usually right for `can:`: a policy method that returns `true` unconditionally cannot deny, and the
@@ -107,10 +107,10 @@ final class ImplicitResponsesExtension implements OperationExtension
         $authorization = $this->authorizationSignal($context);
         if ($authorization !== null) {
             $noOther403 = ! $operation->hasResponse('403');
-            $this->synthesize($operation, $context, 403, self::AUTHORIZATION, $authorization);
+            $this->synthesize($operation, $context, 403, $authorization['exception'], $authorization['signal']);
 
             if ($noOther403 && $operation->hasResponse('403')) {
-                $this->reportUndeniableGates($context, $authorization);
+                $this->reportUndeniableGates($context, $authorization['signal']);
             }
         }
     }
@@ -210,10 +210,12 @@ final class ImplicitResponsesExtension implements OperationExtension
     }
 
     /**
-     * The 403 signal name, or null. Authorization middleware first (`can:`/`signed`/`verified`), then
-     * a FormRequest whose `authorize()` gate is not a literal `return true`.
+     * The 403 signal and the exception it stands for, or null. Authorization middleware first, then a
+     * FormRequest whose `authorize()` gate is not a literal `return true`.
+     *
+     * @return array{signal: string, exception: string}|null
      */
-    private function authorizationSignal(RouteContext $context): ?string
+    private function authorizationSignal(RouteContext $context): ?array
     {
         foreach ($context->route->middleware as $middleware) {
             $signal = $this->middlewareSignal($context, $middleware);
@@ -222,29 +224,33 @@ final class ImplicitResponsesExtension implements OperationExtension
             }
         }
 
-        return $this->formRequestAuthorizes($context) ? 'formrequest-authorize' : null;
+        return $this->formRequestAuthorizes($context) ? ['signal' => 'formrequest-authorize', 'exception' => self::AUTHORIZATION] : null;
     }
 
     /**
      * The 403 signal ONE middleware raises, or null. Stated once because two readers ask it: the signal
      * above takes the first answer in route order, while the reachability check needs to know whether
      * anything OTHER than a `can:` gate is also holding the 403 up.
+     *
+     * @return array{signal: string, exception: string}|null
      */
-    private function middlewareSignal(RouteContext $context, string $middleware): ?string
+    private function middlewareSignal(RouteContext $context, string $middleware): ?array
     {
         if (CanGate::matches($middleware)) {
-            return 'can-middleware';
+            return ['signal' => 'can-middleware', 'exception' => self::AUTHORIZATION];
         }
         // Asked by class, through the build's alias map: an application's own alias or subclass of either
         // middleware produces the 403 too, and an alias re-pointed elsewhere does not.
         if ($this->middleware->runs($context, $middleware, ValidateSignature::class)) {
-            return 'signed-middleware';
+            return ['signal' => 'signed-middleware', 'exception' => self::AUTHORIZATION];
         }
         if ($this->middleware->runs($context, $middleware, EnsureEmailIsVerified::class)) {
-            return 'verified-middleware';
+            return ['signal' => 'verified-middleware', 'exception' => self::AUTHORIZATION];
         }
+        // A token missing a scope or ability the middleware names, as the auth package throws it.
+        $denial = $this->authentication->denial($context, $middleware);
 
-        return null;
+        return $denial === null ? null : ['signal' => 'token-middleware', 'exception' => $denial];
     }
 
     /** Whether the route's FormRequest declares an authorize() gate that is not a literal `return true`. */

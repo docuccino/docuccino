@@ -54,6 +54,7 @@ use Illuminate\Contracts\Auth\Access\Gate as GateContract;
 use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Routing\Middleware\ValidateSignature;
 use Illuminate\Support\Facades\Gate;
+use Laravel\Sanctum\Http\Middleware\CheckAbilities;
 
 /**
  * `authorization.gate-cannot-deny`: the implicit 403 is synthesized from the PRESENCE of a `can:` gate,
@@ -784,6 +785,22 @@ it('reads a guest as refused behind the authenticator in a document that declare
         ->and($denial->undeniablePolicyMethod($context(['auth:web', 'can:view,'.Kiosk::class]), $gate))->toBe(KioskPolicy::class.'::view')
         // Anti-vacuity: without the authenticator a guest reaches a method that refuses guests, which denies.
         ->and($denial->undeniablePolicyMethod($context(['can:view,'.Kiosk::class]), $gate))->toBeNull();
+});
+
+/** An auth package's token middleware reads the user itself, so a guest is refused before the gate there too. */
+it("reads a guest as refused behind an auth package's token middleware", function (): void {
+    $gate = CanGate::parse('can:view,'.Kiosk::class);
+    $denial = new GateDenial(app(RouteAuthentication::class), static fn (): GateContract => app(GateContract::class), static fn (): bool => false);
+    $context = new RouteContext(
+        route: new RouteDescriptor(['GET'], 'api/kiosks', middleware: [CheckAbilities::class.':read', 'can:view,'.Kiosk::class]),
+        actionRef: new ActionRef('', KioskController::class, 'index'),
+        attributes: new AttributeSet([]),
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', []),
+    );
+
+    expect($gate)->not->toBeNull()
+        ->and($denial->undeniablePolicyMethod($context, $gate))->toBe(KioskPolicy::class.'::view');
 });
 
 it('says nothing about a policy method a package declares', function (): void {

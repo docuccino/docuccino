@@ -8,26 +8,38 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\NullTypeEngine;
+use Docuccino\Laravel\Integrations\Passport\PassportIntegration;
+use Docuccino\Laravel\Integrations\Sanctum\SanctumIntegration;
+use Docuccino\Laravel\Registry\IntegrationToggles;
 use Docuccino\Laravel\Support\RouteAuthentication;
 use Docuccino\Laravel\Tests\Fixtures\Middleware\ApplicationAuthenticate;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Auth\Middleware\AuthenticateWithBasicAuth;
+use Illuminate\Foundation\Auth\User;
 use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\AuthenticateSession;
+use Laravel\Passport\AccessToken;
+use Laravel\Passport\Client;
+use Laravel\Passport\Passport;
+use Laravel\Passport\PassportServiceProvider;
+use Laravel\Passport\Token;
+use Laravel\Sanctum\HasApiTokens;
+use Laravel\Sanctum\Http\Middleware\CheckAbilities;
+use Laravel\Sanctum\PersonalAccessToken;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
  * {@see RouteAuthentication}'s table, row by row, and the reason each row is right: the middleware is run
  * against a guest's JSON request and refuses it with exactly the exception the table names.
  */
-function routeAuthenticationContext(array $middleware, ?string $pattern = null): RouteContext
+function routeAuthenticationContext(array $middleware, ?string $pattern = null, array $integrations = []): RouteContext
 {
     return new RouteContext(
         route: new RouteDescriptor(['GET'], 'api/things', middleware: $middleware),
         actionRef: new ActionRef('', null, 'index'),
         attributes: new AttributeSet([]),
         engine: new NullTypeEngine,
-        document: new DocumentConfig('default', [], authMiddleware: $pattern),
+        document: new DocumentConfig('default', [], authMiddleware: $pattern, raw: ['integrations' => $integrations]),
     );
 }
 
@@ -39,13 +51,19 @@ function routeAuthenticationTable(): array
 }
 
 /** What the middleware does with a guest's JSON request: the class of what it throws, or null if it lets it through. */
-function guestRefusal(object $middleware): ?string
+function guestRefusal(object $middleware, string ...$arguments): ?string
 {
     $request = Request::create('/api/things', 'GET', server: ['HTTP_ACCEPT' => 'application/json']);
     $request->setLaravelSession(app('session.store'));
 
+    return middlewareThrows($middleware, $request, $arguments);
+}
+
+/** @param  list<string>  $arguments */
+function middlewareThrows(object $middleware, Request $request, array $arguments): ?string
+{
     try {
-        $middleware->handle($request, static fn (): Response => new Response);
+        $middleware->handle($request, static fn (): Response => new Response, ...$arguments);
     } catch (Throwable $e) {
         return $e::class;
     }
@@ -53,9 +71,160 @@ function guestRefusal(object $middleware): ?string
     return null;
 }
 
+/** @return array<class-string, array{refusal: class-string, denial: class-string}> */
+function packageAuthenticators(): array
+{
+    return [...PassportIntegration::authenticators(), ...SanctumIntegration::authenticators()];
+}
+
+/**
+ * Passport booted as an application boots it, with a key of its own: its resource server refuses a request
+ * with no token before the key is read, by the same validator a deployed application runs.
+ */
+function bootPassport(): void
+{
+    $key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+    expect($key)->not->toBeFalse();
+    config()->set('passport.public_key', openssl_pkey_get_details($key)['key']);
+    config()->set('auth.guards.api', ['driver' => 'passport', 'provider' => 'users']);
+    app()->register(PassportServiceProvider::class);
+}
+
+/**
+ * What the middleware does with a request whose token lacks the `read` scope or ability the entry names,
+ * the token set up the way each package's own testing helpers set one up: a user's token on the request
+ * for the middleware that reads the user, and a client token behind the resource server for those that
+ * validate the bearer token themselves.
+ */
+function tokenDenial(string $class): ?string
+{
+    $request = Request::create('/api/things', 'GET', server: ['HTTP_ACCEPT' => 'application/json']);
+    $request->setLaravelSession(app('session.store'));
+
+    if (str_starts_with($class, 'Laravel\\Sanctum\\')) {
+        $user = new class extends User
+        {
+            use HasApiTokens;
+        };
+        $user->withAccessToken(new PersonalAccessToken(['abilities' => ['other']]));
+        $request->setUserResolver(static fn (): User => $user);
+
+        return middlewareThrows(app($class), $request, ['read']);
+    }
+
+    bootPassport();
+
+    $readsTheUser = ['CheckScopes', 'CheckForAnyScope', 'CheckToken', 'CheckTokenForAnyScope'];
+    if (in_array(class_basename($class), $readsTheUser, true)) {
+        $user = new class extends User
+        {
+            use Laravel\Passport\HasApiTokens;
+        };
+        $user->withAccessToken(class_exists('Laravel\\Passport\\AccessToken')
+            ? new AccessToken(['oauth_scopes' => ['other']])
+            : new Token(['scopes' => ['other']]));
+        $request->setUserResolver(static fn (): User => $user);
+
+        return middlewareThrows(app($class), $request, ['read']);
+    }
+
+    Passport::actingAsClient((new Client)->forceFill(['id' => 1]), ['other']);
+
+    return middlewareThrows(app($class), $request, ['read']);
+}
+
 it('names the exception each authenticator really throws at a guest', function (string $class): void {
     expect(guestRefusal(app($class)))->toBe(routeAuthenticationTable()[$class]);
 })->with(array_keys(routeAuthenticationTable()));
+
+/**
+ * An auth package's own middleware reads the token itself, so a route behind it alone refuses a request
+ * without one; and each throws its own exception at a token lacking a scope or ability the entry names.
+ * Every row the installed packages answer with is run both ways.
+ */
+it("names what each auth package's middleware throws at a guest", function (string $class): void {
+    bootPassport();
+
+    expect(guestRefusal(app($class), 'read'))->toBe(packageAuthenticators()[$class]['refusal']);
+})->with(array_keys(packageAuthenticators()));
+
+it("names what each auth package's middleware throws at a token lacking what it names", function (string $class): void {
+    expect(tokenDenial($class))->toBe(packageAuthenticators()[$class]['denial']);
+})->with(array_keys(packageAuthenticators()));
+
+/**
+ * The union of the rows above and the classes that check no token, against every middleware class the
+ * installed packages ship: a class added by an upgrade must land on one side or the other. The abstract
+ * bases are what the listed classes extend, never routed themselves.
+ */
+it('accounts for every middleware class the installed auth packages ship', function (): void {
+    $passes = [
+        'Laravel\\Passport\\Http\\Middleware\\CreateFreshApiToken',
+        'Laravel\\Sanctum\\Http\\Middleware\\AuthenticateSession',
+        'Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful',
+    ];
+    $abstract = [
+        'Laravel\\Passport\\Http\\Middleware\\CheckCredentials',
+        'Laravel\\Passport\\Http\\Middleware\\ValidateToken',
+    ];
+
+    $shipped = [];
+    foreach ([Passport::class, CheckAbilities::class] as $anchor) {
+        $root = dirname((string) (new ReflectionClass($anchor))->getFileName());
+        $directory = str_ends_with($root, 'Middleware') ? $root : $root.'/Http/Middleware';
+        $namespace = str_ends_with($root, 'Middleware') ? (new ReflectionClass($anchor))->getNamespaceName() : (new ReflectionClass($anchor))->getNamespaceName().'\\Http\\Middleware';
+        foreach ((array) glob($directory.'/*.php') as $file) {
+            $shipped[] = $namespace.'\\'.basename((string) $file, '.php');
+        }
+    }
+    sort($shipped);
+
+    $accounted = [...array_keys(packageAuthenticators()), ...array_filter([...$passes, ...$abstract], class_exists(...))];
+    sort($accounted);
+
+    expect($accounted)->toBe($shipped)
+        ->and(count($shipped))->toBeGreaterThan(8);
+});
+
+it('leaves out the auth packages\' middleware that lets a guest through', function (string $class): void {
+    expect(guestRefusal(app($class)))->toBeNull()
+        ->and(app(RouteAuthentication::class)->refusal(routeAuthenticationContext([$class])))->toBeNull();
+})->with([
+    'Laravel\\Sanctum\\Http\\Middleware\\AuthenticateSession',
+    'Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful',
+]);
+
+it("answers an auth package's middleware under any alias the application gives it", function (): void {
+    $authentication = app(RouteAuthentication::class);
+    app('router')->aliasMiddleware('token-can', CheckAbilities::class);
+
+    expect($authentication->refusal(routeAuthenticationContext(['token-can:read'])))->toBe('Illuminate\\Auth\\AuthenticationException')
+        ->and($authentication->denial(routeAuthenticationContext(['token-can:read']), 'token-can:read'))->toBe('Laravel\\Sanctum\\Exceptions\\MissingAbilityException')
+        ->and($authentication->refusal(routeAuthenticationContext([CheckAbilities::class.':read'])))->toBe('Illuminate\\Auth\\AuthenticationException')
+        // Anti-vacuity: the alias names nothing until the application registers it.
+        ->and($authentication->refusal(routeAuthenticationContext(['other-alias:read'])))->toBeNull();
+});
+
+/** An entry naming no scope checks the token and nothing past it, so it denies nothing a token holds. */
+it('finds no denial on an entry that names no scope, or on middleware that is not a token check', function (string $middleware): void {
+    expect(app(RouteAuthentication::class)->denial(routeAuthenticationContext([$middleware]), $middleware))->toBeNull();
+})->with([
+    'bare ability middleware' => CheckAbilities::class,
+    'the framework authenticator' => 'auth:sanctum',
+    'a gate' => 'can:view,post',
+]);
+
+/** A disabled integration contributes nothing to the document, and that includes what its middleware throws. */
+it("drops an auth package's middleware from a document that disables its integration", function (): void {
+    $authentication = app(RouteAuthentication::class);
+    $disabled = routeAuthenticationContext([CheckAbilities::class.':read'], integrations: ['sanctum' => ['enabled' => false]]);
+
+    expect($authentication->refusal($disabled))->toBeNull()
+        ->and($authentication->denial($disabled, CheckAbilities::class.':read'))->toBeNull()
+        ->and(IntegrationToggles::authenticators($disabled->document))->toBe(PassportIntegration::authenticators())
+        // Anti-vacuity: the same route in a document that leaves it on.
+        ->and($authentication->refusal(routeAuthenticationContext([CheckAbilities::class.':read'])))->not->toBeNull();
+});
 
 it('lists the framework authenticators and nothing else', function (): void {
     expect(array_keys(routeAuthenticationTable()))->toBe([Authenticate::class, AuthenticateWithBasicAuth::class]);

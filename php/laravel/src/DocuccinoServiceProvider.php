@@ -12,6 +12,7 @@ use Docuccino\Core\Examples\ExampleRedaction;
 use Docuccino\Core\Examples\RecordedExampleAudit;
 use Docuccino\Core\Extensions\BuiltIn\AttributeExamplesExtension;
 use Docuccino\Core\Extensions\BuiltIn\AttributeOverridesExtension;
+use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Lint\ExampleSchemaLint;
 use Docuccino\Core\Lint\LintRuleOptions;
@@ -74,6 +75,7 @@ use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Pipeline\FragmentStore;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
+use Docuccino\Laravel\Registry\IntegrationToggles;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
 use Docuccino\Laravel\Routing\ResolvedRouteIndex;
 use Docuccino\Laravel\Routing\RouteSurvey;
@@ -159,6 +161,13 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         // The alias map the middleware readers resolve an entry's class through, read once per build
         // after the resolver has filled the router.
         $this->app->scoped(MiddlewareClasses::class);
+
+        // Which middleware authenticates is the framework's answer plus each auth package's, and the
+        // package's is its integration's to give: read per document, so a disabled one contributes none.
+        $this->app->bind(RouteAuthentication::class, static fn (Application $app): RouteAuthentication => new RouteAuthentication(
+            $app->make(MiddlewareClasses::class),
+            static fn (DocumentConfig $document): array => IntegrationToggles::authenticators($document),
+        ));
 
         // Same deal: the inferred-handler tier writes response-fold deferrals, the summary transformer
         // drains them once per build.

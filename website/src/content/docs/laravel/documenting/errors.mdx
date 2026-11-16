@@ -704,10 +704,10 @@ errors:
 
 | Status | When it's added | How to opt out |
 | --- | --- | --- |
-| `401` | The route runs Laravel's authenticator (`auth`, any guard, your own subclass, or `auth.basic`), or middleware matching `security.auth_middleware`. | Mark the route [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) — or `#[IgnoreResponse(401)]`. |
+| `401` | The route runs Laravel's authenticator (`auth`, any guard, your own subclass, or `auth.basic`), Sanctum's or Passport's [token middleware](/laravel/documenting/authentication/#implicit-401), or middleware matching `security.auth_middleware`. | Mark the route [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) — or `#[IgnoreResponse(401)]`. |
 | `422` | Validation rules were recovered (Spatie Data, a form request, an inline `validate()`, or an action's `rules()`), whether they document the body or, on a read route, the query parameters. | `#[IgnoreResponse(422)]`. |
 | `404` | The route binds a model to a path parameter (implicit binding). One `404` per operation. | `#[IgnoreResponse(404)]`. |
-| `403` | The route has `can:` / `signed` / `verified` middleware, or a form request `authorize()` gate that isn't a literal `return true`. | `#[IgnoreResponse(403)]`. |
+| `403` | The route has `can:` / `signed` / `verified` middleware, Sanctum's or Passport's token middleware naming an ability or scope, or a form request `authorize()` gate that isn't a literal `return true`. | `#[IgnoreResponse(403)]`. |
 
 If your action *also* throws one of these explicitly, the two merge into a single response for that
 status — you never get a duplicate. `429` is documented by the [rate-limiting](/laravel/documenting/rate-limiting/)
@@ -842,7 +842,7 @@ and can say which:
 | --- | --- | --- |
 | `400` | `BadRequest` | `BadRequestHttpException`, `MalformedUrlException`, the [Query Builder](/laravel/packages/query-builder/) strict-mode rejection, and an unrecognized exception with a `400` status |
 | `401` | `Unauthorized` | `AuthenticationException`, `UnauthorizedHttpException`, and auth middleware |
-| `403` | `Forbidden` | `AuthorizationException`, `AccessDeniedHttpException`, `InvalidSignatureException`, `can:` / `signed` / `verified` middleware, a form request `authorize()` gate |
+| `403` | `Forbidden` | `AuthorizationException`, `AccessDeniedHttpException`, `InvalidSignatureException`, `can:` / `signed` / `verified` middleware, token-ability and scope middleware, a form request `authorize()` gate |
 | `404` | `NotFound` | `ModelNotFoundException`, `RecordsNotFoundException`, `NotFoundHttpException`, and route–model binding |
 | `413` | `ContentTooLarge` | `PostTooLargeException` |
 | `422` | `UnprocessableEntity` | `ValidationException`, `UnprocessableEntityHttpException`, and any recovered validation rules |
