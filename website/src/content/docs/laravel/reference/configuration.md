@@ -379,6 +379,11 @@ order. `parent` is the OpenAPI-native statement of the same forest; `x-tagGroups
 convention most renderers read a grouped sidebar from, and neither has to be understood for the other
 to work. Flat tags emit no `x-tagGroups` at all.
 
+A group lists only the tags an operation carries, because a renderer draws every member as a page a
+reader can open. A root that only heads its children — `kind: nav` with no operations of its own — names
+its group without appearing in it, and a root nothing under it reaches gets no group at all. The `tags`
+array still defines every tag either way.
+
 `summary`, `parent` and `kind` are OpenAPI 3.2 only. Exporting 3.1 drops them, and says so once per
 member with a `downlevel.tag-*` notice naming every tag — the tags themselves stay. A `parent` dropped
 from a document that carries `x-tagGroups` costs only the native member, so that notice is info; where
