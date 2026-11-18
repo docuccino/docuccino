@@ -150,14 +150,18 @@ Route::middleware('throttle:reports')->get('/reports', ReportController::class);
 // …and nothing anywhere calls RateLimiter::for('reports', …)
 ```
 
-That route is broken. Laravel's named-limiter lookup misses, falls through to reading `reports` as an
-allowance, and casts it to `0` — so every guest request gets a `429`, always. Docuccino reports it as a
-`rate-limit.unregistered-limiter` info diagnostic naming the limiter and the route, which turns a
-production surprise into a line of build output.
+That route is broken. Laravel's named-limiter lookup misses and falls through to reading `reports` as
+an attribute on the signed-in user — and where there is no such attribute, every request fails with a
+`MissingRateLimiterException`. Docuccino reports it as a `rate-limit.unregistered-limiter` info
+diagnostic naming the limiter and the route, which turns a production surprise into a line of build
+output. Every throttle on the route is checked, not only the first.
 
 Nothing else about a throttle raises anything. An inline allowance is never mistaken for a limiter
-name: `throttle:60,1`, bare `throttle`, and the guest|authenticated `throttle:10|60` — whose halves may
-name an attribute on the user rather than a number — all state their own limit and are left alone.
+name: `throttle:60,1`, bare `throttle`, the guest|authenticated `throttle:10|60`, and
+`throttle:rate_limit,1` all state their own limit and are left alone. Laravel looks a limiter up only
+when the throttle has a single parameter, so a non-numeric value in any of the others — a pipe half, or
+the first of several parameters — names an attribute on the user rather than a limiter, and registering
+one would change nothing.
 
 ## Configuration
 

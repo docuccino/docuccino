@@ -65,13 +65,16 @@ final class RateLimitResponsesExtension implements OperationExtension
             return;
         }
 
-        $limit = $limits[0];
-
-        // Above the ignore consult, because what it reports is an application bug rather than anything
-        // about the documented response — see {@see checkRegistered()}. An author saying "do not document
-        // the 429" has not said the limiter is registered.
-        if ($limit->name !== null) {
-            $this->checkRegistered($limit->name, $context);
+        // Every throttle on the route is enforced on its own, so every name is checked, each once. Above the
+        // ignore consult, because what it reports is an application bug rather than anything about the
+        // documented response — see {@see checkRegistered()}. An author saying "do not document the 429"
+        // has not said the limiter is registered.
+        $names = array_values(array_unique(array_filter(array_map(
+            static fn (ThrottleLimit $limit): ?string => $limit->name,
+            $limits,
+        ), static fn (?string $name): bool => $name !== null)));
+        foreach ($names as $name) {
+            $this->checkRegistered($name, $context);
         }
 
         // Asked before anything is built: the body below comes from the error-response chain, which
@@ -261,9 +264,10 @@ final class RateLimitResponsesExtension implements OperationExtension
 
     /**
      * Reports a route throttling on a name nothing registered. That's an application bug rather than a
-     * documentation one — Laravel's named-limiter lookup misses, `resolveMaxAttempts` falls through and
-     * casts the name to `0` for a guest (so every request 429s) or reads it as a property off the user —
-     * and it changes nothing about the documented 429. Saying so IS the whole point of the check.
+     * documentation one — Laravel's named-limiter lookup misses and `resolveMaxAttempts` falls through,
+     * reading the name as an attribute on the signed-in user and otherwise throwing
+     * `MissingRateLimiterException` — and it changes nothing about the documented 429. Saying so IS the
+     * whole point of the check.
      *
      * What a registered limiter's closure says is deliberately not read: the response is value-free, so a
      * dynamic limiter and a literal one document identically and there is nothing to report about either.
