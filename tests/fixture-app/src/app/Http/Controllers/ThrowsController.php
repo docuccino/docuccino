@@ -1370,6 +1370,30 @@ class ThrowsController extends Controller
         throw new \App\Exceptions\ExportFaultException(\App\Enums\ExportFault::from($code));
     }
 
+    /** Case 10t-stored: a value the application stored, read off the model the route bound. */
+    public function enumFromStoredAttribute(\App\Models\Consignment $consignment): JsonResponse
+    {
+        return response()->json(['priority' => \App\Enums\ListingPriority::from($consignment->priority_code)->name]);
+    }
+
+    /** Case 10t-stored-method: the same lookup written in the model, which the action asks. */
+    public function enumFromStoredThroughModel(\App\Models\Consignment $consignment): JsonResponse
+    {
+        return response()->json(['priority' => $consignment->priority()->name]);
+    }
+
+    /** Case 10t-stored-value-object: a stored value handed to a `from()` that is no enum's. */
+    public function valueObjectFromStoredAttribute(\App\Models\Consignment $consignment): JsonResponse
+    {
+        return response()->json(['code' => \App\Support\ConsignmentCode::from($consignment->priority_code)->code]);
+    }
+
+    /** Case 10t-request-property: a value read off the request as a property, which the request chooses. */
+    public function enumFromRequestProperty(Request $request): JsonResponse
+    {
+        return response()->json(['priority' => \App\Enums\ListingPriority::from($request->priority)->name]);
+    }
+
     /** Case 10t-try: `tryFrom()` answers null for a value no case is backed by. */
     public function enumTryFrom(): void
     {

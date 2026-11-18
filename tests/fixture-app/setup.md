@@ -219,6 +219,10 @@ The enum-cast filter proof (feature 1) uses its own inline chain + a cast-target
 
 - `app/Enums/ListingStatus.php` — a backed enum (`open`/`closed`/`draft`) with
   `#[CaseDescription]`s on two cases, so recovery yields backing values + `x-enumDescriptions`.
+- `app/Models/Consignment.php` — an Eloquent model storing its priority as the integer
+  `ListingPriority` is backed by and reading it back through `from()`, with `app/Support/ConsignmentCode.php`,
+  a value object whose own `from()` is handed the same stored value: the `from()` of an enum is an
+  assertion there, and the value object's is not.
 - `app/Models/Listing.php` — an Eloquent model casting its `status` column to `ListingStatus` and
   its `active` column to `boolean`, with a `scopeStatus(Builder, ListingStatus)` local scope. So
   `AllowedFilter::exact('status')` types from `$casts`, `AllowedFilter::scope('status')` types from

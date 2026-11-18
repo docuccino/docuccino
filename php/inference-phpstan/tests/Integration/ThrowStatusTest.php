@@ -183,9 +183,25 @@ it('publishes what a case lookup can throw for the value it is handed', function
     'a string for an int-backed enum, under strict_types' => ['enumFromString', ['TypeError certain signal']],
     // A value the request chooses may be any int, so either may happen and both stay as declared.
     'a value the request chooses' => ['enumFromRuntime', ['TypeError declared signal', 'ValueError declared signal']],
+    'a value read off the request as a property' => ['enumFromRequestProperty', ['TypeError declared signal', 'ValueError declared signal']],
+    // A value read off a model is one the application stored, and whatever wrote it is where it was checked:
+    // a lookup that fails there is the application's own guarantee failing, which no request decides.
+    'a value the application stored' => ['enumFromStoredAttribute', ['TypeError declared assertion', 'ValueError declared assertion']],
+    'the same lookup written in the model' => ['enumFromStoredThroughModel', ['TypeError declared assertion', 'ValueError declared assertion']],
     // `tryFrom()` answers null where `from()` would throw, and declares nothing.
     'tryFrom()' => ['enumTryFrom', []],
 ])->group('fixture');
+
+it('publishes what a from() that is no enum\'s declares, whatever it is handed', function (): void {
+    // An enum's lookup fails only on the value it is handed; a `from()` of the application's own fails
+    // wherever its body says, so a stored argument proves nothing about it.
+    $declared = array_map(
+        static fn (array $throw): string => $throw['exceptionFqcn'].' '.$throw['disposition'],
+        throwsAnalysis('valueObjectFromStoredAttribute')['throws'],
+    );
+
+    expect($declared)->toBe(['UnexpectedValueException signal']);
+})->group('fixture');
 
 it('publishes only what an operand that always throws lets out', function (string $method, array $expected): void {
     // PHP evaluates a call's arguments before it makes the call, and a construction's before it builds

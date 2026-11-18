@@ -498,9 +498,12 @@ final class ThrowAnalyzer
         }
 
         // `from()` on a backed enum handed a constant throws only what that value can. The enum's cases
-        // decide it, so its files are dependencies even where nothing is left to publish.
+        // decide it, so its files are dependencies even where nothing is left to publish. Handed a value the
+        // application stored, it fails only where the application's own guarantee did.
         $certain = [];
-        $lookup = $explicit ? EnumLookup::of($node, $scope, $this->calleeResolver->reached($node, $scope)) : null;
+        $reached = $explicit ? $this->calleeResolver->reached($node, $scope) : null;
+        $lookup = $explicit ? EnumLookup::of($node, $scope, $reached) : null;
+        $asserted = $asserted || ($explicit && EnumLookup::readsStored($node, $scope, $reached));
         if ($lookup !== null) {
             [$enum, $outcomes] = $lookup;
             $this->dependOn(DeclarationFiles::of($enum));
