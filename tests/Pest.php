@@ -2130,10 +2130,11 @@ function stripDocuccinoRecursive(mixed $value): mixed
 }
 
 /**
- * The controllers the throw corpus covers, by relative path => FQCN. Two, and which two is the point: one
- * in `app/` and one in a `Modules\…` root the application maps separately, which is where a modular
+ * The controllers the throw corpus covers, by relative path => FQCN. Two of them are the point: one in
+ * `app/` and one in a `Modules\…` root the application maps separately, which is where a modular
  * application writes most of its actions. A corpus of the first alone cannot see anything the second does
- * differently, and every throw-path defect found here has had a modular spelling.
+ * differently, and every throw-path defect found here has had a modular spelling. The third writes the
+ * throws that assert what the application guarantees, every way one is written.
  *
  * Shared rather than file-local because two guards read it — what the document publishes for each action
  * ({@see UnplacedStatusReconciliationTest}) and what a narrowed descend scope stops reading of it — and a
@@ -2144,6 +2145,7 @@ function stripDocuccinoRecursive(mixed $value): mixed
 function throwCorpusControllers(): array
 {
     return [
+        'app/Http/Controllers/AssertionGuardController.php' => 'App\\Http\\Controllers\\AssertionGuardController',
         'app/Http/Controllers/ThrowsController.php' => 'App\\Http\\Controllers\\ThrowsController',
         'modules/Billing/LedgerThrowsController.php' => 'Modules\\Billing\\LedgerThrowsController',
     ];
@@ -2154,7 +2156,7 @@ function throwCorpusControllers(): array
  * can be executed on rows the corpus does not currently contain — a column nothing lands in is a column
  * nothing has checked.
  *
- * @param  array{unplaced: array<string, list<string>>, demotedThrows: int, surfaced: int}  $sides
+ * @param  array{unplaced: array<string, list<string>>, demotedThrows: int, assertedThrows: int, surfaced: int}  $sides
  */
 function unplacedColumn(array $sides): string
 {
@@ -2166,18 +2168,22 @@ function unplacedColumn(array $sides): string
         // own and has to stay empty: absorbed into `placed` it would be an action publishing fewer
         // responses than it raises with nothing written down about the difference.
         $sides['demotedThrows'] > 0 => 'mixed',
+        // Every throw an assertion, so the document carries no error for it unless the application renders
+        // one at a status — a column with a ledger, as `demoted` is. An assertion beside an error that IS
+        // placed leaves the action placed: the disposition on the throw is what says why it is not published.
+        $sides['assertedThrows'] === $sides['surfaced'] => 'asserted',
         default => 'placed',
     };
 }
 
 /**
- * The four columns the reconciliation guards divide the sweep into. Anything else is a gap.
+ * The five columns the reconciliation guards divide the sweep into. Anything else is a gap.
  *
  * @return list<string>
  */
 function unplacedColumnNames(): array
 {
-    return ['placed', 'unplaced', 'demoted', 'unsurfaced'];
+    return ['placed', 'unplaced', 'demoted', 'asserted', 'unsurfaced'];
 }
 
 /**
@@ -2919,9 +2925,13 @@ function throwsAnalysis(string $method): array
 }
 
 /**
- * @return list<string> signal-disposition exceptions as "ShortName@status"
+ * The exceptions the analysis hands the document, as "ShortName@status" — an assertion with " (assertion)"
+ * after it, since the document carries one only at a status the application renders it with. Plumbing it
+ * demotes is left out.
+ *
+ * @return list<string>
  */
-function signalThrows(string $method): array
+function reportedThrows(string $method): array
 {
     $analysis = throwsAnalysis($method);
 
@@ -2929,13 +2939,14 @@ function signalThrows(string $method): array
     /** @var list<array<string, mixed>> $throws */
     $throws = $analysis['throws'];
     foreach ($throws as $throw) {
-        if (($throw['disposition'] ?? null) !== 'signal') {
+        $disposition = $throw['disposition'] ?? null;
+        if ($disposition !== 'signal' && $disposition !== 'assertion') {
             continue;
         }
         $fqcn = (string) $throw['exceptionFqcn'];
         $pos = strrpos($fqcn, '\\');
         $short = $pos !== false ? substr($fqcn, $pos + 1) : $fqcn;
-        $out[] = $short.'@'.($throw['httpStatusHint'] ?? 'null');
+        $out[] = $short.'@'.($throw['httpStatusHint'] ?? 'null').($disposition === 'assertion' ? ' (assertion)' : '');
     }
     sort($out);
 

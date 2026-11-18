@@ -1820,3 +1820,30 @@ comment-ended and CRLF positions read as its JSON twin, every possible one read 
 mark kept out of quotes, block scalars, anchors, refusals and a document already holding the mark's
 character, each float-tag spelling, each merge YAML and the parser agree on read as its twin, and each
 they do not refused with its line.
+
+## A reader widened to a new spelling, publishing by a rule set where it could not see
+
+A reader that learns a new spelling of a fact — a helper that never returns, a guard that throws what it is
+handed — carries that spelling's whole population into the document, and the rule that decides what to
+publish was only ever measured against the spellings the reader saw before. Where an application had a
+reason to write something one way, the new spelling is where the reason shows.
+
+*Instances.* A throw with no status the application wrote was published as a `500`, which was rarely seen
+to be wrong while the throws it read were mostly refusals. Reading a helper returning `never` brought in
+every guard of that shape, and one application had moved an assertion into exactly such a helper because a
+literal `throw` had put a `500` on every list endpoint it served; reading `throw_if()` and `throw_unless()`
+brought in the type assertions they are the idiomatic spelling of. Between them the two readers took that
+application from 57 operations publishing a `500` to 110, and every new one was an assertion. Each
+reader was right about the form; the rule they fed was wrong about the population, and the fixtures added
+with each held only the outcomes the reader was widened for.
+
+*The tell.* A change that reads a new spelling, with fixtures written for the facts it set out to recover
+and none standing in for what else that spelling is used for in an application.
+
+*The fix that worked.* Decide publication on what the throw IS, never on how it is written: a class of
+PHP's `LogicException` family, or a throw reached only past a failed type test, is an assertion wherever it
+is written, and is published only at a status the application renders it with (`Assertions`,
+`AssertedThrows`). The guard is a fixture writing one assertion every way an application does — a literal
+`throw` behind an `if`, a `??`, an `||` and an early return, `never` and `void` helpers, `throw_if()`, a
+closure — beside the same throws behind a test of a value, and requiring one answer per guard
+(`AssertionGuardTest`).

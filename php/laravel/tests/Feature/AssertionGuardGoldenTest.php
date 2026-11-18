@@ -16,6 +16,7 @@ use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
 use Workbench\App\Exceptions\UnsupportedRadiusException;
@@ -25,7 +26,8 @@ use Workbench\App\Http\Controllers\AssertionGuardController;
  * The document an application gets for throws with no status that assert what it already guarantees,
  * beside the same throws behind a test of a value and exceptions the framework or the application renders
  * at a status. An assertion is no response a request receives, so it is published only at a status the
- * application renders it with. Byte-locked, warm as well as cold.
+ * application renders it with. Byte-locked, warm as well as cold; the scripted analyses are what the real
+ * engine recovers from the fixture app's same actions, which a test below holds them to.
  *
  * @return array<string, ActionAnalysis>
  */
@@ -119,3 +121,31 @@ it('says an ignore written for an assertion\'s 500 now drops nothing', function 
     expect(array_map('strval', array_keys($document['paths']['/api/asserted/ignoredAssertion']['post']['responses'])))->toBe(['200'])
         ->and($codes)->toBe(['attribute.ignore-response-unmatched']);
 });
+
+it('scripts what the real engine recovers from the fixture app’s same actions', function (): void {
+    ensureFixtureAvailable(FixtureRunner::available());
+
+    // `ignoredAssertion` is `listWithNeverHelper` with an ignore on it, which the engine never reads.
+    $scripted = assertionGuardAnalyses();
+    unset($scripted['ignoredAssertion']);
+
+    $real = FixtureRunner::analyzeMany(
+        'app/Http/Controllers/AssertionGuardController.php',
+        'App\\Http\\Controllers\\AssertionGuardController',
+        array_keys($scripted),
+    );
+
+    // What reaches the document: each throw handed on, with what it is for. The fixture app's exception is the
+    // workbench's under another namespace.
+    $facts = static fn (ActionAnalysis $analysis): array => array_values(array_map(
+        static fn (ThrownException $throw): string => str_replace('Workbench\\App\\', 'App\\', $throw->identityKey()).' '.$throw->disposition->value,
+        array_filter($analysis->throws, static fn (ThrownException $throw): bool => $throw->disposition === ThrowDisposition::Signal || $throw->disposition === ThrowDisposition::Assertion),
+    ));
+
+    foreach ($scripted as $action => $analysis) {
+        /** @var array<string, mixed> $recovered */
+        $recovered = $real[$action];
+
+        expect($facts(ActionAnalysis::fromArray($recovered)))->toBe($facts($analysis), $action);
+    }
+})->group('fixture');
