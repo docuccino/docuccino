@@ -13,6 +13,24 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.25.1
+
+### Features
+
+- **laravel**: publish the schema description #[Response] gives the schema it names ([#823](https://github.com/docuccino/docuccino/pull/823))
+- **core**: settle what the responses naming a schema say it is ([#822](https://github.com/docuccino/docuccino/pull/822))
+- **attributes**: let #[Response] describe the schema its schemaName names ([#821](https://github.com/docuccino/docuccino/pull/821))
+- **core**: compare response headers in docuccino:diff ([#815](https://github.com/docuccino/docuccino/pull/815))
+
+### Bug fixes
+
+- **core**: qualify a link parameter by location where its target uses the name twice ([#820](https://github.com/docuccino/docuccino/pull/820))
+- **laravel**: say what an empty filter value does only where it matches rows with none ([#819](https://github.com/docuccino/docuccino/pull/819))
+- **inference-phpstan**: publish every status a declared callee raises an exception at ([#817](https://github.com/docuccino/docuccino/pull/817))
+- **inference-phpstan**: file a backed enum's from() handed a stored model value as an assertion ([#816](https://github.com/docuccino/docuccino/pull/816))
+- **laravel**: check the limiter of every throttle on a route, as the framework looks it up ([#814](https://github.com/docuccino/docuccino/pull/814))
+- **laravel**: stop reporting a route behind several throttles ([#813](https://github.com/docuccino/docuccino/pull/813))
+
 ## v0.25.0
 
 ### Breaking changes
