@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
@@ -24,8 +25,7 @@ use Workbench\App\Http\Controllers\AssertionGuardController;
  * The document an application gets for throws with no status that assert what it already guarantees,
  * beside the same throws behind a test of a value and exceptions the framework or the application renders
  * at a status. An assertion is no response a request receives, so it is published only at a status the
- * application renders it with. Byte-locked, warm as well as cold; the scripted analyses are what the real
- * engine recovers from the fixture app's same actions, which a test below holds them to.
+ * application renders it with. Byte-locked, warm as well as cold.
  *
  * @return array<string, ActionAnalysis>
  */
@@ -84,4 +84,38 @@ it('publishes no 500 for an assertion, byte-identically', function (): void {
     $warm = assertWarmEqualsCold(assertionGuardRoutes(), assertionGuardRoutes(), assertionGuardEngine());
 
     assertGolden('workbench-assertion-guard.uir.json', (new UirEmitter)->emit($warm->document));
+});
+
+it('publishes an assertion only at a status the application renders it with', function (string $action, array $statuses): void {
+    /** @var array{paths: array<string, array{post: array{responses: array<string, mixed>}}>} $document */
+    $document = emittedArray(localityBuild(assertionGuardRoutes(), assertionGuardEngine()));
+
+    expect(array_map('strval', array_keys($document['paths']['/api/asserted/'.$action]['post']['responses'])))->toBe($statuses);
+})->with([
+    // Reached only where the application's own guarantees fail, so no request gets the 500 it falls back to.
+    'a LogicException from a never helper' => ['listWithNeverHelper', ['200']],
+    'a RuntimeException behind an instanceof' => ['unlessUser', ['200']],
+    // The framework renders this class at 401 and the application its own at 422: a status of their own is a
+    // response the request gets, whatever guard it sits behind.
+    'an AuthenticationException behind an instanceof' => ['unlessUserAuthenticated', ['200', '401']],
+    'an InvalidArgumentException the application renders' => ['radiusOutOfRange', ['200', '422']],
+    // Not an assertion at all.
+    'an AuthenticationException behind a flag' => ['ifSystemAuthenticated', ['200', '401']],
+    'a RuntimeException behind a test of a value' => ['valueGuard', ['200', '500']],
+    'a class one site asserts and another refuses with' => ['sameClassTwoSites', ['200', '500']],
+]);
+
+it('says an ignore written for an assertion\'s 500 now drops nothing', function (): void {
+    $build = localityBuild(assertionGuardRoutes(), assertionGuardEngine());
+    /** @var array{paths: array<string, array{post: array{responses: array<string, mixed>}}>, components?: array{responses?: array<string, mixed>}} $document */
+    $document = emittedArray($build);
+
+    // The build drops the assertion itself, so the declaration did nothing, which is worth saying: it can go.
+    $codes = array_map(static fn (Diagnostic $d): string => $d->code, array_values(array_filter(
+        $build->diagnostics,
+        static fn (Diagnostic $d): bool => str_contains((string) $d->routeSignature, 'api/asserted/ignoredAssertion'),
+    )));
+
+    expect(array_map('strval', array_keys($document['paths']['/api/asserted/ignoredAssertion']['post']['responses'])))->toBe(['200'])
+        ->and($codes)->toBe(['attribute.ignore-response-unmatched']);
 });
