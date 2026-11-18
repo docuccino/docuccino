@@ -139,7 +139,8 @@ published shape is the envelope and not the class. Where a status answers with s
 public function completeMfa(Request $request): SuccessData { /* … */ }
 ```
 
-Operations naming the same body alike share the one component.
+Operations naming the same body alike share the one component. A name a component key cannot carry names
+nothing, and `attribute.response-schema-name-invalid` says so.
 
 Three things it does not do. It **renames a shared component; it does not create one** — a body only one
 operation states stays inline, exactly as `#[ErrorComponent]` behaves. Below `400` nothing shares an
