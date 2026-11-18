@@ -15,6 +15,9 @@ use Attribute;
  * `schemaName:` here names the schema of the body this declares — the one name a union, or a body the
  * application wraps, can be given, since neither is a class to annotate — and `type:` points at the class.
  * Nothing below 400 shares an error body, so an `errorComponent:` there names nothing.
+ *
+ * `schemaDescription:` describes the schema `schemaName:` names, which no docblock can, and means nothing
+ * without it. Every declaration naming one schema is one statement about it, so they must agree.
  */
 #[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD | Attribute::TARGET_FUNCTION | Attribute::IS_REPEATABLE)]
 final readonly class Response
@@ -33,5 +36,6 @@ final readonly class Response
         public ?string $mediaType = null,
         public ?string $errorComponent = null,
         public ?string $schemaName = null,
+        public ?string $schemaDescription = null,
     ) {}
 }
