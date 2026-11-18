@@ -22,9 +22,9 @@ Every throttle form Laravel accepts is recognized, and every one of them produce
 | `ThrottleRequests::using('api')` / `::with(...)`, including the FQCN strings they render to | ✓ |
 | `ThrottleRequestsWithRedis` (the Redis variant) | ✓ |
 
-When a route stacks **several** throttle middlewares, a single `429` is documented from the first, with
-a `rate-limit.multiple-throttles` info diagnostic noting the others are enforced independently but not
-separately represented.
+A route behind **several** throttles documents one `429`, and that is the whole truth about all of
+them: each one refuses a request with the same response, headers and all, and the document states no
+limit value that a second throttle could contradict.
 
 <Tabs>
 	<TabItem label="Your code">

@@ -24,9 +24,10 @@ use Illuminate\Cache\RateLimiter;
  * whose route carries a `throttle` middleware. Always on — `throttle` ships with Laravel.
  *
  * The 429 itself is the same for every throttled route, limit values included — see
- * {@see RateLimitResponse} for why. A named limiter (`throttle:api`) is still looked up in the booted
- * app's `RateLimiter::for` registrations, but only to check that the registration exists — see
- * {@see checkRegistered()}.
+ * {@see RateLimitResponse} for why — and so one 429 is the whole truth about a route behind several
+ * throttles: each of them refuses a request with that same response. A named limiter (`throttle:api`) is
+ * still looked up in the booted app's `RateLimiter::for` registrations, but only to check that the
+ * registration exists — see {@see checkRegistered()}.
  *
  * The body comes from the error-response chain rather than this integration — see {@see body()} for why a
  * middleware-synthesized response has to ask, and why it stays inline.
@@ -77,12 +78,6 @@ final class RateLimitResponsesExtension implements OperationExtension
         // registers a shared response component as it goes ({@see IgnoredResponses}).
         if (IgnoredResponses::drops($context, '429')) {
             return;
-        }
-
-        // Below it, because this one reports what the DOCUMENT does with several throttles, and a route
-        // that documents no 429 at all represents none of them to under-report.
-        if (count($limits) > 1) {
-            $this->reportMultiple($limits, $context);
         }
 
         $contribution = Contribution::integration('rate-limit', $context->actionSource());
@@ -262,22 +257,6 @@ final class RateLimitResponsesExtension implements OperationExtension
         }
 
         return $limits;
-    }
-
-    /**
-     * @param  list<ThrottleLimit>  $limits
-     */
-    private function reportMultiple(array $limits, RouteContext $context): void
-    {
-        $context->components->addDiagnostic(new Diagnostic(
-            severity: Severity::Info,
-            code: 'rate-limit.multiple-throttles',
-            message: sprintf(
-                'Route carries %d throttle middleware; a single 429 is documented from the first — the others are enforced independently but not separately represented.',
-                count($limits),
-            ),
-            routeSignature: $context->route->signature(),
-        ));
     }
 
     /**

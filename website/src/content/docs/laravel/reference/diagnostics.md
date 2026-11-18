@@ -288,7 +288,6 @@ correct-but-vaguer document rather than dropping the endpoint.
 | `json-api-paginate.default-config` | info | The package's config wasn't readable, so documented pagination parameters use its defaults (`page[number]`/`page[size]`) | Publish it — `php artisan vendor:publish --tag=json-api-paginate` — so custom names reach the docs |
 | `timacdonald-json-api.resource-object-not-sent` | warning | A timacdonald/json-api resource isn't sent as a JSON:API resource object, so its resource objects — primary data and `included` entries — are published as open objects. Laravel 12.45 and later send a resource as its `resolveResourceData()` returns, which timacdonald/json-api only declares from v1.0.0-beta.10: an older release is sent as its attributes alone. A resource overriding `resolveResourceData()` itself reports this too | Upgrade timacdonald/json-api to v1.0.0-beta.10 or later; for an override of your own, remove it or describe the response explicitly |
 | `rate-limit.unregistered-limiter` | info | A route throttles on a named limiter nothing registers with `RateLimiter::for()`, so the allowance can't be documented | Register it in a service provider, or state the allowance inline as `throttle:60,1` — see [Named limiters](/laravel/documenting/rate-limiting/#named-limiters) |
-| `rate-limit.multiple-throttles` | info | A route carries more than one throttle middleware; one `429` is documented from the first | Nothing. The others are still enforced — they just aren't separately representable in OpenAPI |
 
 ## Authorization
 
