@@ -73,6 +73,16 @@ function bindingFactRoutes(): callable
             ->scopeBindings();
         // A framework trait that validates the value before the default lookup, which keeps the column.
         $router->get('api/binding-beacons/{beacon}', [BindingController::class, 'showBeacon']);
+        // Models that resolve a binding in code of their own only to narrow which records it admits — a
+        // grouped closure, a plain extra where — and still look the segment up as the framework does, by
+        // key and by a column the route names; one that looks it up on its route key whatever the route
+        // names; and one that changes the value before looking it up.
+        $router->get('api/binding-playbooks/{playbook}', [BindingController::class, 'showPlaybook']);
+        $router->get('api/binding-playbook-slugs/{playbook:slug}', [BindingController::class, 'showPlaybook']);
+        $router->get('api/binding-bulletins/{bulletin}', [BindingController::class, 'showBulletin']);
+        $router->get('api/binding-memos/{memo}', [BindingController::class, 'showMemo']);
+        $router->get('api/binding-memo-titles/{memo:title}', [BindingController::class, 'showMemo']);
+        $router->get('api/binding-consignments/{consignment}', [BindingController::class, 'showConsignment']);
         // Every note a binding writes, on segments their author described as well.
         $router->get('api/binding-described/{ledger:reference}/entries/{entry}', [DescribedBindingController::class, 'showEntry'])
             ->scopeBindings()

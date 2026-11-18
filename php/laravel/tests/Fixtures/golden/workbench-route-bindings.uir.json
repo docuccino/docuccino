@@ -19,7 +19,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 59,
+                "line": 63,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showAlmanac"
               }
             },
@@ -52,7 +52,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 59,
+                      "line": 63,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -80,7 +80,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 59,
+                    "line": 63,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showAlmanac"
                   }
                 }
@@ -107,7 +107,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 59,
+                      "line": 63,
                       "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showAlmanac"
                     }
                   }
@@ -172,7 +172,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 66,
+                "line": 70,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showArticle"
               }
             },
@@ -205,7 +205,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 66,
+                      "line": 70,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -233,7 +233,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 66,
+                    "line": 70,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showArticle"
                   }
                 }
@@ -259,7 +259,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 66,
+                      "line": 70,
                       "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showArticle"
                     }
                   }
@@ -289,7 +289,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 136,
+                "line": 140,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showBeacon"
               }
             },
@@ -322,7 +322,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 136,
+                      "line": 140,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -350,7 +350,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 136,
+                    "line": 140,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showBeacon"
                   }
                 }
@@ -377,7 +377,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 136,
+                      "line": 140,
                       "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showBeacon"
                     }
                   }
@@ -385,6 +385,216 @@
               },
               "type": "string",
               "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/binding-bulletins/{bulletin}": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:7pzqwpqkhjlsyah3",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/BindingController.php",
+                "line": 154,
+                "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showBulletin"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ],
+          "uses": {
+            "responses": {
+              "404": {
+                "id": "res:v1:335ukflxo6kvki4p",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/BindingController.php",
+                      "line": 154,
+                      "symbol": "implicit:route-model-binding"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "get.api.binding-bulletins.@bulletin",
+        "summary": "Show a published bulletin.",
+        "tags": [
+          "Bindings"
+        ],
+        "parameters": [
+          {
+            "x-docuccino": {
+              "id": "par:v1:wprr4thzckotzb4p",
+              "provenance": [
+                {
+                  "producer": "inference",
+                  "layer": "inference",
+                  "fields": [
+                    "required"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/BindingController.php",
+                    "line": 154,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showBulletin"
+                  }
+                }
+              ]
+            },
+            "name": "bulletin",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "type"
+                    ]
+                  }
+                ]
+              },
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/binding-consignments/{consignment}": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:m5riaojig2xhgij2",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/BindingController.php",
+                "line": 168,
+                "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showConsignment"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ],
+          "uses": {
+            "responses": {
+              "404": {
+                "id": "res:v1:vrzk5uhr3nowrjze",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/BindingController.php",
+                      "line": 168,
+                      "symbol": "implicit:route-model-binding"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "get.api.binding-consignments.@consignment",
+        "summary": "Show a consignment by its reference, in any case.",
+        "tags": [
+          "Bindings"
+        ],
+        "parameters": [
+          {
+            "x-docuccino": {
+              "id": "par:v1:x6lxmlodspk6jory",
+              "provenance": [
+                {
+                  "producer": "inference",
+                  "layer": "inference",
+                  "fields": [
+                    "required"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/BindingController.php",
+                    "line": 168,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showConsignment"
+                  }
+                }
+              ]
+            },
+            "name": "consignment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "type"
+                    ]
+                  }
+                ]
+              },
+              "type": "string"
             }
           }
         ],
@@ -408,7 +618,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 122,
+                "line": 126,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showCoupon"
               }
             },
@@ -441,7 +651,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 122,
+                      "line": 126,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -468,7 +678,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 122,
+                    "line": 126,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showCoupon"
                   }
                 }
@@ -513,7 +723,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 129,
+                "line": 133,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showCouponEntry"
               }
             },
@@ -546,7 +756,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 129,
+                      "line": 133,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -573,7 +783,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 129,
+                    "line": 133,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showCouponEntry"
                   }
                 }
@@ -610,7 +820,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 129,
+                    "line": 133,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showCouponEntry"
                   }
                 }
@@ -661,7 +871,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 80,
+                "line": 84,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showBound"
               }
             },
@@ -694,7 +904,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 80,
+                      "line": 84,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -721,7 +931,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 80,
+                    "line": 84,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showBound"
                   }
                 }
@@ -972,7 +1182,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 87,
+                "line": 91,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showDossier"
               }
             },
@@ -1005,7 +1215,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 87,
+                      "line": 91,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -1032,7 +1242,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 87,
+                    "line": 91,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showDossier"
                   }
                 }
@@ -1077,7 +1287,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 94,
+                "line": 98,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showExplicit"
               }
             },
@@ -1110,7 +1320,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 94,
+                      "line": 98,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -1138,7 +1348,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 94,
+                    "line": 98,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showExplicit"
                   }
                 }
@@ -1164,7 +1374,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 94,
+                      "line": 98,
                       "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showExplicit"
                     }
                   }
@@ -1194,7 +1404,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 94,
+                "line": 98,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showExplicit"
               }
             },
@@ -1227,7 +1437,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 94,
+                      "line": 98,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -1255,7 +1465,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 94,
+                    "line": 98,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showExplicit"
                   }
                 }
@@ -1281,7 +1491,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 94,
+                      "line": 98,
                       "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showExplicit"
                     }
                   }
@@ -1311,7 +1521,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 101,
+                "line": 105,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showFallback"
               }
             },
@@ -1384,7 +1594,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 52,
+                "line": 56,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showJournal"
               }
             },
@@ -1417,7 +1627,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 52,
+                      "line": 56,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -1445,7 +1655,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 52,
+                    "line": 56,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showJournal"
                   }
                 }
@@ -1471,7 +1681,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 52,
+                      "line": 56,
                       "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showJournal"
                     }
                   }
@@ -1535,7 +1745,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 31,
+                "line": 35,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showByReference"
               }
             },
@@ -1568,7 +1778,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 31,
+                      "line": 35,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -1596,7 +1806,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 31,
+                    "line": 35,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showByReference"
                   }
                 }
@@ -1622,7 +1832,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 31,
+                      "line": 35,
                       "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showByReference"
                     }
                   }
@@ -1652,7 +1862,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 38,
+                "line": 42,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showEntry"
               }
             },
@@ -1685,7 +1895,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 38,
+                      "line": 42,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -1713,7 +1923,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 38,
+                    "line": 42,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showEntry"
                   }
                 }
@@ -1740,7 +1950,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 38,
+                      "line": 42,
                       "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showEntry"
                     }
                   }
@@ -1762,7 +1972,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 38,
+                    "line": 42,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showEntry"
                   }
                 }
@@ -1788,7 +1998,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 38,
+                      "line": 42,
                       "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showEntry"
                     }
                   }
@@ -1818,7 +2028,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 45,
+                "line": 49,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showEntryByTitle"
               }
             },
@@ -1851,7 +2061,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 45,
+                      "line": 49,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -1879,7 +2089,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 45,
+                    "line": 49,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showEntryByTitle"
                   }
                 }
@@ -1922,7 +2132,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 45,
+                    "line": 49,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showEntryByTitle"
                   }
                 }
@@ -1948,7 +2158,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 45,
+                      "line": 49,
                       "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showEntryByTitle"
                     }
                   }
@@ -1978,7 +2188,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 45,
+                "line": 49,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showEntryByTitle"
               }
             },
@@ -2011,7 +2221,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 45,
+                      "line": 49,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -2039,7 +2249,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 45,
+                    "line": 49,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showEntryByTitle"
                   }
                 }
@@ -2083,7 +2293,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 45,
+                    "line": 49,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showEntryByTitle"
                   }
                 }
@@ -2109,13 +2319,223 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 45,
+                      "line": 49,
                       "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showEntryByTitle"
                     }
                   }
                 ]
               },
               "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/binding-memo-titles/{memo}": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:a6dfwmvko7yb6eo5",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/BindingController.php",
+                "line": 161,
+                "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showMemo"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ],
+          "uses": {
+            "responses": {
+              "404": {
+                "id": "res:v1:qqo334xdilqqiwqu",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/BindingController.php",
+                      "line": 161,
+                      "symbol": "implicit:route-model-binding"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "get.api.binding-memo-titles.@memo",
+        "summary": "Show an unarchived memo.",
+        "tags": [
+          "Bindings"
+        ],
+        "parameters": [
+          {
+            "x-docuccino": {
+              "id": "par:v1:vxliebwjecugwi6k",
+              "provenance": [
+                {
+                  "producer": "inference",
+                  "layer": "inference",
+                  "fields": [
+                    "required"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/BindingController.php",
+                    "line": 161,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showMemo"
+                  }
+                }
+              ]
+            },
+            "name": "memo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "type"
+                    ]
+                  }
+                ]
+              },
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/binding-memos/{memo}": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:ehvitzlwg2d7h4u6",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/BindingController.php",
+                "line": 161,
+                "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showMemo"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ],
+          "uses": {
+            "responses": {
+              "404": {
+                "id": "res:v1:j4vaqvuumjxlo6x4",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/BindingController.php",
+                      "line": 161,
+                      "symbol": "implicit:route-model-binding"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "get.api.binding-memos.@memo",
+        "summary": "Show an unarchived memo.",
+        "tags": [
+          "Bindings"
+        ],
+        "parameters": [
+          {
+            "x-docuccino": {
+              "id": "par:v1:pjxvothhr3hwrbtj",
+              "provenance": [
+                {
+                  "producer": "inference",
+                  "layer": "inference",
+                  "fields": [
+                    "required"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/BindingController.php",
+                    "line": 161,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showMemo"
+                  }
+                }
+              ]
+            },
+            "name": "memo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "type"
+                    ]
+                  }
+                ]
+              },
+              "type": "string"
             }
           }
         ],
@@ -2139,7 +2559,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 59,
+                "line": 63,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showAlmanac"
               }
             },
@@ -2172,7 +2592,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 59,
+                      "line": 63,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -2200,7 +2620,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 59,
+                    "line": 63,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showAlmanac"
                   }
                 }
@@ -2227,7 +2647,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 59,
+                      "line": 63,
                       "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showAlmanac"
                     }
                   }
@@ -2279,6 +2699,216 @@
         }
       }
     },
+    "/api/binding-playbook-slugs/{playbook}": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:7bbzymg7sxpzezoe",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/BindingController.php",
+                "line": 147,
+                "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showPlaybook"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ],
+          "uses": {
+            "responses": {
+              "404": {
+                "id": "res:v1:7ost2nsh7dkztrvn",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/BindingController.php",
+                      "line": 147,
+                      "symbol": "implicit:route-model-binding"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "get.api.binding-playbook-slugs.@playbook",
+        "summary": "Show a playbook you own, or a shared one.",
+        "tags": [
+          "Bindings"
+        ],
+        "parameters": [
+          {
+            "x-docuccino": {
+              "id": "par:v1:fnew7n2tim43rdfm",
+              "provenance": [
+                {
+                  "producer": "inference",
+                  "layer": "inference",
+                  "fields": [
+                    "required"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/BindingController.php",
+                    "line": 147,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showPlaybook"
+                  }
+                }
+              ]
+            },
+            "name": "playbook",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "type"
+                    ]
+                  }
+                ]
+              },
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/binding-playbooks/{playbook}": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:cf5niv75tdcklgoj",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/BindingController.php",
+                "line": 147,
+                "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showPlaybook"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "fallback",
+              "layer": "fallback",
+              "fields": [
+                "operationId"
+              ]
+            }
+          ],
+          "uses": {
+            "responses": {
+              "404": {
+                "id": "res:v1:xl6gf72bi22o6qsa",
+                "provenance": [
+                  {
+                    "producer": "integration:implicit-response",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/BindingController.php",
+                      "line": 147,
+                      "symbol": "implicit:route-model-binding"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "get.api.binding-playbooks.@playbook",
+        "summary": "Show a playbook you own, or a shared one.",
+        "tags": [
+          "Bindings"
+        ],
+        "parameters": [
+          {
+            "x-docuccino": {
+              "id": "par:v1:hyll6pdnqbs2ya4v",
+              "provenance": [
+                {
+                  "producer": "inference",
+                  "layer": "inference",
+                  "fields": [
+                    "required"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/BindingController.php",
+                    "line": 147,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showPlaybook"
+                  }
+                }
+              ]
+            },
+            "name": "playbook",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "type"
+                    ]
+                  }
+                ]
+              },
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/api/binding-refs/{ledger}": {
       "get": {
         "x-docuccino": {
@@ -2292,7 +2922,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 31,
+                "line": 35,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showByReference"
               }
             },
@@ -2325,7 +2955,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 31,
+                      "line": 35,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -2353,7 +2983,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 31,
+                    "line": 35,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showByReference"
                   }
                 }
@@ -2379,7 +3009,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 31,
+                      "line": 35,
                       "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showByReference"
                     }
                   }
@@ -2409,7 +3039,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 73,
+                "line": 77,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showSeason"
               }
             },
@@ -2442,7 +3072,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 73,
+                      "line": 77,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -2469,7 +3099,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 73,
+                    "line": 77,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showSeason"
                   }
                 }
@@ -2489,7 +3119,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 73,
+                      "line": 77,
                       "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showSeason"
                     }
                   }
@@ -2519,7 +3149,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 108,
+                "line": 112,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showVoucher"
               }
             },
@@ -2552,7 +3182,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 108,
+                      "line": 112,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -2579,7 +3209,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 108,
+                    "line": 112,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showVoucher"
                   }
                 }
@@ -2624,7 +3254,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 108,
+                "line": 112,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showVoucher"
               }
             },
@@ -2657,7 +3287,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 108,
+                      "line": 112,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -2684,7 +3314,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 108,
+                    "line": 112,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showVoucher"
                   }
                 }
@@ -2729,7 +3359,7 @@
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/BindingController.php",
-                "line": 115,
+                "line": 119,
                 "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showVoucherEntry"
               }
             },
@@ -2762,7 +3392,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 115,
+                      "line": 119,
                       "symbol": "implicit:route-model-binding"
                     }
                   }
@@ -2790,7 +3420,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 115,
+                    "line": 119,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showVoucherEntry"
                   }
                 }
@@ -2817,7 +3447,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/BindingController.php",
-                      "line": 115,
+                      "line": 119,
                       "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showVoucherEntry"
                     }
                   }
@@ -2838,7 +3468,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/BindingController.php",
-                    "line": 115,
+                    "line": 119,
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showVoucherEntry"
                   }
                 }
@@ -3013,7 +3643,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "d1b9c7b0d9cf2cc39f78e3ea2eabc732434e285e6c39fa8545a77bf760fd52c5"
+      "contentHash": "3582c206876acc9ac0611cd643427274f11b78243485411d5b72939faed82df8"
     },
     "generator": {
       "name": "docuccino/laravel",
