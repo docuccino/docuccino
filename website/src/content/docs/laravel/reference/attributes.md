@@ -96,6 +96,7 @@ public function __construct(
     public ?string $mediaType = null,
     public ?string $errorComponent = null,
     public ?string $schemaName = null,
+    public ?string $schemaDescription = null,
 )
 ```
 
@@ -141,6 +142,25 @@ public function completeMfa(Request $request): SuccessData { /* … */ }
 
 Operations naming the same body alike share the one component. A name a component key cannot carry names
 nothing, and `attribute.response-schema-name-invalid` says so.
+
+`schemaDescription:` describes that schema — what the body *is*, for a reader of `components.schemas` —
+where `description:` describes the response. A union or an envelope has no docblock to read one from, so
+this is the only place to write it, and it needs `schemaName:` beside it to have a schema to describe:
+
+```php
+#[Response(
+    status: 422,
+    type: 'OtpChallenge|PasskeyChallenge',
+    schemaName: 'SignInChallenge',
+    schemaDescription: 'Sign-in did not complete: one further step is required. Read `data.challenge_type` to tell which.',
+)]
+```
+
+Every declaration naming one schema is a statement about the same thing, so they have to agree. Write the
+sentence on one of them and leave the others without, or write the same sentence on each. Two different
+sentences leave the schema undescribed, with a `components.schema-description-conflict` warning naming
+both and where each was written — the document never picks one by the order your routes happen to be
+read in.
 
 Three things it does not do. It **renames a shared component; it does not create one** — a body only one
 operation states stays inline, exactly as `#[ErrorComponent]` behaves. Below `400` nothing shares an
