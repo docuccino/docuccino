@@ -226,7 +226,7 @@ it('sees a code written in each of the shapes the packages use', function (strin
     // Held in a class constant the constructor names.
     'class constant' => ['config.machine-dependent-value', 'warning'],
     // Held in a constant table the emitter loops over.
-    'constant table' => ['downlevel.tag-parent', 'warning'],
+    'constant table' => ['downlevel.tag-kind', 'warning'],
 ]);
 
 it('records both severities where one is chosen at emit time', function (): void {

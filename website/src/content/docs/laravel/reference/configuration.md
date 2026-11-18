@@ -379,10 +379,11 @@ order. `parent` is the OpenAPI-native statement of the same forest; `x-tagGroups
 convention most renderers read a grouped sidebar from, and neither has to be understood for the other
 to work. Flat tags emit no `x-tagGroups` at all.
 
-`summary`, `parent` and `kind` are OpenAPI 3.2 only. Exporting 3.1 drops them, each with its own
-`downlevel.tag-*` warning — the tags themselves stay. A `parent` dropped from a document that carries
-`x-tagGroups` costs only the native member; where nothing carries the groups, the hierarchy really is
-flattened and nesting the names ("Billing / Invoices") is the way back.
+`summary`, `parent` and `kind` are OpenAPI 3.2 only. Exporting 3.1 drops them, and says so once per
+member with a `downlevel.tag-*` notice naming every tag — the tags themselves stay. A `parent` dropped
+from a document that carries `x-tagGroups` costs only the native member, so that notice is info; where
+nothing carries the groups, the hierarchy really is flattened, it is a warning, and nesting the names
+("Billing / Invoices") is the way back.
 
 ### `webhooks`
 
