@@ -605,6 +605,11 @@ changed. No color, no timestamps — safe to paste into a PR comment.
 `securityScheme.changed`. A change carrying field-level detail adds a `fields` array. The `policy`
 member appears only with `--enforce`, and `requiredVersion` only on a violation.
 
+A response's [links](/laravel/documenting/responses/#links-between-operations) are compared by name:
+`response.link-added`, `response.link-removed`, and `response.link-changed` with the members that moved
+in `fields`. None of them is breaking. A link only says which value another operation takes, and an
+operation a link named that goes is reported, and breaking, on its own.
+
 `subject` says what the change is about, member by member, so you can group changes without taking
 `path` apart — a path template, a webhook name and a component name can all hold a dot or a space, so
 `components.schemas.Pet.enum` could be the enum of `Pet` or the schema `Pet.enum`. Its `kind` decides
