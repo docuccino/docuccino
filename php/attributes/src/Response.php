@@ -11,8 +11,10 @@ use Attribute;
  * usable on controllers, actions and closure routes.
  *
  * Which attribute names what: `#[ErrorComponent]` names an error where the error is defined,
- * `errorComponent:` here names one status of one operation, `#[SchemaName]` names a class's schema, and
- * `type:` points at the class. Nothing below 400 shares an error body, so a name there names nothing.
+ * `errorComponent:` here names one status of one operation, `#[SchemaName]` names a class's schema,
+ * `schemaName:` here names the schema of the body this declares — the one name a union, or a body the
+ * application wraps, can be given, since neither is a class to annotate — and `type:` points at the class.
+ * Nothing below 400 shares an error body, so an `errorComponent:` there names nothing.
  */
 #[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD | Attribute::TARGET_FUNCTION | Attribute::IS_REPEATABLE)]
 final readonly class Response
@@ -30,5 +32,6 @@ final readonly class Response
         public ?string $description = null,
         public ?string $mediaType = null,
         public ?string $errorComponent = null,
+        public ?string $schemaName = null,
     ) {}
 }

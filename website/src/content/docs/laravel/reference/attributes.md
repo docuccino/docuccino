@@ -95,6 +95,7 @@ public function __construct(
     public ?string $description = null,
     public ?string $mediaType = null,
     public ?string $errorComponent = null,
+    public ?string $schemaName = null,
 )
 ```
 
@@ -121,6 +122,24 @@ response in `components.responses`, and the shape under it where the status stat
 #[Response(status: 422, type: SignInChallenge::class, mediaType: 'application/json', errorComponent: 'AuthenticationChallenge')]
 public function completeMfa(Request $request): SuccessData { /* … */ }
 ```
+
+`schemaName:` names the **schema** of the body this declares, in `components.schemas`, the way
+[`#[SchemaName]`](#schemaname) names a class's. It is for the bodies no class stands for: a union of
+`type:` members, or a class the application wraps in an envelope (a Data object's `data` key), whose
+published shape is the envelope and not the class. Where a status answers with several representations,
+`errorComponent:` names the response and this names the one body:
+
+```php
+#[Response(
+    status: 422,
+    type: 'OtpChallenge|PasskeyChallenge',
+    errorComponent: 'ValidationErrorOrChallenge',
+    schemaName: 'SignInChallenge',
+)]
+public function completeMfa(Request $request): SuccessData { /* … */ }
+```
+
+Operations naming the same body alike share the one component.
 
 Three things it does not do. It **renames a shared component; it does not create one** — a body only one
 operation states stays inline, exactly as `#[ErrorComponent]` behaves. Below `400` nothing shares an
