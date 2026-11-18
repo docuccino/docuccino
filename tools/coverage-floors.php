@@ -146,11 +146,16 @@ const FLOORS = [
     // Re-recorded 59.11 → 59.53 when a body handing back the object it was followed for, a respond()
     // callback's guards and a helper reached by many paths came to be read once each (`StateKeepingCalls`,
     // `ParameterUse`, unit-tested in process).
-    // Measured 59.53% (3364/5651): 58% of it is 3277.58 statements, 86.42 of margin.
+    // Re-recorded 59.53 → 59.78 when a subclass of a framework fixed-status exception came to inherit the
+    // status the framework's constructor pins (read in `SubclassStatus`, unit-tested in process), and the
+    // private guards a declaring callee calls to be read (`PrivateHelpers`, unit-tested in process); the
+    // closures a declaring callee writes are read only under real analysis, the fixture group's. 59 would
+    // leave 45.16 statements of margin; the floor is left at 58 here.
+    // Measured 59.78% (3453/5776): 58% of it is 3350.08 statements, 102.92 of margin.
     // The record leaves out the rows that only run on the newest PHP (clone-with), which the
     // coverage job's PHP 8.4 skips; a run on 8.5 reads 3 statements higher. Read the same way as
     // before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => ['floor' => 58, 'measured' => 59.53],
+    'inference-phpstan' => ['floor' => 58, 'measured' => 59.78],
 ];
 
 /*

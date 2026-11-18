@@ -70,6 +70,14 @@ it('publishes the status each construction shape writes', function (string $meth
     'the same factory two undeclared calls away' => ['manifestStatusTwoCallsAway', ['ManifestRejectedException@404']],
     'a factory behind a callee that DECLARES the throw' => ['manifestStatusDeclaredByCallee', ['ManifestRejectedException@409']],
     'the same declared callee naming another factory' => ['manifestStatusDeclaredNotFound', ['ManifestRejectedException@404']],
+    // The declaring callee's own code is more than its top level: a guard written inside the transaction it
+    // runs, and one kept in a private method of its own class, state their factory as plainly.
+    'a declared callee throwing inside its own transaction closure' => ['manifestStatusDeclaredInTransaction', ['ManifestRejectedException@404']],
+    'a declared callee throwing from its own private guard' => ['manifestStatusDeclaredInPrivateGuard', ['ManifestRejectedException@409']],
+    // An application exception extending one of the framework's fixed-status exceptions is that status:
+    // its own constructor only chooses the message, and the framework's passes its literal on.
+    'a subclass of a framework fixed-status exception, thrown with new' => ['fixedStatusSubclass', ['ManifestDeferredException@422']],
+    'the same subclass through throw_if()\'s class-string form' => ['fixedStatusSubclassThrownIf', ['ManifestDeferredException@422']],
     // And the same four facts where the code lives outside the descend scope: reading a status is not
     // walking into a body, so a modular guard states one as plainly as a guard in `app/`.
     'a modular class thrown from inside the descend scope' => ['modularExceptionClassStatus', ['LedgerRejectedException@404']],

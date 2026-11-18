@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Exceptions\ExportLockedException;
+use App\Exceptions\ManifestDeferredException;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Services\ExportProbeQuery;
 use App\Services\ManifestDeclaredQuery;
+use App\Services\ManifestGuardedQuery;
 use App\Services\ManifestRelayQuery;
 use App\Services\ManifestReviewQuery;
+use App\Services\ManifestTransactionQuery;
 use App\Services\OrderService;
 use App\Services\PayloadValidator;
 use App\Support\Attempts;
@@ -1074,6 +1077,36 @@ class ThrowsController extends Controller
     public function manifestStatusDeclaredNotFound(ManifestDeclaredQuery $query): void
     {
         $query->missingResults(true);
+    }
+
+    /**
+     * Case 10x'': the declared guard's `throw` written inside the transaction the callee runs.
+     */
+    public function manifestStatusDeclaredInTransaction(ManifestTransactionQuery $query): void
+    {
+        $query->commit(true);
+    }
+
+    /**
+     * Case 10x''': the declared guard's `throw` written in a private method of the callee's own class.
+     */
+    public function manifestStatusDeclaredInPrivateGuard(ManifestGuardedQuery $query): void
+    {
+        $query->results(true);
+    }
+
+    /**
+     * Case 10z: an application exception that is a framework fixed-status exception with a constructor of
+     * its own, thrown with `new` and through `throw_if()`'s class-string form.
+     */
+    public function fixedStatusSubclass(): void
+    {
+        throw new ManifestDeferredException('queued');
+    }
+
+    public function fixedStatusSubclassThrownIf(bool $queued): void
+    {
+        throw_if($queued, ManifestDeferredException::class, 'queued');
     }
 
     /**

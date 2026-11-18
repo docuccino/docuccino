@@ -25,7 +25,9 @@ use Docuccino\Inference\PhpStan\Trace\Callee;
 use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
 use LogicException;
 use PhpParser\Node;
+use PhpParser\NodeFinder;
 use PHPStan\Analyser\Scope;
+use PHPStan\Analyser\ThrowPoint;
 use PHPStan\Node\ClosureReturnStatementsNode;
 use PHPStan\Node\FunctionReturnStatementsNode;
 use PHPStan\Node\MethodReturnStatementsNode;
@@ -1306,7 +1308,7 @@ final class ThrowAnalyzer
         $this->dependOn([$callee->file, $callee->writtenIn()]);
 
         $readings = [];
-        foreach ($body->getStatementResult()->getThrowPoints() as $throwPoint) {
+        foreach ($this->writtenByCallee($callee, $body) as $throwPoint) {
             $node = $throwPoint->getNode();
             $scope = $this->fileAnalyzer->stableScope($throwPoint->getScope());
 
@@ -1322,6 +1324,38 @@ final class ThrowAnalyzer
         }
 
         return ThrowSiteStatus::stated($readings);
+    }
+
+    /**
+     * The throw points of the code the declaring callee writes itself: its body, the closures written inside
+     * it — a `transaction()` callback is still the callee's own guard, though the analyser hands its throws
+     * to whoever calls it — and the private methods of its own class it calls, which no subclass can stand
+     * in for. Read, not walked into: one hop, and nothing a helper calls in turn.
+     *
+     * @return list<ThrowPoint>
+     */
+    private function writtenByCallee(Callee $callee, MethodReturnStatementsNode|FunctionReturnStatementsNode $body): array
+    {
+        $points = array_values($body->getStatementResult()->getThrowPoints());
+        $statements = $body->getStatements();
+        $finder = new NodeFinder;
+
+        $closures = $this->fileAnalyzer->closures($callee->writtenIn());
+        foreach ($finder->findInstanceOf($statements, Node\Expr\Closure::class) as $closure) {
+            $written = $closures[$closure->getStartFilePos()] ?? null;
+            if ($written !== null) {
+                $points = [...$points, ...array_values($written->getStatementResult()->getThrowPoints())];
+            }
+        }
+
+        foreach ($callee->class === null ? [] : PrivateHelpers::called($callee->class, $statements) as $helper) {
+            $written = $this->fileAnalyzer->method($callee->file, $callee->class, $helper);
+            if ($written !== null) {
+                $points = [...$points, ...array_values($written->getStatementResult()->getThrowPoints())];
+            }
+        }
+
+        return $points;
     }
 
     /**
