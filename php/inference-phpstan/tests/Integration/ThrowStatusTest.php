@@ -107,9 +107,13 @@ it('publishes the status each construction shape writes', function (string $meth
     'a construction one assignment behind the throw' => ['heldConstructionAtThrowSite', ['ExportBlockedException@451']],
     'the same, with its status chosen at run time' => ['heldRuntimeConstructionAtThrowSite', ['ExportBlockedException@null']],
     // A class is built by its BASE too: `new static(503)` one class up builds this one, so a subclass
-    // adding nothing still has a status, and one adding a factory of its own has two and states neither.
+    // adding nothing still has a status, and one adding a factory of its own has two, which the class alone
+    // cannot choose between.
     'a factory the subclass inherits from its base' => ['inheritedFactoryStatus', ['ExportRelocatedException@503']],
-    'a class its own base and its own factory build differently' => ['inheritedAgreementStatus', ['ExportOfflineException@null']],
+    // Reached through a guard that declares it, though, the guard's own two `throw`s are what this call
+    // raises: one at 503 and one at 413, and the request gets whichever ran. Both are responses a client can
+    // receive, so both are published; the stand-in this once answered named neither.
+    'a class its own base and its own factory build differently' => ['inheritedAgreementStatus', ['ExportOfflineException@413', 'ExportOfflineException@503']],
     // …and the same class reached by a RETHROW, which builds nothing and has no declaring callee to read
     // either, so only the class could have answered and it agrees on neither of its two statuses.
     'the same class reached by a rethrow that builds nothing' => ['rethrownAgreementStatus', ['ExportOfflineException@null']],

@@ -648,7 +648,8 @@ names. A subclass of one of the framework's fixed-status exceptions — `extends
 with a constructor of its own that only chooses the message — is that status, read off the framework's
 installed constructor. Where a method only declares the exception (`@throws`), the status is read from the
 `throw` it writes, including one inside a closure it runs (a `DB::transaction()` callback) or in a private
-method of its own class it calls. Applications that keep a refusal's reason and its status together on an
+method of its own class it calls. A method that throws the class at more than one status — a `422` from one
+factory and a `409` from another — documents each of them, since a client can receive either. Applications that keep a refusal's reason and its status together on an
 enum get the same:
 
 ```php

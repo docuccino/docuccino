@@ -958,10 +958,15 @@ where the one above it could not:
   two was the whole defect: layer 1 took the declaration and stopped, so an application that documents its
   guards — the idiomatic thing to do — lost every per-factory status and published the placeholder 500 for
   a 409 written two lines into the callee. The read is the same grammar the throw site's is, one hop on:
-  each `throw` of this class in the callee's body folded by `atThrowSite()` in its own scope, and they
-  either agree or the callee states nothing. A `throw` there that presents no construction at all — a
-  rethrow, one hop further down — takes the whole reading with it rather than letting the rest agree for a
-  subset, and the class's own agreement is then still entitled to answer.
+  each `throw` of this class in the callee's body folded by `atThrowSite()` in its own scope, and where
+  every one folds the callee states EVERY status among them — one when they agree, several when its
+  `throw`s build the class at several. Those are the responses this call can raise, whichever branch ran,
+  so each is published (`ThrowSiteStatus`); this is the one read allowed more than one answer, because it is
+  the one reading exactly the throws this call reaches, where the class's agreement below speaks for
+  constructions anywhere. One `throw` that would not fold leaves the callee stating none, and a `throw`
+  there that presents no construction at all — a rethrow, one hop further down — takes the whole reading
+  with it rather than letting the rest speak for a subset, and the class's own agreement is then still
+  entitled to answer.
 - **What the class's own constructions agree on** (`SubclassStatus::agreed()`) — the same fold as the
   first read, without the private-constructor condition, and therefore a weaker claim: the constructions
   are a subset of the application's rather than all of them. It answers only where the throw point carried
