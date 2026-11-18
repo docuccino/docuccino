@@ -1406,7 +1406,8 @@ where the class name isn't what you want a client to see. What falls back to `Er
 nothing named at all, so finding `Error422` under a nicely-named response means one representation has no
 declaration of its own, not that the attribute was ignored. A shape no class stands for — a union of
 `type:` members, or a class your application wraps in a `data` envelope — is named with
-[`#[Response(schemaName:)]`](/laravel/reference/attributes/#response) on the declaration itself.
+[`#[Response(schemaName:)]`](/laravel/reference/attributes/#response) on the declaration itself, and
+described with `schemaDescription:` beside it, since such a shape has no docblock to read one from.
 
 Where the name can reach nothing at all, the build says so with
 `attribute.error-component-unreachable`: on a status below `400`, which shares no error body, and on one
