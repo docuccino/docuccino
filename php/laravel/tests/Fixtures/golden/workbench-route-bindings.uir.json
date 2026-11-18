@@ -464,6 +464,7 @@
                   "producer": "inference",
                   "layer": "inference",
                   "fields": [
+                    "description",
                     "required"
                   ],
                   "source": {
@@ -472,24 +473,37 @@
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showBulletin"
                   }
                 }
-              ]
+              ],
+              "facts": {
+                "routeBinding": {
+                  "key": "id"
+                }
+              }
             },
             "name": "bulletin",
             "in": "path",
+            "description": "Matched on the resource's `id`.",
             "required": true,
             "schema": {
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "fallback",
-                    "layer": "fallback",
+                    "producer": "inference",
+                    "layer": "inference",
                     "fields": [
+                      "format",
                       "type"
-                    ]
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/BindingController.php",
+                      "line": 154,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showBulletin"
+                    }
                   }
                 ]
               },
-              "type": "string"
+              "type": "string",
+              "format": "ulid"
             }
           }
         ],
@@ -2510,6 +2524,7 @@
                   "producer": "inference",
                   "layer": "inference",
                   "fields": [
+                    "description",
                     "required"
                   ],
                   "source": {
@@ -2518,24 +2533,35 @@
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showMemo"
                   }
                 }
-              ]
+              ],
+              "facts": {
+                "routeBinding": {
+                  "key": "id"
+                }
+              }
             },
             "name": "memo",
             "in": "path",
+            "description": "Matched on the resource's `id`.",
             "required": true,
             "schema": {
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "fallback",
-                    "layer": "fallback",
+                    "producer": "inference",
+                    "layer": "inference",
                     "fields": [
                       "type"
-                    ]
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/BindingController.php",
+                      "line": 161,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showMemo"
+                    }
                   }
                 ]
               },
-              "type": "string"
+              "type": "integer"
             }
           }
         ],
@@ -2768,6 +2794,7 @@
                   "producer": "inference",
                   "layer": "inference",
                   "fields": [
+                    "description",
                     "required"
                   ],
                   "source": {
@@ -2776,20 +2803,31 @@
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showPlaybook"
                   }
                 }
-              ]
+              ],
+              "facts": {
+                "routeBinding": {
+                  "key": "slug"
+                }
+              }
             },
             "name": "playbook",
             "in": "path",
+            "description": "Matched on the resource's `slug`.",
             "required": true,
             "schema": {
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "fallback",
-                    "layer": "fallback",
+                    "producer": "inference",
+                    "layer": "inference",
                     "fields": [
                       "type"
-                    ]
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/BindingController.php",
+                      "line": 147,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showPlaybook"
+                    }
                   }
                 ]
               },
@@ -2873,6 +2911,7 @@
                   "producer": "inference",
                   "layer": "inference",
                   "fields": [
+                    "description",
                     "required"
                   ],
                   "source": {
@@ -2881,24 +2920,37 @@
                     "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showPlaybook"
                   }
                 }
-              ]
+              ],
+              "facts": {
+                "routeBinding": {
+                  "key": "id"
+                }
+              }
             },
             "name": "playbook",
             "in": "path",
+            "description": "Matched on the resource's `id`.",
             "required": true,
             "schema": {
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "fallback",
-                    "layer": "fallback",
+                    "producer": "inference",
+                    "layer": "inference",
                     "fields": [
+                      "format",
                       "type"
-                    ]
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/BindingController.php",
+                      "line": 147,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\BindingController::showPlaybook"
+                    }
                   }
                 ]
               },
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -3643,7 +3695,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "3582c206876acc9ac0611cd643427274f11b78243485411d5b72939faed82df8"
+      "contentHash": "803e51a50faebf6ba6999b9571d122a3d737d446abaf959dd18fef8209aa5132"
     },
     "generator": {
       "name": "docuccino/laravel",
