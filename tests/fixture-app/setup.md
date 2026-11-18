@@ -395,6 +395,14 @@ in the file being walked, and an array return is no type the trace follows:
   `abort_if()` and `abort_unless()` among them, handed a condition they never throw on — a literal or a
   `false` class constant — and one only a docblock calls `false`, beside `report_if()`, which throws
   nothing. A controller of its own, outside the throw corpus.
+- `app/Http/Controllers/AssertionGuardController.php` + `app/Exceptions/ListingMisconfiguredException.php` +
+  `app/Exceptions/UnsupportedRadiusException.php` — throws with no status asserting what the application
+  already guarantees, written every way an application writes one: a literal `throw` behind an `if`, a `??`,
+  an `||` and an early return, helpers returning `never` and `void`, `throw_if()` and `throw_unless()`, a
+  closure and an arrow function; beside them the same throws behind a test of a value, a re-thrown unique
+  violation, one class asserted at one site and refused with at another, exceptions carrying a status behind
+  a type test, an application `LogicException` subclass and an `InvalidArgumentException` subclass that
+  renders itself at 422. Part of the throw corpus.
 - `app/Http/Requests/Failures/` + `app/Exceptions/SubmissionMalformedException.php` — form requests that
   answer a failed validation or authorization their own way: `failedValidation()` throwing an
   `HttpResponseException` carrying a JSON envelope with the validator's errors in it, written on the request

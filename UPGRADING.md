@@ -4,6 +4,46 @@ One section per release that asks something of you, newest first. A release not 
 nothing but the version bump — the [changelog](https://docs.docuccino.app/changelog/) carries the
 full record either way.
 
+## v0.25.0
+
+One change, for anyone whose document publishes a `500`, and a last part on what a diff across the
+upgrade reports.
+
+### A `500` only an assertion raised
+
+Only if an operation publishes a `500` for an exception with no HTTP status that your code throws to
+state something it already guarantees: the user its middleware put there, a relation its foreign key
+keeps, a class every subclass must name.
+
+- **That `500` is no longer published.** A `throw` with no status is an assertion when its class is in
+  PHP's `LogicException` family (`LogicException`, `InvalidArgumentException`, `DomainException` and the
+  rest, or a class of your own extending one), or when it is reached only past a failed type test: an
+  `instanceof`, a type function such as `is_string()`, or a test for `null`, `??` included. How it is
+  written makes no difference: a literal `throw`, a helper returning `never` or `void`, `throw_if()` and
+  `throw_unless()` all give one answer. v0.24.0 began reading the last three, and published a `500` for
+  every assertion they make; those go, and so do the ones a literal `throw` published before.
+- **A status still stands.** An exception carrying one, such as an `AuthenticationException` behind an
+  `instanceof`, is documented as before, and so is an assertion your exception handling renders at a status
+  of its own.
+- **Check the ones a request can reach.** A `null` check meaning "nothing there yet", or an
+  `InvalidArgumentException` refusing a value the request sent, is something a client really meets, and
+  its `500` goes with the rest. Give it the status that client should see, with an exception that carries
+  one or a handler that answers the class, and it is documented at that status.
+  [A `throw` that only asserts](https://docs.docuccino.app/laravel/documenting/errors/#a-throw-that-only-asserts)
+  has the rule and an example.
+- **An `#[IgnoreResponse(status: 500)]` written to hide one now drops nothing.** It is reported as
+  `attribute.ignore-response-unmatched`, a warning, so a build that fails on warnings fails until you
+  delete it.
+- **A `throw` you moved into a helper to keep its `500` out can come back.** It gives the same answer
+  wherever it is written.
+
+### What `docuccino:diff` reports across this upgrade
+
+Only if you diff a document committed before the upgrade against a build after it, or gate it with
+`--enforce`. Each `500` that goes is reported as `response.removed`, which the differ reads as breaking,
+and nothing else in the document moves. Regenerate committed documents after upgrading. If you gate on
+`docuccino:coverage`, a `500` no test could reach no longer counts as a response your tests missed.
+
 ## v0.24.0
 
 Six changes, each for a different reader, and a last part on what a diff across the upgrade

@@ -6,7 +6,7 @@ head:
 description: Document 4xx and 5xx responses automatically — read out of your real exception handling, with framework defaults behind them.
 ---
 
-import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
+import { Tabs, TabItem, Steps, Aside } from '@astrojs/starlight/components';
 
 Error responses are one of the most tedious parts of API docs to maintain by hand. Docuccino
 documents them for you by reading how your application actually handles exceptions, and falls back
@@ -695,7 +695,8 @@ throw_if($export->isLocked(), ExportLockedException::class, 423, 'The export is 
 throw_unless($export->isFresh(), new Refused(TokenRefusal::Expired));                      // a 401
 ```
 
-A message on its own is the `RuntimeException` Laravel makes of it, documented as a `500`. A guard handed a
+A message on its own is the `RuntimeException` Laravel makes of it, documented as a `500` unless the guard
+[only asserts](#a-throw-that-only-asserts). A guard handed a
 condition it can never throw on, such as `abort_if(false, 403)` or a `throw_if()` on a class constant that
 is `false`, documents nothing.
 
@@ -749,11 +750,59 @@ OrderLockedException::for($order)`. A response built from a value the constructo
 enum case, is read from the constructor's own types. So when the cases carry different statuses, the
 response is documented under `default`.
 
+### A `throw` that only asserts
+
+Some throws are not refusals. They are your code stating something it already guarantees: the user your
+route's `auth` middleware put there, the relation a foreign key keeps, the class every list builder is
+required to name. No request a correctly wired application receives can reach them, so the `500` Laravel
+would send is not a response a client of your API can get, and Docuccino leaves it out.
+
+A `throw` with no status is treated as an assertion when either of these is true:
+
+- **Its class is in PHP's `LogicException` family**: `LogicException`, `InvalidArgumentException`,
+  `DomainException`, `LengthException`, `OutOfRangeException`, `BadFunctionCallException`,
+  `BadMethodCallException`, or a class of your own that extends one. PHP defines these as errors in the
+  program's logic, which should lead directly to a fix in your code.
+- **It is reached only past a failed type test**: an `instanceof`, a type function such as `is_string()`,
+  or a test for `null`, `??` included.
+
+```php
+$recruiter = $request->user();
+
+// No 500: the route's policy admits recruiters only.
+throw_unless($recruiter instanceof Recruiter, RuntimeException::class, 'The route runs behind its policy.');
+
+// No 500: every list builder names its row class.
+$rowClass = $dataClass ?? $this->dataClass() ?? $this->missingDataClass();
+
+// A 500: the request decides this.
+if ($request->integer('count') > 100) {
+    throw new RuntimeException('Too many invoices in one export.');
+}
+```
+
+How the `throw` is written makes no difference. A literal `throw`, a helper returning `never` or `void`,
+`throw_if()` and `throw_unless()`, and a closure all give the same answer for the same guard, so you never
+have to move a `throw` somewhere to keep it out of your document.
+
+An exception that carries a status is a refusal wherever it sits:
+`throw_unless($user instanceof User, AuthenticationException::class)` still documents its `401`. So is an
+assertion your exception handling renders at a status of its own: if your handler answers
+`InvalidArgumentException` with a `422`, the endpoint documents the `422`.
+
+<Aside type="caution">
+Make sure a request really can't reach it. A test for `null` can be an answer rather than a guarantee,
+such as `if ($version === null)` where `null` means nothing has been published yet. An
+`InvalidArgumentException` can refuse a value the request sent. If a client can reach the `throw`, give it
+the status that client should see: throw an exception that carries one, or answer the class in your
+exception handler. That documents the response and stops your server answering `500` for it.
+</Aside>
+
 ### When a `500` is a stand-in
 
 A `500` in your document is not one fact. It is the right answer when your code says so, and it is the
 right answer for an exception that is no HTTP error at all — Laravel really does answer `500` for a bare
-`RuntimeException`. It is a **stand-in** only in the third case: the error is an `HttpException`
+`RuntimeException` a request can reach. It is a **stand-in** only in the third case: the error is an `HttpException`
 subclass, nothing in your code stated a number for it, and the table above has no row for the class
 either. A response has to be keyed by status, so it is filed at `500` — a key the document cannot do
 without, not a claim about what your server sends.

@@ -977,9 +977,10 @@ document CARRIES, and `project_paths` bounds that on purpose; the declaring-call
 the error the document already carries SAYS, so its gate is the application's own source — the same scope
 every other status read uses, for the priming reason below. That is what lets a modular guard state its
 status as plainly as one in `app/`. Measured over one build of the fixture's throw corpus when it held 57
-(it holds 139 actions on two controllers now; every one added since depends only on files those already
+(it holds 164 actions on three controllers now; every one added since depends only on files those already
 did, but for the nine whose closures a helper runs, which add `app/Support/Attempts.php` and the helper
-files, and the seventeen that read a reason enum, which add the enums and exception classes they read — none
+files, the seventeen that read a reason enum, which add the enums and exception classes they read, and the
+twenty-five on the assertion controller, which add it and the two exception classes it throws — none
 re-measured), the analysed-file count is 163 with the read and 163 without, so no recorded walk is discarded; the cost is two
 extra live file walks (25 against 23), one per callee body whose `throw` states a status —
 `app/Services/ManifestDeclaredQuery.php` and `modules/Billing/LedgerReviewQuery.php` — and no measurable
@@ -1119,9 +1120,9 @@ list and the read declines anyway — measured against Symfony's own `ConflictHt
 `__construct` has zero statements — while asking for it primes that file, grows the analysed set and
 discards every walk the replay layer had recorded. That argument is about PRIMING, so it reaches vendor and
 stops there: a primed root is already in the analysed set, its bodies intact, and reading one grows nothing.
-Measured over one build of the fixture app's throw corpus when it held 58 (it holds 139 throw actions now,
-and every one added since depends only on files those already did, but for the nine helper rows and the
-seventeen reason-enum rows, not re-measured), the analysed-file count is the same whether the status reads are scoped to the
+Measured over one build of the fixture app's throw corpus when it held 58 (it holds 164 throw actions now,
+and every one added since depends only on files those already did, but for the nine helper rows, the
+seventeen reason-enum rows and the twenty-five assertion rows, not re-measured), the analysed-file count is the same whether the status reads are scoped to the
 application or to the descend paths — so nothing recorded is discarded — and the wider scope costs one extra live file walk, for an exception class nothing else opened. (The
 absolute counts this paragraph used to give were taken against a smaller corpus than the one above it, and
 two adjacent paragraphs disagreeing about one corpus is what stops a reader trusting either.) Scoping these reads to the descend paths instead published a placeholder 500 for a
@@ -1251,14 +1252,44 @@ of the docs site rather than here, because the reader who needs them is the one 
 that published nothing.
 
 Result model: `ThrownException{exceptionFqcn, httpStatusHint: ?int, callChain: list<Frame>,
-confidence: certain|declared|likely, disposition: signal|internal|dropped}` —
+confidence: certain|declared|likely, disposition: signal|assertion|internal|dropped}` —
 vendor-declared 500-class exceptions are demoted to `internal`, project-declared kept.
 **Exception identity = (fqcn, httpStatusHint)**: two aborts (403/404) are two responses;
-never dedupe by fqcn alone. Engine stops at "exceptions + status hints"; response bodies
+never dedupe by fqcn alone. Where one identity is met twice the disposition that publishes most wins
+before confidence does (`ThrowDisposition::rank()`): a class one site raises as an error and another as an
+assertion is an error, whichever the walk met first. Engine stops at "exceptions + status hints"; response bodies
 are the pipeline's ExceptionToResponse job. Known limitation (accepted): an incomplete
 `@throws` docblock suppresses descent, hiding deeper exceptions — the docblock is trusted about WHICH
 classes a call raises. It is not trusted about their statuses, which is a separate claim it never makes:
 that read goes one hop past the declaration into the callee's own `throw` (`inDeclaringCallee()` above).
+
+### An assertion is not a response
+
+A throw with no status the application raises only where its own guarantees fail is an `assertion`
+(`ThrowSignal`, `Assertions`): a class of PHP's `LogicException` family, which PHP defines as a defect in the
+program, or a throw reached only past a failed type test — `instanceof`, an `is_*()` type function, a test
+for `null` including `??`. No request a correctly wired application receives gets it, so it publishes no
+`500`. The rule is about the CLASS and the PATH, never the form: the guards on the way to a throw are read by
+the one walk a return's guards are (`ParameterUse::guardsTo()`, short circuits included), a `throw_if()` is
+behind its own condition too (`GuardCondition::of()`), and what a helper or a handed closure throws is behind
+every guard on the way to the call that reached it, which the analysis carries down. A `never` helper and a
+`void` one therefore give one answer, and so do a literal `throw` and the `throw_unless()` spelling it.
+
+The engine only FILES the throw; the adapter decides whether it is sent (`AssertedThrows`), because only the
+adapter sees how the application renders it. An assertion rendered at the 500 a status-less exception falls
+back to is no response; one the framework or the application renders at a status of its own — Laravel's
+`AuthenticationException` at 401, an `InvalidArgumentException` an application's handler answers with 422 —
+is, and stands. It is read and rolled back the way an ignored status is, and records no ignore match, so an
+`#[IgnoreResponse(500)]` written for one is reported as dropping nothing.
+
+Measured on a real application before it shipped (284 operations; 57 published a `500` before the readers
+that reach `never` helpers and `throw_if()`, 110 after): 44 publish one now. Every one of the 66 removed is
+an assertion of the two kinds above; two of them are reachable by a request — an `InvalidArgumentException`
+a settings service throws for an out-of-range value, and a `null` check meaning "nothing published yet" —
+which is the cost of reading the class and the guard rather than the request, and is why the errors page
+tells the author to give such a throw a status. The rule adds no `500` of its own: the three operations
+publishing one that did not before re-throw a caught database error behind a test of a value, which the
+readers above made legible and a literal `throw $e` already published.
 
 ### 6c. How far descent goes, and what it says when it stops
 
