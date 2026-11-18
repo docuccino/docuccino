@@ -459,10 +459,10 @@ The seventh was the same shape once more, and the largest drop yet. Reading a st
 `@throws` — descending one hop to the `throw` the callee writes, because a `@throws` says which CLASS a
 call raises and nothing about which status — put 47 Scope-driven statements into `ThrowAnalyzer`, taking
 49.70% to 48.87% against a floor of 49. What came out was the DECISION rather than the walk:
-`ThrowSiteStatus` answers what a SET of throw readings states — all folded and agreeing, or one of three
-ways a set fails to speak, each naming whose code the fold gave up in — and it is
-`ConstructionStatus::agreedIn()` one level up, so it belonged in its own class on the design's own terms
-rather than for the ratio. Nothing about it needs a scope, so a dataset drives every branch, including the
+`ThrowSiteStatus` answers what a SET of throw readings states — every status, where all of them folded,
+or one of three ways a set fails to speak, each naming whose code the fold gave up in — and it is
+`ConstructionStatus::agreedIn()`'s question one level up, so it belonged in its own class on the design's
+own terms rather than for the ratio. Nothing about it needs a scope, so a dataset drives every branch, including the
 two that only a set can have: two `throw`s at two statuses, and one unreadable `throw` discarding the
 others. 49.49% (1271/2568), about thirteen statements of headroom. The test that came with it also caught
 a hole in a neighbour: the guard deriving `ThrowAnalyzer`'s missing-status producers from their declared
