@@ -1030,9 +1030,10 @@ Nor does it hide what the rules enforce: where a rule writes a note ("Must be a 
 ## Validation rule reference
 
 This is the complete rule vocabulary, with the file rules covered under [File
-uploads](#file-uploads) below. Anything not listed leaves the property permissive and raises a
-`validation.rule-unhandled` info diagnostic — and you can teach Docuccino a new rule by registering a
-`RuleTransformer` (see [Writing an integration](/extending/extension-authoring/)).
+uploads](#file-uploads) below: every rule Laravel's validator ships is read. A rule name it doesn't ship
+— one an application or a package registers with `Validator::extend()` — leaves the property permissive
+and raises a `validation.rule-unhandled` info diagnostic, and you can teach Docuccino that rule by
+registering a `RuleTransformer` (see [Writing an integration](/extending/extension-authoring/)).
 
 ### Presence
 
@@ -1042,7 +1043,9 @@ uploads](#file-uploads) below. Anything not listed leaves the property permissiv
 | `nullable` | The type admits `null` (`type: [string, null]`); a blank string the middleware turns into `null` is noted beside it — see [Blank values](#blank-values). |
 | `sometimes` | Keeps the field **out** of `required` — even alongside `required`, because `sometimes\|required` means "required when present". |
 | `filled` | No effect on the documented shape; a `nullable` field with it takes no blank — see [Blank values](#blank-values). |
-| `required_if`, `required_unless`, `required_with`, `required_with_all`, `required_without`, `required_without_all` | A description note ("Required when `status` is `paid`.") — a conditional requirement has no JSON Schema keyword. |
+| `required_if`, `required_unless`, `required_with`, `required_with_all`, `required_without`, `required_without_all`, `required_if_accepted`, `required_if_declined` | A description note ("Required when `status` is `paid`.") — a conditional requirement has no JSON Schema keyword. |
+| `present_if`, `present_unless`, `present_with`, `present_with_all` | A description note ("Must be sent, even empty, when `kind` is `company`."). It says "sent" rather than "required", because `present` asks for the key and nothing about its value. |
+| `required_array_keys:x,y` | The keys it names join the object's `required` list. That is exactly what Laravel checks — each key is there, whatever it holds — and a `nullable` field's `null` still passes, since `required` constrains only an object. |
 | `Rule::requiredIf(…)`, `Rule::requiredUnless(…)`, or the `new RequiredIf(…)` / `new RequiredUnless(…)` they build | A literal `true` or `false` reads as the rule it settles to: `Rule::requiredIf(true)` is `required`, and `Rule::requiredIf(false)` is no rule at all. A closure, or a value only the request decides, leaves the field optional with no note. Docuccino never calls the closure: its answer at build time says nothing about the next request. |
 
 ### Blank values
@@ -1218,6 +1221,7 @@ per value:
 | `uuid` | `string`, `format: uuid` |
 | `ulid` | `string`, `format: ulid` |
 | `url` | `string`, `format: uri` |
+| `base64` (Laravel 13) | `string`, `contentEncoding: base64`, with a value it accepts as the example. |
 | `ip` | `string`, `format: ip`. Laravel takes either family here, and JSON Schema has no format for both, so this one describes the value rather than checks it. |
 | `ipv4` | `string`, `format: ipv4` — a dotted quad with no leading zeros, as Laravel checks it. |
 | `ipv6` | `string`, `format: ipv6` — an IPv4-mapped address like `::ffff:192.0.2.1` is one, an address with a zone id like `fe80::1%eth0` isn't. |
@@ -1270,6 +1274,7 @@ a `format` claim about it would be a guess.
 | `mac_address` | An anchored `pattern` for the forms Laravel accepts: six pairs of hex digits joined by `:` or by `-`, or three groups of four joined by `.`. |
 | `hex_color` | An anchored `pattern` for `#` and 3, 4, 6 or 8 hex digits in either case — Laravel's own regex, which takes a final newline the way any regex without `D` does. |
 | `starts_with:INV-` / `ends_with:.pdf` | An anchored `pattern` for a single value; a multi-value set becomes a description ("Must start with one of: …"), since there's no single pattern for it. |
+| `doesnt_start_with:tmp_` / `doesnt_end_with:.bak` | `not: { type: string, pattern: "^tmp_" }` for a single value, which an escaped literal states exactly; it adds no `type` of its own, since Laravel takes a number there. Several values, or a second negation on a field that already carries a `not`, become a description ("Must not start with any of: …"). |
 | `accepted` | `boolean` with `const: true`. Laravel also takes the spellings a form sends, `"yes"`, `"on"`, `1`, `"1"` and `"true"`, which aren't published. |
 | `declined` | `boolean` with `const: false`, and Laravel also takes `"no"`, `"off"`, `0`, `"0"` and `"false"`. |
 | `accepted_if:kind,business`, `declined_if:kind,business` | A note, "Must be accepted when kind is business." (or "declined"), and nothing else. Until `kind` is one of the values listed, Laravel takes any value there, or none, and a schema can't say "until". A type rule beside it, such as `boolean`, still publishes. |
@@ -1295,10 +1300,27 @@ every other rule, and they're applied last, so they see the finished property.
 
 | Rule | Documented as |
 | --- | --- |
-| `prohibited` | The field is **omitted** from the documented body. It can never be sent, so documenting it would invite exactly what the API rejects. Any nested key under it goes too. |
-| `prohibited_if:other,value` / `prohibited_unless:other,value` | The field stays documented and optional — it's sendable in some states — with the condition as a description ("Must not be sent when …"). |
+| `prohibited`, `missing` | The field is **omitted** from the documented body. It can never be sent, so documenting it would invite exactly what the API rejects. Any nested key under it goes too. |
+| `prohibited_if:other,value` / `prohibited_unless:other,value`, `prohibited_if_accepted`, `prohibited_if_declined`, `missing_if`, `missing_unless`, `missing_with`, `missing_with_all` | The field stays documented and optional — it's sendable in some states — with the condition as a description ("Must not be sent when …"). |
 | `Rule::prohibitedIf(…)`, `Rule::prohibitedUnless(…)`, or the `new ProhibitedIf(…)` / `new ProhibitedUnless(…)` they build | A literal condition that prohibits the field omits it, like `prohibited`. One that doesn't is no rule, so the field stays documented. A closure or a value only the request decides leaves it documented and optional, with no note. |
 | `prohibits:other` | Documented and optional: this rule constrains the *other* field, and says so in the description. |
+
+### Described in a note
+
+These constrain the value in a way no schema keyword states truly, so each is a description note
+beneath the field, and the schema stays as wide as the field's other rules leave it.
+
+| Rule | Note | Why no keyword |
+| --- | --- | --- |
+| `same:password`, `different:old_email` | "Must match password." / "Must differ from old_email." | It compares with another field's value. |
+| `in_array:allowed.*` | "Must be one of the values sent in allowed." | The values come from the same request. |
+| `date_equals:today` | "Must be the same date as today." | The date is read when the request runs, or from another field. |
+| `contains:a,b`, `doesnt_contain:a` | "Must contain each of: a, b." / "Must contain none of: a." | Laravel compares loosely, so `1` and `"1"` both count — a `const` would refuse one of them. |
+| `in_array_keys:en,fr` | "Must contain at least one of the keys: en, fr." | |
+| `array_keys:en,fr` (Laravel 13) | "May contain only the keys: en, fr." | |
+| `active_url` | "Must be a URL whose host resolves in DNS." The field is a `string`. | The host is resolved when the request runs, and Laravel takes values a `uri` format would refuse. |
+| `ascii`, `lowercase`, `uppercase`, `encoding:UTF-8` | "Must contain only ASCII characters.", "Must be lowercase.", … | Laravel reads case and encoding over all of Unicode; a pattern would be narrower. |
+| `not_regex:/^tmp/` | "Must not match /^tmp/." | A PHP regex is published wider than it reads where it can't be exact, and a wider pattern inside `not` would refuse values the API accepts. |
 
 ### Recognized with no schema effect
 
