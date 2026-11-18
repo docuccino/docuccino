@@ -593,7 +593,7 @@ The name in the description is always the **public** one — the key a client se
 
 Anything you write yourself wins outright — a [comment above the entry](#a-comment-becomes-the-description)
 or a `#[QueryParameter]` replaces the generated line entirely. The
-[`whereIn`, `null`, separator, and default notes](#defaults-and-nullable-filters) are appended either
+[`whereIn`, empty-value, separator, and default notes](#defaults-and-nullable-filters) are appended either
 way, because they describe the request form rather than the matching.
 
 ### Overriding the generated prose
@@ -709,8 +709,17 @@ Chained modifiers are recovered too:
   case is the value the query binds it as, so `->default(Status::Sent)` documents `sent`. A
   `default` on the [filter class](#custom-filter-classes) covers every other call site, and a chained
   one here wins for this entry, exactly as a comment does over the class's `description`.
-- `->nullable()` appends *"Accepts `null` to filter for absent values."* to the description. It does
-  **not** add `null` as an enum value — the empty filter is a request form, not one of the enum's cases.
+- `->nullable()` on an `exact` filter appends *"An empty value matches rows that have no value."* to
+  the description. A query string has no `null`: a client sends `filter[status]=`, Laravel's
+  `ConvertEmptyStringsToNull` makes it null, and an exact match on a column compiles that as `whereNull`.
+  It does **not** add `null` as an enum value — the empty filter is a request form, not one of the
+  enum's cases.
+
+  Spatie's `nullable()` only lets the null through to the filter instead of dropping it, so on any other
+  filter the note would be a guess, and it is left off: a partial, prefix or suffix match reads the null
+  as an empty string and matches every row with a value, `belongsTo` and `trashed` ignore it, an exact
+  match through a relation matches only rows whose related row has no value, and a scope, callback or
+  custom filter does whatever your code does with it — say so in its comment or `#[QueryParameter]`.
 
 ```php
 AllowedFilter::exact('status')->default('sent')->nullable();
