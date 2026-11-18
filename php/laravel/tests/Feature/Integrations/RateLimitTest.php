@@ -33,6 +33,7 @@ use Illuminate\Cache\RateLimiter;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Routing\Router;
 use Workbench\App\Http\Controllers\ArchiveController;
 use Workbench\App\Http\Controllers\FormController;
@@ -152,7 +153,7 @@ it('reports a throttle on a limiter name nothing registered, and documents the s
 
 it('still reports an unregistered limiter on a route that ignores the 429', function (): void {
     // An `#[IgnoreResponse(429)]` says what to document; it says nothing about whether the limiter the
-    // route names exists. Consulting it above this check hid the app bug — every guest request 429s —
+    // route names exists. Consulting it above this check hid the app bug — every guest request fails —
     // behind an attribute about documentation.
     /** @var Router $router */
     $router = app('router');
@@ -194,6 +195,40 @@ it('documents one 429 for a route behind several throttles, and reports nothing 
             $result->diagnostics,
             static fn ($diagnostic): bool => str_starts_with($diagnostic->code, 'rate-limit.'),
         )))->toBe([]);
+});
+
+it('checks the limiter of every throttle on a route, not only the first', function (array $middleware): void {
+    // Each throttle on a route is enforced on its own, so an unregistered name anywhere in the stack fails
+    // requests exactly as one in first place does. Two throttles naming the same limiter are one fact.
+    /** @var Router $router */
+    $router = app('router');
+    $router->get('api/stacked-throttle', [FormController::class, 'index'])->middleware($middleware);
+
+    bindStubEngine();
+    $reported = diagnosticsCoded(generateDocument()->diagnostics, 'rate-limit.unregistered-limiter');
+
+    expect($reported)->toHaveCount(1)
+        ->and($reported[0]->message)->toContain('"reports"')
+        ->and($reported[0]->routeSignature)->toBe('GET /api/stacked-throttle');
+})->with([
+    'second of two' => [['throttle:60,1', 'throttle:reports']],
+    // The router already drops a repeated middleware string, so the repeat that reaches the check is one
+    // limiter spelled two ways.
+    'named twice' => [['throttle:reports', 'throttle:10,1', ThrottleRequests::using('reports')]],
+]);
+
+it('reports every unregistered limiter a route names, not only the first', function (): void {
+    /** @var Router $router */
+    $router = app('router');
+    $router->get('api/two-unregistered', [FormController::class, 'index'])->middleware(['throttle:reports', 'throttle:exports']);
+
+    bindStubEngine();
+    $reported = diagnosticsCoded(generateDocument()->diagnostics, 'rate-limit.unregistered-limiter');
+
+    expect(array_map(static fn ($diagnostic): string => $diagnostic->message, $reported))->toEqualCanonicalizing([
+        'Route throttles on the named rate limiter "reports", but nothing registers it with RateLimiter::for().',
+        'Route throttles on the named rate limiter "exports", but nothing registers it with RateLimiter::for().',
+    ]);
 });
 
 it('reports nothing for a registered named limiter, however dynamic it is', function (): void {
