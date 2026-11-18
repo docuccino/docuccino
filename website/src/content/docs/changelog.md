@@ -13,6 +13,30 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.25.0
+
+### Breaking changes
+
+- **inference-phpstan**: a throw that only asserts what the application guarantees publishes no 500 ([#801](https://github.com/docuccino/docuccino/pull/801))
+  - an operation no longer publishes a `500` that came only from an exception with no HTTP status that the application raises to assert what it already guarantees. That means a class of PHP's `LogicException` family, or a throw reached only past a failed `instanceof`, `is_*()` or `null` test, whether the throw is written literally, in a helper, or handed to `throw_if()` or `throw_unless()`. `docuccino:diff` reports each removal as a breaking `response.removed`. An `#[IgnoreResponse(status: 500)]` written to hide one now drops nothing and is reported as `attribute.ignore-response-unmatched`. Regenerate committed documents after upgrading; see UPGRADING.md.
+
+### Features
+
+- **laravel**: publish a declared response body under the schema name #[Response] gives it ([#810](https://github.com/docuccino/docuccino/pull/810))
+- **attributes**: let #[Response] name the schema of the body it declares ([#809](https://github.com/docuccino/docuccino/pull/809))
+- **core**: compare response links in docuccino:diff ([#807](https://github.com/docuccino/docuccino/pull/807))
+- **laravel**: read every validation rule the installed framework ships ([#805](https://github.com/docuccino/docuccino/pull/805))
+- **core**: file a thrown exception the application raises only where its own guarantees fail as an assertion ([#799](https://github.com/docuccino/docuccino/pull/799))
+
+### Bug fixes
+
+- **inference-phpstan**: read the status an exception states through its framework parent, a closure or a private guard ([#808](https://github.com/docuccino/docuccino/pull/808))
+- **laravel**: say once that a rule class is unread, however many fields it is on ([#806](https://github.com/docuccino/docuccino/pull/806))
+- **core**: list in a tag group only the tags an operation carries ([#804](https://github.com/docuccino/docuccino/pull/804))
+- **core**: say a dropped tag member and a capped Postman collection once per document ([#803](https://github.com/docuccino/docuccino/pull/803))
+- **laravel**: type a segment whose model only narrows the framework's own binding lookup ([#802](https://github.com/docuccino/docuccino/pull/802))
+- **laravel**: document an assertion only at a status the application renders it with ([#800](https://github.com/docuccino/docuccino/pull/800))
+
 ## v0.24.0
 
 ### Breaking changes

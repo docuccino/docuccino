@@ -7,6 +7,12 @@ User-facing changes to `docuccino/attributes` — features, fixes, performance w
 taken from the commit messages scoped `attributes`. Entries begin after v0.1.2; older history is in
 the [repository](https://github.com/docuccino/docuccino) git log.
 
+## v0.25.0
+
+### Features
+
+- let #[Response] name the schema of the body it declares ([#809](https://github.com/docuccino/docuccino/pull/809))
+
 ## v0.13.1
 
 ### Features
