@@ -254,7 +254,9 @@ The rest of the classification follows the same instinct.
 - **An obligation on the writer gates the request.** A parameter or field that became required, a
   `format` that arrived: breaking on a request, reported on a response.
 - **A field a consumer reads gates the response.** A property added is safe; a property removed is
-  not.
+  not. A response header reads the same way: a `required` one removed, or made optional, breaks a
+  client that relied on it, while an optional one going breaks nothing — a client already had to cope
+  with its absence.
 - **Gone is gone.** A removed operation, parameter, response or status code — and a security scheme
   that changed or disappeared while a `security` requirement still names it.
 - **Prose is never breaking.** A description or a summary, an operation's `deprecated`, a security

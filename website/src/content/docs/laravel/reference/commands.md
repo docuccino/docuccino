@@ -605,6 +605,25 @@ changed. No color, no timestamps — safe to paste into a PR comment.
 `securityScheme.changed`. A change carrying field-level detail adds a `fields` array. The `policy`
 member appears only with `--enforce`, and `requiredVersion` only on a violation.
 
+A response's `headers` are compared by name, without regard to case, as HTTP names them — and a
+`Content-Type` not at all, since OpenAPI says a response header of that name is ignored. A header is
+something a client reads, so it breaks only to stop promising one a client may rely on:
+
+| Code | Breaking |
+| --- | --- |
+| `response.header-added` | no — even a `required` one; a client ignores what it doesn't read |
+| `response.required-header-removed` | **yes** |
+| `response.header-removed` | no — it was optional, so a client already handled its absence |
+| `response.header-became-optional` | **yes** |
+| `response.header-became-required` | no |
+| `response.header-description-changed` | no |
+| `response.header-unresolved-ref` | **yes** where the new side points at a header the document doesn't declare |
+
+A header's value — its `schema`, or the one under its `content` — compares as a response body's
+does, under `… headers <name> schema`, so a value it could not carry before is breaking. A header
+behind a `$ref` is read as the `components.headers` entry it names: hoisting one is no change, and an
+edit to the component is reported wherever it is used.
+
 A response's [links](/laravel/documenting/responses/#links-between-operations) are compared by name:
 `response.link-added`, `response.link-removed`, and `response.link-changed` with the members that moved
 in `fields`. None of them is breaking. A link only says which value another operation takes, and an

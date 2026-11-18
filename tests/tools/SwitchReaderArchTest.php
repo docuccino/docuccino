@@ -42,6 +42,7 @@ function allowedSwitchReads(): array
         'php/core/src/Contract/ContractChecker.php::requestBody' => [1, 'OAS request-body `required`'],
         'php/core/src/Contract/ContractIndex.php::parameters' => [1, 'OAS parameter `required`'],
         'php/core/src/Contract/ResponseHeaders.php::of' => [1, 'OAS response-header `required`'],
+        'php/core/src/Diff/DocumentDiffer.php::diffHeaders' => [3, 'OAS response-header `required`, on both sides of a diff'],
         'php/core/src/Emit/Postman/Description.php::request' => [1, 'OAS operation `deprecated`'],
         'php/core/src/Emit/Postman/Url.php::expand' => [1, 'OAS path-parameter `required`'],
         'php/core/src/Emit/Postman/Url.php::headers' => [2, 'OAS header- and cookie-parameter `required`'],
