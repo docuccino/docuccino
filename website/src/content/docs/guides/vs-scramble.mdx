@@ -58,7 +58,7 @@ supported. Everything in the Docuccino column is one package.
 | …when the allow-lists live in a `QueryBuilder` subclass's constructor | ✓ | — | — |
 | Validation constraints folded into bracketed `filter[…]` parameters | ✓ | — | — |
 
-Docuccino maps 84 named Laravel rules onto schema constraints, and documents your own rule classes from
+Docuccino maps 115 named Laravel rules onto schema constraints, and documents your own rule classes from
 a [`#[RuleSchema]`](/laravel/reference/attributes/#ruleschema) on the class, with a `RuleTransformer`
 for anything it doesn't know.
 
@@ -165,7 +165,7 @@ this is the surface you get without writing an annotation — the useful list to
 against:
 
 - **Requests** — form requests, inline `validate()`, and Spatie Data objects, with the full Laravel
-  rule vocabulary (84 named Laravel rules) mapped to schema constraints.
+  rule vocabulary (115 named Laravel rules) mapped to schema constraints.
 - **Query parameters** — Spatie Query Builder filters, sorts, includes, fields and pagination, traced
   through helper methods several calls deep, folded out of the method that builds each entry, and read
   from a builder subclass's constructor when the container hands your action its builder. Validation
