@@ -4018,6 +4018,27 @@ it('reports a response link added, removed or changed, and nothing for its prove
  * its absence. The value compares with a response's semantics: a header that may now carry a value it never
  * could breaks a client switching on it.
  */
+it('reads a link parameter qualified by its location as the same link changed', function (): void {
+    // The link is keyed by its name, not by what it fills, so qualifying `id` as `path.id` changes that
+    // member of one link: a client following it still reaches the same operation.
+    $withLink = static function (string $key): array {
+        $document = diffBase();
+        $document['paths']['/api/v1/forms/{id}']['get']['responses']['200']['links'] = [
+            'showForm' => ['operationId' => 'forms.show', 'parameters' => [$key => '$response.body#/id']],
+        ];
+
+        return $document;
+    };
+
+    $changeset = diffOf($withLink('id'), $withLink('path.id'));
+
+    expect(array_map(static fn ($change): string => $change->code, $changeset->changes))->toBe(['response.link-changed'])
+        ->and($changeset->changes[0]->path)->toBe('GET /api/v1/forms/{id} responses 200 links showForm')
+        ->and(array_map(static fn ($f): array => [$f->field, $f->old, $f->new], $changeset->changes[0]->fields))
+        ->toBe([['parameters', ['id' => '$response.body#/id'], ['path.id' => '$response.body#/id']]])
+        ->and($changeset->isBreaking())->toBeFalse();
+});
+
 it('reports a response header by whether a client could have relied on it', function (): void {
     $withHeaders = static function (array $headers): array {
         $document = diffBase();

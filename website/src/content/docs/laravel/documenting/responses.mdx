@@ -942,6 +942,11 @@ Route::get('/orders/{order}/notes/{note}', [OrderNoteController::class, 'show'])
 "parameters": { "order": "$request.path.order", "note": "$response.body#/data/id" }
 ```
 
+A segment is keyed by its bare name unless the target also uses that name somewhere else — a
+`{page}` segment beside a `page` query parameter for pagination — where the key is qualified by its
+location, `path.page`, as OpenAPI provides for exactly that case. Without it, a client could put the
+id in the page number.
+
 A scoped child (`->scopeBindings()`) only resolves within its parent, so Docuccino fills it from a body
 only where the code proves the record belongs to the parent in the request: on the child's own
 collection, as above, or on its own path. A route like `/orders/{order}/latest-note` could return any

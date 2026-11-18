@@ -226,7 +226,8 @@ public function receipt(Payment $payment): array { /* … */ }
 
 Name the target `operation` by its `operationId` or as the document writes it, `GET /api/orders/{order}`.
 Each of `parameters` is one of the target's parameters — qualify it by location as OpenAPI allows,
-`path.order`, where two share a name — mapped to a
+`path.order`, where two share a name; a bare name the target uses in two locations leaves the link out,
+with a `response-link.parameter-ambiguous` warning — mapped to a
 [runtime expression](https://spec.openapis.org/oas/v3.2.0.html#runtime-expressions) or a literal value.
 `status` picks the response the link sits on; leave it out for the operation's first success response.
 `name` defaults to the target's `operationId`, and a declared link replaces one Docuccino worked out under
