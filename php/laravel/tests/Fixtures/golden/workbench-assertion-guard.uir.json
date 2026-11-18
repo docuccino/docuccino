@@ -30,7 +30,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "401": {
+                "id": "res:v1:g7k7d7shbcdhlpq3",
+                "provenance": [
+                  {
+                    "producer": "integration:framework-errors",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/AssertionGuardController.php",
+                      "line": 45,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\AssertionGuardController::ifSystemAuthenticated"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.asserted.ifSystemAuthenticated",
         "tags": [
@@ -83,61 +105,7 @@
             }
           },
           "401": {
-            "x-docuccino": {
-              "id": "res:v1:g7k7d7shbcdhlpq3",
-              "provenance": [
-                {
-                  "producer": "integration:framework-errors",
-                  "layer": "integration",
-                  "fields": [
-                    "component",
-                    "description"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/AssertionGuardController.php",
-                    "line": 45,
-                    "symbol": "Workbench\\App\\Http\\Controllers\\AssertionGuardController::ifSystemAuthenticated"
-                  }
-                }
-              ],
-              "facts": {
-                "component": "Unauthorized"
-              }
-            },
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "x-docuccino": {
-                    "provenance": [
-                      {
-                        "producer": "integration:framework-errors",
-                        "layer": "integration",
-                        "fields": [
-                          "properties",
-                          "required",
-                          "type"
-                        ],
-                        "source": {
-                          "file": "workbench/app/Http/Controllers/AssertionGuardController.php",
-                          "line": 45,
-                          "symbol": "Workbench\\App\\Http\\Controllers\\AssertionGuardController::ifSystemAuthenticated"
-                        }
-                      }
-                    ]
-                  },
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "message"
-                  ]
-                }
-              }
-            }
+            "$ref": "#/components/responses/Unauthorized"
           }
         }
       }
@@ -383,6 +351,69 @@
                 }
               }
             }
+          },
+          "422": {
+            "x-docuccino": {
+              "id": "res:v1:xhrshyimkphugbjg",
+              "provenance": [
+                {
+                  "producer": "integration:inferred-handler",
+                  "layer": "integration",
+                  "fields": [
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/AssertionGuardController.php",
+                    "line": 52,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\AssertionGuardController::radiusOutOfRange"
+                  }
+                }
+              ],
+              "facts": {
+                "examplePlaceholders": {
+                  "application/json": [
+                    "message"
+                  ]
+                }
+              }
+            },
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "integration:inferred-handler",
+                        "layer": "integration",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/AssertionGuardController.php",
+                          "line": 52,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\AssertionGuardController::radiusOutOfRange"
+                        }
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                },
+                "example": {
+                  "message": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -594,7 +625,29 @@
                 "operationId"
               ]
             }
-          ]
+          ],
+          "uses": {
+            "responses": {
+              "401": {
+                "id": "res:v1:n7toxzc6rcd6jbfs",
+                "provenance": [
+                  {
+                    "producer": "integration:framework-errors",
+                    "layer": "integration",
+                    "fields": [
+                      "component",
+                      "description"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/AssertionGuardController.php",
+                      "line": 38,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\AssertionGuardController::unlessUserAuthenticated"
+                    }
+                  }
+                ]
+              }
+            }
+          }
         },
         "operationId": "post.api.asserted.unlessUserAuthenticated",
         "tags": [
@@ -645,6 +698,9 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           }
         }
       }
@@ -769,6 +825,20 @@
         "required": [
           "message"
         ]
+      },
+      "Unauthorized": {
+        "x-docuccino": {
+          "id": "sch:v1:qntkok75rrb2gjjq"
+        },
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
       }
     },
     "responses": {
@@ -781,6 +851,16 @@
             }
           }
         }
+      },
+      "Unauthorized": {
+        "description": "Unauthorized",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Unauthorized"
+            }
+          }
+        }
       }
     }
   },
@@ -788,7 +868,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "dada0f543501a51b93b7f0f6b12ac9d3781268c2e4f97bf4c53149ee60ad6802",
-      "contentHash": "59d2a70d3b9188997abcf659e22aacb2df2c48857530bcabf53094e0fc808cdf"
+      "contentHash": "232bbffd35e2c27d1fc8326c0e84cfe32e1e5b1674a24e04a3a47d0d420c3f63"
     },
     "generator": {
       "name": "docuccino/laravel",
