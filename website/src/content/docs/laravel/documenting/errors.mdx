@@ -644,7 +644,12 @@ status could be determined. It is the body Laravel's renderer sends for any exce
 
 Your own `HttpException` subclass is documented under the status your code gives it, wherever you write
 it: a literal in its `parent::__construct()`, an argument at the `throw`, or the static factory the `throw`
-names. Applications that keep a refusal's reason and its status together on an enum get the same:
+names. A subclass of one of the framework's fixed-status exceptions — `extends UnprocessableEntityHttpException`
+with a constructor of its own that only chooses the message — is that status, read off the framework's
+installed constructor. Where a method only declares the exception (`@throws`), the status is read from the
+`throw` it writes, including one inside a closure it runs (a `DB::transaction()` callback) or in a private
+method of its own class it calls. Applications that keep a refusal's reason and its status together on an
+enum get the same:
 
 ```php
 enum TokenRefusal: string

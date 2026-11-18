@@ -977,10 +977,12 @@ document CARRIES, and `project_paths` bounds that on purpose; the declaring-call
 the error the document already carries SAYS, so its gate is the application's own source — the same scope
 every other status read uses, for the priming reason below. That is what lets a modular guard state its
 status as plainly as one in `app/`. Measured over one build of the fixture's throw corpus when it held 57
-(it holds 164 actions on three controllers now; every one added since depends only on files those already
+(it holds 168 actions on three controllers now; every one added since depends only on files those already
 did, but for the nine whose closures a helper runs, which add `app/Support/Attempts.php` and the helper
-files, the seventeen that read a reason enum, which add the enums and exception classes they read, and the
-twenty-five on the assertion controller, which add it and the two exception classes it throws — none
+files, the seventeen that read a reason enum, which add the enums and exception classes they read, the
+twenty-five on the assertion controller, which add it and the two exception classes it throws, and the four
+reading a framework parent, a transaction closure or a private guard, which add the exception class and the
+two services they read — none
 re-measured), the analysed-file count is 163 with the read and 163 without, so no recorded walk is discarded; the cost is two
 extra live file walks (25 against 23), one per callee body whose `throw` states a status —
 `app/Services/ManifestDeclaredQuery.php` and `modules/Billing/LedgerReviewQuery.php` — and no measurable
@@ -1120,9 +1122,10 @@ list and the read declines anyway — measured against Symfony's own `ConflictHt
 `__construct` has zero statements — while asking for it primes that file, grows the analysed set and
 discards every walk the replay layer had recorded. That argument is about PRIMING, so it reaches vendor and
 stops there: a primed root is already in the analysed set, its bodies intact, and reading one grows nothing.
-Measured over one build of the fixture app's throw corpus when it held 58 (it holds 164 throw actions now,
+Measured over one build of the fixture app's throw corpus when it held 58 (it holds 168 throw actions now,
 and every one added since depends only on files those already did, but for the nine helper rows, the
-seventeen reason-enum rows and the twenty-five assertion rows, not re-measured), the analysed-file count is the same whether the status reads are scoped to the
+seventeen reason-enum rows, the twenty-five assertion rows and the four framework-parent, closure and
+private-guard rows, not re-measured), the analysed-file count is the same whether the status reads are scoped to the
 application or to the descend paths — so nothing recorded is discarded — and the wider scope costs one extra live file walk, for an exception class nothing else opened. (The
 absolute counts this paragraph used to give were taken against a smaller corpus than the one above it, and
 two adjacent paragraphs disagreeing about one corpus is what stops a reader trusting either.) Scoping these reads to the descend paths instead published a placeholder 500 for a
